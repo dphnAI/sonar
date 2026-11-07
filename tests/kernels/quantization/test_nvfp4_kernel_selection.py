@@ -4,8 +4,8 @@
 
 import pytest
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.kernels.linear import (
+import sonar.envs as envs
+from sonar.model_executor.kernels.linear import (
     _POSSIBLE_NVFP4_KERNELS,
     CutlassNvFp4LinearKernel,
     FlashInferB12xNvFp4LinearKernel,
@@ -14,7 +14,7 @@ from aphrodite.model_executor.kernels.linear import (
     HummingNvFp4LinearKernel,
     init_nvfp4_linear_kernel,
 )
-from aphrodite.platforms.interface import PlatformEnum
+from sonar.platforms.interface import PlatformEnum
 
 # W4A4 kernels that run on SM120/121, where the head of the list is gated to
 # sm_10x and selection falls through to whatever follows.
@@ -36,7 +36,7 @@ def test_w4a16_kernel_does_not_precede_w4a4_kernels(w4a4_kernel):
 
 def test_batch_invariant_w4a16_selects_humming(monkeypatch):
     # The batch-invariant CUTLASS kernel is W4A4-only.
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
     for kernel in (CutlassNvFp4LinearKernel, HummingNvFp4LinearKernel):
         monkeypatch.setattr(
             kernel,

@@ -4,8 +4,8 @@
 
 import pytest
 
-from aphrodite.lora.request import LoRARequest
-from aphrodite.lora.resolver import LoRAResolver, LoRAResolverRegistry
+from sonar.lora.request import LoRARequest
+from sonar.lora.resolver import LoRAResolver, LoRAResolverRegistry
 
 
 class DummyLoRAResolver(LoRAResolver):

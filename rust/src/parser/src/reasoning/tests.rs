@@ -3,10 +3,8 @@
 
 use std::sync::Arc;
 
-use aphrodite_tokenizer::test_utils::{TestTokenizer, decode_chunks, decode_ids};
-use aphrodite_tokenizer::{
-    DecodedText, DynTokenizer, TokenAnchor, TokenAttribution, Tokenizer as _,
-};
+use sonar_tokenizer::test_utils::{TestTokenizer, decode_chunks, decode_ids};
+use sonar_tokenizer::{DecodedText, DynTokenizer, TokenAnchor, TokenAttribution, Tokenizer as _};
 
 use super::{
     CohereCmdReasoningParser, DeepSeekR1ReasoningParser, DeepSeekV3ReasoningParser,
@@ -479,7 +477,7 @@ fn delimited_partial_framing_is_preserved_on_mismatch_or_finish() {
 
 #[test]
 fn delimited_prompt_initialization_consumes_only_remaining_framing() {
-    use aphrodite_tokenizer::Tokenizer;
+    use sonar_tokenizer::Tokenizer;
     let tokenizer = fake_tokenizer();
     for (prompt, wire, reasoning, content) in [
         (

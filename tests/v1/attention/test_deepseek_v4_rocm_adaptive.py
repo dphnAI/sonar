@@ -6,17 +6,17 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.deepseek_v4.amd.rocm import (
+from sonar.models.deepseek_v4.amd.rocm import (
     DeepseekV4ROCMAiterMLASparseMetadataBuilder,
     DeepseekV4ROCMAiterSparseSWAMetadataBuilder,
 )
-from aphrodite.models.deepseek_v41.amd import rocm as v41_rocm
-from aphrodite.models.deepseek_v41.amd.rocm import (
+from sonar.models.deepseek_v41.amd import rocm as v41_rocm
+from sonar.models.deepseek_v41.amd.rocm import (
     DeepseekV41ROCMAiterMLASparseMetadataBuilder,
 )
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends.mla import indexer
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends.mla import indexer
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV4IndexerBackend,
     DeepseekV32IndexerMetadataBuilder,
     DeepseekV41IndexerBackend,
@@ -41,9 +41,7 @@ def _mock_rocm_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _make_indexer_builder(*, adaptive: bool, capacity: int = 12):
     builder = DeepseekV32IndexerMetadataBuilder.__new__(DeepseekV32IndexerMetadataBuilder)
-    builder.aphrodite_config = SimpleNamespace(
-        speculative_config=SimpleNamespace(enable_adaptive_verification=adaptive)
-    )
+    builder.sonar_config = SimpleNamespace(speculative_config=SimpleNamespace(enable_adaptive_verification=adaptive))
     builder.supports_varlen = False
     builder.decode_seq_lens_buffer = torch.zeros(capacity, dtype=torch.int32)
     builder.expanded_block_table_buffer = torch.zeros((capacity, 2), dtype=torch.int32)

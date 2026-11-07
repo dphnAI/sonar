@@ -9,19 +9,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockIdentityCodec,
     LoadSpec,
     UMBPNamespace,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
     UMBPStoreConnectorScheduler,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.v1.kv_connector.umbp_test_utils import (
-    _aphrodite_config,
     _kv_cache_config,
     _SchedulerHandle,
+    _sonar_config,
 )
 
 mori_available = importlib.util.find_spec("mori") is not None
@@ -58,7 +58,7 @@ def test_scheduler_async_lookup_defers_then_returns_hit(monkeypatch):
             return [True] * len(keys)
 
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {
                 "mode": "embedded",
                 "lookup_async": True,
@@ -102,7 +102,7 @@ def test_scheduler_async_lookup_defers_then_returns_hit(monkeypatch):
 def test_async_lookup_discards_results_for_changed_request(monkeypatch, change):
     """A completed old query must not be interpreted using a new prefix."""
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"lookup_async": True}),
+        _sonar_config({"lookup_async": True}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("changed-query")),
@@ -142,7 +142,7 @@ def test_async_lookup_discards_results_for_changed_request(monkeypatch, change):
 
 def test_scheduler_reset_clears_pending_lookup_state(monkeypatch):
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "lookup_async": True}),
+        _sonar_config({"mode": "embedded", "lookup_async": True}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("reset")),
@@ -172,7 +172,7 @@ def test_async_lookup_failure_recomputes_and_allows_retry(failure):
 
     handle = _Handle(failure)
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"lookup_async": True, "load_async": False}),
+        _sonar_config({"lookup_async": True, "load_async": False}),
         _kv_cache_config(),
         handle,
         BlockIdentityCodec(UMBPNamespace("lookup-retry")),

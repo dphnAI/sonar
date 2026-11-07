@@ -96,7 +96,7 @@ hardware_overrides:
       - "--allowed-local-media-path"
       - "/"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -111,24 +111,24 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.12.0
+  - **Sonar version:** >= 0.12.0
   - **Hardware:** 4x H100/H200 (BF16 or FP8), or 4x MI300X/MI325X/MI355X with ROCm
   - **Python:** 3.10+ for NVIDIA; Python 3.12 with ROCm 7.0 and glibc >= 2.35 for AMD ROCm wheels
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   uv pip install "transformers>=5.0.0"
   ```
 
@@ -137,7 +137,7 @@ guide: |
   ### Tensor Parallel + Expert Parallel (FP8 on 4 GPUs)
 
   ```bash
-  aphrodite serve zai-org/GLM-4.5V-FP8 \
+  sonar serve zai-org/GLM-4.5V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -151,9 +151,9 @@ guide: |
   ### AMD ROCm (4xMI300x/MI325x/MI355x))
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve zai-org/GLM-4.5V-FP8 \
+  sonar serve zai-org/GLM-4.5V-FP8 \
        --tensor-parallel-size 4 \
        --tool-call-parser glm45 \
        --reasoning-parser glm45 \
@@ -197,7 +197,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --backend openai-chat \
     --endpoint /v1/chat/completions \
     --model zai-org/GLM-4.5V-FP8 \
@@ -216,4 +216,4 @@ guide: |
 
   - [Model card](https://huggingface.co/zai-org/GLM-4.5V)
   - [FP8 checkpoint](https://huggingface.co/zai-org/GLM-4.5V-FP8)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

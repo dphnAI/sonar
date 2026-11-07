@@ -16,11 +16,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.logprobs import create_sample_logprobs
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine import EngineCoreOutput
-from aphrodite.v1.engine.logprobs import LogprobsProcessor
-from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors
+from sonar.logprobs import create_sample_logprobs
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine import EngineCoreOutput
+from sonar.v1.engine.logprobs import LogprobsProcessor
+from sonar.v1.outputs import LogprobsLists, LogprobsTensors
 
 
 def _make_processor(num_logprobs: int) -> LogprobsProcessor:

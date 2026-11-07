@@ -12,9 +12,9 @@ why this runs in an interpreter of its own.
 import ctypes
 import sys
 
-from aphrodite.model_executor.layers import mhc  # noqa: F401
-from aphrodite.models import deepseek_v4  # noqa: F401
-from aphrodite.utils import jit_monitor
+from sonar.model_executor.layers import mhc  # noqa: F401
+from sonar.models import deepseek_v4  # noqa: F401
+from sonar.utils import jit_monitor
 
 
 class DlInfo(ctypes.Structure):

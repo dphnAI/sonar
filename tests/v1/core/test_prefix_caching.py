@@ -12,40 +12,40 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-import aphrodite.v1.core.kv_cache_manager as kv_cache_manager
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed.kv_events import (
+import sonar.v1.core.kv_cache_manager as kv_cache_manager
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.config import SonarConfig
+from sonar.distributed.kv_events import (
     MEDIUM_CPU,
     MEDIUM_GPU,
     AllBlocksCleared,
     BlockRemoved,
     BlockStored,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
     HiSparseConnector,
     HiSparseConnectorScheduler,
     HiSparseConnectorWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
     OffloadingConnector,
 )
-from aphrodite.lora.request import LoRARequest
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.lora.request import LoRARequest
+from sonar.model_executor.layers.mamba.checkpoint import (
     compute_mamba_prefill_checkpoints,
 )
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256, sha256_cbor
-from aphrodite.v1.core.block_pool import BlockHashToBlockMap, BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager, Request
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256, sha256_cbor
+from sonar.v1.core.block_pool import BlockHashToBlockMap, BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager, Request
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     BlockHashWithGroupId,
     KVCacheBlock,
@@ -56,10 +56,10 @@ from aphrodite.v1.core.kv_cache_utils import (
     init_none_hash,
     make_block_hash_with_group_id,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.hisparse.coordinator import get_hisparse_coordinator
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.hisparse.coordinator import get_hisparse_coordinator
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     HiSparseHotSpec,
     HiSparseResidentSpec,
@@ -71,8 +71,8 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.outputs import KVConnectorOutput
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.outputs import KVConnectorOutput
+from sonar.v1.request import RequestStatus
 
 pytestmark = pytest.mark.cpu_test
 
@@ -131,13 +131,13 @@ def make_request(
 
 
 def make_kv_cache_manager(
-    kv_cache_config: KVCacheConfig, aphrodite_config: AphroditeConfig | None = None, **kwargs
+    kv_cache_config: KVCacheConfig, sonar_config: SonarConfig | None = None, **kwargs
 ) -> KVCacheManager:
     """Build a ``KVCacheManager``, deriving ``scheduler_block_size`` from the
     config (LCM of group block sizes) unless explicitly provided. This mirrors
     ``resolve_kv_cache_block_sizes`` for the non-context-parallel case used by
     these tests, so callers don't have to pass it at every site. With
-    ``aphrodite_config``, a HiSparseConnector builds the HiSparse coordinator."""
+    ``sonar_config``, a HiSparseConnector builds the HiSparse coordinator."""
     kwargs.setdefault(
         "scheduler_block_size",
         lcm(*(g.kv_cache_spec.block_size for g in kv_cache_config.kv_cache_groups)),
@@ -149,10 +149,8 @@ def make_kv_cache_manager(
         )
     manager = KVCacheManager(kv_cache_config, **kwargs)
     if kv_cache_config.hisparse_host_num_blocks is not None:
-        if aphrodite_config is not None:
-            HiSparseConnector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config).bind_kv_cache_manager(
-                manager
-            )
+        if sonar_config is not None:
+            HiSparseConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config).bind_kv_cache_manager(manager)
         else:
             get_hisparse_coordinator(manager)
     return manager
@@ -247,13 +245,13 @@ def make_hisparse_kv_cache_manager(
     max_in_flight_tokens: int | None = None,
     enable_caching: bool = False,
     num_prefill_lookahead: int = 0,
-    aphrodite_config: AphroditeConfig | None = None,
+    sonar_config: SonarConfig | None = None,
     **config_kwargs,
 ) -> KVCacheManager:
     config = make_hisparse_kv_cache_config(num_blocks, host_num_blocks, **config_kwargs)
     return make_kv_cache_manager(
         config,
-        aphrodite_config,
+        sonar_config,
         max_model_len=max_model_len,
         max_in_flight_tokens=max_in_flight_tokens,
         enable_caching=enable_caching,
@@ -607,13 +605,13 @@ def allocate_external_prefix(manager: KVCacheManager, request: Request, num_toke
 @pytest.mark.parametrize("num_tokens", [1, 15, 16, 17, 31, 32, 33, 127])
 def test_nixl_hisparse_full_block_import_keeps_a_writable_tail(num_tokens):
     """Import every real token and restore the page used by last-token replay."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
         NixlPullConnectorScheduler,
     )
-    from tests.v1.kv_connector.unit.utils import create_aphrodite_config
+    from tests.v1.kv_connector.unit.utils import create_sonar_config
 
     manager = make_hisparse_kv_cache_manager(32, 16, enable_caching=True)
-    config = create_aphrodite_config(block_size=HISPARSE_BLOCK_SIZE)
+    config = create_sonar_config(block_size=HISPARSE_BLOCK_SIZE)
     connector = NixlPullConnectorScheduler(config, "test", manager.kv_cache_config)
     request = make_request("import", list(range(num_tokens)), HISPARSE_BLOCK_SIZE, sha256)
     request.kv_transfer_params = {"do_remote_prefill": True}
@@ -905,7 +903,7 @@ def _make_hisparse_scheduler(
         use_kv_connector=mock_kv(matched_tokens=matched_tokens, is_async=True),
         **kwargs,
     )
-    manager = make_hisparse_kv_cache_manager(32, host_num_blocks, aphrodite_config=scheduler.aphrodite_config)
+    manager = make_hisparse_kv_cache_manager(32, host_num_blocks, sonar_config=scheduler.sonar_config)
     scheduler.kv_cache_manager = manager
     scheduler.kv_cache_config = manager.kv_cache_config
     assert scheduler.scheduler_reserve_full_isl
@@ -5845,7 +5843,7 @@ def test_mamba_reachable_block_mask_sparsifies_retention():
     the manager keeps one cached state per interval-sized segment (plus the
     latest replay boundary) instead of a snapshot per block, which is what
     lets a small attention block_size avoid Mamba dominating the KV pool."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import MambaManager
+    from sonar.v1.core.single_type_kv_cache_manager import MambaManager
 
     block_size = 16
     spec = MambaSpec(
@@ -5880,7 +5878,7 @@ def test_mamba_reachable_block_mask_sparsifies_retention():
 
 def test_mamba_reachable_block_mask_pins_shared_prefix():
     """A detected shared prefix must pin its Mamba state block."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import MambaManager
+    from sonar.v1.core.single_type_kv_cache_manager import MambaManager
 
     block_size = 16
     spec = MambaSpec(
@@ -5995,7 +5993,7 @@ def test_mamba_shared_prefix_reuse_under_zero_retention():
 @pytest.mark.skip_global_cleanup
 def test_swa_reachable_block_mask_final_partial_segment():
     """Only a final SWA horizon makes its incomplete segment tail reachable."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import SlidingWindowManager
+    from sonar.v1.core.single_type_kv_cache_manager import SlidingWindowManager
 
     spec = SlidingWindowSpec(
         block_size=4,
@@ -6027,7 +6025,7 @@ def test_swa_reachable_block_mask_final_partial_segment():
 
 def test_swa_reachable_block_mask_pins_shared_prefix():
     """SWA pins the sliding-window tail ending on a shared-prefix junction."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import SlidingWindowManager
+    from sonar.v1.core.single_type_kv_cache_manager import SlidingWindowManager
 
     block_size = 16
 
@@ -6064,7 +6062,7 @@ def test_swa_reachable_block_mask_with_dcp_scaling():
     """DCP shards each block's KV across ranks, scaling the effective block size.
     Verify that dcp_world_size > 1 scales block size in reachability calculations,
     producing different masks than dcp_world_size=1."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import SlidingWindowManager
+    from sonar.v1.core.single_type_kv_cache_manager import SlidingWindowManager
 
     block_size = 16
     sliding_window = 32  # need = cdiv(31, 16) = 2
@@ -6119,7 +6117,7 @@ def test_swa_reachable_block_mask_sub_block_alignment_is_dense(block_size, dcp_w
     happens for hybrid offloading (e.g. Gemma), where alignment_tokens is the
     full-attention chunk size and need not divide the SWA block size. The mask
     must fall back to dense (None) rather than raise."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import SlidingWindowManager
+    from sonar.v1.core.single_type_kv_cache_manager import SlidingWindowManager
 
     spec = SlidingWindowSpec(
         block_size=block_size,
@@ -6147,7 +6145,7 @@ def test_mamba_reachable_block_mask_ignores_dcp():
     state block spans kv_cache_spec.block_size tokens regardless of DCP. The
     mask must not scale by dcp_world_size, so retention granularity is
     identical for any DCP world size."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import MambaManager
+    from sonar.v1.core.single_type_kv_cache_manager import MambaManager
 
     spec = MambaSpec(
         block_size=16,
@@ -6181,7 +6179,7 @@ def test_mamba_reachable_block_mask_ignores_dcp():
 def test_mamba_reachable_block_mask_large_dcp_stays_sparse():
     """A large DCP world size must not scale the Mamba block size, so it can
     never collapse sparse retention into dense caching."""
-    from aphrodite.v1.core.single_type_kv_cache_manager import MambaManager
+    from sonar.v1.core.single_type_kv_cache_manager import MambaManager
 
     spec = MambaSpec(
         block_size=8,

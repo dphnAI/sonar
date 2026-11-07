@@ -7,10 +7,10 @@ import pytest
 import torch
 from compressed_tensors.compressors.pack_quantized.helpers import unpack_from_int32
 
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_embedding import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_embedding import (  # noqa: E501
     _dequant_gather_triton,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 DEVICE = current_platform.device_type
 

@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.v1.spec_decode.utils import unconditional_to_conditional_rates
+from sonar.config.speculative import SpeculativeConfig
+from sonar.v1.spec_decode.utils import unconditional_to_conditional_rates
 
 
 def test_unconditional_to_conditional_rates_basic():

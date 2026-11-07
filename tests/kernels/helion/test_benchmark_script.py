@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     pytest.skip("Helion is not installed", allow_module_level=True)

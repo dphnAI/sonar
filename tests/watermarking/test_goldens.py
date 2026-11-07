@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from aphrodite.config.watermarking import WatermarkConfig
+from sonar.config.watermarking import WatermarkConfig
 from tests.watermarking.golden_candidates import (
     DETECTOR_FACTORIES,
     GOLDEN_FLOAT_RTOL,

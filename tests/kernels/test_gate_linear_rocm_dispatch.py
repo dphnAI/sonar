@@ -16,8 +16,8 @@ import inspect
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.router.gate_linear as gate_linear_mod
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+import sonar.model_executor.layers.fused_moe.router.gate_linear as gate_linear_mod
+from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
 
 def _make_gate(
@@ -35,8 +35,8 @@ def _make_gate(
 ) -> GateLinear:
     """Build a GateLinear with platform predicates mocked, no GPU needed."""
     for target in (
-        "aphrodite.model_executor.layers.linear",
-        "aphrodite.model_executor.parameter",
+        "sonar.model_executor.layers.linear",
+        "sonar.model_executor.parameter",
     ):
         monkeypatch.setattr(
             f"{target}.get_tensor_model_parallel_rank",
@@ -53,7 +53,7 @@ def _make_gate(
     monkeypatch.setattr(platform, "is_device_capability", lambda *a, **k: False)
     monkeypatch.setattr(platform, "is_device_capability_family", lambda *a, **k: False)
     if is_rocm:
-        import aphrodite.platforms.rocm as rocm_platform
+        import sonar.platforms.rocm as rocm_platform
 
         monkeypatch.setattr(rocm_platform, "on_gfx950", lambda: on_gfx950)
 
@@ -182,7 +182,7 @@ def test_rocm_fp32_router_gemm_rejects_unsupported_configs(
 # ---------------------------------------------------------------------------
 def _make_bf16x3_gate(monkeypatch, *, supported=True, **kwargs):
     """Build a gate with the ROCm bf16x3 platform check mocked."""
-    from aphrodite.model_executor.layers.fused_moe.router import (
+    from sonar.model_executor.layers.fused_moe.router import (
         bf16x3_router_gemm_rocm as rocm_bf16x3,
     )
 
@@ -241,11 +241,11 @@ def test_rocm_bf16x3_set_out_dtype_enables_tier(monkeypatch):
 
 def test_rocm_bf16x3_dispatch_is_a_custom_op():
     """The num_tokens branch must stay opaque to Dynamo; see the op's impl."""
-    assert hasattr(torch.ops.aphrodite, "rocm_bf16x3_router_gemm_dispatch")
+    assert hasattr(torch.ops.sonar, "rocm_bf16x3_router_gemm_dispatch")
     x = torch.zeros(8192, 6144, dtype=torch.bfloat16, device="meta")
     w = torch.zeros(128, 6144, dtype=torch.float32, device="meta")
     split = torch.zeros(3, 128, 6144, dtype=torch.bfloat16, device="meta")
-    out = torch.ops.aphrodite.rocm_bf16x3_router_gemm_dispatch(x, w, split)
+    out = torch.ops.sonar.rocm_bf16x3_router_gemm_dispatch(x, w, split)
     assert out.shape == (8192, 128)
     assert out.dtype == torch.float32
 

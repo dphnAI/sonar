@@ -6,15 +6,15 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.distributed.parallel_state import (
+from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 
 _SHAPES = (
     (129, 512),
@@ -45,7 +45,7 @@ def _reference(
     if weight_scale is None:
         torch.mm(x, weight.T, out=partial[:M])
     else:
-        from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+        from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
             mxfp8_e4m3_quantize,
         )
 
@@ -108,16 +108,16 @@ def _run_mode(
     backend: str,
 ) -> None:
     # cute_dsl is unavailable off CUDA, so import it only inside the GPU worker.
-    from aphrodite.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import GemmRsAr
+    from sonar.model_executor.kernels.linear.cute_dsl.gemm_rs_ar import GemmRsAr
 
     gemm_rs_ar = GemmRsAr(
         max_M=max(M for M, _ in _SHAPES),
         N=_N,
         all_reduce=all_reduce,
     )
-    from aphrodite.config.quantization import QuantizationConfigArgs
-    from aphrodite.model_executor.layers.linear import RowParallelLinear
-    from aphrodite.model_executor.layers.quantization.online.base import (
+    from sonar.config.quantization import QuantizationConfigArgs
+    from sonar.model_executor.layers.linear import RowParallelLinear
+    from sonar.model_executor.layers.quantization.online.base import (
         OnlineQuantizationConfig,
     )
 
@@ -244,10 +244,10 @@ def _worker(local_rank: int, world_size: int, master_port: int, backend: str) ->
     )
 
     init_distributed_environment()
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.model_config = ModelConfig(dtype="bfloat16")
     config.kernel_config.linear_backend = "auto" if backend == "bf16" else backend
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     group = dist.group.WORLD
@@ -267,7 +267,7 @@ def _worker(local_rank: int, world_size: int, master_port: int, backend: str) ->
 
     # Production binds one mode per worker; exercise both mode-bound instances
     # sequentially in this test without implying that both are initialized.
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         for all_reduce in (False, True):
             _run_mode(
                 all_reduce=all_reduce,

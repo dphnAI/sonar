@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""MRCR long-context evaluation for Aphrodite's OpenAI-compatible server.
+"""MRCR long-context evaluation for Sonar's OpenAI-compatible server.
 
 Streams samples from `openai/mrcr` on HuggingFace, sends chat completions to
 the server, and scores each response with a prefix-gated SequenceMatcher ratio
@@ -169,7 +169,7 @@ def evaluate_mrcr(
     concurrency: int = 8,
     extra_body: dict | None = None,
 ) -> dict:
-    """Run MRCR against a Aphrodite server; auto-discovers model and context."""
+    """Run MRCR against a Sonar server; auto-discovers model and context."""
     needles = needles or [2, 4, 8]
     extra_body = DEFAULT_EXTRA_BODY if extra_body is None else extra_body
     base_url = f"{host}:{port}"
@@ -251,7 +251,7 @@ def evaluate_mrcr(
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="MRCR evaluation for Aphrodite serve")
+    p = argparse.ArgumentParser(description="MRCR evaluation for Sonar serve")
     p.add_argument("--model", default=None, help="Default: discovered from /v1/models")
     p.add_argument("--num-samples", type=int, default=40)
     p.add_argument("--needles", type=int, nargs="+", default=[2, 4, 8], choices=[2, 4, 8])

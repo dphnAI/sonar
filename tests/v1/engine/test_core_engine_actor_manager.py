@@ -15,10 +15,10 @@ import ray
 import zmq
 from torch.distributed import TCPStore
 
-from aphrodite.utils.network_utils import make_zmq_socket, split_zmq_path
-from aphrodite.v1.engine.core import EngineCoreActorMixin
-from aphrodite.v1.engine.core_client import BackgroundResources
-from aphrodite.v1.engine.utils import (
+from sonar.utils.network_utils import make_zmq_socket, split_zmq_path
+from sonar.v1.engine.core import EngineCoreActorMixin
+from sonar.v1.engine.core_client import BackgroundResources
+from sonar.v1.engine.utils import (
     CoreEngineActorManager,
     EngineZmqAddresses,
     _dp_nodes_master_first,
@@ -26,13 +26,13 @@ from aphrodite.v1.engine.utils import (
     bind_engine_zmq_listeners,
     launch_core_engines,
 )
-from aphrodite.v1.utils import APIServerProcessManager
+from sonar.v1.utils import APIServerProcessManager
 
 
 class _StubEngineCoreActor(EngineCoreActorMixin):
     def __init__(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
         local_client: bool,
         addresses: EngineZmqAddresses,
         executor_class: type[Any],
@@ -41,9 +41,9 @@ class _StubEngineCoreActor(EngineCoreActorMixin):
         local_dp_rank: int = 0,
     ):
         # Exercise the production Ray actor mixin without loading a model.
-        EngineCoreActorMixin.__init__(self, aphrodite_config, addresses, dp_rank, local_dp_rank)
+        EngineCoreActorMixin.__init__(self, sonar_config, addresses, dp_rank, local_dp_rank)
 
-    def _set_visible_devices(self, aphrodite_config: Any, local_dp_rank: int) -> None:
+    def _set_visible_devices(self, sonar_config: Any, local_dp_rank: int) -> None:
         pass
 
     def wait_for_init(self) -> None:
@@ -53,7 +53,7 @@ class _StubEngineCoreActor(EngineCoreActorMixin):
         pass
 
     def get_nixl_side_channel_host(self) -> str | None:
-        return os.environ.get("APHRODITE_NIXL_SIDE_CHANNEL_HOST")
+        return os.environ.get("SONAR_NIXL_SIDE_CHANNEL_HOST")
 
     def get_addresses(self) -> tuple[list[str], list[str]]:
         """Return the addresses snapshot the actor was constructed with.
@@ -98,14 +98,14 @@ def test_background_resources_passes_worker_shutdown_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timeout = 7
-    monkeypatch.setenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", str(timeout))
+    monkeypatch.setenv("SONAR_WORKER_SHUTDOWN_TIMEOUT_SECONDS", str(timeout))
     engine_manager = Mock()
     resources = BackgroundResources(ctx=None, engine_manager=engine_manager)
     resources()
     engine_manager.shutdown.assert_called_once_with(timeout=timeout)
 
 
-def _make_aphrodite_config() -> SimpleNamespace:
+def _make_sonar_config() -> SimpleNamespace:
     return SimpleNamespace(
         parallel_config=SimpleNamespace(
             data_parallel_size=1,
@@ -156,20 +156,20 @@ def test_coordination_store_held_only_by_the_online_dp_master(
         def __init__(self, **kwargs) -> None:
             self.kwargs = kwargs
 
-    aphrodite_config = _make_aphrodite_config_ray_dp_multinode()
-    parallel_config = aphrodite_config.parallel_config
+    sonar_config = _make_sonar_config_ray_dp_multinode()
+    parallel_config = sonar_config.parallel_config
     for name, value in overrides.items():
         setattr(parallel_config, name, value)
     # Port 0 makes the handshake socket take a free port at bind time; a port
     # reserved up front can be handed to the coordination store meanwhile.
     parallel_config.data_parallel_rpc_port = 0
     parallel_config._coord_store_port = 0
-    monkeypatch.setattr("aphrodite.v1.engine.utils.CoreEngineProcManager", FakeManager)
-    monkeypatch.setattr("aphrodite.v1.engine.utils.CoreEngineActorManager", FakeManager)
-    monkeypatch.setattr("aphrodite.v1.engine.utils.wait_for_engine_startup", lambda *args, **kwargs: None)
+    monkeypatch.setattr("sonar.v1.engine.utils.CoreEngineProcManager", FakeManager)
+    monkeypatch.setattr("sonar.v1.engine.utils.CoreEngineActorManager", FakeManager)
+    monkeypatch.setattr("sonar.v1.engine.utils.wait_for_engine_startup", lambda *args, **kwargs: None)
 
     with launch_core_engines(
-        aphrodite_config,
+        sonar_config,
         executor_class=_DummyExecutor,
         log_stats=False,
         addresses=_make_addresses(),
@@ -226,13 +226,13 @@ def test_driver_nixl_side_channel_host_does_not_leak_to_engine_core_actor(
     created_placement_groups: list[Any] = []
     manager: CoreEngineActorManager | None = None
 
-    def create_dp_placement_groups(aphrodite_config: Any):
+    def create_dp_placement_groups(sonar_config: Any):
         pg = _make_cpu_placement_group()
         created_placement_groups.append(pg)
         return [pg], [0]
 
-    monkeypatch.setenv("APHRODITE_NIXL_SIDE_CHANNEL_HOST", driver_marker)
-    monkeypatch.setattr("aphrodite.v1.engine.core.EngineCoreActor", _StubEngineCoreActor)
+    monkeypatch.setenv("SONAR_NIXL_SIDE_CHANNEL_HOST", driver_marker)
+    monkeypatch.setattr("sonar.v1.engine.core.EngineCoreActor", _StubEngineCoreActor)
     monkeypatch.setattr(
         CoreEngineActorManager,
         "create_dp_placement_groups",
@@ -241,7 +241,7 @@ def test_driver_nixl_side_channel_host_does_not_leak_to_engine_core_actor(
 
     try:
         manager = CoreEngineActorManager(
-            aphrodite_config=_make_aphrodite_config(),
+            sonar_config=_make_sonar_config(),
             addresses=_make_addresses(),
             executor_class=_DummyExecutor,
             log_stats=False,
@@ -279,8 +279,8 @@ def ray_context_dp2():
         ray.shutdown()
 
 
-def _make_aphrodite_config_ray_dp_multinode() -> SimpleNamespace:
-    """Minimal aphrodite_config that drives the Ray-DP multi-API-server path:
+def _make_sonar_config_ray_dp_multinode() -> SimpleNamespace:
+    """Minimal sonar_config that drives the Ray-DP multi-API-server path:
     ``data_parallel_size != data_parallel_size_local`` forces TCP placeholders
     (multi-node fan-out), and ``data_parallel_backend="ray"`` routes
     ``launch_core_engines`` through the Ray branch.
@@ -303,7 +303,7 @@ def _make_aphrodite_config_ray_dp_multinode() -> SimpleNamespace:
         needs_dp_coordinator=False,
         kv_transfer_config=None,
         # ``_apply_dp_identity_suffix`` reads and rewrites this.
-        instance_id="aphrodite-ray-dp-regression-test",
+        instance_id="sonar-ray-dp-regression-test",
     )
 
 
@@ -323,24 +323,24 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
     """
     created_placement_groups: list[Any] = []
 
-    def create_dp_placement_groups(aphrodite_config: Any):
+    def create_dp_placement_groups(sonar_config: Any):
         pg1 = _make_cpu_placement_group()
         pg2 = _make_cpu_placement_group()
         created_placement_groups.extend([pg1, pg2])
         return [pg1, pg2], [0, 0]
 
-    monkeypatch.setattr("aphrodite.v1.engine.core.EngineCoreActor", _StubEngineCoreActor)
+    monkeypatch.setattr("sonar.v1.engine.core.EngineCoreActor", _StubEngineCoreActor)
     monkeypatch.setattr(
         CoreEngineActorManager,
         "create_dp_placement_groups",
         staticmethod(create_dp_placement_groups),
     )
 
-    aphrodite_config = _make_aphrodite_config_ray_dp_multinode()
+    sonar_config = _make_sonar_config_ray_dp_multinode()
 
     # Mirror run_multi_api_server: bind listeners in the supervisor so the
     # addresses pickled into Ray actors contain kernel-assigned ports.
-    listeners = bind_engine_zmq_listeners(aphrodite_config, num_api_servers=2)
+    listeners = bind_engine_zmq_listeners(sonar_config, num_api_servers=2)
     addresses = listeners.addresses
 
     sock = socket.socket()
@@ -350,7 +350,7 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
     try:
         # Ray actors are spawned here, pickling ``addresses`` into each one.
         with launch_core_engines(
-            aphrodite_config,
+            sonar_config,
             executor_class=_DummyExecutor,
             log_stats=False,
             addresses=addresses,
@@ -424,7 +424,7 @@ def ray_2gpu_node(monkeypatch: pytest.MonkeyPatch):
     if ray.is_initialized():
         ray.shutdown()
     ray.init(num_cpus=4, num_gpus=2, include_dashboard=False, log_to_driver=False)
-    monkeypatch.setattr("aphrodite.v1.engine.utils.current_platform.ray_device_key", "GPU")
+    monkeypatch.setattr("sonar.v1.engine.utils.current_platform.ray_device_key", "GPU")
 
     (node_resources,) = available_resources_per_node().values()
     master_ip = _node_ip_from_resources(node_resources)

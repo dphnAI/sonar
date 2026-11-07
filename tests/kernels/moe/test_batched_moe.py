@@ -6,20 +6,20 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     BatchedTritonExperts,
     invoke_moe_batched_triton_kernel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import (
     batched_moe,
     make_dummy_moe_config,
@@ -59,7 +59,7 @@ DTYPES = [torch.bfloat16]
 if not current_platform.is_fp8_fnuz():
     DTYPES.append(torch.float8_e4m3fn)
 
-aphrodite_config = AphroditeConfig()
+sonar_config = SonarConfig()
 
 
 @dataclass
@@ -374,7 +374,7 @@ def test_fused_moe_batched_experts(
         a1_scale = None
         a2_scale = None
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         topk_weight, topk_ids, _ = fused_topk(a, score, topk, False)
 
         baseline_output = torch_experts(
@@ -449,13 +449,13 @@ def _run_td(A, B, num_expert_tokens, use_td: bool, swap: bool | None = None):
         dtype=torch.bfloat16,
         device=A.device,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
         batched_triton_kernel,
         batched_triton_kernel_swapped,
     )
 
     if use_td:
-        from aphrodite.triton_utils.allocation import set_triton_allocator
+        from sonar.triton_utils.allocation import set_triton_allocator
 
         set_triton_allocator(A.device)
 
@@ -533,7 +533,7 @@ def test_swapped_kernel_matches_original_source():
     """The two kernels must stay in sync apart from their program_id axes."""
     import inspect
 
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
         batched_triton_kernel,
         batched_triton_kernel_swapped,
     )
@@ -676,7 +676,7 @@ def test_batched_experts_masked_activation_end_to_end(
     if current_platform.is_xpu():
         pytest.skip("Masked activations are not enabled on XPU")
 
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     set_random_seed(7)
     device = current_platform.device_type
@@ -704,7 +704,7 @@ def test_batched_experts_masked_activation_end_to_end(
     routing_weights = torch.softmax(score.float(), dim=-1)
     topk_weights, topk_ids = torch.topk(routing_weights, topk, dim=-1)
     topk_ids = topk_ids.to(torch.int32)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         baseline_output = _torch_experts_with_shared_activation(
             a,
             w1,
@@ -728,7 +728,7 @@ def test_batched_experts_end_to_end(m, n, k, e, topk):
     """End-to-end BatchedTritonExperts via the reference (no-comms)
     BatchedPrepareAndFinalize, validated against a torch reference. Exercises
     the device-enablement path."""
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.v1.worker.workspace import init_workspace_manager
 
     set_random_seed(7)
     device = current_platform.device_type
@@ -739,7 +739,7 @@ def test_batched_experts_end_to_end(m, n, k, e, topk):
     w1 = torch.randn((e, 2 * n, k), device=device, dtype=torch.bfloat16) / 15
     w2 = torch.randn((e, k, n), device=device, dtype=torch.bfloat16) / 15
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         topk_weight, topk_ids, _ = fused_topk(a, score, topk, False)
 
         baseline_output = torch_experts(a, w1, w2, topk_weight, topk_ids)
@@ -749,7 +749,7 @@ def test_batched_experts_end_to_end(m, n, k, e, topk):
 
 
 def test_batched_triton_backend_mapping():
-    from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+    from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
         UnquantizedMoeBackend,
         map_unquantized_backend,
     )
@@ -759,10 +759,10 @@ def test_batched_triton_backend_mapping():
 
 
 def test_batched_resize_keeps_blockwise_quant_k_tile():
-    from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
         resize_batched_config_tiles,
     )
-    from aphrodite.model_executor.layers.fused_moe.fused_moe import get_default_config
+    from sonar.model_executor.layers.fused_moe.fused_moe import get_default_config
 
     block_shape = [128, 128]
     cfg = get_default_config(512, 64, 1408, 2048, 6, "fp8_w8a8", block_shape)
@@ -772,8 +772,8 @@ def test_batched_resize_keeps_blockwise_quant_k_tile():
 
 def test_batched_config_override_is_not_resized():
     """An override or tuned config reaches the batched kernel with its own tiles."""
-    from aphrodite.model_executor.layers.fused_moe import override_config
-    from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+    from sonar.model_executor.layers.fused_moe import override_config
+    from sonar.model_executor.layers.fused_moe.fused_moe import (
         has_configured_moe_config,
         try_get_optimal_moe_config,
     )

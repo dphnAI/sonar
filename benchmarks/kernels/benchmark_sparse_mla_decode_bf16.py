@@ -13,8 +13,8 @@ import json
 
 import torch
 
-from aphrodite.triton_utils import triton
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.triton_utils import triton
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     _rocm_sparse_attn_decode_ragged_bf16_triton,
     _rocm_sparse_attn_prefill_ragged_triton,
     rocm_sparse_decode_bf16_num_splits,

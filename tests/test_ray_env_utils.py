@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for aphrodite.v1.executor.ray_env_utils."""
+"""Tests for sonar.v1.executor.ray_env_utils."""
 
 import os
 from unittest.mock import patch
 
-from aphrodite.v1.executor.ray_env_utils import (
+from sonar.v1.executor.ray_env_utils import (
     get_driver_env_vars,
     update_runtime_env_for_worker_import,
 )
@@ -47,7 +47,7 @@ class TestExclusion:
 
     @patch.dict(os.environ, {"LMCACHE_LOCAL_CPU": "True"}, clear=False)
     @patch(
-        "aphrodite.v1.executor.ray_env_utils.RAY_NON_CARRY_OVER_ENV_VARS",
+        "sonar.v1.executor.ray_env_utils.RAY_NON_CARRY_OVER_ENV_VARS",
         {"LMCACHE_LOCAL_CPU"},
     )
     def test_non_carry_over_blacklist(self):
@@ -55,7 +55,7 @@ class TestExclusion:
 
 
 class TestImportTimePropagation:
-    @patch.dict(os.environ, {"APHRODITE_USE_BREAKABLE_CUDAGRAPH": "1"}, clear=False)
+    @patch.dict(os.environ, {"SONAR_USE_BREAKABLE_CUDAGRAPH": "1"}, clear=False)
     def test_breakable_cudagraph_is_available_during_actor_import(self):
         runtime_env = {"env_vars": {"EXISTING": "value"}}
 
@@ -64,7 +64,7 @@ class TestImportTimePropagation:
         assert result is runtime_env
         assert result["env_vars"] == {
             "EXISTING": "value",
-            "APHRODITE_USE_BREAKABLE_CUDAGRAPH": "1",
+            "SONAR_USE_BREAKABLE_CUDAGRAPH": "1",
         }
 
     @patch.dict(os.environ, {"OTHER_ENV_VAR": "value"}, clear=True)

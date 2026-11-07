@@ -10,7 +10,7 @@ from ...utils import create_new_process_for_each_test
 @pytest.mark.parametrize("tp_size", [1, 2])
 @pytest.mark.parametrize("backend", ["mp", "ray"])
 @create_new_process_for_each_test()
-def test_collective_rpc(tp_size, backend, monkeypatch, aphrodite_runner):
+def test_collective_rpc(tp_size, backend, monkeypatch, sonar_runner):
     if torch.accelerator.device_count() < tp_size:
         pytest.skip(f"Not enough GPUs for tensor parallelism {tp_size}")
     if tp_size == 1 and backend == "ray":
@@ -23,8 +23,8 @@ def test_collective_rpc(tp_size, backend, monkeypatch, aphrodite_runner):
     def echo_rank(self):
         return self.rank
 
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    with sonar_runner(
         "hmellor/tiny-random-LlamaForCausalLM",
         enforce_eager=True,
         load_format="dummy",

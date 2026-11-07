@@ -10,12 +10,12 @@ head counts, and sequence lengths.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 _SKIP_NON_MI3XX = True
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_mi3xx
+    from sonar.platforms.rocm import on_mi3xx
 
     _SKIP_NON_MI3XX = not on_mi3xx()
 
@@ -37,7 +37,7 @@ ATOL, RTOL = 1.5e-2, 1e-2
 
 
 def _require_aiter():
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not is_aiter_found_and_supported():
         pytest.skip("aiter is required on supported ROCm hardware for this test")
@@ -86,7 +86,7 @@ def _make_inputs(
     When contiguous_indices=False, tokens are randomly scattered in a 2x pool
     to simulate real paged allocation.
     """
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
 
     actual_nhead = AiterMLAHelper.get_actual_mla_num_heads(nhead)
     total_kv_tokens = batch_size * kv_seq_len
@@ -121,7 +121,7 @@ def _make_inputs(
 
 def _run_kernel(inputs: dict) -> torch.Tensor:
     """Run decode through the production rocm_aiter_ops path."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.mla_decode_fwd(
         inputs["q"],

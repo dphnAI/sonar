@@ -31,7 +31,7 @@
   #define __HIP__RDNA3__
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace moe_gptq_rdna3 {
 
 #define BLOCK_KN_SIZE 256
@@ -556,7 +556,7 @@ void dispatch_moe_gemm_q4(
 }
 
 }  // namespace moe_gptq_rdna3
-}  // namespace aphrodite
+}  // namespace sonar
 
 // ---------------------------------------------------------------------------
 // Public entry point
@@ -622,11 +622,11 @@ void moe_gptq_gemm_rdna3(torch::Tensor a, torch::Tensor c,
 
   // Manual dtype dispatch using HIP native types (c10::Half/BFloat16 don't
   // implicitly convert to half/__hip_bfloat16 in device code).
-  using aphrodite::gptq_rdna3::bf16_t;
+  using sonar::gptq_rdna3::bf16_t;
 
   auto dispatch = [&](auto* a_ptr, auto* c_ptr, const auto* s_ptr) {
     using T = std::remove_const_t<std::remove_pointer_t<decltype(a_ptr)>>;
-    aphrodite::moe_gptq_rdna3::dispatch_moe_gemm_q4<T>(
+    sonar::moe_gptq_rdna3::dispatch_moe_gemm_q4<T>(
         a_ptr, c_ptr, (const uint32_t*)b_q_weight.data_ptr<int32_t>(), s_ptr,
         (const uint32_t*)b_qzeros.data_ptr<int32_t>(), topk_w_ptr,
         sorted_token_ids.data_ptr<int32_t>(), expert_ids.data_ptr<int32_t>(),

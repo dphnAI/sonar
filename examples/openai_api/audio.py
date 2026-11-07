@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""An example showing how to use aphrodite to serve VLMs.
-Launch the aphrodite server with the following command:
-aphrodite run fixie-ai/ultravox-v0_3
+"""An example showing how to use sonar to serve VLMs.
+Launch the sonar server with the following command:
+sonar run fixie-ai/ultravox-v0_3
 """
 
 import os
@@ -18,7 +18,7 @@ audio_path = os.path.join(
     "mary_had_lamb.ogg",
 )
 
-# Modify OpenAI's API key and API base to use aphrodite's API server.
+# Modify OpenAI's API key and API base to use sonar's API server.
 openai_api_key = "EMPTY"
 openai_api_base = "http://localhost:2242/v1"
 client = OpenAI(

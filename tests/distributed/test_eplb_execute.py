@@ -8,24 +8,24 @@ import pytest
 import torch
 import torch.distributed
 
-import aphrodite.distributed.eplb.eplb_communicator as eplb_comm
-import aphrodite.utils.gpu_sync_debug as gsd
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.eplb.eplb_communicator import (
+import sonar.distributed.eplb.eplb_communicator as eplb_comm
+import sonar.utils.gpu_sync_debug as gsd
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.eplb.eplb_communicator import (
     create_eplb_communicator,
     has_nixl,
 )
-from aphrodite.distributed.eplb.rebalance_execute import (
+from sonar.distributed.eplb.rebalance_execute import (
     move_from_buffer,
     rearrange_expert_weights_inplace,
     transfer_layer,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     ensure_model_parallel_initialized,
     get_tp_group,
 )
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.interfaces import MixtureOfExperts
+from sonar.platforms import current_platform
 
 from .eplb_utils import distributed_run, set_env_vars_and_device
 
@@ -358,10 +358,10 @@ def _test_async_transfer_layer_without_mtp_worker(
 ) -> None:
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.tensor_parallel_size = world_size
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
@@ -479,10 +479,10 @@ def _test_rearrange_expert_weights_with_redundancy(
     # to expert parallel)
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.tensor_parallel_size = world_size
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
@@ -627,10 +627,10 @@ def test_rearrange_expert_weights_with_redundancy(
 def _test_rearrange_expert_weights_no_change(env, world_size) -> None:
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.tensor_parallel_size = world_size
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
@@ -755,10 +755,10 @@ def test_rearrange_expert_weights_no_change(world_size):
 def _test_rearrange_expert_weights_profile_mode(env, world_size) -> None:
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.tensor_parallel_size = world_size
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
@@ -850,11 +850,11 @@ def test_rearrange_expert_weights_profile_mode(world_size):
 
 def _test_eplb_communicator_pipeline_parallel(env, world_size, backend):
     set_env_vars_and_device(env)
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.parallel_config.tensor_parallel_size = 2
     config.parallel_config.pipeline_parallel_size = world_size // 2
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=2,
             pipeline_model_parallel_size=world_size // 2,

@@ -6,9 +6,9 @@ import pytest
 import torch
 
 try:
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 except ImportError:
-    pytest.skip("Could not import aphrodite._custom_ops. (pip install -e .)", allow_module_level=True)
+    pytest.skip("Could not import sonar._custom_ops. (pip install -e .)", allow_module_level=True)
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 1, reason="Need CUDA device")

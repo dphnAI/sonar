@@ -36,7 +36,7 @@ using namespace cute;
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite {
+namespace sonar {
 template <typename Arch, template <typename> typename ArchGuard,
           typename ElementAB_, typename ElementD_,
           template <typename, typename> typename Epilogue_, typename TileShape,
@@ -191,4 +191,4 @@ inline void fallback_cutlass_gemm_caller(torch::stable::Tensor& out,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

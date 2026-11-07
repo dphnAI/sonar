@@ -12,11 +12,11 @@ import pytest
 import torch
 from PIL import Image, ImageDraw, ImageOps
 
-from aphrodite.config.multimodal import MMHasherAlgorithm
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.media.base import MediaWithBytes
-from aphrodite.multimodal.media.image import ImageMediaIO
-from aphrodite.multimodal.parse import MultiModalDataParser
+from sonar.config.multimodal import MMHasherAlgorithm
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.media.base import MediaWithBytes
+from sonar.multimodal.media.image import ImageMediaIO
+from sonar.multimodal.parse import MultiModalDataParser
 
 pytestmark = pytest.mark.cpu_test
 

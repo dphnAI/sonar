@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from PIL import Image
 from transformers import Qwen2VLForConditionalGeneration
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, SonarRunner
 from ....utils import large_gpu_test
 from ...utils import check_embeddings_close
 
@@ -76,7 +76,7 @@ def apply_chat_template_and_add_eos(
 
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     embed_texts: list[bool],
@@ -85,16 +85,14 @@ def _run_test(
     dtype: str,
 ) -> None:
     """SET PYTHONPATH."""
-    # NOTE: take care of the order. run Aphrodite first, and then run HF.
-    # Aphrodite needs a fresh new process without cuda initialization.
+    # NOTE: take care of the order. run Sonar first, and then run HF.
+    # Sonar needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with aphrodite_runner(
-        model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=8192
-    ) as aphrodite_model:
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+    with sonar_runner(model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=8192) as sonar_model:
+        tokenizer = sonar_model.llm.get_tokenizer()
         texts = [
-            # this is necessary because aphrodite_model.embed will not apply any
+            # this is necessary because sonar_model.embed will not apply any
             # templating to the prompt, and therefore lacks an image_pad
             # token unless one is inserted beforehand (the (28,28) image
             # above is converted to an image pad token by the chat template).
@@ -103,10 +101,10 @@ def _run_test(
                 apply_chat_template_fn=tokenizer.apply_chat_template,
             )
             for text, image in zip(input_texts, input_images)
-            # aphrodite will replace the pad token with the actual image,
+            # sonar will replace the pad token with the actual image,
             # which may be a placeholder image, later.
         ]
-        aphrodite_outputs = aphrodite_model.embed(texts, images=input_images)
+        sonar_outputs = sonar_model.embed(texts, images=input_images)
 
     hf_outputs = []
     with hf_runner(model, dtype=dtype, auto_cls=Qwen2VLForConditionalGeneration) as hf_model:
@@ -145,9 +143,9 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -155,7 +153,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 def test_models_text(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -167,7 +165,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_texts,
         input_images,
         embed_texts,
@@ -181,7 +179,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 def test_models_image(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -193,7 +191,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_texts,
         input_images,
         embed_texts,

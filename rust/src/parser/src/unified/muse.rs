@@ -33,8 +33,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use serde_json::{Map, Value};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use winnow::ascii::{multispace0 as ws0, multispace1 as ws1};
 use winnow::combinator::{alt, delimited, eof, peek, preceded, repeat, seq};
 use winnow::error::{ContextError, ErrMode, ModalResult, StrContext};
@@ -502,8 +502,8 @@ fn muse_error(label: &'static str) -> ErrMode<ContextError> {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::{DecodedText, test_utils::TestTokenizer};
     use serde_json::{Value, json};
+    use sonar_tokenizer::{DecodedText, test_utils::TestTokenizer};
     use thiserror_ext::AsReport;
 
     use super::{EOM, EOT, MESSAGE, MuseUnifiedParser, START};

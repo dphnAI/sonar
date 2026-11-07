@@ -10,8 +10,8 @@ guard raise AttributeError for string/list/scalar bodies and surface as HTTP 500
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.exceptions import SonarValidationError
 
 
 @pytest.mark.parametrize(
@@ -29,7 +29,7 @@ def test_chat_completion_request_rejects_non_object_body(payload):
 
 
 def test_chat_completion_request_cache_salt_still_validated_on_dict():
-    with pytest.raises(AphroditeValidationError, match="cache_salt"):
+    with pytest.raises(SonarValidationError, match="cache_salt"):
         ChatCompletionRequest.model_validate(
             {
                 "model": "qwen",

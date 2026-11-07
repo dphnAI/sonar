@@ -8,10 +8,10 @@ import itertools
 
 import regex as re
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser import ParserManager
-from aphrodite.parser.abstract_parser import Parser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser import ParserManager
+from sonar.parser.abstract_parser import Parser
 
 _SPECIAL_TOKEN_RE = re.compile(r"(<\|[A-Z_]+\|>)")
 REPLACEMENT_CHAR = "�"

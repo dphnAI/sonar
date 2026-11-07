@@ -9,7 +9,7 @@
 #include "topk_histogram_4096.cuh"
 #include "topk_histogram_4096_overflow.cuh"
 
-namespace aphrodite::persistent::overflow {
+namespace sonar::persistent::overflow {
 
 // Where exact recovery resumes after the medium path's coarse histogram:
 // the selected 11-bit FP32 prefix and how many keys are still needed in it.
@@ -28,9 +28,9 @@ __device__ __noinline__ void recover_medium(const InT* scores, int32_t* output,
       scores, output, length, smem, prefix, remaining);
 }
 
-}  // namespace aphrodite::persistent::overflow
+}  // namespace sonar::persistent::overflow
 
-namespace aphrodite::filtered_topk {
+namespace sonar::filtered_topk {
 
 template <typename T, size_t N>
 struct vec_t;
@@ -260,6 +260,6 @@ __device__ __noinline__ void recover_coarse(const DType* scores, IdType* output,
 }
 
 }  // namespace overflow
-}  // namespace aphrodite::filtered_topk
+}  // namespace sonar::filtered_topk
 
 #endif  // PERSISTENT_TOPK_OVERFLOW_CUH_

@@ -6,8 +6,8 @@ use std::fmt;
 /// Backend type for the benchmark endpoint.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
-    #[value(name = "aphrodite")]
-    Aphrodite,
+    #[value(name = "sonar")]
+    Sonar,
     #[value(name = "openai")]
     Openai,
     #[value(name = "openai-chat")]
@@ -18,34 +18,34 @@ pub enum BackendKind {
     OpenaiEmbeddings,
     #[value(name = "openai-embeddings-chat")]
     OpenaiEmbeddingsChat,
-    #[value(name = "aphrodite-pooling")]
-    AphroditePooling,
-    #[value(name = "aphrodite-rerank")]
-    AphroditeRerank,
+    #[value(name = "sonar-pooling")]
+    SonarPooling,
+    #[value(name = "sonar-rerank")]
+    SonarRerank,
 }
 
 impl BackendKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Aphrodite => "aphrodite",
+            Self::Sonar => "sonar",
             Self::Openai => "openai",
             Self::OpenaiChat => "openai-chat",
             Self::OpenaiResponses => "openai-responses",
             Self::OpenaiEmbeddings => "openai-embeddings",
             Self::OpenaiEmbeddingsChat => "openai-embeddings-chat",
-            Self::AphroditePooling => "aphrodite-pooling",
-            Self::AphroditeRerank => "aphrodite-rerank",
+            Self::SonarPooling => "sonar-pooling",
+            Self::SonarRerank => "sonar-rerank",
         }
     }
 
     /// Return true if the backend is compatible with OpenAI-style API and sampling parameters.
     pub fn is_openai_compatible(self) -> bool {
         match self {
-            Self::Aphrodite | Self::Openai | Self::OpenaiChat | Self::OpenaiResponses => true,
+            Self::Sonar | Self::Openai | Self::OpenaiChat | Self::OpenaiResponses => true,
             Self::OpenaiEmbeddings
             | Self::OpenaiEmbeddingsChat
-            | Self::AphroditePooling
-            | Self::AphroditeRerank => false,
+            | Self::SonarPooling
+            | Self::SonarRerank => false,
         }
     }
 
@@ -55,8 +55,8 @@ impl BackendKind {
             self,
             Self::OpenaiEmbeddings
                 | Self::OpenaiEmbeddingsChat
-                | Self::AphroditePooling
-                | Self::AphroditeRerank
+                | Self::SonarPooling
+                | Self::SonarRerank
         )
     }
 }
@@ -144,7 +144,7 @@ impl fmt::Display for SpeedBenchConfig {
     }
 }
 
-/// High-performance benchmark client for Aphrodite serving endpoints.
+/// High-performance benchmark client for Sonar serving endpoints.
 #[derive(clap::Args, Debug, Clone)]
 pub struct BenchServeArgs {
     /// The type of backend or endpoint to use for the benchmark.
@@ -228,7 +228,7 @@ pub struct BenchServeArgs {
     pub per_turn_input_len: usize,
 
     /// Range ratio for sampling input/output lengths, matching Python
-    /// `aphrodite bench serve`: lengths are drawn uniformly from
+    /// `sonar bench serve`: lengths are drawn uniformly from
     /// [len*(1-r), len*(1+r)]. 0.0 (the default) = exact target lengths.
     /// Accepts a single float in [0, 1) or a JSON object
     /// '{"input": r1, "output": r2}' for independent control.
@@ -264,7 +264,7 @@ pub struct BenchServeArgs {
 
     /// Send prompt as token ID arrays instead of text strings.
     /// By default, prompts are decoded to text for maximum
-    /// compatibility. Enable this for pure Aphrodite deployments to skip server-side
+    /// compatibility. Enable this for pure Sonar deployments to skip server-side
     /// tokenization (faster, exact token counts).
     #[arg(long, default_value_t = false)]
     pub prompt_token_ids: bool,
@@ -625,7 +625,7 @@ pub struct BenchServeArgs {
     pub sweep_request_rate: Option<String>,
 
     /// Reset the server's prefix cache before each sweep iteration.
-    /// Requires APHRODITE_SERVER_DEV_MODE=1 on the Aphrodite server.
+    /// Requires SONAR_SERVER_DEV_MODE=1 on the Sonar server.
     #[arg(long, default_value_t = false)]
     pub reset_prefix_cache: bool,
 
@@ -707,12 +707,12 @@ impl BenchServeArgs {
         match self.backend {
             BackendKind::OpenaiChat => "/v1/chat/completions".to_string(),
             BackendKind::OpenaiResponses => "/v1/responses".to_string(),
-            BackendKind::Aphrodite | BackendKind::Openai => "/v1/completions".to_string(),
+            BackendKind::Sonar | BackendKind::Openai => "/v1/completions".to_string(),
             BackendKind::OpenaiEmbeddings | BackendKind::OpenaiEmbeddingsChat => {
                 "/v1/embeddings".to_string()
             }
-            BackendKind::AphroditePooling => "/pooling".to_string(),
-            BackendKind::AphroditeRerank => "/v1/rerank".to_string(),
+            BackendKind::SonarPooling => "/pooling".to_string(),
+            BackendKind::SonarRerank => "/v1/rerank".to_string(),
         }
     }
 

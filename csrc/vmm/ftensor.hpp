@@ -8,7 +8,7 @@
 #include "constants.hpp"
 #include "page.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 class FTensor {
@@ -38,4 +38,4 @@ class FTensor {
 };
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

@@ -4,8 +4,8 @@
 import numpy as np
 import pytest
 
-from aphrodite.lora.request import LoRARequest
-from aphrodite.v1.worker.gpu.lora_utils import LoraState
+from sonar.lora.request import LoRARequest
+from sonar.v1.worker.gpu.lora_utils import LoraState
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 

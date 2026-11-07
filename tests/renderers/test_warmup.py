@@ -28,10 +28,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.exceptions import ChatTemplateResolutionError
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.renderers.base import BaseRenderer
-from aphrodite.renderers.params import ChatParams
+from sonar.exceptions import ChatTemplateResolutionError
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.renderers.base import BaseRenderer
+from sonar.renderers.params import ChatParams
 
 
 def _make_renderer_mock(mm_limits: dict[str, int]) -> MagicMock:
@@ -340,7 +340,7 @@ class TestEngineStartWarmupHook:
         # InprocClient has no _start_mm_warmup (only MPClient does), so it
         # takes no renderer at all: passing one is a TypeError at the call
         # site rather than a silently-ignored kwarg.
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         with pytest.raises(TypeError, match="renderer"):
             cc.InprocClient(
@@ -356,7 +356,7 @@ class TestEngineStartWarmupHook:
         # renderer kwarg is intercepted by InprocClient.__init__ (keyword-only
         # after *), so it is never forwarded to EngineCore — which has no
         # renderer parameter at all.
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         callback = MagicMock()
         with patch.object(cc, "EngineCore") as mock_engine_core:
@@ -369,14 +369,14 @@ class TestEngineStartWarmupHook:
 
         mock_engine_core.assert_called_once()
         args, kwargs = mock_engine_core.call_args
-        assert len(args) == 3  # aphrodite_config, executor_class, log_stats
+        assert len(args) == 3  # sonar_config, executor_class, log_stats
         assert "renderer" not in kwargs
         assert kwargs.get("executor_fail_callback") is callback
 
     def test_make_client_does_not_pass_renderer_to_inproc_client(self):
         # In-process: the renderer must never reach InprocClient, so MM
         # warmup stays a plain inline call inside renderer.warmup().
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         cfg = self._mock_config()
         renderer = self._mock_renderer()
@@ -388,7 +388,7 @@ class TestEngineStartWarmupHook:
             client = cc.EngineCoreClient.make_client(
                 multiprocess_mode=False,
                 asyncio_mode=False,
-                aphrodite_config=cfg,
+                sonar_config=cfg,
                 executor_class=MagicMock(),
                 log_stats=False,
                 renderer=renderer,
@@ -409,7 +409,7 @@ class TestEngineStartWarmupHook:
         ],
     )
     def test_make_client_passes_renderer(self, client_cls, multiprocess_mode):
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         cfg = self._mock_config()
         renderer = self._mock_renderer()
@@ -418,7 +418,7 @@ class TestEngineStartWarmupHook:
             cc.EngineCoreClient.make_client(
                 multiprocess_mode=multiprocess_mode,
                 asyncio_mode=False,
-                aphrodite_config=cfg,
+                sonar_config=cfg,
                 executor_class=MagicMock(),
                 log_stats=False,
                 renderer=renderer,
@@ -435,7 +435,7 @@ class TestEngineStartWarmupHook:
         ],
     )
     def test_make_async_mp_client_passes_renderer(self, client_cls, dp_size, external_lb):
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         cfg = self._mock_config()
         cfg.parallel_config.data_parallel_size = dp_size
@@ -456,7 +456,7 @@ class TestEngineStartWarmupHook:
     def test_mp_client_starts_mm_warmup_only_with_renderer(self):
         # MPClient must call renderer.start_mm_warmup_in_background when a
         # renderer was given, and skip it (no crash) when not.
-        from aphrodite.v1.engine import core_client as cc
+        from sonar.v1.engine import core_client as cc
 
         # No renderer: _start_mm_warmup is a no-op.
         client = cc.MPClient.__new__(cc.MPClient)

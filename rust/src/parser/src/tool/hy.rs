@@ -5,7 +5,7 @@ mod structural_tag;
 
 use std::sync::Arc;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use winnow::ascii::multispace0 as ws0;
 use winnow::combinator::{alt, delimited, eof, repeat, seq, terminated};
 use winnow::prelude::*;
@@ -386,9 +386,9 @@ fn ignored_rest_event(input: &mut HyInput<'_>) -> ModalResult<HyEvent> {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_tokenizer::DecodedText;
     use expect_test::expect;
     use serde_json::{Value, json};
+    use sonar_tokenizer::DecodedText;
     use thiserror_ext::AsReport;
 
     use super::{HyDialect, HyToolParser, ToolParser};

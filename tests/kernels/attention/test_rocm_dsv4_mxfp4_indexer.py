@@ -13,25 +13,25 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm-only", allow_module_level=True)
 
-from aphrodite.platforms.rocm import get_cdna_version
+from sonar.platforms.rocm import get_cdna_version
 
 if get_cdna_version() != 4:
     pytest.skip("CDNA4-only", allow_module_level=True)
 
-from aphrodite.models.deepseek_v4.amd.rocm import (
+from sonar.models.deepseek_v4.amd.rocm import (
     DeepseekV4RocmMxfp4Compressor,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import (
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import (
     rocm_mxfp4_indexer_k_store,
 )
-from aphrodite.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
+from sonar.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
 
 # DeepSeek-V4-Pro's indexer: 64 heads of 128, ratio 4 with overlap, 256-token
 # blocks, so 64-entry K pages.

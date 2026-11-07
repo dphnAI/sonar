@@ -8,12 +8,12 @@ import huggingface_hub.constants
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     fastsafetensors_weights_iterator,
     safetensors_weights_iterator,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.mark.skipif(
@@ -22,7 +22,7 @@ from aphrodite.platforms import current_platform
 )
 @pytest.mark.parametrize("queue_size", [0, 1])
 def test_fastsafetensors_model_loader(monkeypatch, queue_size):
-    monkeypatch.setenv("APHRODITE_FASTSAFETENSORS_QUEUE_SIZE", str(queue_size))
+    monkeypatch.setenv("SONAR_FASTSAFETENSORS_QUEUE_SIZE", str(queue_size))
     with tempfile.TemporaryDirectory() as tmpdir:
         huggingface_hub.constants.HF_HUB_OFFLINE = False
         download_weights_from_hf("openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir)

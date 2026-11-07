@@ -11,33 +11,33 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite import (
+from sonar import (
     CompletionOutput,
     PromptType,
     RequestOutput,
     SamplingParams,
     TokensPrompt,
 )
-from aphrodite import logger as aphrodite_logger
-from aphrodite.config import AphroditeConfig
-from aphrodite.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
-from aphrodite.entrypoints.generate.beam_search.online import BeamSearchOnlineMixin
-from aphrodite.entrypoints.generate.beam_search.utils import (
+from sonar import logger as sonar_logger
+from sonar.config import SonarConfig
+from sonar.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
+from sonar.entrypoints.generate.beam_search.online import BeamSearchOnlineMixin
+from sonar.entrypoints.generate.beam_search.utils import (
     BeamSearchInstance,
     BeamSearchSequence,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import EngineInput, TokensInput
-from aphrodite.logprobs import Logprob, SampleLogprobs
-from aphrodite.sampling_params import BeamSearchParams, StructuredOutputsParams
-from aphrodite.v1.structured_output.backend_types import StructuredOutputBackend
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import EngineInput, TokensInput
+from sonar.logprobs import Logprob, SampleLogprobs
+from sonar.sampling_params import BeamSearchParams, StructuredOutputsParams
+from sonar.v1.structured_output.backend_types import StructuredOutputBackend
 
 
 @pytest.fixture
 def reset_warning_once():
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
     yield
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
 
 
 class _Tokenizer:
@@ -55,22 +55,22 @@ class _Renderer:
         return _Tokenizer()
 
 
-class _AphroditeConfig:
+class _SonarConfig:
     use_v2_model_runner = True
     watermark_config = object()
     speculative_config = None
     model_config = SimpleNamespace(is_diffusion=False)
 
     def _check_supports_watermarking(self, params: BeamSearchParams) -> bool:
-        return AphroditeConfig._check_supports_watermarking(cast(AphroditeConfig, self), params)
+        return SonarConfig._check_supports_watermarking(cast(SonarConfig, self), params)
 
 
 class _InputProcessor:
-    aphrodite_config = _AphroditeConfig()
+    sonar_config = _SonarConfig()
     generation_config_fields: dict[str, Any] = {}
 
     def resolve_watermarking(self, params):
-        return self.aphrodite_config._check_supports_watermarking(params)
+        return self.sonar_config._check_supports_watermarking(params)
 
 
 class _EngineClient:
@@ -366,7 +366,7 @@ async def test_offline_beam_search_preserves_prompt_priorities(monkeypatch, conc
 
 def test_offline_beam_search_rejects_mismatched_priorities():
     serving = _OfflineServing()
-    with pytest.raises(AphroditeValidationError, match="lengths of prompts"):
+    with pytest.raises(SonarValidationError, match="lengths of prompts"):
         serving.beam_search(
             [{"prompt_token_ids": [1]}, {"prompt_token_ids": [2]}],
             BeamSearchParams(beam_width=2, max_tokens=1, watermarking=False),
@@ -478,7 +478,7 @@ async def test_beam_search_abort_returns_partial_outputs(
 
 
 @pytest.mark.asyncio
-async def test_beam_search_warns_and_disables_watermarking(caplog_aphrodite, reset_warning_once) -> None:
+async def test_beam_search_warns_and_disables_watermarking(caplog_sonar, reset_warning_once) -> None:
     prompt = {
         "type": "token",
         "prompt": "prompt",
@@ -486,25 +486,25 @@ async def test_beam_search_warns_and_disables_watermarking(caplog_aphrodite, res
     }
     params = BeamSearchParams(beam_width=2, max_tokens=1)
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         output = await anext(_AsyncServing().beam_search(prompt, "request", params))
 
-    assert "beam search requests will run without watermarking" in caplog_aphrodite.text
+    assert "beam search requests will run without watermarking" in caplog_sonar.text
     # The caller's params object is never rewritten by admission.
     assert params.watermarking is None
     assert output.finished
 
 
-def test_offline_beam_search_warns_and_disables_watermarking(caplog_aphrodite, reset_warning_once) -> None:
+def test_offline_beam_search_warns_and_disables_watermarking(caplog_sonar, reset_warning_once) -> None:
     params = BeamSearchParams(beam_width=2, max_tokens=1)
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         outputs = _OfflineServing().beam_search(
             cast(list[PromptType], [{"type": "token", "prompt_token_ids": [1]}]),
             params,
         )
 
-    assert "beam search requests will run without watermarking" in caplog_aphrodite.text
+    assert "beam search requests will run without watermarking" in caplog_sonar.text
     # The caller's params object is never rewritten by admission.
     assert params.watermarking is None
     assert len(outputs) == 1
@@ -627,6 +627,6 @@ def test_beam_allowlist_rejects_unsupported_requests(case):
     if case == "grammar":
         params.structured_outputs = StructuredOutputsParams(regex="a")
     sampling = SamplingParams(logprobs=4)
-    with pytest.raises((ValueError, AphroditeValidationError)):
+    with pytest.raises((ValueError, SonarValidationError)):
         params.configure_logprobs(sampling, config)
         sampling._validate_logprobs(config.model_config)

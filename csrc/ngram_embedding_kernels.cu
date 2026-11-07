@@ -14,7 +14,7 @@
 
 #include <cstdint>
 
-namespace aphrodite::ngram_embedding {
+namespace sonar::ngram_embedding {
 
 constexpr int kBlockThreads = 256;
 
@@ -64,7 +64,7 @@ __global__ void ComputeNGramIdsKernel(
   }
 }
 
-}  // namespace aphrodite::ngram_embedding
+}  // namespace sonar::ngram_embedding
 
 void ngram_compute_n_gram_ids(
     int64_t ne_n, int64_t ne_k, torch::stable::Tensor& ne_weights,
@@ -82,8 +82,8 @@ void ngram_compute_n_gram_ids(
   const torch::stable::accelerator::DeviceGuard device_guard(
       ne_weights.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  aphrodite::ngram_embedding::ComputeNGramIdsKernel<<<
-      grid_size, aphrodite::ngram_embedding::kBlockThreads, 0, stream>>>(
+  sonar::ngram_embedding::ComputeNGramIdsKernel<<<
+      grid_size, sonar::ngram_embedding::kBlockThreads, 0, stream>>>(
       batch_size, static_cast<int>(ne_n), static_cast<int>(ne_k),
       ne_weights.mutable_data_ptr<int32_t>(),
       ne_mods.mutable_data_ptr<int32_t>(),

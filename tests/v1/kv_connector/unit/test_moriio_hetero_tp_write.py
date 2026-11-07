@@ -20,39 +20,39 @@ import msgspec
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import ssm_conv_transfer_utils
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import ssm_conv_transfer_utils
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ROLE,
     MoRIIOAgentMetadata,
     MoRIIOError,
     RemoteAllocInfo,
     WriteTask,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
     kda_conv_ssm,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
     _rank_heads,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import (
     derive_mamba_conv_split,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     MambaSpec,
     MLAAttentionSpec,
     SlidingWindowSpec,
     compute_layout_strides,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 from .utils import make_moriio_writer
 

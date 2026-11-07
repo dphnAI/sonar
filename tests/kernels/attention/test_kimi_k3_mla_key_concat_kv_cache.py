@@ -4,14 +4,14 @@
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
+import sonar._custom_ops as ops
+from sonar.models.kimi_k3.nvidia.ops.fused_mla_key_concat_kv_cache import (
     fused_mla_decode_q_concat_kv_cache_insert,
     fused_mla_key_concat_ds_mla_insert,
     fused_mla_key_concat_kv_cache_insert,
     fused_mla_qkv_quant_kv_cache_fp8_insert,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 NUM_TOKENS = 4
 NUM_HEADS = 2

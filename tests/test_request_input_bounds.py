@@ -18,19 +18,19 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-import aphrodite.envs as envs
-from aphrodite import SamplingParams
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+import sonar.envs as envs
+from sonar import SamplingParams
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs.engine import embeds_input
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.tokenizers import deepseek_v4_encoding, deepseek_v32_encoding
-from aphrodite.v1.engine.input_processor import InputProcessor
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.inputs.engine import embeds_input
+from sonar.sampling_params import BeamSearchParams
+from sonar.tokenizers import deepseek_v4_encoding, deepseek_v32_encoding
+from sonar.v1.engine.input_processor import InputProcessor
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
@@ -66,7 +66,7 @@ def test_prompt_embeds_mask_length_rejected_before_engine_submission(prompt_embe
         is_token_ids=[False] * mask_len,
     )
 
-    with pytest.raises(AphroditeValidationError, match="prompt_is_token_ids") as exc_info:
+    with pytest.raises(SonarValidationError, match="prompt_is_token_ids") as exc_info:
         prompt_embeds_processor.process_inputs("invalid", prompt, SamplingParams(max_tokens=1), ("generate",))
 
     assert exc_info.value.parameter == "prompt_is_token_ids"
@@ -96,12 +96,12 @@ def test_routed_experts_offset_validated_before_engine_submission(offset):
     processor.generation_config_fields = {}
     processor.renderer = Mock()
     processor.renderer.get_eos_token_id.return_value = None
-    processor.aphrodite_config = Mock()
+    processor.sonar_config = Mock()
     params = SamplingParams(routed_experts_prompt_start=offset)
     prompt = {"type": "token", "prompt_token_ids": [1, 2, 3]}
 
     if not 0 <= offset <= 3:
-        with pytest.raises(AphroditeValidationError, match="routed_experts_prompt_start"):
+        with pytest.raises(SonarValidationError, match="routed_experts_prompt_start"):
             InputProcessor.process_inputs(processor, "invalid", prompt, params, ("generate",))
         params.routed_experts_prompt_start = 0
 
@@ -115,7 +115,7 @@ def _process_inputs_with_max_model_len(params: SamplingParams, max_model_len: in
     processor.generation_config_fields = {}
     processor.renderer = Mock()
     processor.renderer.get_eos_token_id.return_value = None
-    processor.aphrodite_config = Mock()
+    processor.sonar_config = Mock()
     processor.model_config = Mock()
     processor.model_config.max_model_len = max_model_len
     prompt = {"type": "token", "prompt_token_ids": [1, 2, 3]}
@@ -126,7 +126,7 @@ def test_unset_max_tokens_rejects_oversized_min_tokens():
     """Reject min_tokens that only becomes invalid after max_tokens is filled."""
     params = SamplingParams(max_tokens=None, min_tokens=2147483648)
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="min_tokens must be less than or equal to max_tokens",
     ):
         _process_inputs_with_max_model_len(params)
@@ -199,10 +199,10 @@ def test_public_requests_reject_more_than_four_stop_strings(
 
 def test_stop_string_limit_can_be_overridden():
     env = os.environ.copy()
-    env["APHRODITE_MAX_STOP_STRINGS"] = "1"
+    env["SONAR_MAX_STOP_STRINGS"] = "1"
     code = """
 from pydantic import ValidationError
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
 
 try:
     CompletionRequest(
@@ -253,18 +253,18 @@ def test_bad_word_tokenization_stops_at_worker_limit():
     params = SamplingParams(bad_words=[f"word-{i}" for i in range(65)])
     tokenizer = MockTokenizer()
 
-    with pytest.raises(AphroditeValidationError, match="Too many bad words"):
+    with pytest.raises(SonarValidationError, match="Too many bad words"):
         params.update_from_tokenizer(tokenizer)
 
     assert tokenizer.calls == 129
 
 
 def test_bad_word_tokenization_limit_can_be_overridden(monkeypatch):
-    monkeypatch.setenv("APHRODITE_MAX_NUM_BAD_WORDS", "2")
+    monkeypatch.setenv("SONAR_MAX_NUM_BAD_WORDS", "2")
     params = SamplingParams(bad_words=["bad", "worse"])
     tokenizer = MockTokenizer()
 
-    with pytest.raises(AphroditeValidationError, match="The max number is 2"):
+    with pytest.raises(SonarValidationError, match="The max number is 2"):
         params.update_from_tokenizer(tokenizer)
 
     assert tokenizer.calls == 3
@@ -281,7 +281,7 @@ def test_bad_word_rejects_empty_base_tokenization():
     params = SamplingParams(bad_words=["\x16"])
 
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="must tokenize to at least one token",
     ) as exc_info:
         params.update_from_tokenizer(EmptyBaseEncodingTokenizer())
@@ -308,7 +308,7 @@ def test_bad_word_skips_empty_optional_prefixed_tokenization():
 
 
 def _set_max_n(monkeypatch: pytest.MonkeyPatch, value: int) -> None:
-    monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", str(value))
+    monkeypatch.setenv("SONAR_MAX_N_SEQUENCES", str(value))
     if hasattr(envs.__getattr__, "cache_clear"):
         envs.__getattr__.cache_clear()
 
@@ -318,7 +318,7 @@ def test_direct_beam_width_rejects_values_over_sequence_cap(
 ):
     _set_max_n(monkeypatch, 4)
 
-    with pytest.raises(AphroditeValidationError, match="beam_width must be at most 4"):
+    with pytest.raises(SonarValidationError, match="beam_width must be at most 4"):
         BeamSearchParams(beam_width=5, max_tokens=1)
 
 
@@ -335,7 +335,7 @@ def test_chat_beam_conversion_rejects_n_before_stream_state_allocation(
         max_tokens=1,
     )
 
-    with pytest.raises(AphroditeValidationError, match="beam_width must be at most 4"):
+    with pytest.raises(SonarValidationError, match="beam_width must be at most 4"):
         request.to_beam_search_params(max_tokens=1, default_sampling_params={})
 
 

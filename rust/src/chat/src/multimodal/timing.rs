@@ -3,7 +3,7 @@
 
 //! Multimodal preprocessing spans and their timing collector configuration.
 
-use aphrodite_tracing::timing::{RequestTimingLayer, RequestTimingStats};
+use sonar_tracing::timing::{RequestTimingLayer, RequestTimingStats};
 use tracing::{Span, info_span};
 use tracing_subscriber::filter::{Filtered, LevelFilter};
 
@@ -11,7 +11,7 @@ use tracing_subscriber::filter::{Filtered, LevelFilter};
 pub(super) const MM_STAGE_TARGET: &str = "mm_processor_timing";
 
 /// Create the timing layer and its stats handle for multimodal preprocessing
-/// stage spans (`aphrodite-bench mm-processor`), mirroring the Python
+/// stage spans (`sonar-bench mm-processor`), mirroring the Python
 /// `TimingContext` / `MultiModalTimingRegistry`.
 pub fn mm_timing_layer<S>() -> (
     Filtered<RequestTimingLayer, LevelFilter, S>,

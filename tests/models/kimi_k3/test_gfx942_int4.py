@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.quantization.mxfp4 import (
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.model_executor.layers.fused_moe import RoutedExperts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.quantization.mxfp4 import (
     _moe_weight_override_is_int4,
     _use_k3_situ_int4_gfx942,
 )
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar.model_executor.layers.quantization.online.base import (
     OnlineQuantizationConfig,
 )
 
@@ -30,7 +30,7 @@ class _FakeAiterOpsModule(ModuleType):
     rocm_aiter_ops: SimpleNamespace
 
 
-def _aphrodite_config(moe_weight: str | None):
+def _sonar_config(moe_weight: str | None):
     quantization_config = None if moe_weight is None else QuantizationConfigArgs(moe={"weight": moe_weight})
     return SimpleNamespace(model_config=SimpleNamespace(quantization_config=quantization_config))
 
@@ -45,8 +45,8 @@ def _aphrodite_config(moe_weight: str | None):
 )
 def test_moe_weight_override_is_int4(monkeypatch, moe_weight, expected):
     monkeypatch.setattr(
-        "aphrodite.config.get_current_aphrodite_config",
-        lambda: _aphrodite_config(moe_weight),
+        "sonar.config.get_current_sonar_config",
+        lambda: _sonar_config(moe_weight),
     )
     assert _moe_weight_override_is_int4() is expected
 
@@ -57,21 +57,21 @@ def test_k3_situ_int4_gfx942_requires_explicit_override(int4_requested):
         activation=MoEActivation.SITU,
         activation_situ_linear_beta=25.0,
     )
-    fake_rocm = _FakeRocmModule("aphrodite.platforms.rocm")
+    fake_rocm = _FakeRocmModule("sonar.platforms.rocm")
     fake_rocm.on_gfx942 = lambda: True
-    fake_aiter_ops = _FakeAiterOpsModule("aphrodite._aiter_ops")
+    fake_aiter_ops = _FakeAiterOpsModule("sonar._aiter_ops")
     fake_aiter_ops.rocm_aiter_ops = SimpleNamespace(is_fused_moe_enabled=lambda: True)
     with (
-        patch("aphrodite.platforms.current_platform.is_rocm", return_value=True),
+        patch("sonar.platforms.current_platform.is_rocm", return_value=True),
         patch.dict(
             sys.modules,
             {
-                "aphrodite.platforms.rocm": fake_rocm,
-                "aphrodite._aiter_ops": fake_aiter_ops,
+                "sonar.platforms.rocm": fake_rocm,
+                "sonar._aiter_ops": fake_aiter_ops,
             },
         ),
         patch(
-            "aphrodite.model_executor.layers.quantization.mxfp4._moe_weight_override_is_int4",
+            "sonar.model_executor.layers.quantization.mxfp4._moe_weight_override_is_int4",
             return_value=int4_requested,
         ),
     ):

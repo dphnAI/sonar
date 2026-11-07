@@ -6,15 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.config.attention import AttentionConfig, HiSparseConfig
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar.config.attention import AttentionConfig, HiSparseConfig
+from sonar.model_executor.layers.attention.attention import (
     _largest_kernel_block_within,
 )
-from aphrodite.v1.attention.backend import AttentionType, MultipleOf
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import get_attn_spec_kind
-from aphrodite.v1.hisparse.runtime import ResolvedHiSparseConfig
-from aphrodite.v1.kv_cache_interface import KVCacheSpecKind
+from sonar.v1.attention.backend import AttentionType, MultipleOf
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import get_attn_spec_kind
+from sonar.v1.hisparse.runtime import ResolvedHiSparseConfig
+from sonar.v1.kv_cache_interface import KVCacheSpecKind
 
 
 @pytest.mark.parametrize(
@@ -92,30 +92,30 @@ def test_backend_per_kind_defaults_empty():
 
 
 def test_hisparse_device_buffer_size_boundaries():
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
         speculative_config=None,
     )
-    resolved = ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+    resolved = ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)
     assert resolved is not None
     assert resolved.device_buffer_size == 256
 
-    aphrodite_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=127)
+    sonar_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=127)
     with pytest.raises(ValueError, match="expected at least 128"):
-        ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+        ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)
 
-    aphrodite_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=32768)
-    resolved = ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+    sonar_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=32768)
+    resolved = ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)
     assert resolved is not None
     assert resolved.device_buffer_size == 32768
 
-    aphrodite_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=32769)
+    sonar_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=32769)
     with pytest.raises(ValueError, match="int16 slot-index limit"):
-        ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+        ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)
 
 
 def test_hisparse_device_buffer_covers_speculative_window():
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
         speculative_config=SimpleNamespace(
             num_speculative_tokens=3,
@@ -123,10 +123,10 @@ def test_hisparse_device_buffer_covers_speculative_window():
         ),
     )
 
-    resolved = ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+    resolved = ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)
     assert resolved is not None
     assert resolved.device_buffer_size == 5 * 128
 
-    aphrodite_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=4 * 128 - 1)
+    sonar_config.attention_config.hisparse_config = HiSparseConfig(device_buffer_size=4 * 128 - 1)
     with pytest.raises(ValueError, match="expected at least 512"):
-        ResolvedHiSparseConfig.from_aphrodite_config(aphrodite_config, model_top_k=128)
+        ResolvedHiSparseConfig.from_sonar_config(sonar_config, model_top_k=128)

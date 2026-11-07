@@ -1,12 +1,12 @@
 # DeepSeek DeepGEMM Kernels Benchmark
 
-This directory includes benchmarks between DeepSeek's DeepGEMM block fp8 kernels against Aphrodite's existing triton and CUTLASS-based kernels.
+This directory includes benchmarks between DeepSeek's DeepGEMM block fp8 kernels against Sonar's existing triton and CUTLASS-based kernels.
 
 Currently this just includes dense GEMMs and only works on Hopper GPUs.
 
 ## Setup
 
-You need to install Aphrodite in your usual fashion, then install DeepGEMM from source in its own directory:
+You need to install Sonar in your usual fashion, then install DeepGEMM from source in its own directory:
 
 ```bash
 git clone --recursive https://github.com/deepseek-ai/DeepGEMM
@@ -25,12 +25,12 @@ PyTorch version: 2.5.1+cu124
 CUDA version: 12.4
 Triton version: 3.1.0
 Using device: NVIDIA H100 80GB HBM3
-WARNING 02-26 21:55:15 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=4096,K=7168,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
-INFO 02-26 21:55:15 [fp8_utils.py:449] Using configuration from /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=7168,K=18432,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
-WARNING 02-26 21:55:16 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=18432,K=7168,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
-WARNING 02-26 21:55:17 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=24576,K=1536,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
-INFO 02-26 21:55:17 [fp8_utils.py:449] Using configuration from /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=32768,K=512,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
-INFO 02-26 21:55:17 [fp8_utils.py:449] Using configuration from /home/mgoin/code/aphrodite/aphrodite/model_executor/layers/quantization/utils/configs/N=7168,K=16384,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+WARNING 02-26 21:55:15 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=4096,K=7168,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
+INFO 02-26 21:55:15 [fp8_utils.py:449] Using configuration from /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=7168,K=18432,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+WARNING 02-26 21:55:16 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=18432,K=7168,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
+WARNING 02-26 21:55:17 [fp8_utils.py:458] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=24576,K=1536,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json
+INFO 02-26 21:55:17 [fp8_utils.py:449] Using configuration from /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=32768,K=512,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+INFO 02-26 21:55:17 [fp8_utils.py:449] Using configuration from /home/mgoin/code/sonar/sonar/model_executor/layers/quantization/utils/configs/N=7168,K=16384,device_name=NVIDIA_H100_80GB_HBM3,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
 
 ===== PERFORMANCE COMPARISON =====
 
@@ -56,7 +56,7 @@ DeepGEMM Implementation:
 | 4096 |  4096 |  7168 | 335.4     | 717.0  | 275.1  |
 +------+-------+-------+-----------+--------+--------+
 
-Aphrodite Triton Implementation:
+Sonar Triton Implementation:
 +------+-------+-------+-----------+--------+--------+--------------+
 | m    | n     | k     | Time (μs) | TFLOPS | GB/s   | vs DeepGEMM  |
 +------+-------+-------+-----------+--------+--------+--------------+
@@ -78,7 +78,7 @@ Aphrodite Triton Implementation:
 | 4096 |  4096 |  7168 | 901.8     | 266.7  | 102.3  | 0.37x slower |
 +------+-------+-------+-----------+--------+--------+--------------+
 
-Aphrodite CUTLASS Implementation:
+Sonar CUTLASS Implementation:
 +------+-------+-------+-----------+--------+--------+--------------+--------------+
 | m    | n     | k     | Time (μs) | TFLOPS | GB/s   | vs DeepGEMM  | vs Triton    |
 +------+-------+-------+-----------+--------+--------+--------------+--------------+
@@ -105,17 +105,17 @@ Aphrodite CUTLASS Implementation:
 | Implementation | Avg TFLOPS | Avg GB/s | Avg Time (ms) |
 +----------------+------------+----------+---------------+
 | DeepGEMM       | 310.98     | 1052.10  | 0.11          |
-| Aphrodite Triton    | 144.30     | 715.60   | 0.23          |
-| Aphrodite CUTLASS   | 286.78     | 1076.67  | 0.11          |
+| Sonar Triton    | 144.30     | 715.60   | 0.23          |
+| Sonar CUTLASS   | 286.78     | 1076.67  | 0.11          |
 +----------------+------------+----------+---------------+
 
 ===== AVERAGE SPEEDUPS =====
 +-----------------------------+--------------+
 | Comparison                  | Speedup      |
 +-----------------------------+--------------+
-| DeepGEMM vs Aphrodite Triton     | 1.71x faster |
-| DeepGEMM vs Aphrodite CUTLASS    | 0.94x slower |
-| Aphrodite CUTLASS vs Aphrodite Triton | 1.84x faster |
+| DeepGEMM vs Sonar Triton     | 1.71x faster |
+| DeepGEMM vs Sonar CUTLASS    | 0.94x slower |
+| Sonar CUTLASS vs Sonar Triton | 1.84x faster |
 +-----------------------------+--------------+
 
 ===== ACCURACY COMPARISON =====
@@ -123,7 +123,7 @@ Aphrodite CUTLASS Implementation:
 | Implementation | Avg Diff vs Reference |
 +----------------+-----------------------+
 | DeepGEMM       | 0.000684              |
-| Aphrodite Triton    | 0.000684              |
-| Aphrodite CUTLASS   | 0.000684              |
+| Sonar Triton    | 0.000684              |
+| Sonar CUTLASS   | 0.000684              |
 +----------------+-----------------------+
 ```

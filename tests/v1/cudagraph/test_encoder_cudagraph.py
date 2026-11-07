@@ -20,12 +20,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.model_executor.models.interfaces import SupportsEncoderCudaGraph
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.encoder_cudagraph import (
+from sonar.model_executor.models.interfaces import SupportsEncoderCudaGraph
+from sonar.platforms import current_platform
+from sonar.v1.worker.encoder_cudagraph import (
     EncoderCudaGraphManager,
 )
-from aphrodite.v1.worker.encoder_cudagraph_defs import (
+from sonar.v1.worker.encoder_cudagraph_defs import (
     EncoderCudaGraphCaptureInputs,
     EncoderCudaGraphConfig,
     EncoderCudaGraphReplayBuffers,
@@ -35,7 +35,7 @@ from aphrodite.v1.worker.encoder_cudagraph_defs import (
 HAS_DEVICE_GRAPH = current_platform.is_cuda_alike() or current_platform.is_xpu()
 
 if current_platform.is_xpu():
-    from aphrodite.v1.worker.xpu_model_runner import _torch_cuda_wrapper
+    from sonar.v1.worker.xpu_model_runner import _torch_cuda_wrapper
 
     # Route torch.cuda graph/stream APIs to torch.xpu, as XPUModelRunner does.
     with _torch_cuda_wrapper():
@@ -47,7 +47,7 @@ if current_platform.is_xpu():
 
 
 class _MockCompilationConfig:
-    """Minimal mock for AphroditeConfig.compilation_config."""
+    """Minimal mock for SonarConfig.compilation_config."""
 
     def __init__(
         self,
@@ -76,8 +76,8 @@ class _MockParallelConfig:
     tensor_parallel_size = 1
 
 
-class _MockAphroditeConfig:
-    """Minimal mock for AphroditeConfig used in __init__ tests."""
+class _MockSonarConfig:
+    """Minimal mock for SonarConfig used in __init__ tests."""
 
     def __init__(
         self,
@@ -106,7 +106,7 @@ class _MockModel(SupportsEncoderCudaGraph):
             out_hidden_size=32,
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config):
+    def get_encoder_cudagraph_budget_range(self, sonar_config):
         return (self._min_budget, self._max_budget)
 
     def get_max_frames_per_video(self) -> int:
@@ -149,10 +149,10 @@ class _MockModel(SupportsEncoderCudaGraph):
 def _make_manager_with_budgets(budgets: list[int]) -> EncoderCudaGraphManager:
     """Create a minimal EncoderCudaGraphManager with only token_budgets set.
 
-    Skips the parts of __init__ that require a real AphroditeConfig / model
+    Skips the parts of __init__ that require a real SonarConfig / model
     by patching the attributes directly after construction.
     """
-    from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
+    from sonar.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphConfig
 
     mgr = object.__new__(EncoderCudaGraphManager)
     mgr.token_budgets = sorted(budgets)
@@ -476,7 +476,7 @@ class SimpleMockViTModel(torch.nn.Module, SupportsEncoderCudaGraph):
 
     def get_encoder_cudagraph_budget_range(
         self,
-        aphrodite_config,
+        sonar_config,
     ) -> tuple[int, int]:
         # For tests: min=4, max=128 (small values for fast capture)
         return (4, 128)
@@ -591,7 +591,7 @@ def _make_manager_for_gpu(
     *,
     max_frames_per_batch: int | None = None,
 ) -> EncoderCudaGraphManager:
-    """Create EncoderCudaGraphManager bypassing AphroditeConfig for GPU tests."""
+    """Create EncoderCudaGraphManager bypassing SonarConfig for GPU tests."""
     mgr = object.__new__(EncoderCudaGraphManager)
     mgr.token_budgets = sorted(token_budgets)
     mgr.path_token_budgets = {"default": mgr.token_budgets}
@@ -748,15 +748,15 @@ class TestEncoderCudaGraphCaptureReplay:
 @torch.inference_mode()
 def test_eonly_capture_preserves_outputs_across_replay_and_fallback(profile_only):
     """The E-only entry captures only the encoder and preserves cached outputs."""
-    from aphrodite.distributed.ec_transfer.ec_connector.base import (
+    from sonar.distributed.ec_transfer.ec_connector.base import (
         ECConnectorBase,
         ECConnectorMetadata,
     )
-    from aphrodite.v1.core.sched.output import SchedulerOutput
-    from aphrodite.v1.worker.gpu.ec_connector import ActiveECConnector
-    from aphrodite.v1.worker.gpu.mm.encoder_runner import EncoderRunner
-    from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
-    from aphrodite.v1.worker.workspace import lock_workspace
+    from sonar.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.worker.gpu.ec_connector import ActiveECConnector
+    from sonar.v1.worker.gpu.mm.encoder_runner import EncoderRunner
+    from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+    from sonar.v1.worker.workspace import lock_workspace
 
     device = torch.device(current_platform.device_type, 0)
     dtype = torch.float16
@@ -768,7 +768,7 @@ def test_eonly_capture_preserves_outputs_across_replay_and_fallback(profile_only
     runner = object.__new__(MMEncoderModelRunner)
     runner.model_state = SimpleNamespace(encoder_runner=encoder)
     # No decoder manager is installed: capture must be encoder-only.
-    with patch("aphrodite.v1.worker.mm_encoder_model_runner.lock_workspace", wraps=lock_workspace) as lock:
+    with patch("sonar.v1.worker.mm_encoder_model_runner.lock_workspace", wraps=lock_workspace) as lock:
         runner.capture_model(profile_only=profile_only)
         assert lock.call_count == int(not profile_only)
     assert len(manager.budget_graphs["default"]) == len(_BUDGETS)
@@ -782,7 +782,7 @@ def test_eonly_capture_preserves_outputs_across_replay_and_fallback(profile_only
     connector.save_caches.side_effect = lambda *, encoder_cache, mm_hash: (
         pending_sends.update({mm_hash: encoder_cache[mm_hash]})
     )
-    with patch("aphrodite.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=connector):
+    with patch("sonar.v1.worker.gpu.ec_connector.get_ec_transfer", return_value=connector):
         ec = ActiveECConnector(SimpleNamespace(), cache)
     scheduled = cast(
         SchedulerOutput,
@@ -816,8 +816,8 @@ def test_eonly_capture_preserves_outputs_across_replay_and_fallback(profile_only
 
 
 def test_eonly_without_encoder_graph_skips_capture():
-    from aphrodite.v1.worker.gpu.mm.encoder_runner import EncoderRunner
-    from aphrodite.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
+    from sonar.v1.worker.gpu.mm.encoder_runner import EncoderRunner
+    from sonar.v1.worker.mm_encoder_model_runner import MMEncoderModelRunner
 
     encoder = object.__new__(EncoderRunner)
     encoder.cudagraph_manager = None
@@ -1052,7 +1052,7 @@ class MockDeepseekVL2Model(torch.nn.Module, SupportsEncoderCudaGraph):
             out_hidden_size=_DSV2_DIM,
         )
 
-    def get_encoder_cudagraph_budget_range(self, aphrodite_config) -> tuple[int, int]:
+    def get_encoder_cudagraph_budget_range(self, sonar_config) -> tuple[int, int]:
         return (_dsv2_output_tokens(1, 1), 128)
 
     def get_encoder_cudagraph_item_specs(self, mm_kwargs: dict[str, Any]) -> list[EncoderItemSpec]:
@@ -1346,10 +1346,10 @@ class TestInitInvariantValidation:
         min_budget=4,
         max_budget=128,
     ):
-        aphrodite_config = _MockAphroditeConfig(token_budgets, max_mm_items)
+        sonar_config = _MockSonarConfig(token_budgets, max_mm_items)
         model = _MockModel(min_budget, max_budget)
         return EncoderCudaGraphManager(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=torch.device("cpu"),
             dtype=torch.float32,
             model=model,
@@ -1429,13 +1429,13 @@ class TestInitInvariantValidation:
 
     def test_user_budgets_zero_raises(self):
         """Non-positive budgets should be caught at config validation."""
-        from aphrodite.config.compilation import CompilationConfig
+        from sonar.config.compilation import CompilationConfig
 
         with pytest.raises(ValueError, match="must be positive"):
             CompilationConfig(encoder_cudagraph_token_budgets=[0, 128])
 
     def test_user_budgets_negative_raises(self):
-        from aphrodite.config.compilation import CompilationConfig
+        from sonar.config.compilation import CompilationConfig
 
         with pytest.raises(ValueError, match="must be positive"):
             CompilationConfig(encoder_cudagraph_token_budgets=[-1, 64])

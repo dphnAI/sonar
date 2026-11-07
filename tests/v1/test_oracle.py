@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.engine.arg_utils import AsyncEngineArgs
+from sonar.engine.arg_utils import AsyncEngineArgs
 
 MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 

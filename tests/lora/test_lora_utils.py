@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.lora.utils import is_in_target_modules
+from sonar.lora.utils import is_in_target_modules
 
 
 class TestIsInTargetModules:

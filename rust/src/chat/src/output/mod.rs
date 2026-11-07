@@ -4,11 +4,11 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_llm::{RequestTimestamps, WeightVersionSpan};
-use aphrodite_parser::output_grammar::BuiltOutputGrammar;
-use aphrodite_text::output::{DecodedLogprobs, DecodedPromptLogprobs, DecodedTextEvent};
 use futures::Stream;
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_llm::{RequestTimestamps, WeightVersionSpan};
+use sonar_parser::output_grammar::BuiltOutputGrammar;
+use sonar_text::output::{DecodedLogprobs, DecodedPromptLogprobs, DecodedTextEvent};
 use trait_set::trait_set;
 use uuid::Uuid;
 
@@ -69,7 +69,7 @@ pub(crate) enum AssistantEvent {
     },
 }
 
-/// Boxed stream of decoded text events coming from [`aphrodite_text`].
+/// Boxed stream of decoded text events coming from [`sonar_text`].
 pub type DynDecodedTextEventStream = Pin<Box<dyn Stream<Item = Result<DecodedTextEvent>> + Send>>;
 /// Boxed stream of structured chat events exposed by [`crate::ChatLlm`].
 pub type DynChatEventStream = Pin<Box<dyn Stream<Item = Result<ChatEvent>> + Send>>;

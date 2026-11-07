@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.utils.collection_utils import (
+from sonar.utils.collection_utils import (
     common_prefix,
     is_list_of_numbers,
     swap_dict_values,

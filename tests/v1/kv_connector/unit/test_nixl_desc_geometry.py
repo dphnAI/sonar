@@ -23,18 +23,18 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlAgentMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
     NixlPullConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
     NixlPushConnectorWorker,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -47,7 +47,7 @@ from aphrodite.v1.kv_cache_interface import (
     create_kv_cache_views,
 )
 
-from .utils import create_aphrodite_config, expand_strided_descs
+from .utils import create_sonar_config, expand_strided_descs
 
 
 class _RecordingNixl:
@@ -157,7 +157,7 @@ def _make_packed_mla_view_worker(
         groups.append(KVCacheGroupSpec([name], spec))
         (caches[name],) = create_kv_cache_views(raw, spec, num_blocks, KVCacheLayout.BLHNC, tensor)
 
-    config = create_aphrodite_config(block_size=block_size)
+    config = create_sonar_config(block_size=block_size)
     config.parallel_config.pipeline_parallel_size = pp_size
     config.kv_transfer_config.kv_role = "kv_producer"
     config.cache_config.kv_cache_layout = "BLHNC"
@@ -330,7 +330,7 @@ def test_packed_mla_rejects_unequal_block_sizes_before_peer_registration(
 
 @pytest.mark.cpu_test
 def test_local_descriptors_follow_each_region_pool_capacity():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -354,14 +354,14 @@ def _register_overlaid_mla_worker(*, push_pp: bool = False, tail_bytes: int = 0,
     rounded up to a page boundary does. Clearing ``page_covers_view`` narrows
     each layer's view below its page, leaving the block interior non-contiguous.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
         NixlPushConnectorWorker,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         KVCacheGroupSpec,
         KVCacheTensor,
@@ -406,7 +406,7 @@ def _register_overlaid_mla_worker(*, push_pp: bool = False, tail_bytes: int = 0,
     worker.attn_backends = []
     worker._has_mamba = False
     worker._is_csa_linear = False
-    worker.aphrodite_config = MagicMock()
+    worker.sonar_config = MagicMock()
     worker.backend_name = "FLASHMLA"
     worker.num_blocks = num_blocks
     worker.nixl_memory_type = "VRAM"
@@ -482,7 +482,7 @@ def test_overlaid_transfer_groups_share_region_geometry(push_pp):
     """Groups overlaid on one allocation share its transfer region."""
     import msgspec
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlAgentMetadata,
     )
 
@@ -554,14 +554,14 @@ def _make_mla_hybrid_worker(
 
     ``kda_only_tensor`` adds a third layer to the first KDA group in a tensor
     no other group uses, as when a model has more SSM than MLA layers."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import (
         base_worker as bw,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import (
         KVCacheConfig,
         KVCacheGroupSpec,
         KVCacheTensor,
@@ -609,13 +609,13 @@ def _make_mla_hybrid_worker(
         ],
     )
 
-    aphrodite_config = create_aphrodite_config(block_size=local_block_size)
-    aphrodite_config.cache_config.enable_prefix_caching = False
+    sonar_config = create_sonar_config(block_size=local_block_size)
+    sonar_config.cache_config.enable_prefix_caching = False
     # kv_buffer_device defaults to the *real* platform's device type, which on
     # a CPU-only test host would make this a host-buffer worker: host xfer
     # buffers are per-layer, so the HMA shared-tensor regions this test builds
     # would not be deduplicated. Pin it to the faked device type.
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
 
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [kernel_block_size]
@@ -625,7 +625,7 @@ def _make_mla_hybrid_worker(
     fake_platform.device_type = "cuda"
     fake_platform.get_nixl_memory_type.return_value = "VRAM"
 
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
     with (
         patch.object(bw, "NixlWrapper", _RecordingNixl),
@@ -634,12 +634,12 @@ def _make_mla_hybrid_worker(
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
         patch(
-            "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+            "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
             return_value="DS",
         ),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = (worker_cls or NixlConnectorWorker)(aphrodite_config, "local-engine", kv_cache_config)
+        worker = (worker_cls or NixlConnectorWorker)(sonar_config, "local-engine", kv_cache_config)
         worker.use_mla = True
 
         # Attention caches are kernel-block granular on dim 0, as the
@@ -718,10 +718,10 @@ def test_mla_hybrid_groups_read_only_their_own_regions(kda_only_tensor):
 @pytest.mark.cpu_test
 def test_nixl_keeps_packed_sparse_mla_manager_block():
     """Like the worker, NIXL keeps packed sparse MLA + indexer manager blocks."""
-    from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-    from aphrodite.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseBackend
-    from aphrodite.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
-    from aphrodite.v1.kv_cache_interface import UniformTypeKVCacheSpecs
+    from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+    from sonar.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseBackend
+    from sonar.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
+    from sonar.v1.kv_cache_interface import UniformTypeKVCacheSpecs
 
     specs = {
         "mla": MLAAttentionSpec(1152, num_kv_heads=1, head_size=512, dtype=torch.bfloat16),
@@ -734,7 +734,7 @@ def test_nixl_keeps_packed_sparse_mla_manager_block():
     worker = object.__new__(bw.NixlBaseConnectorWorker)
     worker.block_size, worker.num_blocks, worker.attn_backends = 1152, 2, []
     worker._physical_blocks_per_logical_kv_block = 1
-    worker.aphrodite_config = SimpleNamespace(
+    worker.sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(get_resolved_kv_cache_layout=lambda: KVCacheLayout.BLHNC),
         compilation_config=SimpleNamespace(static_forward_context=layers),
     )
@@ -756,16 +756,16 @@ def test_nixl_keeps_packed_sparse_mla_manager_block():
 )
 def test_nixl_compressed_kernel_split(layout, kernel_block_size, raises):
     """NIXL keeps compressed pages whole or rejects a layer-outer split."""
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
     spec = MLAAttentionSpec(384, num_kv_heads=1, head_size=128, dtype=torch.uint8, tokens_per_state=8)
     kv_cache_config = KVCacheConfig(2, [], [KVCacheGroupSpec(["summary"], spec)])
-    aphrodite_config = create_aphrodite_config(block_size=384)
-    aphrodite_config.cache_config.kv_cache_layout = layout.name
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cpu"
+    sonar_config = create_sonar_config(block_size=384)
+    sonar_config.cache_config.kv_cache_layout = layout.name
+    sonar_config.kv_transfer_config.kv_buffer_device = "cpu"
     backend = MagicMock()
     backend.get_name.return_value = "TEST"
     ctx = pytest.raises(NotImplementedError) if raises else contextlib.nullcontext()
@@ -775,10 +775,10 @@ def test_nixl_compressed_kernel_split(layout, kernel_block_size, raises):
         patch.object(bw, "get_tensor_model_parallel_world_size", return_value=1),
         patch.object(bw, "get_current_attn_backends", return_value=[backend]),
         patch.object(bw, "select_common_block_size", return_value=kernel_block_size),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         ctx,
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "local-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "local-engine", kv_cache_config)
         worker.shutdown()
 
 
@@ -791,7 +791,7 @@ def _make_remote_meta(
     region_group_ids=None,
     layer_group_ids=None,
 ):
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlAgentMetadata,
     )
 
@@ -872,7 +872,7 @@ def test_hetero_ppl_multi_read_writes_stay_within_request_blocks():
     equal kernel pages, tp_ratio=-2 multi-read with replicated MLA and
     TP-sharded KDA state. Every local descriptor of the request's reads must
     stay within its own blocks."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
 
@@ -988,7 +988,7 @@ def _run_hetero_case(local_block, kernel, remote_block, num_tokens, tp_size=2, r
     ``remote_kernel`` defaults to the local kernel block size; a smaller
     value additionally exercises block_size_ratio > 1.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
 
@@ -1295,13 +1295,13 @@ def _make_csa_linear_ple_worker(scratch_aliases: str = "compressed", ple_page_si
     with (block-outer layout: both start at byte 0 of the block)."""
     from unittest.mock import MagicMock
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+    from sonar.v1.kv_cache_interface import (
         CircularBufferSpec,
         FullAttentionSpec,
         KVCacheConfig,
@@ -1411,9 +1411,9 @@ def _make_csa_linear_ple_worker(scratch_aliases: str = "compressed", ple_page_si
         ],
     )
 
-    aphrodite_config = create_aphrodite_config(block_size=4)
-    aphrodite_config.cache_config.enable_prefix_caching = False
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config = create_sonar_config(block_size=4)
+    sonar_config.cache_config.enable_prefix_caching = False
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [4]
     fake_backend.get_name.return_value = "TEST_ATTN"
@@ -1429,12 +1429,12 @@ def _make_csa_linear_ple_worker(scratch_aliases: str = "compressed", ple_page_si
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
         patch(
-            "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+            "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
             return_value="DS",
         ),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "local-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "local-engine", kv_cache_config)
         tensors = [torch.zeros((2, stride), dtype=torch.uint8) for stride in block_strides]
         worker.register_kv_caches(
             {
@@ -1517,7 +1517,7 @@ def test_csa_linear_selects_compressed_sparse_compressor_state_and_mamba_regions
 
 @pytest.mark.cpu_test
 def test_csa_linear_ple_descriptor_is_not_split():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
         TPMapping,
     )
 
@@ -1556,7 +1556,7 @@ def test_csa_linear_ple_descriptor_is_not_split():
 def test_csa_linear_remote_ple_is_copied_whole():
     from types import SimpleNamespace
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlAgentMetadata,
     )
 
@@ -1633,12 +1633,12 @@ def _make_ring_worker():
     model whose sliding-window KV lives in per-request rings."""
     from unittest.mock import MagicMock
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         CircularBufferSpec,
         KVCacheConfig,
         KVCacheGroupSpec,
@@ -1689,9 +1689,9 @@ def _make_ring_worker():
         kv_cache_groups=[group(paged_specs), group(ring_specs)],
     )
 
-    aphrodite_config = create_aphrodite_config(block_size=4)
-    aphrodite_config.cache_config.enable_prefix_caching = False
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config = create_sonar_config(block_size=4)
+    sonar_config.cache_config.enable_prefix_caching = False
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [4]
     fake_backend.get_name.return_value = "TEST_ATTN"
@@ -1706,9 +1706,9 @@ def _make_ring_worker():
         patch.object(bw, "get_tensor_model_parallel_world_size", return_value=1),
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "local-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "local-engine", kv_cache_config)
         tensors = [torch.zeros((2, 256), dtype=torch.uint8) for _ in range(2)]
         worker.register_kv_caches(
             {
@@ -1753,12 +1753,12 @@ def _make_shared_base_ring_worker():
     folding it into the swa region truncates every transferred block."""
     from unittest.mock import MagicMock
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.kv_cache_interface import (
         CircularBufferSpec,
         KVCacheConfig,
         KVCacheGroupSpec,
@@ -1806,9 +1806,9 @@ def _make_shared_base_ring_worker():
         ],
     )
 
-    aphrodite_config = create_aphrodite_config(block_size=4)
-    aphrodite_config.cache_config.enable_prefix_caching = False
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config = create_sonar_config(block_size=4)
+    sonar_config.cache_config.enable_prefix_caching = False
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
     fake_backend = MagicMock()
     fake_backend.get_supported_kernel_block_sizes.return_value = [4]
     fake_backend.get_name.return_value = "TEST_ATTN"
@@ -1823,9 +1823,9 @@ def _make_shared_base_ring_worker():
         patch.object(bw, "get_tensor_model_parallel_world_size", return_value=1),
         patch.object(bw, "get_current_attn_backends", return_value=[fake_backend]),
         patch.object(bw, "current_platform", fake_platform),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, "local-engine", kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, "local-engine", kv_cache_config)
         swa_cache = raw.as_strided((num_blocks, swa_page), (block_stride, 1))
         ring_cache = raw.as_strided((num_blocks, 1, ring_page), (block_stride, block_stride, 1))
         worker.register_kv_caches({swa_name: swa_cache, ring_name: ring_cache})
@@ -1858,11 +1858,11 @@ def test_shared_base_regions_with_distinct_block_lens_stay_separate():
     np.testing.assert_array_equal(descs[:, 0], [base[0], base[0] + 256, base[0], base[0] + 256])
 
 
-# Real model KV layouts, end to end on CPU: Aphrodite's planner and allocator build
+# Real model KV layouts, end to end on CPU: Sonar's planner and allocator build
 # P's and D's caches, D reads one request from P, and the recorded descriptors
 # are run as memory copies so every byte can be checked. Each case is the
 # first layers of a model with that model's per-layer KV specs. Hybrid block
-# sizes are the ones Aphrodite aligns to on CPU, where the attention page must hold
+# sizes are the ones Sonar aligns to on CPU, where the attention page must hold
 # the Mamba state.
 _BF16 = torch.bfloat16
 
@@ -2036,19 +2036,19 @@ _LAYOUT_PREFERENCE = ["LBNHC", "LBHNC", "BLNHC", "BLHNC", "BHLNC", "LHBNC"]
 def _real_model_side(model, layout):
     """Plan and allocate one side's KV caches the way the engine does, with
     just enough blocks for one request of one or two blocks per group."""
-    from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
-    from aphrodite.v1.core.kv_cache_planning import (
+    from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
+    from sonar.v1.core.kv_cache_planning import (
         get_global_kv_cache_groups,
         get_kv_cache_configs,
     )
-    from aphrodite.v1.worker.utils import allocate_kv_cache
+    from sonar.v1.worker.utils import allocate_kv_cache
 
     block_size, layers = _REAL_MODELS[model]
-    aphrodite_config = create_aphrodite_config(block_size=block_size, max_model_len=block_size, kv_role="kv_both")
-    aphrodite_config.model_config.max_model_len = block_size
-    aphrodite_config.cache_config.enable_prefix_caching = False
-    aphrodite_config.cache_config.kv_cache_layout = layout
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cuda"
+    sonar_config = create_sonar_config(block_size=block_size, max_model_len=block_size, kv_role="kv_both")
+    sonar_config.model_config.max_model_len = block_size
+    sonar_config.cache_config.enable_prefix_caching = False
+    sonar_config.cache_config.kv_cache_layout = layout
+    sonar_config.kv_transfer_config.kv_buffer_device = "cuda"
     # A Mamba page is padded to the attention page, which holds it.
     specs = {name: make(block_size, None) for name, make in layers}
     mamba_page = max(
@@ -2056,29 +2056,27 @@ def _real_model_side(model, layout):
         default=None,
     )
     specs = {name: make(block_size, mamba_page) for name, make in layers}
-    resolved = resolve_kv_cache_layout(aphrodite_config, [_LAYOUT_PREFERENCE], specs.values())
-    groups = get_global_kv_cache_groups(aphrodite_config, [specs])
-    aphrodite_config.cache_config.num_gpu_blocks_override = 2 + sum(
-        _blocks_per_request(g.kv_cache_spec) for g in groups
-    )
-    kv_cache_config = get_kv_cache_configs(aphrodite_config, [specs], [1 << 40], groups)[0]
-    kv_cache_config.kv_cache_layout = aphrodite_config.cache_config.kv_cache_layout
+    resolved = resolve_kv_cache_layout(sonar_config, [_LAYOUT_PREFERENCE], specs.values())
+    groups = get_global_kv_cache_groups(sonar_config, [specs])
+    sonar_config.cache_config.num_gpu_blocks_override = 2 + sum(_blocks_per_request(g.kv_cache_spec) for g in groups)
+    kv_cache_config = get_kv_cache_configs(sonar_config, [specs], [1 << 40], groups)[0]
+    kv_cache_config.kv_cache_layout = sonar_config.cache_config.kv_cache_layout
     caches = allocate_kv_cache(
         kv_cache_config,
         torch.device("cpu"),
         resolved,
         [g.kv_cache_spec.block_size for g in kv_cache_config.kv_cache_groups],
     )
-    return aphrodite_config, kv_cache_config, caches
+    return sonar_config, kv_cache_config, caches
 
 
 def _blocks_per_request(spec):
     return 1 if isinstance(spec, MambaSpec) else 2
 
 
-def _real_model_worker(engine_id, aphrodite_config, kv_cache_config, caches):
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
+def _real_model_worker(engine_id, sonar_config, kv_cache_config, caches):
+    from sonar.config import set_current_sonar_config
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
         NixlConnectorWorker,
     )
 
@@ -2097,12 +2095,12 @@ def _real_model_worker(engine_id, aphrodite_config, kv_cache_config, caches):
         patch.object(bw, "select_common_block_size", lambda size, *_: size),
         patch.object(bw, "current_platform", fake_platform),
         patch(
-            "aphrodite.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
+            "sonar.model_executor.layers.mamba.mamba_utils.get_conv_state_layout",
             return_value="DS",
         ),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        worker = NixlConnectorWorker(aphrodite_config, engine_id, kv_cache_config)
+        worker = NixlConnectorWorker(sonar_config, engine_id, kv_cache_config)
         worker.use_mla = use_mla
         worker.register_kv_caches(caches)
     return worker
@@ -2147,7 +2145,7 @@ def test_real_model_layout_pull_copies_every_page(model, p_layout, d_layout):
     """D pulls one request from P with each model's real KV plan: every page
     of every layer arrives at D's block for the same layer and request
     position, and nothing else in D's caches changes."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
         NixlConnectorMetadata,
     )
 

@@ -28,7 +28,7 @@ model:
 
 dependencies:
   - note: "Optional: opt into DeepGEMM FP8 MoE kernels for extra throughput"
-    command: "export APHRODITE_USE_DEEP_GEMM=1"
+    command: "export SONAR_USE_DEEP_GEMM=1"
     optional: true
 
 features:
@@ -86,22 +86,22 @@ hardware_overrides:
   hopper:
     extra_args: []
     extra_env:
-      APHRODITE_USE_DEEP_GEMM: "1"
+      SONAR_USE_DEEP_GEMM: "1"
   amd:
     # Verified on 8× MI300X / MI325X / MI355X (FP8 path uses --data-parallel-size 8
     # instead of TP8 — swap strategy to DP if deploying the FP8 checkpoint).
     extra_args: ["--attention-backend", "rocm_aiter_fa", "--moe-backend", "aiter"]
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides: {}
 
 guide: |
   ## Overview
 
-  [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder) is an advanced large language model created by the Qwen team. `Qwen3-Coder-480B-A35B-Instruct` is the flagship coder MoE with 480B total / 35B active parameters. Aphrodite supports it including tool calling; the guide below covers BF16 and FP8 serving on NVIDIA and AMD GPUs.
+  [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder) is an advanced large language model created by the Qwen team. `Qwen3-Coder-480B-A35B-Instruct` is the flagship coder MoE with 480B total / 35B active parameters. Sonar supports it including tool calling; the guide below covers BF16 and FP8 serving on NVIDIA and AMD GPUs.
 
-  TPU support is provided through [Aphrodite TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Ironwood](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/ironwood/vLLM/Qwen3-Coder-480B-A35B). The Ironwood docker command rendered by the hardware picker uses the `vllm/vllm-tpu` image; pin to the tag specified by the upstream recipe.
+  TPU support is provided through [Sonar TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Ironwood](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/ironwood/vLLM/Qwen3-Coder-480B-A35B). The Ironwood docker command rendered by the hardware picker uses the `vllm/vllm-tpu` image; pin to the tag specified by the upstream recipe.
 
   ## Prerequisites
 
@@ -109,14 +109,14 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### ROCm (MI300X, MI325X, MI355X)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
   The ROCm wheel requires Python 3.12, ROCm 7.0, and glibc >= 2.35.
 
@@ -124,7 +124,7 @@ guide: |
 
   ### 8xH200 / 8xH20 BF16
   ```bash
-  aphrodite serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
+  sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
     --max-model-len 32000 \
     --enable-expert-parallel \
     --tensor-parallel-size 8 \
@@ -134,7 +134,7 @@ guide: |
 
   ### 8xH200 / 8xH20 FP8 (DP=8, recommended)
   ```bash
-  APHRODITE_USE_DEEP_GEMM=1 aphrodite serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
+  SONAR_USE_DEEP_GEMM=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --max-model-len 131072 \
     --enable-expert-parallel \
     --data-parallel-size 8 \
@@ -144,7 +144,7 @@ guide: |
 
   ### 8xMI300X/MI325X/MI355X BF16
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
+  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct \
     --max-model-len 32000 \
     --attention-backend rocm_aiter_fa \
     --moe-backend aiter \
@@ -156,7 +156,7 @@ guide: |
 
   ### 8xMI300X/MI325X/MI355X FP8
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
+  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --trust-remote-code \
     --max-model-len 131072 \
     --attention-backend rocm_aiter_fa \
@@ -170,8 +170,8 @@ guide: |
   ## Client Usage
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8 \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -185,7 +185,7 @@ guide: |
 
   - **Context-length OOM**: A single H20 node cannot serve the native 262144 context. Reduce `--max-model-len` or raise `--gpu-memory-utilization`.
   - **TP=8 failure on FP8**: Expect `ValueError: The output_size of gate's and up's weight = 320 is not divisible by weight quantization block_n = 128.` on FP8 with TP=8. Switch to `--data-parallel-size 8` instead.
-  - **DeepGEMM**: set `APHRODITE_USE_DEEP_GEMM=1` for faster FP8 matmul. Follow the [setup instructions](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/deepgemm/README.md#setup) to install it.
+  - **DeepGEMM**: set `SONAR_USE_DEEP_GEMM=1` for faster FP8 matmul. Follow the [setup instructions](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/deepgemm/README.md#setup) to install it.
   - **Tool calling**: add `--tool-call-parser qwen3_coder` as shown above.
 
   ## Evaluation

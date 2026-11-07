@@ -1,6 +1,6 @@
 # Install OpenAI triton_kernels from https://github.com/triton-lang/triton/tree/main/python/triton_kernels
 
-# Set TRITON_KERNELS_SRC_DIR for use with local development with Aphrodite. We expect TRITON_KERNELS_SRC_DIR to
+# Set TRITON_KERNELS_SRC_DIR for use with local development with Sonar. We expect TRITON_KERNELS_SRC_DIR to
 # be directly set to the triton_kernels python directory.
 if (DEFINED ENV{TRITON_KERNELS_SRC_DIR})
   message(STATUS "[triton_kernels] Fetch from $ENV{TRITON_KERNELS_SRC_DIR}")
@@ -10,7 +10,7 @@ if (DEFINED ENV{TRITON_KERNELS_SRC_DIR})
   )
 
 else()
-  if (APHRODITE_TARGET_DEVICE STREQUAL "rocm")
+  if (SONAR_TARGET_DEVICE STREQUAL "rocm")
     set(TRITON_GIT "https://github.com/ROCm/triton.git")
     # Pinned from release/internal/3.8.x
     set(TRITON_KERNELS_TAG "669b31acc1dd1b3fd93286afd5db67f65d9f7557")
@@ -46,13 +46,13 @@ message (STATUS "[triton_kernels] triton_kernels is available at ${TRITON_KERNEL
 
 add_custom_target(triton_kernels)
 
-# Ensure the aphrodite/third_party directory exists before installation
-install(CODE "file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/aphrodite/third_party/triton_kernels\")")
+# Ensure the sonar/third_party directory exists before installation
+install(CODE "file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/sonar/third_party/triton_kernels\")")
 
 ## Copy .py files to install directory.
 install(DIRECTORY
         ${TRITON_KERNELS_PYTHON_DIR}
         DESTINATION
-        aphrodite/third_party/triton_kernels/
+        sonar/third_party/triton_kernels/
         COMPONENT triton_kernels
         FILES_MATCHING PATTERN "*.py")

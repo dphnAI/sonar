@@ -9,11 +9,11 @@ from unittest.mock import MagicMock
 import regex as re
 import torch
 
-from aphrodite import CompletionOutput
-from aphrodite.config import ReasoningConfig
-from aphrodite.utils.torch_utils import make_tensor_with_pad
-from aphrodite.v1.sample.logits_processor import BatchUpdate, LogitsProcessor
-from aphrodite.v1.sample.metadata import SamplingMetadata
+from sonar import CompletionOutput
+from sonar.config import ReasoningConfig
+from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.v1.sample.logits_processor import BatchUpdate, LogitsProcessor
+from sonar.v1.sample.metadata import SamplingMetadata
 
 
 def create_mock_reasoning_config(start_token_ids: list[int], end_token_ids: list[int]) -> ReasoningConfig:

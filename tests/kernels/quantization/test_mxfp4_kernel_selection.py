@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.model_executor.kernels.linear import (
+import sonar.envs as envs
+from sonar.model_executor.kernels.linear import (
     AiterMxfp4LinearKernel,
     EmulationMxfp4LinearKernel,
     FlashInferMxFp4LinearKernel,
@@ -22,15 +22,15 @@ from aphrodite.model_executor.kernels.linear import (
     init_mxfp4_linear_kernel,
     register_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     quant_dequant_mxfp4,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
     kMxfp6E2M3Dynamic,
     kMxfp6E3M2Dynamic,
 )
-from aphrodite.platforms import PlatformEnum
+from sonar.platforms import PlatformEnum
 
 pytestmark = pytest.mark.cpu_test
 
@@ -131,12 +131,12 @@ def test_emulation_kernel_accepts_any_config(activation_quant_key, monkeypatch):
     # `EmulationMxfp4LinearKernel.can_implement` gates on `has_quark()`,
     # which we are not testing here.
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mxfp4.emulation.has_quark",
+        "sonar.model_executor.kernels.linear.mxfp4.emulation.has_quark",
         lambda: True,
     )
     config = MxFp4LinearLayerConfig(activation_quant_key=activation_quant_key)
     with patch(
-        "aphrodite.model_executor.kernels.linear._get_linear_backend",
+        "sonar.model_executor.kernels.linear._get_linear_backend",
         return_value="emulation",
     ):
         can_implement, reason = EmulationMxfp4LinearKernel.can_implement(config)
@@ -149,11 +149,11 @@ def test_emulation_kernel_derives_quant_dequant_func_from_config(monkeypatch):
     # `EmulationMxfp4LinearKernel.can_implement` gates on `has_quark()`,
     # which we are not testing here.
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mxfp4.emulation.has_quark",
+        "sonar.model_executor.kernels.linear.mxfp4.emulation.has_quark",
         lambda: True,
     )
     with patch(
-        "aphrodite.model_executor.kernels.linear._get_linear_backend",
+        "sonar.model_executor.kernels.linear._get_linear_backend",
         return_value="emulation",
     ):
         weight_only_config = MxFp4LinearLayerConfig()
@@ -170,7 +170,7 @@ def test_emulation_kernel_derives_quant_dequant_func_from_config(monkeypatch):
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_emulation_kernel_dequantizes_at_load_and_keeps_activation_qdq(dtype, monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mxfp4.emulation.has_quark",
+        "sonar.model_executor.kernels.linear.mxfp4.emulation.has_quark",
         lambda: True,
     )
     kernel = EmulationMxfp4LinearKernel(MxFp4LinearLayerConfig(activation_quant_key=kMxfp4Dynamic))
@@ -180,9 +180,9 @@ def test_emulation_kernel_dequantizes_at_load_and_keeps_activation_qdq(dtype, mo
     x = torch.tensor([[2.0, 4.0]], dtype=dtype)
 
     with (
-        patch.object(envs, "APHRODITE_MXFP4_EMULATION_DEQUANT_AT_LOAD", True),
+        patch.object(envs, "SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD", True),
         patch(
-            "aphrodite.model_executor.kernels.linear.mxfp4.emulation.dequant_mxfp4",
+            "sonar.model_executor.kernels.linear.mxfp4.emulation.dequant_mxfp4",
             return_value=dequantized,
         ) as dequant,
     ):
@@ -202,7 +202,7 @@ def test_emulation_kernel_dequantizes_at_load_and_keeps_activation_qdq(dtype, mo
 
 def test_emulation_kernel_opt_out_dequantizes_per_invocation(monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.mxfp4.emulation.has_quark",
+        "sonar.model_executor.kernels.linear.mxfp4.emulation.has_quark",
         lambda: True,
     )
     kernel = EmulationMxfp4LinearKernel(MxFp4LinearLayerConfig(activation_quant_key=kMxfp4Dynamic))
@@ -212,9 +212,9 @@ def test_emulation_kernel_opt_out_dequantizes_per_invocation(monkeypatch):
     x = torch.tensor([[2.0, 4.0]], dtype=torch.bfloat16)
 
     with (
-        patch.object(envs, "APHRODITE_MXFP4_EMULATION_DEQUANT_AT_LOAD", False),
+        patch.object(envs, "SONAR_MXFP4_EMULATION_DEQUANT_AT_LOAD", False),
         patch(
-            "aphrodite.model_executor.kernels.linear.mxfp4.emulation.dequant_mxfp4",
+            "sonar.model_executor.kernels.linear.mxfp4.emulation.dequant_mxfp4",
             return_value=dequantized,
         ) as dequant,
     ):
@@ -236,7 +236,7 @@ def test_aiter_kernel_is_supported_requires_native_mx_support():
     """AiterMxfp4LinearKernel must not be selected on platforms without
     native MX compute, even if AITER itself is importable."""
     with patch(
-        "aphrodite.model_executor.kernels.linear.mxfp4.aiter.current_platform.supports_mx",
+        "sonar.model_executor.kernels.linear.mxfp4.aiter.current_platform.supports_mx",
         return_value=False,
     ):
         is_supported, reason = AiterMxfp4LinearKernel.is_supported()
@@ -265,7 +265,7 @@ class OOTMxFp4LinearKernel(MxFp4LinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_init_mxfp4_linear_kernel_dispatches_to_registered_kernel(platform_mock):
     """init_mxfp4_linear_kernel should select a registered kernel that
     reports itself as supported, and construct it with a fresh config."""
@@ -299,7 +299,7 @@ class UnsupportedMxFp4LinearKernel(MxFp4LinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_init_mxfp4_linear_kernel_raises_when_no_kernel_matches(platform_mock):
     platform_mock._enum = PlatformEnum.UNSPECIFIED
     register_linear_kernel(UnsupportedMxFp4LinearKernel, PlatformEnum.UNSPECIFIED, "mxfp4")

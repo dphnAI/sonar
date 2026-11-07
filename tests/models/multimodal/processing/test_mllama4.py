@@ -7,7 +7,7 @@ import torch
 from torch import prod
 from transformers import Llama4Config
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ...utils import build_model_context
 

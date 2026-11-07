@@ -16,12 +16,12 @@ import pytest
 from fastapi.responses import JSONResponse
 from pydantic import TypeAdapter
 
-import aphrodite.envs as envs
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.connections import HTTPConnection
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.launchers import run_batch as run_batch_module
-from aphrodite.entrypoints.launchers.run_batch import (
+import sonar.envs as envs
+from sonar.assets.audio import AudioAsset
+from sonar.connections import HTTPConnection
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.launchers import run_batch as run_batch_module
+from sonar.entrypoints.launchers.run_batch import (
     BatchProgressTracker,
     BatchRequestInput,
     BatchRequestOutput,
@@ -40,13 +40,13 @@ from aphrodite.entrypoints.launchers.run_batch import (
     validate_batch,
     validate_run_batch_args,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionResponse
-from aphrodite.entrypoints.openai.completion.protocol import CompletionResponse
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.exceptions import AphroditeValidationError, RetryableRequestError
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.mem_constants import MiB_bytes
-from aphrodite.v1.engine.exceptions import EngineDeadError
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionResponse
+from sonar.entrypoints.openai.completion.protocol import CompletionResponse
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.exceptions import RetryableRequestError, SonarValidationError
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.mem_constants import MiB_bytes
+from sonar.v1.engine.exceptions import EngineDeadError
 
 CHAT_MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 EMBEDDING_MODEL_NAME = "intfloat/multilingual-e5-small"
@@ -509,7 +509,7 @@ def test_empty_file():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -536,7 +536,7 @@ def test_completions():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -569,7 +569,7 @@ def test_completions_endpoint():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -609,7 +609,7 @@ def test_completions_invalid_input():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -633,7 +633,7 @@ def test_embeddings():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -664,7 +664,7 @@ def test_score(input_batch):
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -700,7 +700,7 @@ def test_reasoning_parser():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -742,7 +742,7 @@ def test_transcription():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -780,7 +780,7 @@ def test_transcription_http_url():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -820,7 +820,7 @@ def test_translation():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -863,7 +863,7 @@ def test_tool_calling():
         input_file.flush()
         proc = subprocess.Popen(
             [
-                "aphrodite",
+                "sonar",
                 "run-batch",
                 "-i",
                 input_file.name,
@@ -956,7 +956,7 @@ async def test_download_bytes_data_url_bypasses_domain_check():
 async def test_download_bytes_rejects_disallowed_domain():
     """HTTP URLs whose hostname is not in the allowlist must be rejected."""
     url = "https://evil.internal/secret"
-    with pytest.raises(AphroditeValidationError, match="allowed domains") as exc_info:
+    with pytest.raises(SonarValidationError, match="allowed domains") as exc_info:
         await download_bytes_from_url(url, allowed_media_domains=["example.com"])
     # URL validation failures carry structured metadata for the frontend.
     assert exc_info.value.parameter == "url"
@@ -966,7 +966,7 @@ async def test_download_bytes_rejects_disallowed_domain():
 @pytest.mark.asyncio
 async def test_download_bytes_rejects_unsupported_scheme():
     """Unsupported URL schemes are rejected with structured metadata."""
-    with pytest.raises(AphroditeValidationError, match="Unsupported URL scheme") as exc_info:
+    with pytest.raises(SonarValidationError, match="Unsupported URL scheme") as exc_info:
         await download_bytes_from_url("ftp://example.com/file")
     assert exc_info.value.parameter == "url"
     assert exc_info.value.value == "ftp"
@@ -976,7 +976,7 @@ async def test_download_bytes_rejects_unsupported_scheme():
 async def test_download_bytes_rejects_cloud_metadata_ip():
     """Cloud metadata endpoints must be blocked when an allowlist is set."""
     url = "http://169.254.169.254/latest/meta-data/"
-    with pytest.raises(AphroditeValidationError, match="allowed domains"):
+    with pytest.raises(SonarValidationError, match="allowed domains"):
         await download_bytes_from_url(url, allowed_media_domains=["example.com"])
 
 
@@ -988,7 +988,7 @@ async def test_download_bytes_rejects_internal_ip():
         "http://192.168.1.1/admin",
         "http://127.0.0.1:8080/internal",
     ]:
-        with pytest.raises(AphroditeValidationError, match="allowed domains"):
+        with pytest.raises(SonarValidationError, match="allowed domains"):
             await download_bytes_from_url(internal_url, allowed_media_domains=["example.com"])
 
 
@@ -1000,7 +1000,7 @@ async def test_download_bytes_allows_permitted_domain():
     mock_session = _make_aiohttp_mocks(expected)
 
     with patch(
-        "aphrodite.entrypoints.launchers.run_batch.aiohttp.ClientSession",
+        "sonar.entrypoints.launchers.run_batch.aiohttp.ClientSession",
         return_value=mock_session,
     ):
         result = await download_bytes_from_url(url, allowed_media_domains=["example.com"])
@@ -1015,7 +1015,7 @@ async def test_download_bytes_no_allowlist_permits_any_domain():
     mock_session = _make_aiohttp_mocks(expected)
 
     with patch(
-        "aphrodite.entrypoints.launchers.run_batch.aiohttp.ClientSession",
+        "sonar.entrypoints.launchers.run_batch.aiohttp.ClientSession",
         return_value=mock_session,
     ):
         result = await download_bytes_from_url(url, allowed_media_domains=None)
@@ -1026,17 +1026,17 @@ async def test_download_bytes_no_allowlist_permits_any_domain():
 async def test_download_bytes_empty_allowlist_denies_all():
     """An empty allowlist must deny all HTTP URLs (least privilege)."""
     url = "https://any-domain.example.org/file.wav"
-    with pytest.raises(AphroditeValidationError, match="allowed domains"):
+    with pytest.raises(SonarValidationError, match="allowed domains"):
         await download_bytes_from_url(url, allowed_media_domains=[])
 
 
 @pytest.mark.asyncio
 async def test_download_bytes_unsupported_scheme():
     """Unsupported URL schemes must be rejected regardless of allowlist."""
-    with pytest.raises(AphroditeValidationError, match="Unsupported URL scheme"):
+    with pytest.raises(SonarValidationError, match="Unsupported URL scheme"):
         await download_bytes_from_url("ftp://example.com/file.wav")
 
-    with pytest.raises(AphroditeValidationError, match="Unsupported URL scheme"):
+    with pytest.raises(SonarValidationError, match="Unsupported URL scheme"):
         await download_bytes_from_url(
             "ftp://example.com/file.wav",
             allowed_media_domains=["example.com"],
@@ -1051,7 +1051,7 @@ async def test_download_bytes_backslash_bypass():
     The fix normalizes through urllib3 before handing to aiohttp.
     """
     bypass_url = "http://allowed.example.com\\@evil.internal/secret"
-    with pytest.raises(AphroditeValidationError, match="allowed domains"):
+    with pytest.raises(SonarValidationError, match="allowed domains"):
         await download_bytes_from_url(bypass_url, allowed_media_domains=["evil.internal"])
 
 
@@ -1062,7 +1062,7 @@ async def test_download_bytes_backslash_bypass():
     [
         (EngineDeadError(), 500, "InternalServerError"),
         (RetryableRequestError("Engine is busy"), 503, "ServiceUnavailableError"),
-        (AphroditeValidationError("Invalid audio"), 400, "BadRequestError"),
+        (SonarValidationError("Invalid audio"), 400, "BadRequestError"),
     ],
 )
 async def test_batch_audio_preserves_handler_error_status(is_translation, error, status_code, error_type):
@@ -1093,7 +1093,7 @@ async def test_batch_audio_preserves_handler_error_status(is_translation, error,
 async def test_transcription_wrapper_rejects_oversized_data_url_before_decode(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
     handler = AsyncMock()
     wrapped_handler = make_transcription_wrapper(is_translation=False)(handler)
     request = BatchTranscriptionRequest.model_validate(
@@ -1104,7 +1104,7 @@ async def test_transcription_wrapper_rejects_oversized_data_url_before_decode(
         }
     )
 
-    with patch("aphrodite.entrypoints.launchers.run_batch.base64.b64decode") as decode:
+    with patch("sonar.entrypoints.launchers.run_batch.base64.b64decode") as decode:
         response = await wrapped_handler(request)
 
     assert isinstance(response, ErrorResponse)
@@ -1118,10 +1118,10 @@ async def test_download_bytes_allows_http_body_at_audio_limit(
     monkeypatch: pytest.MonkeyPatch,
     batch_http_server: _BatchHTTPServer,
 ):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
     connection = HTTPConnection()
     monkeypatch.setattr(
-        "aphrodite.entrypoints.launchers.run_batch.global_http_connection",
+        "sonar.entrypoints.launchers.run_batch.global_http_connection",
         connection,
     )
 
@@ -1137,10 +1137,10 @@ async def test_transcription_wrapper_rejects_oversized_http_before_handler(
     monkeypatch: pytest.MonkeyPatch,
     batch_http_server: _BatchHTTPServer,
 ):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
+    monkeypatch.setattr(envs, "SONAR_MAX_AUDIO_CLIP_FILESIZE_MB", 1)
     connection = HTTPConnection()
     monkeypatch.setattr(
-        "aphrodite.entrypoints.launchers.run_batch.global_http_connection",
+        "sonar.entrypoints.launchers.run_batch.global_http_connection",
         connection,
     )
     handler = AsyncMock()
@@ -1197,11 +1197,11 @@ async def test_upload_data_uploads_once_on_success(status, from_file, tmp_path):
 
     with (
         patch(
-            "aphrodite.entrypoints.launchers.run_batch.aiohttp.ClientSession",
+            "sonar.entrypoints.launchers.run_batch.aiohttp.ClientSession",
             return_value=session,
         ),
         patch(
-            "aphrodite.entrypoints.launchers.run_batch.asyncio.sleep",
+            "sonar.entrypoints.launchers.run_batch.asyncio.sleep",
             new_callable=AsyncMock,
         ) as sleep,
     ):
@@ -1216,11 +1216,11 @@ async def test_upload_data_error_includes_awaited_response_body():
     session = _make_aiohttp_put_session(status=500, body_text="server-error-detail")
     with (
         patch(
-            "aphrodite.entrypoints.launchers.run_batch.aiohttp.ClientSession",
+            "sonar.entrypoints.launchers.run_batch.aiohttp.ClientSession",
             return_value=session,
         ),
         patch(
-            "aphrodite.entrypoints.launchers.run_batch.asyncio.sleep",
+            "sonar.entrypoints.launchers.run_batch.asyncio.sleep",
             AsyncMock(),
         ),
         pytest.raises(Exception) as exc_info,
@@ -1451,7 +1451,7 @@ def test_unwritable_output_file_is_rejected_before_engine_start(tmp_path):
     validate_run_batch_args(args("HTTPS://example.com/out.jsonl"))
 
 
-def test_admission_limits_are_ignored(caplog_aphrodite):
+def test_admission_limits_are_ignored(caplog_sonar):
     """The engine must not answer batch requests with 503 rows."""
     args = make_arg_parser(FlexibleArgumentParser()).parse_args(
         ["-i", "in.jsonl", "-o", "out.jsonl", "--max-num-queued-reqs", "8"] + ["--max-num-queued-tokens", "100"]
@@ -1460,7 +1460,7 @@ def test_admission_limits_are_ignored(caplog_aphrodite):
     engine_args = AsyncEngineArgs.from_cli_args(args)
     assert engine_args.max_num_queued_reqs is None
     assert engine_args.max_num_queued_tokens is None
-    assert "Ignoring --max-num-queued-reqs and --max-num-queued-tokens" in (caplog_aphrodite.text)
+    assert "Ignoring --max-num-queued-reqs and --max-num-queued-tokens" in (caplog_sonar.text)
 
 
 def _chat_requests(n: int) -> list[dict]:
@@ -1469,7 +1469,7 @@ def _chat_requests(n: int) -> list[dict]:
 
 def _response(request_json: str) -> BatchRequestOutput:
     return BatchRequestOutput(
-        id="aphrodite-test",
+        id="sonar-test",
         custom_id=json.loads(request_json)["custom_id"],
         response=None,
         error=None,

@@ -7,14 +7,14 @@ correct under CUDA graph replay with new sequence lengths."""
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda() or not current_platform.is_device_capability_family(100):
     pytest.skip("Flint decode attention targets SM100", allow_module_level=True)
 
 from flashinfer.decode import trtllm_batch_decode_with_kv_cache  # noqa: E402
 
-from aphrodite.models.flint.ops.decode_attention import flint_decode_attention  # noqa: E402
+from sonar.models.flint.ops.decode_attention import flint_decode_attention  # noqa: E402
 
 HQ, HKV, D, PAGE = 32, 4, 128, 16
 SCALE = D**-0.5

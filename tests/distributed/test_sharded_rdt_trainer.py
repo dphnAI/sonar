@@ -19,13 +19,13 @@ from functools import cached_property
 import pytest
 import torch
 
-from aphrodite.distributed.weight_transfer import (
+from sonar.distributed.weight_transfer import (
     ParamMeta,
     WeightSource,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.base import layerwise_groups
-from aphrodite.distributed.weight_transfer.sharded_rdt_trainer import (
+from sonar.distributed.weight_transfer.base import layerwise_groups
+from sonar.distributed.weight_transfer.sharded_rdt_trainer import (
     ShardedRDTTrainerInitInfo,
     ShardedRDTTrainerWeightTransferEngine,
 )
@@ -116,7 +116,7 @@ def _rdt_engine_with_fake_server(source, *, is_sender, client, server, monkeypat
     """Build a ShardedRDTTrainerWeightTransferEngine wired to an in-process fake
     server (no Ray, no CUDA IPC): bypass trainer_init's spawn, set the
     group-major metadata, and route _rpc to the fake."""
-    import aphrodite.distributed.weight_transfer.sharded_rdt_trainer as mod
+    import sonar.distributed.weight_transfer.sharded_rdt_trainer as mod
 
     # reduce_tensor needs CUDA; the fake server never rebuilds, so stub it.
     monkeypatch.setattr(mod, "reduce_tensor", lambda t: (None, ("fake",)))
@@ -487,7 +487,7 @@ def _serve_ring_server(src_name, src):
     pull needs no Ray and no NIXL registration. Returns (server, serve) where
     ``serve(chain)`` packs one spec into the SAME ring slot every time — which is
     what puts the destination-view cache, and only it, under test."""
-    from aphrodite.distributed.weight_transfer.sharded_rdt_trainer import (
+    from sonar.distributed.weight_transfer.sharded_rdt_trainer import (
         _RDTProducerServer,
     )
 

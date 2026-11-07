@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-build-info"
+name = "sonar-build-info"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -7,19 +7,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite import logger as aphrodite_logger
-from aphrodite.config import AphroditeConfig, WatermarkConfig
-from aphrodite.renderers import BaseRenderer
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.input_processor import InputProcessor
-from aphrodite.v1.engine.llm_engine import LLMEngine
+from sonar import SamplingParams
+from sonar import logger as sonar_logger
+from sonar.config import SonarConfig, WatermarkConfig
+from sonar.renderers import BaseRenderer
+from sonar.sampling_params import BeamSearchParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.input_processor import InputProcessor
+from sonar.v1.engine.llm_engine import LLMEngine
 
 
 def _input_processor(server_uses_watermarking: bool = True) -> InputProcessor:
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.model_config = SimpleNamespace(
         try_get_generation_config=lambda: {},
         logits_processors=None,
@@ -59,21 +59,21 @@ def _engine_core_request(params: SamplingParams) -> EngineCoreRequest:
 
 @pytest.fixture
 def reset_warning_once():
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
     yield
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
 
 
-def test_greedy_watermarked_requests_warn_once(caplog_aphrodite, reset_warning_once):
+def test_greedy_watermarked_requests_warn_once(caplog_sonar, reset_warning_once):
     first = SamplingParams(temperature=0)
     second = SamplingParams(temperature=0)
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         first_resolved = _validate(first)
         second_resolved = _validate(second)
 
     message = "subsequent greedy requests will use ordinary greedy sampling"
-    assert caplog_aphrodite.text.count(message) == 1
+    assert caplog_sonar.text.count(message) == 1
     assert first_resolved is False
     assert second_resolved is False
     # The caller's params objects are left untouched.
@@ -91,37 +91,37 @@ def test_default_watermarking_resolves_when_configured():
 
 @pytest.mark.parametrize("watermarking", [True])
 def test_requested_watermarking_without_engine_config_warns_and_disables(
-    watermarking, caplog_aphrodite, reset_warning_once
+    watermarking, caplog_sonar, reset_warning_once
 ):
     params = SamplingParams(watermarking=watermarking)
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         resolved = _validate(params, server_uses_watermarking=False)
 
-    assert "engine has no watermark configuration" in caplog_aphrodite.text
+    assert "engine has no watermark configuration" in caplog_sonar.text
     assert resolved is False
     assert params.watermarking is watermarking
 
 
 @pytest.mark.parametrize("watermarking", [None, True])
-def test_explicit_and_default_greedy_warn_and_disable(watermarking, caplog_aphrodite, reset_warning_once):
+def test_explicit_and_default_greedy_warn_and_disable(watermarking, caplog_sonar, reset_warning_once):
     params = SamplingParams(temperature=0, watermarking=watermarking)
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         resolved = _validate(params)
 
-    assert "ordinary greedy sampling" in caplog_aphrodite.text
+    assert "ordinary greedy sampling" in caplog_sonar.text
     assert resolved is False
     assert params.watermarking is watermarking
 
 
-def test_trace_replay_with_watermarking_warns_and_disables(caplog_aphrodite, reset_warning_once):
+def test_trace_replay_with_watermarking_warns_and_disables(caplog_sonar, reset_warning_once):
     params = SamplingParams(trace_decode_token_ids=[1])
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         resolved = _validate(params)
 
-    assert "trace replay requests will run without watermarking" in caplog_aphrodite.text
+    assert "trace replay requests will run without watermarking" in caplog_sonar.text
     assert resolved is False
     assert params.watermarking is None
 
@@ -145,23 +145,23 @@ def test_incompatible_modes_are_allowed_when_watermarking_is_disabled(params):
         SamplingParams(trace_decode_token_ids=[1]),
     ],
 )
-def test_requests_without_engine_config_are_unwatermarked(params, caplog_aphrodite, reset_warning_once):
-    with caplog_aphrodite.at_level("WARNING"):
+def test_requests_without_engine_config_are_unwatermarked(params, caplog_sonar, reset_warning_once):
+    with caplog_sonar.at_level("WARNING"):
         resolved = _validate(params, server_uses_watermarking=False)
 
-    assert "engine has no watermark configuration" not in caplog_aphrodite.text
+    assert "engine has no watermark configuration" not in caplog_sonar.text
     assert resolved is False
     assert params.watermarking is None
 
 
-def test_trace_replay_takes_precedence_over_greedy_warning(caplog_aphrodite, reset_warning_once):
+def test_trace_replay_takes_precedence_over_greedy_warning(caplog_sonar, reset_warning_once):
     params = SamplingParams(temperature=0, trace_decode_token_ids=[1])
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         _validate(params)
 
-    assert "trace replay requests will run without watermarking" in caplog_aphrodite.text
-    assert "ordinary greedy sampling" not in caplog_aphrodite.text
+    assert "trace replay requests will run without watermarking" in caplog_sonar.text
+    assert "ordinary greedy sampling" not in caplog_sonar.text
 
 
 @pytest.mark.parametrize(
@@ -176,24 +176,24 @@ def test_seeded_and_parallel_sampling_are_allowed(params):
     _validate(params)
 
 
-def test_direct_engine_trace_replay_warns_and_disables(caplog_aphrodite, monkeypatch, reset_warning_once):
+def test_direct_engine_trace_replay_warns_and_disables(caplog_sonar, monkeypatch, reset_warning_once):
     engine = object.__new__(LLMEngine)
     engine.input_processor = _input_processor()
-    engine.aphrodite_config = engine.input_processor.aphrodite_config
+    engine.sonar_config = engine.input_processor.sonar_config
     assign_request_id = MagicMock()
     monkeypatch.setattr(engine.input_processor, "assign_request_id", assign_request_id)
     engine.output_processor = MagicMock()
     engine.engine_core = MagicMock()
     request = _engine_core_request(SamplingParams(trace_decode_token_ids=[1]))
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         engine.add_request(
             request.request_id,
             request,
             SamplingParams(watermarking=False),
         )
 
-    assert "trace replay requests will run without watermarking" in caplog_aphrodite.text
+    assert "trace replay requests will run without watermarking" in caplog_sonar.text
     assert request.sampling_params.watermarking is False
     assert request.sampling_params._watermarking_skipped is True
     assign_request_id.assert_called_once_with(request)
@@ -202,7 +202,7 @@ def test_direct_engine_trace_replay_warns_and_disables(caplog_aphrodite, monkeyp
 def test_direct_engine_request_uses_embedded_opt_out(monkeypatch):
     engine = object.__new__(LLMEngine)
     engine.input_processor = _input_processor()
-    engine.aphrodite_config = engine.input_processor.aphrodite_config
+    engine.sonar_config = engine.input_processor.sonar_config
     assign_request_id = MagicMock()
     monkeypatch.setattr(engine.input_processor, "assign_request_id", assign_request_id)
     engine.output_processor = MagicMock()
@@ -219,7 +219,7 @@ def test_direct_engine_request_uses_embedded_opt_out(monkeypatch):
     assign_request_id.assert_called_once_with(request)
 
 
-def test_direct_async_engine_trace_replay_warns_and_disables(caplog_aphrodite, monkeypatch, reset_warning_once):
+def test_direct_async_engine_trace_replay_warns_and_disables(caplog_sonar, monkeypatch, reset_warning_once):
     engine = object.__new__(AsyncLLM)
     engine.engine_core = SimpleNamespace(
         resources=SimpleNamespace(engine_dead=False),
@@ -228,7 +228,7 @@ def test_direct_async_engine_trace_replay_warns_and_disables(caplog_aphrodite, m
     )
     engine.output_handler = None
     engine.input_processor = _input_processor()
-    engine.aphrodite_config = engine.input_processor.aphrodite_config
+    engine.sonar_config = engine.input_processor.sonar_config
     engine.output_processor = MagicMock()
     engine.log_requests = False
     monkeypatch.setattr(engine, "_run_output_handler", MagicMock())
@@ -241,16 +241,16 @@ def test_direct_async_engine_trace_replay_warns_and_disables(caplog_aphrodite, m
             SamplingParams(watermarking=False),
         )
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         asyncio.run(add_request())
 
-    assert "trace replay requests will run without watermarking" in caplog_aphrodite.text
+    assert "trace replay requests will run without watermarking" in caplog_sonar.text
     assert request.sampling_params.watermarking is False
     assert request.sampling_params._watermarking_skipped is True
 
 
 def test_direct_async_engine_greedy_request_warns_and_disables_watermarking(
-    caplog_aphrodite, monkeypatch, reset_warning_once
+    caplog_sonar, monkeypatch, reset_warning_once
 ):
     engine = object.__new__(AsyncLLM)
     engine.engine_core = SimpleNamespace(
@@ -260,7 +260,7 @@ def test_direct_async_engine_greedy_request_warns_and_disables_watermarking(
     )
     engine.output_handler = None
     engine.input_processor = _input_processor()
-    engine.aphrodite_config = engine.input_processor.aphrodite_config
+    engine.sonar_config = engine.input_processor.sonar_config
     engine.output_processor = MagicMock()
     engine.log_requests = False
     monkeypatch.setattr(engine, "_run_output_handler", MagicMock())
@@ -273,10 +273,10 @@ def test_direct_async_engine_greedy_request_warns_and_disables_watermarking(
             SamplingParams(watermarking=False),
         )
 
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         asyncio.run(add_request())
 
-    assert "subsequent greedy requests will use ordinary greedy sampling" in (caplog_aphrodite.text)
+    assert "subsequent greedy requests will use ordinary greedy sampling" in (caplog_sonar.text)
     assert request.sampling_params.watermarking is False
     assert request.sampling_params._watermarking_skipped is True
 
@@ -316,7 +316,7 @@ def test_shared_sampling_params_are_not_rewritten_by_admission(reset_warning_onc
     assert _validate(greedy) is True
 
 
-def test_shared_beam_search_params_are_not_rewritten_by_admission(caplog_aphrodite, reset_warning_once):
+def test_shared_beam_search_params_are_not_rewritten_by_admission(caplog_sonar, reset_warning_once):
     """Beam search must keep resolving per engine after reuse."""
     params = BeamSearchParams(beam_width=2, max_tokens=4, temperature=0.8)
 
@@ -326,7 +326,7 @@ def test_shared_beam_search_params_are_not_rewritten_by_admission(caplog_aphrodi
 
     # The same object on a watermarked engine is warned about and still
     # resolves to False, without the first decision being written back.
-    with caplog_aphrodite.at_level("WARNING"):
+    with caplog_sonar.at_level("WARNING"):
         assert _input_processor(True).resolve_watermarking(params) is False
-    assert "beam search requests will run without watermarking" in caplog_aphrodite.text
+    assert "beam search requests will run without watermarking" in caplog_sonar.text
     assert params.watermarking is None

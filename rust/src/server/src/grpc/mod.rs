@@ -9,8 +9,8 @@ mod health;
 mod inference;
 mod media;
 
-/// Generated protobuf/gRPC types for the `aphrodite` package.
-pub use aphrodite_proto as pb;
+/// Generated protobuf/gRPC types for the `sonar` package.
+pub use sonar_proto as pb;
 
 pub(crate) use control::ControlGrpcService;
 pub use control::ControlServiceImpl;

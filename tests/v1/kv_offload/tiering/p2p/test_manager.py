@@ -17,41 +17,41 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import DEFAULT_NONE_HASH_SEED, init_none_hash
-from aphrodite.v1.kv_offload.base import (
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import DEFAULT_NONE_HASH_SEED, init_none_hash
+from sonar.v1.kv_offload.base import (
     LookupResult,
     OffloadKey,
     OffloadPolicy,
     ReqContext,
     ScheduleEndContext,
 )
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     TieringOffloadingMetrics,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.example.manager import ExampleSecondaryTierManager
+from sonar.v1.kv_offload.tiering.manager import (
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
 )
-from aphrodite.v1.kv_offload.tiering.p2p import manager as manager_module
-from aphrodite.v1.kv_offload.tiering.p2p.manager import (
+from sonar.v1.kv_offload.tiering.p2p import manager as manager_module
+from sonar.v1.kv_offload.tiering.p2p.manager import (
     _RECONNECT_MAX_BACKOFF_S,
     _RETAINED_HOLD_CAP_S,
     _UNBOUND_STORE_TIMEOUT_S,
     P2PSecondaryTierManager,
     _annotate_req_context,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session import (
+from sonar.v1.kv_offload.tiering.p2p.session import (
     LoadResult,
     SessionCloseResult,
     SessionPollResult,
     StoreResult,
 )
-from aphrodite.v1.kv_offload.tiering.p2p.session.client import _LOOKUP_TIMEOUT_S
-from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import (
+from sonar.v1.kv_offload.tiering.p2p.session.client import _LOOKUP_TIMEOUT_S
+from sonar.v1.kv_offload.tiering.p2p.session.protocol import (
     TYPE_KEY,
     ConnectMsg,
     DisconnectMsg,
@@ -370,7 +370,7 @@ class _RecordingParent:
         self.finished: list[str] = []
 
     def on_new_request(self, ctx):
-        from aphrodite.v1.kv_offload.base import RequestOffloadingContext
+        from sonar.v1.kv_offload.base import RequestOffloadingContext
 
         return RequestOffloadingContext()
 
@@ -639,11 +639,11 @@ class TestPromotionLatency:
 def test_timed_out_load_holds_chunks_until_abort_ack(monkeypatch):
     """A timed-out P2P load fails at once but keeps its primary chunk out of
     the free pool: the peer may still be writing it. The AbortAck frees it."""
-    from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
-    from aphrodite.v1.kv_offload.tiering.p2p.session import P2PSession
-    from aphrodite.v1.kv_offload.tiering.p2p.session import client as client_module
-    from aphrodite.v1.kv_offload.tiering.p2p.session.client import _PD_LOAD_TIMEOUT_S
-    from aphrodite.v1.kv_offload.tiering.p2p.session.protocol import AbortAckMsg
+    from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec
+    from sonar.v1.kv_offload.tiering.p2p.session import P2PSession
+    from sonar.v1.kv_offload.tiering.p2p.session import client as client_module
+    from sonar.v1.kv_offload.tiering.p2p.session.client import _PD_LOAD_TIMEOUT_S
+    from sonar.v1.kv_offload.tiering.p2p.session.protocol import AbortAckMsg
     from tests.v1.kv_offload.tiering.p2p.test_sessions import (
         FakeConnection,
         FakeDataTransport,
@@ -779,7 +779,7 @@ class TestOnRequestFinished:
         parked batches survive until a peer fetches them or the
         `_reap_unbound_stores` timeout fires — `on_request_finished`
         must not evict them."""
-        from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
+        from sonar.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
         mgr = _make_manager()
         mgr._unbound_stores["req-1"] = [
@@ -979,7 +979,7 @@ class TestGetFinished:
     def test_unbound_store_kept_within_timeout(self):
         """Recently-parked unbound stores stay across a poll."""
         mgr = self._make()
-        from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
+        from sonar.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
         mgr._unbound_stores["req-fresh"] = [_UnboundStoreBatch(job_id=99, keys=[OffloadKey(b"k")], block_ids=[0])]
         list(mgr.get_finished_jobs())
@@ -989,7 +989,7 @@ class TestGetFinished:
         """Unbound stores past the reap deadline surface as failed and their
         kv_request_id lands in _reaped_stores so a late FetchMsg is rejected
         instead of parking demand nothing can satisfy."""
-        from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
+        from sonar.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
         mgr = self._make()
         stale = _UnboundStoreBatch(job_id=10, keys=[OffloadKey(b"k")], block_ids=[0])
@@ -1065,7 +1065,7 @@ class TestHasPendingWork:
     def test_parked_unbound_store_is_pending_work(self):
         """A parked store still pins primary slots until it is fetched or
         reaped, so it keeps the engine stepping."""
-        from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
+        from sonar.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
         mgr = _make_manager()
         mgr._unbound_stores["req-1"] = [_UnboundStoreBatch(job_id=1, keys=[OffloadKey(b"k")], block_ids=[0])]
@@ -1088,16 +1088,16 @@ class TestHasPendingWork:
         """
         from unittest.mock import MagicMock
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
             OffloadingConnectorScheduler,
         )
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
             OffloadingConnector,
         )
-        from aphrodite.v1.core.sched.interface import PauseState
-        from aphrodite.v1.core.sched.scheduler import Scheduler
-        from aphrodite.v1.engine.core import EngineCoreProc
-        from aphrodite.v1.kv_offload.tiering.manager import (
+        from sonar.v1.core.sched.interface import PauseState
+        from sonar.v1.core.sched.scheduler import Scheduler
+        from sonar.v1.engine.core import EngineCoreProc
+        from sonar.v1.kv_offload.tiering.manager import (
             CPUPrimaryTierOffloadingManager,
             TieringOffloadingManager,
         )
@@ -1143,16 +1143,16 @@ class TestHasPendingWork:
         driver, so the tiering manager must keep the engine stepping."""
         from unittest.mock import MagicMock
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.offloading.scheduler import (
             OffloadingConnectorScheduler,
         )
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
             OffloadingConnector,
         )
-        from aphrodite.v1.core.sched.interface import PauseState
-        from aphrodite.v1.core.sched.scheduler import Scheduler
-        from aphrodite.v1.engine.core import EngineCoreProc
-        from aphrodite.v1.kv_offload.tiering.manager import (
+        from sonar.v1.core.sched.interface import PauseState
+        from sonar.v1.core.sched.scheduler import Scheduler
+        from sonar.v1.engine.core import EngineCoreProc
+        from sonar.v1.kv_offload.tiering.manager import (
             CPUPrimaryTierOffloadingManager,
             TieringOffloadingManager,
         )
@@ -1294,8 +1294,7 @@ class TestShutdownDrain:
         monkeypatch.setattr(manager_module, "_DRAIN_SLEEP_S", 0.0)
         times = iter([100.0, 100.0, 100.06])
         # Patch via a fake module on `manager_module.time` so we do not mutate
-        # the global `time` module — other code in the process (e.g. the
-        # buildkite test collector's pytest_runtest_logreport hook) calls
+        # the global `time` module. Other code in the process may call
         # time.monotonic() before monkeypatch teardown.
         fake_time = SimpleNamespace(monotonic=lambda: next(times), sleep=time.sleep)
         monkeypatch.setattr(manager_module, "time", fake_time)
@@ -1460,7 +1459,7 @@ class _FakeData:
         return tid
 
     def poll(self, peer_id=None):
-        from aphrodite.v1.kv_offload.tiering.p2p.data.base import PollResult
+        from sonar.v1.kv_offload.tiering.p2p.data.base import PollResult
 
         done = self._inflight_done[:]
         self._inflight_done.clear()
@@ -1529,7 +1528,7 @@ class TestBidirectionalManager:
 
     def test_lookup_before_handshake_ack_falls_back_to_local_prefill(self):
         """A probe never waits on a pending handshake: a gone peer would hold
-        it until APHRODITE_P2P_HANDSHAKE_TIMEOUT_S. The peer gets no lookup."""
+        it until SONAR_P2P_HANDSHAKE_TIMEOUT_S. The peer gets no lookup."""
         mgr_a, _ = _build_paired_managers()
         ctx = _req_context(_remote_kv_source_kv_params("B", 2))
         mgr_a.on_new_request(ctx)
@@ -1701,7 +1700,7 @@ class TestBidirectionalManager:
         next tick via TransferDoneMsg(success=False) — not stall for
         _PD_LOAD_TIMEOUT_S and then take the abort path.
         """
-        from aphrodite.v1.kv_offload.tiering.p2p.session.client import (
+        from sonar.v1.kv_offload.tiering.p2p.session.client import (
             _PD_LOAD_TIMEOUT_S,
         )
 
@@ -1946,7 +1945,7 @@ class TestPollOnce:
         """When session.poll() reports a kv_request_id whose FetchMsg
         arrived this tick, the manager binds it to that session and
         replays every parked submit_store batch via add_stored_blocks."""
-        from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
+        from sonar.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
         mgr = _make_manager()
         peer = "10.0.0.1:8000"
@@ -2042,7 +2041,7 @@ class TestDrainJobs:
 
         sleeps: list[float] = []
         # If drain_jobs sleeps when nothing is pending, that's a regression.
-        import aphrodite.v1.kv_offload.tiering.p2p.manager as m
+        import sonar.v1.kv_offload.tiering.p2p.manager as m
 
         original_sleep = m.time.sleep
         m.time.sleep = lambda s: sleeps.append(s)
@@ -2102,8 +2101,7 @@ class TestDrainJobs:
             sess._server._inflight = {}
 
         # Patch via a fake module on `manager_module.time` so we do not mutate
-        # the global `time` module — other code in the process (e.g. the
-        # buildkite test collector's pytest_runtest_logreport hook) calls
+        # the global `time` module. Other code in the process may call
         # time.monotonic() before monkeypatch teardown.
         fake_time = SimpleNamespace(monotonic=fake_monotonic, sleep=clearing_sleep)
         monkeypatch.setattr(manager_module, "time", fake_time)
@@ -2222,7 +2220,7 @@ class TestConnectionDeathMidTransfer:
 
 
 class TestBindHostPortDefaults:
-    """host/port fall back to APHRODITE_P2P_SIDE_CHANNEL_* when not in config."""
+    """host/port fall back to SONAR_P2P_SIDE_CHANNEL_* when not in config."""
 
     @staticmethod
     def _construct(monkeypatch, dp_index=0, calls: dict | None = None, **kwargs) -> P2PSecondaryTierManager:
@@ -2259,27 +2257,27 @@ class TestBindHostPortDefaults:
         return P2PSecondaryTierManager(spec, memoryview(b""), **kwargs)
 
     def test_defaults_from_env_unset(self, monkeypatch):
-        monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", raising=False)
-        monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", raising=False)
+        monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_HOST", raising=False)
+        monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_PORT", raising=False)
         mgr = self._construct(monkeypatch)
         # localhost default is used verbatim as the dial-back identity.
         assert mgr._local_id == "localhost:5710"
 
     def test_env_override(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.1.2.3")
-        monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
+        monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_HOST", "10.1.2.3")
+        monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5799")
         mgr = self._construct(monkeypatch)
         assert mgr._local_id == "10.1.2.3:5799"
 
     def test_explicit_config_wins(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.1.2.3")
-        monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
+        monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_HOST", "10.1.2.3")
+        monkeypatch.setenv("SONAR_P2P_SIDE_CHANNEL_PORT", "5799")
         mgr = self._construct(monkeypatch, host="192.0.2.5", port=6001)
         assert mgr._local_id == "192.0.2.5:6001"
 
     def test_dp_index_offsets_default_port(self, monkeypatch):
-        monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", raising=False)
-        monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", raising=False)
+        monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_HOST", raising=False)
+        monkeypatch.delenv("SONAR_P2P_SIDE_CHANNEL_PORT", raising=False)
         mgr = self._construct(monkeypatch, dp_index=2)
         assert mgr._local_id == "localhost:5712"
 
@@ -2319,13 +2317,13 @@ class TestBindHostPortDefaults:
 
 
 # ---------------------------------------------------------------------------
-# Tests for session capacity limit (APHRODITE_P2P_MAX_PEERS)
+# Tests for session capacity limit (SONAR_P2P_MAX_PEERS)
 # ---------------------------------------------------------------------------
 
 
 class TestSessionCapLimit:
     """_get_or_create_session and _accept_new_peers reject new peers when
-    the session count reaches APHRODITE_P2P_MAX_PEERS."""
+    the session count reaches SONAR_P2P_MAX_PEERS."""
 
     def _make_with_control(self):
         mgr = _make_manager()
@@ -2360,10 +2358,10 @@ class TestSessionCapLimit:
         return mgr, created
 
     def test_outbound_rejected_at_capacity(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "2")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "2")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr, created = self._make_with_control()
         mgr._sessions["peer-a:1"] = _FakeSession(peer_id="peer-a:1")  # type: ignore[assignment]
@@ -2375,10 +2373,10 @@ class TestSessionCapLimit:
         assert len(created) == 0
 
     def test_on_new_request_records_failure_on_cap(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr, _ = self._make_with_control()
         mgr._sessions["existing:1"] = _FakeSession(peer_id="existing:1")  # type: ignore[assignment]
@@ -2390,10 +2388,10 @@ class TestSessionCapLimit:
         assert "req-cap" in mgr._failed_req_ids
 
     def test_inbound_rejected_at_capacity(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr, _ = self._make_with_control()
         mgr._sessions["existing:1"] = _FakeSession(peer_id="existing:1")  # type: ignore[assignment]
@@ -2404,10 +2402,10 @@ class TestSessionCapLimit:
         assert "new-peer:2" not in mgr._sessions
 
     def test_existing_session_reused_below_cap(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr, _ = self._make_with_control()
         existing = _FakeSession(peer_id="existing:1")
@@ -2497,12 +2495,12 @@ class TestIdleSessionEviction:
         return mgr
 
     def test_idle_session_evicted(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "10")
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "10")
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr = self._make_with_fake_data()
         idle_session = _FakeSession(
@@ -2515,11 +2513,11 @@ class TestIdleSessionEviction:
         assert "idle:1" not in mgr._sessions
 
     def test_idle_session_kept_below_headroom(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "10")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "10")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr = self._make_with_fake_data()
         idle_session = _FakeSession(
@@ -2532,12 +2530,12 @@ class TestIdleSessionEviction:
         assert "idle:1" in mgr._sessions
 
     def test_active_session_kept(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "10")
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "10")
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr = self._make_with_fake_data()
         active = _FakeSession(
@@ -2550,12 +2548,12 @@ class TestIdleSessionEviction:
         assert "active:1" in mgr._sessions
 
     def test_session_with_pending_work_not_evicted(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "1")
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "1")
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
 
         mgr = self._make_with_fake_data()
         busy = _FakeSession(
@@ -2569,10 +2567,10 @@ class TestIdleSessionEviction:
         assert "busy:1" in mgr._sessions
 
     def test_disabled_when_zero(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "0")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "0")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
 
         mgr = self._make_with_fake_data()
         old = _FakeSession(
@@ -2668,12 +2666,12 @@ class TestRetainedTransfers:
         assert mgr._retained == {}
 
     def test_idle_eviction_retains_too(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_P2P_IDLE_TIMEOUT_S", "10")
-        monkeypatch.setenv("APHRODITE_P2P_MAX_PEERS", "1")
-        import aphrodite.envs
+        monkeypatch.setenv("SONAR_P2P_IDLE_TIMEOUT_S", "10")
+        monkeypatch.setenv("SONAR_P2P_MAX_PEERS", "1")
+        import sonar.envs
 
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_IDLE_TIMEOUT_S", None)
-        aphrodite.envs.__dict__.pop("APHRODITE_P2P_MAX_PEERS", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_IDLE_TIMEOUT_S", None)
+        sonar.envs.__dict__.pop("SONAR_P2P_MAX_PEERS", None)
         mgr = _make_manager()
         mgr._data = _RetiringFakeData()  # type: ignore[assignment]
         mgr._sessions[self.PEER] = _FakeSession(  # type: ignore[assignment]

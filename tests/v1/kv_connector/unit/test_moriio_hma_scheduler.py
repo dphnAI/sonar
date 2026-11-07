@@ -19,11 +19,11 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups
-from aphrodite.v1.core.sched.output import KVConnectorBlockState, SchedulerOutput
-from aphrodite.v1.core.single_type_kv_cache_manager import FullAttentionManager
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_planning import get_kv_cache_groups
+from sonar.v1.core.sched.output import KVConnectorBlockState, SchedulerOutput
+from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -31,17 +31,17 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.request import RequestStatus
 
-moriio_connector = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector")
-moriio_layout = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout")
+moriio_connector = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector")
+moriio_layout = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout")
 ssm_conv_transfer_utils = importlib.import_module(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils"
+    "sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils"
 )
 MambaConvSplitInfo = ssm_conv_transfer_utils.MambaConvSplitInfo
 MoRIIOMode = moriio_connector.MoRIIOMode
-moriio_common = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
+moriio_common = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
 get_role = moriio_common.get_role
 set_role = moriio_common.set_role
 
@@ -133,7 +133,7 @@ def _spec_config(method: str):
     return SimpleNamespace(method=method, use_dspark=lambda: method == "dspark")
 
 
-def _gate_aphrodite_config(
+def _gate_sonar_config(
     *,
     read_mode: bool = True,
     speculative_config=None,
@@ -263,7 +263,7 @@ def test_scheduler_rejects_hybrid_without_attention_group():
     config.transfer_groups = tuple(config.kv_cache_groups)
 
     with pytest.raises(moriio_common.MoRIIOError, match="attention group"):
-        moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(), "engine", config)
+        moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(), "engine", config)
 
 
 def _glm5_next_mtp_kv_cache_config() -> KVCacheConfig:
@@ -293,26 +293,26 @@ def _glm5_next_mtp_kv_cache_config() -> KVCacheConfig:
             dtype=torch.bfloat16,
             dcp_sharded=False,
         )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
         parallel_config=SimpleNamespace(pipeline_parallel_size=1),
         speculative_config=None,
         cache_config=SimpleNamespace(get_resolved_kv_cache_layout=lambda: KVCacheLayout.BLHNC),
     )
-    groups = get_kv_cache_groups(aphrodite_config, specs)
+    groups = get_kv_cache_groups(sonar_config, specs)
     return KVCacheConfig(num_blocks=64, kv_cache_tensors=[], kv_cache_groups=groups)
 
 
 def _glm5_next_mtp_scheduler(kv_role: str = "kv_consumer"):
-    aphrodite_config = _gate_aphrodite_config(
+    sonar_config = _gate_sonar_config(
         speculative_config=_spec_config("mtp"),
         block_size=1024,
         num_lookahead_tokens=1,
         num_speculative_tokens=1,
     )
-    aphrodite_config.kv_transfer_config.kv_role = kv_role
+    sonar_config.kv_transfer_config.kv_role = kv_role
     config = _glm5_next_mtp_kv_cache_config()
-    return moriio_connector.MoRIIOConnectorScheduler(aphrodite_config, "engine", config)
+    return moriio_connector.MoRIIOConnectorScheduler(sonar_config, "engine", config)
 
 
 @pytest.mark.usefixtures("restore_moriio_role")
@@ -457,7 +457,7 @@ def test_scheduler_rejects_incompatible_mamba_groups():
     config.transfer_groups = tuple(config.kv_cache_groups)
 
     with pytest.raises(moriio_common.MoRIIOError, match="same cache spec"):
-        moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(), "engine", config)
+        moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(), "engine", config)
 
 
 def test_scheduler_rejects_mamba_group_without_two_states():
@@ -470,7 +470,7 @@ def test_scheduler_rejects_mamba_group_without_two_states():
     config.transfer_groups = tuple(config.kv_cache_groups)
 
     with pytest.raises(moriio_common.MoRIIOError, match="exactly two Mamba states"):
-        moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(), "engine", config)
+        moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(), "engine", config)
 
 
 def test_scheduler_rejects_non_dspark_speculative_hybrid_write():
@@ -484,7 +484,7 @@ def test_scheduler_rejects_non_dspark_speculative_hybrid_write():
 
     with pytest.raises(moriio_common.MoRIIOError, match="speculative decoding"):
         moriio_connector.MoRIIOConnectorScheduler(
-            _gate_aphrodite_config(read_mode=False, speculative_config=_spec_config("ngram")),
+            _gate_sonar_config(read_mode=False, speculative_config=_spec_config("ngram")),
             "engine",
             config,
         )
@@ -524,7 +524,7 @@ def _dspark_wrapped_attention_config(*, dcp_sharded: bool = True):
 @pytest.mark.parametrize("dcp_size,dcp_sharded,expected_tail", [(1, True, 4), (4, True, 1), (4, False, 4)])
 def test_scheduler_accepts_dspark_with_wrapped_full_attention(dcp_size, dcp_sharded, expected_tail, read_mode):
     config = _dspark_wrapped_attention_config(dcp_sharded=dcp_sharded)
-    aphrodite_config = _gate_aphrodite_config(
+    sonar_config = _gate_sonar_config(
         read_mode=read_mode,
         speculative_config=_spec_config("dspark"),
         block_size=4,
@@ -532,7 +532,7 @@ def test_scheduler_accepts_dspark_with_wrapped_full_attention(dcp_size, dcp_shar
         num_speculative_tokens=7,
         dcp_size=dcp_size,
     )
-    scheduler = moriio_connector.MoRIIOConnectorScheduler(aphrodite_config, "engine", config)
+    scheduler = moriio_connector.MoRIIOConnectorScheduler(sonar_config, "engine", config)
 
     assert scheduler._full_attn_group_idx == 1
     assert scheduler._num_ssm_scratch_blocks == 2
@@ -549,10 +549,10 @@ def test_scheduler_accepts_dspark_with_wrapped_full_attention(dcp_size, dcp_shar
         dcp_world_size=dcp_size,
     )
     imported_tokens = manager.block_size
-    target_tokens = 1 + aphrodite_config.num_speculative_tokens
+    target_tokens = 1 + sonar_config.num_speculative_tokens
     manager.allocate_new_blocks(
         "decode",
-        num_tokens=imported_tokens + target_tokens + aphrodite_config.num_lookahead_tokens,
+        num_tokens=imported_tokens + target_tokens + sonar_config.num_lookahead_tokens,
         num_tokens_main_model=imported_tokens + target_tokens,
     )
     local = [b.block_id for b in manager.req_to_blocks["decode"]]
@@ -566,9 +566,7 @@ def test_scheduler_accepts_dspark_with_wrapped_full_attention(dcp_size, dcp_shar
 def test_hybrid_write_clamps_attention_and_excludes_scratch_slots():
     config = _dspark_wrapped_attention_config()
     config.select_transfer_block_ids = lambda blocks: tuple(blocks)
-    sched = moriio_connector.MoRIIOConnectorScheduler(
-        _gate_aphrodite_config(read_mode=False, dcp_size=2), "engine", config
-    )
+    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False, dcp_size=2), "engine", config)
     assert sched._clamp_to_prompt_blocks(SimpleNamespace(num_prompt_tokens=9), [[10, 11, 12, 13], [1, 2, 3, 4]]) == [
         [11],
         [1, 2],
@@ -579,9 +577,7 @@ def test_hybrid_write_clamps_attention_and_excludes_scratch_slots():
 def test_hybrid_write_resolves_current_state_instead_of_cached_block_ids():
     config = _dspark_wrapped_attention_config()
     config.select_transfer_block_ids = lambda blocks: tuple(blocks)
-    sched = moriio_connector.MoRIIOConnectorScheduler(
-        _gate_aphrodite_config(read_mode=False, dcp_size=2), "engine", config
-    )
+    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False, dcp_size=2), "engine", config)
     state = KVConnectorBlockState(
         req_ids={"req"},
         resolve_block_ids=lambda _: ([0, 51, 52, 53], [31, 32, 33]),
@@ -601,7 +597,7 @@ def test_hybrid_write_notifies_grouped_slots_or_releases_a_complete_local_hit(
 ):
     config = _dspark_wrapped_attention_config()
     config.select_transfer_block_ids = lambda blocks: tuple(blocks)
-    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(read_mode=False), "engine", config)
+    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False), "engine", config)
     sched.send_notify_block = Mock()
     sched._send_transfer_release = Mock()
     req = _mk_request(
@@ -651,7 +647,7 @@ def test_hybrid_write_keeps_separate_draft_groups_and_their_block_spans():
     config.transfer_groups = tuple(g for g in config.kv_cache_groups if g.enable_kv_transfer)
     config.select_transfer_block_ids = lambda blocks: (blocks[0], blocks[2], blocks[3])
     sched = moriio_connector.MoRIIOConnectorScheduler(
-        _gate_aphrodite_config(read_mode=False, dcp_size=2, speculative_config=_spec_config("dspark")),
+        _gate_sonar_config(read_mode=False, dcp_size=2, speculative_config=_spec_config("dspark")),
         "engine",
         config,
     )
@@ -682,9 +678,7 @@ def test_hybrid_write_keeps_separate_draft_groups_and_their_block_spans():
 def test_hybrid_write_request_finished_defers_free_only_with_blocks_to_send(blocks, delay_free):
     config = _dspark_wrapped_attention_config()
     config.select_transfer_block_ids = lambda blocks: tuple(blocks)
-    sched = moriio_connector.MoRIIOConnectorScheduler(
-        _gate_aphrodite_config(read_mode=False, dcp_size=2), "engine", config
-    )
+    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False, dcp_size=2), "engine", config)
     sched.is_producer = True
     req = _mk_request(list(range(9)), params={"do_remote_decode": True, "transfer_id": "tx"})
     req.request_id = "req"
@@ -704,9 +698,7 @@ def test_hybrid_write_build_meta_saves_current_state_on_the_final_chunk():
     state slots move between chunks without appending a block."""
     config = _dspark_wrapped_attention_config()
     config.select_transfer_block_ids = lambda blocks: tuple(blocks)
-    sched = moriio_connector.MoRIIOConnectorScheduler(
-        _gate_aphrodite_config(read_mode=False, dcp_size=2), "engine", config
-    )
+    sched = moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False, dcp_size=2), "engine", config)
     sched.is_producer = True
     set_role(moriio_common.ROLE.PRODUCER)
     params = {
@@ -797,7 +789,7 @@ def test_scheduler_rejects_circular_buffer_without_mamba():
     config.transfer_groups = tuple(config.kv_cache_groups)
 
     with pytest.raises(NotImplementedError, match="CircularBufferSpec"):
-        moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(), "engine", config)
+        moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(), "engine", config)
 
 
 @pytest.mark.usefixtures("restore_moriio_role")
@@ -821,7 +813,7 @@ def test_scheduler_rejects_circular_buffer_in_hybrid_write():
     config.transfer_groups = tuple(config.kv_cache_groups)
 
     with pytest.raises(NotImplementedError, match="CircularBufferSpec"):
-        moriio_connector.MoRIIOConnectorScheduler(_gate_aphrodite_config(read_mode=False), "engine", config)
+        moriio_connector.MoRIIOConnectorScheduler(_gate_sonar_config(read_mode=False), "engine", config)
 
 
 def test_split_block_groups_rejects_non_hybrid_use():
@@ -1203,7 +1195,7 @@ def _make_register_worker(caches, geoms, *, disable_hma: bool = True):
         tp_rank=0,
         dp_rank=0,
         is_producer=False,
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(hf_config=SimpleNamespace(model_type="x")),
             scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=disable_hma),
         ),

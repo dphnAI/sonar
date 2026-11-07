@@ -4,11 +4,11 @@
 import numpy as np
 import pytest
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine import EngineCoreOutput, EngineCoreRequest, FinishReason
-from aphrodite.v1.engine.detokenizer import BaseIncrementalDetokenizer
-from aphrodite.v1.engine.output_processor import OutputProcessor
-from aphrodite.v1.outputs import LogprobsLists, SamplingMaskLists
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine import EngineCoreOutput, EngineCoreRequest, FinishReason
+from sonar.v1.engine.detokenizer import BaseIncrementalDetokenizer
+from sonar.v1.engine.output_processor import OutputProcessor
+from sonar.v1.outputs import LogprobsLists, SamplingMaskLists
 
 
 @pytest.fixture(params=[True, False])

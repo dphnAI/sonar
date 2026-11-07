@@ -12,7 +12,7 @@ classes, not by MediaIO classes.
 import pytest
 import torch
 
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioEmbeddingItems,
     ImageEmbeddingItems,
     MultiModalDataParser,

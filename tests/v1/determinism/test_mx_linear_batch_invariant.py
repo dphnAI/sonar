@@ -6,7 +6,7 @@ import pytest
 import torch
 from utils import requires_mx
 
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 
 SEED = 0
 
@@ -113,8 +113,8 @@ def _mxfp8_weights(n: int, k: int):
 def test_mxfp4_linear_is_batch_invariant(n: int, k: int, use_asm_gemm: bool):
     pytest.importorskip("aiter")
 
-    # Importing the module registers torch.ops.aphrodite.gemm_with_dynamic_quant.
-    import aphrodite.model_executor.kernels.linear.mxfp4.aiter  # noqa: F401
+    # Importing the module registers torch.ops.sonar.gemm_with_dynamic_quant.
+    import sonar.model_executor.kernels.linear.mxfp4.aiter  # noqa: F401
 
     set_random_seed(SEED)
     weight, weight_scale = _mxfp4_weights(n, k, use_asm_gemm)
@@ -122,9 +122,7 @@ def test_mxfp4_linear_is_batch_invariant(n: int, k: int, use_asm_gemm: bool):
 
     probes = {
         num_tokens: _probe(
-            torch.ops.aphrodite.gemm_with_dynamic_quant(
-                x[:num_tokens], weight, weight_scale, use_asm_gemm, torch.bfloat16
-            )
+            torch.ops.sonar.gemm_with_dynamic_quant(x[:num_tokens], weight, weight_scale, use_asm_gemm, torch.bfloat16)
         )
         for num_tokens in MXFP4_TOKEN_COUNTS
     }
@@ -139,7 +137,7 @@ def test_mxfp4_linear_is_batch_invariant(n: int, k: int, use_asm_gemm: bool):
 @pytest.mark.parametrize("n,k", MXFP8_CASES)
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 def test_mxfp8_linear_is_batch_invariant(n: int, k: int, dtype: torch.dtype):
-    from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+    from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
         _mxfp8_dot_scaled_linear,
     )
 

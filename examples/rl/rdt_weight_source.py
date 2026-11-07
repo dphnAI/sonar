@@ -3,11 +3,11 @@
 """The ``WeightSource`` for ``rlhf_sharded_rdt_small_ep.py``.
 
 A trainer's producer job is to present its weights under the names the inference
-side expects, which for Aphrodite means HF CHECKPOINT names. Transformers does not
+side expects, which for Sonar means HF CHECKPOINT names. Transformers does not
 store MoE experts that way -- it fuses each layer's into ``[E, ...]`` tensors --
 so that is the one conversion this file does. Kept beside the example rather than
 inside it so the example stays about the sync itself, alongside
-``rdt_aphrodite_serve.py``.
+``rdt_sonar_serve.py``.
 """
 
 from functools import cached_property
@@ -15,8 +15,8 @@ from functools import cached_property
 import regex as re
 import torch
 
-from aphrodite.distributed.weight_transfer import ParamMeta, WeightSource
-from aphrodite.distributed.weight_transfer.base import materialize_full_tensor
+from sonar.distributed.weight_transfer import ParamMeta, WeightSource
+from sonar.distributed.weight_transfer.base import materialize_full_tensor
 
 # Transformers fuses a layer's experts into ``[E, ...]`` tensors; the checkpoint
 # stores them per expert. This matches the fused parameter names.
@@ -27,7 +27,7 @@ class CheckpointNameSource(WeightSource):
     """`WeightSource` over an FSDP2 model that publishes HF CHECKPOINT names.
 
     Transformers keeps each layer's experts fused as ``[E, ...]`` tensors, but
-    Aphrodite's MoE loaders are written against the per-expert checkpoint entries --
+    Sonar's MoE loaders are written against the per-expert checkpoint entries --
     only ``qwen{2,3}_moe`` also accept the fused names, so publishing them
     straight from ``named_parameters()`` limits the example to one family and
     fails the consumer's bake on ``experts.gate_up_proj`` everywhere else.

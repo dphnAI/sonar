@@ -4,7 +4,7 @@
 decode-only steps of at most 64 rows with causal SWA windows, eager or in a
 FULL graph. Every backbone layer takes the whole layer: a CSA layer through
 its top-k (its compressor and indexer run between the launches), an HCA layer
-through every compressed row (Aphrodite's c128a table), a hash-routed layer with
+through every compressed row (Sonar's c128a table), a hash-routed layer with
 its tokens' experts. Deployments the kernels cannot run are an error."""
 
 import sys
@@ -13,10 +13,10 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.models.deepseek_v4.amd import mono_decode as md
-from aphrodite.models.deepseek_v4.amd.mono.dims import HIDDEN, MAX_TOKENS, WINDOW
+from sonar.config import CUDAGraphMode
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.models.deepseek_v4.amd import mono_decode as md
+from sonar.models.deepseek_v4.amd.mono.dims import HIDDEN, MAX_TOKENS, WINDOW
 
 M = 6
 HCA_WIDTH = 512
@@ -65,7 +65,7 @@ def _swa(**overrides):
 
 
 def _c128a(rows=M, width=128):
-    """APHRODITE's c128a decode table: its step's rows of a 64-row buffer as wide as
+    """SONAR's c128a decode table: its step's rows of a 64-row buffer as wide as
     the longest context, cut to the step's active width."""
     buffer = torch.arange(64 * HCA_WIDTH, dtype=torch.int32).view(64, HCA_WIDTH)
     return buffer[:rows, :width].view(rows, 1, -1)
@@ -184,7 +184,7 @@ def test_select_runs_the_compressor_then_the_indexer(run, ratio, indexed, expect
 @pytest.mark.parametrize("decode_tokens", [M, M - 2], ids=["exact", "padded"])
 def test_hca_step_reads_every_compressed_row(run, decode_tokens):
     """An HCA layer's keys are its c128a table's rows: the runner is built as
-    wide as Aphrodite's table, and the kernels read the table's buffer at its row
+    wide as Sonar's table, and the kernels read the table's buffer at its row
     stride. A FULL graph padded past the step's decode tokens reads its pad
     rows from the same buffer (their slots are -1)."""
     comp = _comp(rows=decode_tokens)
@@ -299,16 +299,16 @@ def _config(monokernel=True, max_model_len=8192):
 
 def _deployment(monkeypatch, tp=8, aiter_linear=True):
     """A deployment the kernels take (the runner module stubbed: no FlyDSL)."""
-    import aphrodite.platforms.rocm as rocm
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    import sonar.platforms.rocm as rocm
+    from sonar._aiter_ops import rocm_aiter_ops
 
-    monkeypatch.delenv("APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
-    monkeypatch.delenv("APHRODITE_ROCM_FP8_PADDING", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_FP8_PADDING", raising=False)
     monkeypatch.setattr(rocm, "get_cdna_version", lambda: 4)
     monkeypatch.setattr(md, "get_tensor_model_parallel_world_size", lambda: tp)
     monkeypatch.setattr(md, "_compute_units", lambda: 256)
     monkeypatch.setattr(rocm_aiter_ops, "is_linear_fp8_enabled", classmethod(lambda cls: aiter_linear))
-    name = "aphrodite.models.deepseek_v4.amd.mono.runner"
+    name = "sonar.models.deepseek_v4.amd.mono.runner"
     runner = ModuleType(name)
     runner.BLOCKS = 256  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, name, runner)
@@ -339,24 +339,24 @@ def test_off_without_the_flag(monkeypatch):
     "case, match",
     [
         (dict(tp=4), "tensor parallel size 8"),
-        (dict(aiter_linear=False), "APHRODITE_ROCM_USE_AITER_LINEAR"),
-        (dict(padding="0"), "APHRODITE_ROCM_FP8_PADDING"),
+        (dict(aiter_linear=False), "SONAR_ROCM_USE_AITER_LINEAR"),
+        (dict(padding="0"), "SONAR_ROCM_FP8_PADDING"),
     ],
     ids=["tp", "aiter-linear", "fp8-padding"],
 )
 def test_opt_in_outside_the_kernels_raises(monkeypatch, case, match):
-    """The kernels read TP8 shards of Aphrodite's preshuffled, padded aiter FP8
+    """The kernels read TP8 shards of Sonar's preshuffled, padded aiter FP8
     weights: any other deployment is an error, not garbage."""
     padding = case.get("padding")
     _deployment(monkeypatch, **{k: v for k, v in case.items() if k != "padding"})
     if padding is not None:
-        monkeypatch.setenv("APHRODITE_ROCM_FP8_PADDING", padding)
+        monkeypatch.setenv("SONAR_ROCM_FP8_PADDING", padding)
     with pytest.raises(ValueError, match=match):
         md.MonoDecodeLayer.create(_decoder_layer(), _config())
 
 
-def test_hca_key_table_is_aphrodites_c128a_width(monkeypatch):
-    """The runner's HCA key table is as wide as the c128a table Aphrodite's metadata
+def test_hca_key_table_is_sonars_c128a_width(monkeypatch):
+    """The runner's HCA key table is as wide as the c128a table Sonar's metadata
     builder allocates: every compressed row of the longest context, in 128-row
     multiples (sparse_mla)."""
     _deployment(monkeypatch)

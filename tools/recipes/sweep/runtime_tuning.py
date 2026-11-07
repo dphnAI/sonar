@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Optional runtime refinement for configs produced from Aphrodite Recipes.
+"""Optional runtime refinement for configs produced from Sonar Recipes.
 
 The recipe remains the baseline. Each policy may return an override only when
 enough information is available. Keep policies independent so the tuning
@@ -21,7 +21,7 @@ from typing import Any
 from hardware_detection import HardwareInfo
 from model_constraints import load_head_constraints, suggest_tensor_parallel_size
 
-from aphrodite.config.scheduler import SchedulerConfig
+from sonar.config.scheduler import SchedulerConfig
 
 
 @dataclass(frozen=True)
@@ -158,7 +158,7 @@ def _resolve_tensor_parallel_size(
         constraints = load_head_constraints(config)
     except Exception as exc:
         result.notes.append(
-            "tensor-parallel-size: kept recipe value (Aphrodite default TP=1 if absent); "
+            "tensor-parallel-size: kept recipe value (Sonar default TP=1 if absent); "
             f"model head detection failed: {exc}"
         )
         return
@@ -241,7 +241,7 @@ def _resolve_max_num_seqs(
         (
             "benchmark seed derived from the optional global target concurrency "
             f"and data_parallel_size={data_parallel_size}; config.yml keeps the "
-            "recipe/Aphrodite scheduler default"
+            "recipe/Sonar scheduler default"
         ),
     )
 
@@ -269,7 +269,7 @@ def _resolve_max_num_batched_tokens(
     )
     prefill_budget = ceil(workload.input_tokens * prefills_per_step)
 
-    # Use Aphrodite's scheduler defaults/constraints as floors rather than local
+    # Use Sonar's scheduler defaults/constraints as floors rather than local
     # recipe-specific magic constants.
     candidate = max(
         SchedulerConfig.DEFAULT_MAX_NUM_BATCHED_TOKENS,
@@ -278,7 +278,7 @@ def _resolve_max_num_batched_tokens(
     )
 
     # Chunked prefill normally lets a prompt span scheduler iterations. If the
-    # recipe explicitly disables it, Aphrodite requires the token budget to cover
+    # recipe explicitly disables it, Sonar requires the token budget to cover
     # max_model_len when max_model_len is known.
     if config.get("enable-chunked-prefill") is False:
         max_model_len = config.get("max-model-len")
@@ -296,7 +296,7 @@ def _resolve_max_num_batched_tokens(
             f"prefills_per_step={prefills_per_step:.2f}, "
             f"decode_budget={decode_budget}, "
             f"prefill_budget={prefill_budget}); config.yml keeps the "
-            "recipe/Aphrodite scheduler default"
+            "recipe/Sonar scheduler default"
         ),
     )
 

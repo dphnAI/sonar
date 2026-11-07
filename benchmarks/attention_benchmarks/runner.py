@@ -4,7 +4,7 @@
 """Standard attention benchmark runner - shared utilities for non-MLA benchmarks.
 
 This module provides helpers for running standard attention backends
-(FlashAttention, Triton, FlashInfer) with real Aphrodite integration.
+(FlashAttention, Triton, FlashInfer) with real Sonar integration.
 """
 
 import logging
@@ -24,8 +24,7 @@ from common import (
     run_ncu_profile,
 )
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     DeviceConfig,
@@ -33,16 +32,17 @@ from aphrodite.config import (
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
-from aphrodite.v1.attention.backends.utils import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar.v1.attention.backends.utils import (
     CommonAttentionMetadata,
     get_supported_kv_cache_layouts,
     resolve_kv_cache_layout,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheLayout,
     KVCacheTensor,
@@ -68,7 +68,7 @@ def _get_backend_config(backend: str) -> dict:
         Dict with backend_class
 
     """
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     try:
         backend_enum = AttentionBackendEnum[backend]
@@ -82,8 +82,8 @@ def _get_backend_config(backend: str) -> dict:
 
 @contextmanager
 def log_warnings_and_errors_only():
-    """Temporarily set Aphrodite logger to WARNING level."""
-    logger = logging.getLogger("aphrodite")
+    """Temporarily set Sonar logger to WARNING level."""
+    logger = logging.getLogger("sonar")
     old_level = logger.level
     logger.setLevel(logging.WARNING)
     try:
@@ -135,12 +135,12 @@ def _build_common_attn_metadata(
     )
 
 
-def _create_aphrodite_config(
+def _create_sonar_config(
     config: BenchmarkConfig,
     max_num_blocks: int,
     max_model_len: int = 0,
-) -> AphroditeConfig:
-    """Create a AphroditeConfig for benchmarking with mock model methods."""
+) -> SonarConfig:
+    """Create a SonarConfig for benchmarking with mock model methods."""
     model_config = ModelConfig(
         model=config.model,
         tokenizer=config.model,
@@ -183,7 +183,7 @@ def _create_aphrodite_config(
     model_config.get_head_size = types.MethodType(lambda self: config.head_dim, model_config)
     model_config.get_sliding_window = types.MethodType(lambda self: None, model_config)
 
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         parallel_config=parallel_config,
@@ -242,7 +242,7 @@ def _create_backend_impl(
 def _create_metadata_builder(
     backend_class,
     kv_cache_spec: FullAttentionSpec,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     backend_name: str = "",
 ):
@@ -255,10 +255,10 @@ def _create_metadata_builder(
     if backend_name == "FLASHINFER":
         import unittest.mock
 
-        from aphrodite.v1.attention.backends.utils import PerLayerParameters
+        from sonar.v1.attention.backends.utils import PerLayerParameters
 
-        def mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
-            head_size = aphrodite_config.model_config.get_head_size()
+        def mock_get_per_layer_parameters(sonar_config, layer_names, impl_cls):
+            head_size = sonar_config.model_config.get_head_size()
             return {
                 layer_name: PerLayerParameters(
                     window_left=-1,  # No sliding window
@@ -269,20 +269,20 @@ def _create_metadata_builder(
             }
 
         with unittest.mock.patch(
-            "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+            "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
             mock_get_per_layer_parameters,
         ):
             return builder_cls(
                 kv_cache_spec=kv_cache_spec,
                 layer_names=layer_names,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 device=device,
             )
 
     return builder_cls(
         kv_cache_spec=kv_cache_spec,
         layer_names=layer_names,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
     )
 
@@ -306,7 +306,7 @@ def _create_input_tensors(
     """
     q_dtype = dtype
     if quantize_query:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         q_dtype = current_platform.fp8_dtype()
     v_dim = config.v_head_dim if config.v_head_dim is not None else config.head_dim
@@ -473,26 +473,26 @@ def run_attention_benchmark(config: BenchmarkConfig) -> BenchmarkResult:
     max_blocks_per_request = (max_kv + config.block_size - 1) // config.block_size
     max_num_blocks = batch_size * max_blocks_per_request
 
-    # Suppress Aphrodite logs during setup to reduce spam
+    # Suppress Sonar logs during setup to reduce spam
     with log_warnings_and_errors_only():
-        # Create aphrodite_config first - uses model's native dtype via "auto"
-        aphrodite_config = _create_aphrodite_config(config, max_num_blocks, max_kv)
-        dtype = aphrodite_config.model_config.dtype
+        # Create sonar_config first - uses model's native dtype via "auto"
+        sonar_config = _create_sonar_config(config, max_num_blocks, max_kv)
+        dtype = sonar_config.model_config.dtype
 
-        # Wrap everything in set_current_aphrodite_config context
+        # Wrap everything in set_current_sonar_config context
         # This is required for backends like flashinfer that need global config
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             backend_class, impl, layer = _create_backend_impl(backend_cfg, config, device, dtype)
             # Set KV cache layout if the backend requires a specific one
             # (e.g., FlashInfer requires LBHNC on SM100/Blackwell for TRTLLM attention)
             supported = get_supported_kv_cache_layouts([backend_class])
-            layout = resolve_kv_cache_layout(aphrodite_config, [[m.name for m in supported]])
+            layout = resolve_kv_cache_layout(sonar_config, [[m.name for m in supported]])
 
             common_metadata = _build_common_attn_metadata(q_lens, kv_lens, config.block_size, device)
 
             kv_cache_spec = backend_class.customize_spec(_kv_cache_spec(config, dtype))
 
-            builder = _create_metadata_builder(backend_class, kv_cache_spec, aphrodite_config, device, config.backend)
+            builder = _create_metadata_builder(backend_class, kv_cache_spec, sonar_config, device, config.backend)
 
             attn_metadata = builder.build(
                 common_prefix_len=0,

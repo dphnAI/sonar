@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 
 def test_qwen3_5_lm_head_receives_quant_config():
-    from aphrodite.model_executor.models.qwen3_5 import Qwen3_5ForCausalLMBase
+    from sonar.model_executor.models.qwen3_5 import Qwen3_5ForCausalLMBase
 
     mock_quant_config = Mock()
 
@@ -14,28 +14,28 @@ def test_qwen3_5_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_aphrodite_config = Mock()
-    mock_aphrodite_config.model_config.hf_text_config = mock_hf_config
-    mock_aphrodite_config.cache_config.mamba_cache_mode = "align"
-    mock_aphrodite_config.scheduler_config = Mock()
-    mock_aphrodite_config.quant_config = mock_quant_config
-    mock_aphrodite_config.lora_config = None
+    mock_sonar_config = Mock()
+    mock_sonar_config.model_config.hf_text_config = mock_hf_config
+    mock_sonar_config.cache_config.mamba_cache_mode = "align"
+    mock_sonar_config.scheduler_config = Mock()
+    mock_sonar_config.quant_config = mock_quant_config
+    mock_sonar_config.lora_config = None
 
     mock_pp_group = Mock()
     mock_pp_group.is_last_rank = True
 
     with (
-        patch("aphrodite.model_executor.models.qwen3_5.Qwen3_5Model") as MockModel,
-        patch("aphrodite.model_executor.models.qwen3_5.ParallelLMHead") as MockLMHead,
-        patch("aphrodite.model_executor.models.qwen3_5.LogitsProcessor"),
+        patch("sonar.model_executor.models.qwen3_5.Qwen3_5Model") as MockModel,
+        patch("sonar.model_executor.models.qwen3_5.ParallelLMHead") as MockLMHead,
+        patch("sonar.model_executor.models.qwen3_5.LogitsProcessor"),
         patch(
-            "aphrodite.model_executor.models.qwen3_5.get_pp_group",
+            "sonar.model_executor.models.qwen3_5.get_pp_group",
             return_value=mock_pp_group,
         ),
     ):
         MockModel.return_value.make_empty_intermediate_tensors = Mock()
 
-        Qwen3_5ForCausalLMBase(aphrodite_config=mock_aphrodite_config)
+        Qwen3_5ForCausalLMBase(sonar_config=mock_sonar_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs
@@ -43,8 +43,8 @@ def test_qwen3_5_lm_head_receives_quant_config():
 
 
 def test_qwen3_5_mtp_lm_head_receives_quant_config():
-    from aphrodite.config import CompilationMode
-    from aphrodite.model_executor.models.qwen3_5_mtp import Qwen3_5MTP
+    from sonar.config import CompilationMode
+    from sonar.model_executor.models.qwen3_5_mtp import Qwen3_5MTP
 
     mock_quant_config = Mock()
 
@@ -53,25 +53,25 @@ def test_qwen3_5_mtp_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_aphrodite_config = Mock()
-    mock_aphrodite_config.model_config.hf_text_config = mock_hf_config
-    mock_aphrodite_config.cache_config.mamba_cache_mode = "align"
-    mock_aphrodite_config.compilation_config.mode = CompilationMode.NONE
-    mock_aphrodite_config.quant_config = mock_quant_config
+    mock_sonar_config = Mock()
+    mock_sonar_config.model_config.hf_text_config = mock_hf_config
+    mock_sonar_config.cache_config.mamba_cache_mode = "align"
+    mock_sonar_config.compilation_config.mode = CompilationMode.NONE
+    mock_sonar_config.quant_config = mock_quant_config
 
     mock_pp_group = Mock()
     mock_pp_group.is_last_rank = True
 
     with (
-        patch("aphrodite.model_executor.models.qwen3_5_mtp.Qwen3_5MultiTokenPredictor"),
-        patch("aphrodite.model_executor.models.qwen3_5_mtp.ParallelLMHead") as MockLMHead,
-        patch("aphrodite.model_executor.models.qwen3_5_mtp.LogitsProcessor"),
+        patch("sonar.model_executor.models.qwen3_5_mtp.Qwen3_5MultiTokenPredictor"),
+        patch("sonar.model_executor.models.qwen3_5_mtp.ParallelLMHead") as MockLMHead,
+        patch("sonar.model_executor.models.qwen3_5_mtp.LogitsProcessor"),
         patch(
-            "aphrodite.model_executor.models.qwen3_5_mtp.get_pp_group",
+            "sonar.model_executor.models.qwen3_5_mtp.get_pp_group",
             return_value=mock_pp_group,
         ),
     ):
-        Qwen3_5MTP(aphrodite_config=mock_aphrodite_config)
+        Qwen3_5MTP(sonar_config=mock_sonar_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs

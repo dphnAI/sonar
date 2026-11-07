@@ -4,9 +4,9 @@ import pytest
 import torch
 from nvfp4_utils import FLOAT4_E2M1_MAX, FLOAT8_E4M3_MAX, dequantize_nvfp4_to_dtype
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.has_device_capability(100):
     pytest.skip(

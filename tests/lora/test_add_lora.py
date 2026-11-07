@@ -5,14 +5,14 @@ import time
 
 import pytest
 
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.launchers.api_server.entry import (
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.launchers.api_server.entry import (
     build_async_engine_client_from_engine_args,
 )
-from aphrodite.inputs import TextPrompt
-from aphrodite.lora.request import LoRARequest
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.async_utils import merge_async_iterators
+from sonar.inputs import TextPrompt
+from sonar.lora.request import LoRARequest
+from sonar.sampling_params import SamplingParams
+from sonar.utils.async_utils import merge_async_iterators
 
 MODEL_PATH = "zai-org/chatglm3-6b"
 LORA_RANK = 64

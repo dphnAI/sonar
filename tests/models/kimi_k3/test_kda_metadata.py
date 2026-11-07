@@ -9,38 +9,38 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
-from aphrodite.models.kimi_k3.nvidia.kda_metadata import (
+from sonar.config import SonarConfig, SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.models.kimi_k3.nvidia.kda import KimiK3DeltaAttention
+from sonar.models.kimi_k3.nvidia.kda_metadata import (
     KimiK3KDAAttentionBackend,
     KimiK3KDAMetadata,
     KimiK3KDAMetadataBuilder,
     _mamba_get_block_table_tensor,
     stage_spec_decode_metadata,
 )
-from aphrodite.models.kimi_k3.nvidia.model import KimiLinearForCausalLM
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.v1.attention.backends.gdn_attn import (
+from sonar.models.kimi_k3.nvidia.model import KimiLinearForCausalLM
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from sonar.v1.attention.backends.gdn_attn import (
     GDNAttentionBackend,
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.recoverssm_metadata import (
+from sonar.v1.attention.backends.recoverssm_metadata import (
     RecoverSSMPostprocessMetadata,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
     mamba_get_block_table_tensor,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec
-from aphrodite.v1.worker.mamba_utils import validate_mamba_state_copy_funcs
+from sonar.v1.kv_cache_interface import MambaSpec
+from sonar.v1.worker.mamba_utils import validate_mamba_state_copy_funcs
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -104,28 +104,28 @@ def _make_builder(
     cache_hit_alignment_tokens: int | None = None,
     hash_block_size: int | None = None,
 ) -> _BuilderT:
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
     if num_speculative_tokens:
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=num_speculative_tokens,
         )
         if use_eagle:
-            aphrodite_config.speculative_config.method = "eagle3"
-            aphrodite_config.speculative_config.disable_eagle_block_drop = disable_eagle_block_drop
-    aphrodite_config.compilation_config.cudagraph_mode = (
+            sonar_config.speculative_config.method = "eagle3"
+            sonar_config.speculative_config.disable_eagle_block_drop = disable_eagle_block_drop
+    sonar_config.compilation_config.cudagraph_mode = (
         CUDAGraphMode.FULL_AND_PIECEWISE if full_cuda_graph else CUDAGraphMode.NONE
     )
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
-    aphrodite_config.cache_config.use_replayssm = use_recoverssm
-    aphrodite_config.cache_config.use_kda_recoverssm = use_recoverssm
-    aphrodite_config.cache_config.prefix_match_unit = prefix_match_unit
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config.cache_config.use_replayssm = use_recoverssm
+    sonar_config.cache_config.use_kda_recoverssm = use_recoverssm
+    sonar_config.cache_config.prefix_match_unit = prefix_match_unit
     hash_block_size = hash_block_size or prefix_match_unit or mamba_block_size
-    aphrodite_config.cache_config.hash_block_size = hash_block_size
-    aphrodite_config.cache_config.cache_hit_alignment_tokens = cache_hit_alignment_tokens or hash_block_size
+    sonar_config.cache_config.hash_block_size = hash_block_size
+    sonar_config.cache_config.cache_hit_alignment_tokens = cache_hit_alignment_tokens or hash_block_size
     builder = builder_cls(
         kv_cache_spec=MambaSpec(
             block_size=mamba_block_size,
@@ -137,7 +137,7 @@ def _make_builder(
             prefill_checkpoint_alignment=(16 if num_prefill_checkpoint_blocks > 0 else None),
         ),
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
     )
     if use_recoverssm:
@@ -148,8 +148,8 @@ def _make_builder(
 
 def test_kda_recoverssm_startup_metadata_flow_without_model(monkeypatch):
     """Exercise KDA RecoverSSM startup without loading Kimi-K3 weights."""
-    monkeypatch.setattr("aphrodite.utils.torch_utils.PIN_MEMORY", False)
-    monkeypatch.setattr("aphrodite.v1.attention.backends.utils.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.utils.torch_utils.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.attention.backends.utils.PIN_MEMORY", False)
     layout_config = SimpleNamespace(
         model_config=SimpleNamespace(
             dtype=torch.bfloat16,
@@ -218,7 +218,7 @@ def test_kda_recoverssm_startup_metadata_flow_without_model(monkeypatch):
     builder = KimiK3KDAMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["layer.0"],
-        aphrodite_config=builder_config,
+        sonar_config=builder_config,
         device=DEVICE,
     )
     builder_config.cache_config.hash_block_size = BLOCK_SIZE
@@ -252,7 +252,7 @@ def test_kda_recoverssm_startup_metadata_flow_without_model(monkeypatch):
     # builder's layer_names. Mock only the GPU-cache-dependent constructor.
     builder.recoverssm_context = None
     forward_layer = Mock(recoverssm_backend="triton")
-    builder.aphrodite_config.compilation_config.static_forward_context["layer.0"] = forward_layer
+    builder.sonar_config.compilation_config.static_forward_context["layer.0"] = forward_layer
     spec_common = create_common_attn_metadata(
         BatchSpec(seq_lens=[20], query_lens=[3]),
         BLOCK_SIZE,
@@ -267,7 +267,7 @@ def test_kda_recoverssm_startup_metadata_flow_without_model(monkeypatch):
     )
     recoverssm_context = Mock()
     with patch(
-        "aphrodite.models.kimi_k3.nvidia.ops.recoverssm.KDARecoverSSMCommitContext.create",
+        "sonar.models.kimi_k3.nvidia.ops.recoverssm.KDARecoverSSMCommitContext.create",
         return_value=recoverssm_context,
     ) as create_context:
         spec_metadata = builder.build(
@@ -283,7 +283,7 @@ def test_kda_recoverssm_startup_metadata_flow_without_model(monkeypatch):
     create_context.assert_called_once_with(
         [forward_layer],
         spec_query_len=3,
-        max_num_reqs=builder.aphrodite_config.scheduler_config.max_num_seqs,
+        max_num_reqs=builder.sonar_config.scheduler_config.max_num_seqs,
         backend="triton",
     )
 
@@ -378,7 +378,7 @@ def test_spec_internal_checkpoint_metadata_targets_replay_boundary(
 ) -> None:
     """Lookahead hashes need no back-off from the replay boundary."""
     monkeypatch.setattr(
-        AphroditeConfig,
+        SonarConfig,
         "num_hash_lookahead_tokens",
         property(lambda _: num_hash_lookahead_tokens),
     )
@@ -845,7 +845,7 @@ def test_recoverssm_spec_cudagraph_stages_one_checkpoint_per_request():
     )
     assert isinstance(builder, KimiK3KDAMetadataBuilder)
     assert builder.spec_state_indices_tensor.shape == (
-        builder.aphrodite_config.scheduler_config.max_num_seqs,
+        builder.sonar_config.scheduler_config.max_num_seqs,
         1,
     )
     actual = builder.build_for_cudagraph_capture(common_attn_metadata)
@@ -1061,19 +1061,19 @@ def test_cudagraph_capture_batch_stays_decode_only():
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Kimi-K3 NVIDIA KDA layer")
-def test_recoverssm_layer_keeps_records_outside_kv_cache(monkeypatch: pytest.MonkeyPatch, default_aphrodite_config):
+def test_recoverssm_layer_keeps_records_outside_kv_cache(monkeypatch: pytest.MonkeyPatch, default_sonar_config):
     """A RecoverSSM KDA layer stores the stock conv and SSM state in its Mamba
     pages and its verify records in a buffer with one row per schedulable
     request."""
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_tp_group",
+        "sonar.distributed.parallel_state.get_tp_group",
         lambda: SimpleNamespace(world_size=1, rank_in_group=0),
     )
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
-    default_aphrodite_config.speculative_config = SimpleNamespace(num_speculative_tokens=2)
-    default_aphrodite_config.scheduler_config.max_num_seqs = 5
-    default_aphrodite_config.cache_config.use_replayssm = True
-    default_aphrodite_config.cache_config.use_kda_recoverssm = True
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.speculative_config = SimpleNamespace(num_speculative_tokens=2)
+    default_sonar_config.scheduler_config.max_num_seqs = 5
+    default_sonar_config.cache_config.use_replayssm = True
+    default_sonar_config.cache_config.use_kda_recoverssm = True
     config = KimiLinearConfig(
         hidden_size=16,
         linear_attn_config={
@@ -1085,7 +1085,7 @@ def test_recoverssm_layer_keeps_records_outside_kv_cache(monkeypatch: pytest.Mon
             "use_full_rank_gate": True,
         },
     )
-    layer = KimiK3DeltaAttention(config, default_aphrodite_config, prefix="model.layers.0.self_attn")
+    layer = KimiK3DeltaAttention(config, default_sonar_config, prefix="model.layers.0.self_attn")
     # The CuTe kernels need 128-wide heads: this layer runs the Triton ones.
     assert layer.recoverssm_backend == "triton"
     assert len(layer.get_state_shape()) == len(layer.get_state_dtype()) == 2

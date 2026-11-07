@@ -10,7 +10,7 @@ speech-to-text WebSocket paths.
 
 import pytest
 
-from aphrodite.entrypoints.serve.exception_handling.utils import sanitize_message
+from sonar.entrypoints.serve.exception_handling.utils import sanitize_message
 
 
 def test_sanitize_message():
@@ -29,7 +29,7 @@ class TestSanitizeMessageFilePaths:
         msg = (
             "1 validation error:\n"
             "  {'type': 'list_type', 'loc': ('body', 'messages')}\n"
-            '\n  File "/usr/local/lib/python3.12/dist-packages/aphrodite/'
+            '\n  File "/usr/local/lib/python3.12/dist-packages/sonar/'
             'entrypoints/serve/utils/api_utils.py", line 40, '
             "in create_chat_completion\n"
             "    POST /v1/chat/completions"
@@ -40,7 +40,7 @@ class TestSanitizeMessageFilePaths:
         assert "list_type" in result
 
     def test_strips_arbitrary_absolute_path(self):
-        result = sanitize_message("Error in /home/user/project/aphrodite/server.py")
+        result = sanitize_message("Error in /home/user/project/sonar/server.py")
         assert "/home/user" not in result
 
     def test_strips_single_parent_container_path(self):
@@ -58,7 +58,7 @@ class TestSanitizeMessageFilePaths:
         assert sanitize_message(msg) == msg
 
     def test_strips_both_address_and_path(self):
-        msg = "<Request at 0x7f123> failed at /usr/local/lib/python3.12/dist-packages/aphrodite/server.py"
+        msg = "<Request at 0x7f123> failed at /usr/local/lib/python3.12/dist-packages/sonar/server.py"
         result = sanitize_message(msg)
         assert "0x" not in result
         assert "/usr/local/" not in result
@@ -113,8 +113,8 @@ class TestAffectedModulesUseSanitize:
     @pytest.mark.parametrize(
         "module",
         [
-            "aphrodite.entrypoints.anthropic.serving",
-            "aphrodite.entrypoints.speech_to_text.realtime.connection",
+            "sonar.entrypoints.anthropic.serving",
+            "sonar.entrypoints.speech_to_text.realtime.connection",
         ],
     )
     def test_module_calls_sanitize_message(self, module: str):
@@ -130,10 +130,10 @@ class TestAffectedModulesUseSanitize:
 
 def test_engine_dead_error_response_hides_log_oriented_message():
     """Clients get a generic message with no reference to server internals."""
-    from aphrodite.entrypoints.serve.exception_handling.error_response import (
+    from sonar.entrypoints.serve.exception_handling.error_response import (
         create_error_response,
     )
-    from aphrodite.v1.engine.exceptions import EngineDeadError
+    from sonar.v1.engine.exceptions import EngineDeadError
 
     exc = EngineDeadError()
     err = create_error_response(exc)
@@ -192,5 +192,5 @@ class TestSanitizeMessageReDoSResistance:
     def test_path_redaction_still_works(self):
         """Legitimate paths are still redacted after the fix."""
         assert "<path>" in sanitize_message("Error in /app/server.py")
-        assert "<path>" in sanitize_message("at /workspace/aphrodite/engine.py")
-        assert "<path>" in sanitize_message("error at /usr/lib/python3.12/dist-packages/aphrodite/core.py")
+        assert "<path>" in sanitize_message("at /workspace/sonar/engine.py")
+        assert "<path>" in sanitize_message("error at /usr/lib/python3.12/dist-packages/sonar/core.py")

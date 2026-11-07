@@ -4,17 +4,17 @@
 
 from types import SimpleNamespace
 
-from aphrodite.config.compilation import CUDAGraphMode
+from sonar.config.compilation import CUDAGraphMode
 from tests.v1.attention.utils import MockMambaBuilder
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     max_model_len: int,
     max_num_seqs: int,
     num_speculative_tokens: int = 0,
     block_size: int | None = None,
 ):
-    """Create a minimal mock AphroditeConfig with only the fields the builder
+    """Create a minimal mock SonarConfig with only the fields the builder
     accesses, avoiding any model download / HF config inspection."""
     speculative_config = (
         SimpleNamespace(
@@ -45,7 +45,7 @@ def _make_aphrodite_config(
 
 def test_mamba_single_token_prompt_runs_as_prefill():
     seq_lens = [8, 9, 1]
-    config = _make_aphrodite_config(256, len(seq_lens), block_size=16)
+    config = _make_sonar_config(256, len(seq_lens), block_size=16)
     metadata = MockMambaBuilder.build_mamba_metadata(
         config,
         seq_lens=seq_lens,

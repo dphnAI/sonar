@@ -4,7 +4,7 @@
 
 A strong-keyed module-level dict pins every model ever loaded in the process
 for the life of the interpreter. In-process teardown
-(``APHRODITE_ENABLE_V1_MULTIPROCESSING=0``) then keeps the weights -- and the KV
+(``SONAR_ENABLE_V1_MULTIPROCESSING=0``) then keeps the weights -- and the KV
 cache aliased onto the model's layers -- resident after engine shutdown.
 """
 
@@ -15,7 +15,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     SupportsMultiModal,
     _language_model_by_module,
 )
@@ -66,8 +66,8 @@ def test_cached_entry_is_dropped_with_its_key():
 @pytest.mark.parametrize("marked", [False, True])
 @pytest.mark.parametrize("text_model", ["clip", "siglip"])
 def test_text_tower_without_loader_hook_is_found(text_model, marked, caplog):
-    from aphrodite.model_executor.models.clip import CLIPTextTransformer
-    from aphrodite.model_executor.models.siglip import SiglipTextTransformer
+    from sonar.model_executor.models.clip import CLIPTextTransformer
+    from sonar.model_executor.models.siglip import SiglipTextTransformer
 
     cls = CLIPTextTransformer if text_model == "clip" else SiglipTextTransformer
     # Only token embeddings are needed to exercise text tower discovery.

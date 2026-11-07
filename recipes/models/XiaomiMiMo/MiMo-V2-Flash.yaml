@@ -24,7 +24,7 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--generation-config"
-    - "aphrodite"
+    - "sonar"
   base_env: {}
 
 features:
@@ -66,7 +66,7 @@ hardware_overrides:
     # AITER is disabled for MiMo-V2-Flash (regression when enabled).
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "0"
+      SONAR_ROCM_USE_AITER: "0"
 strategy_overrides: {}
 
 guide: |
@@ -80,20 +80,20 @@ guide: |
   ## Prerequisites
 
   - Hardware: 4x H200 (TP4) or equivalent aggregate VRAM (~320 GB with FP8)
-  - Aphrodite >= 0.20.0
+  - Sonar >= 0.20.0
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm MI300X/MI325X/MI355X)
+  ### Install Sonar (AMD ROCm MI300X/MI325X/MI355X)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch commands
@@ -101,45 +101,45 @@ guide: |
   Basic TP4:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2-Flash \
+  sonar serve XiaomiMiMo/MiMo-V2-Flash \
     --host 0.0.0.0 --port 9001 --seed 1024 \
     --served-model-name mimo_v2_flash \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.9 \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   With tool calling + reasoning:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2-Flash \
+  sonar serve XiaomiMiMo/MiMo-V2-Flash \
     --tensor-parallel-size 4 --trust-remote-code --gpu-memory-utilization 0.9 \
     --tool-call-parser mimo \
     --reasoning-parser qwen3 \
-    --generation-config aphrodite \
+    --generation-config sonar \
     --served-model-name mimo_v2_flash
   ```
 
   DP + TP + EP:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2-Flash \
+  sonar serve XiaomiMiMo/MiMo-V2-Flash \
     --data-parallel-size 2 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --trust-remote-code \
     --gpu-memory-utilization 0.9 \
-    --generation-config aphrodite \
+    --generation-config sonar \
     --served-model-name mimo_v2_flash
   ```
 
   AMD:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=0
-  aphrodite serve XiaomiMiMo/MiMo-V2-Flash --tensor-parallel-size 4 \
-    --trust-remote-code --gpu-memory-utilization 0.9 --generation-config aphrodite
+  export SONAR_ROCM_USE_AITER=0
+  sonar serve XiaomiMiMo/MiMo-V2-Flash --tensor-parallel-size 4 \
+    --trust-remote-code --gpu-memory-utilization 0.9 --generation-config sonar
   ```
 
   Tunable flags:
@@ -164,7 +164,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model XiaomiMiMo/MiMo-V2-Flash \
     --dataset-name random --random-input-len 8000 --random-output-len 1000 \
     --request-rate 3 --num-prompts 1800 --ignore-eos

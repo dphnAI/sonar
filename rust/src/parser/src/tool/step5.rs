@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::qwen_coder::{Qwen3CoderToolParser, QwenCoderConfig};
 use super::{Result, StructuralTagBuilder, Tool, ToolParser, ToolParserOutput};

@@ -10,8 +10,8 @@ import aiohttp
 import pytest
 import requests
 
-import aphrodite.envs as envs
-from aphrodite.connections import (
+import sonar.envs as envs
+from sonar.connections import (
     HTTPConnection,
     HTTPResponseSizeExceededError,
     MediaRequestDownloadBudget,
@@ -163,7 +163,7 @@ async def test_async_get_bytes_with_limit_streams_instead_of_materializing() -> 
 def test_request_download_budget_counts_across_responses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
     budget = MediaRequestDownloadBudget()
     connection = HTTPConnection()
     first = _SyncResponse([b"a" * (3 * _ONE_MIB // 4)])
@@ -171,7 +171,7 @@ def test_request_download_budget_counts_across_responses(
 
     with patch.object(connection, "get_response", side_effect=[first, second]):
         connection.get_bytes("http://example.com/one", request_budget=budget)
-        with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB"):
+        with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB"):
             connection.get_bytes("http://example.com/two", request_budget=budget)
 
     assert budget.used == 3 * _ONE_MIB // 4
@@ -182,7 +182,7 @@ def test_request_download_budget_counts_across_responses(
 async def test_async_request_download_budget_counts_across_responses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
     budget = MediaRequestDownloadBudget()
     connection = HTTPConnection()
     first = _AsyncResponse([b"a" * (3 * _ONE_MIB // 4)])
@@ -190,7 +190,7 @@ async def test_async_request_download_budget_counts_across_responses(
 
     with patch.object(connection, "get_async_response", new=AsyncMock(side_effect=[first, second])):
         await connection.async_get_bytes("http://example.com/one", request_budget=budget)
-        with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB"):
+        with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB"):
             await connection.async_get_bytes("http://example.com/two", request_budget=budget)
 
     assert budget.used == 3 * _ONE_MIB // 4
@@ -200,8 +200,8 @@ async def test_async_request_download_budget_counts_across_responses(
 def test_request_download_budget_counts_retried_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
-    monkeypatch.setattr("aphrodite.connections.time.sleep", lambda _: None)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
+    monkeypatch.setattr("sonar.connections.time.sleep", lambda _: None)
     budget = MediaRequestDownloadBudget()
     connection = HTTPConnection()
     body = b"a" * (3 * _ONE_MIB // 4)
@@ -222,8 +222,8 @@ def test_request_download_budget_counts_retried_attempts(
 async def test_async_request_download_budget_counts_retried_attempts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
-    monkeypatch.setattr("aphrodite.connections.asyncio.sleep", AsyncMock())
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB", 1)
+    monkeypatch.setattr("sonar.connections.asyncio.sleep", AsyncMock())
     budget = MediaRequestDownloadBudget()
     connection = HTTPConnection()
     body = b"a" * (3 * _ONE_MIB // 4)
@@ -241,10 +241,10 @@ async def test_async_request_download_budget_counts_retried_attempts(
 
 
 def test_get_bytes_rejects_content_length_over_limit(monkeypatch: pytest.MonkeyPatch, local_media_server: str) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
     connection = HTTPConnection(reuse_client=False)
 
-    with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB"):
+    with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB"):
         connection.get_bytes(f"{local_media_server}/large")
 
 
@@ -252,11 +252,11 @@ def test_get_bytes_rejects_content_length_over_limit(monkeypatch: pytest.MonkeyP
 async def test_async_get_bytes_rejects_stream_over_limit_without_content_length(
     monkeypatch: pytest.MonkeyPatch, local_media_server: str
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
     connection = HTTPConnection(reuse_client=False)
 
     try:
-        with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB"):
+        with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB"):
             await connection.async_get_bytes(f"{local_media_server}/chunked-large")
     finally:
         if connection._async_client is not None:
@@ -265,7 +265,7 @@ async def test_async_get_bytes_rejects_stream_over_limit_without_content_length(
 
 @pytest.mark.asyncio
 async def test_get_bytes_allows_body_within_limit(monkeypatch: pytest.MonkeyPatch, local_media_server: str) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB", 1, raising=False)
     connection = HTTPConnection(reuse_client=False)
 
     assert connection.get_bytes(f"{local_media_server}/small") == _SMALL_BODY
@@ -287,9 +287,9 @@ async def test_get_bytes_retries_incomplete_response(
     use_async: bool,
     always_incomplete: bool,
 ) -> None:
-    monkeypatch.setattr(envs, "APHRODITE_MEDIA_FETCH_MAX_RETRIES", 2)
-    monkeypatch.setattr("aphrodite.connections.time.sleep", lambda _: None)
-    monkeypatch.setattr("aphrodite.connections.asyncio.sleep", AsyncMock())
+    monkeypatch.setattr(envs, "SONAR_MEDIA_FETCH_MAX_RETRIES", 2)
+    monkeypatch.setattr("sonar.connections.time.sleep", lambda _: None)
+    monkeypatch.setattr("sonar.connections.asyncio.sleep", AsyncMock())
     attempts = 0
     serve_complete_response = _MediaHandler.do_GET
 

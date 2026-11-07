@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
 
@@ -19,7 +19,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 class TestGetFp8MinMax:
     """Test cases for get_fp8_min_max() function."""
 
-    @patch("aphrodite.model_executor.layers.quantization.utils.quant_utils.current_platform")
+    @patch("sonar.model_executor.layers.quantization.utils.quant_utils.current_platform")
     def test_standard_fp8_platform(self, mock_platform):
         """Test that standard FP8 platform uses PyTorch's finfo values."""
         mock_platform.is_fp8_fnuz.return_value = False
@@ -32,7 +32,7 @@ class TestGetFp8MinMax:
         assert fp8_max == finfo.max, f"Expected finfo.max={finfo.max}, got {fp8_max}"
         assert fp8_min == finfo.min, f"Expected finfo.min={finfo.min}, got {fp8_min}"
 
-    @patch("aphrodite.model_executor.layers.quantization.utils.quant_utils.current_platform")
+    @patch("sonar.model_executor.layers.quantization.utils.quant_utils.current_platform")
     def test_fnuz_platform_returns_224(self, mock_platform):
         """Test that fnuz platform returns 224.0."""
         mock_platform.is_fp8_fnuz.return_value = True
@@ -43,7 +43,7 @@ class TestGetFp8MinMax:
         assert fp8_max == 224.0, f"Expected 224.0 for fnuz platform, got {fp8_max}"
         assert fp8_min == -224.0, f"Expected -224.0 for fnuz platform, got {fp8_min}"
 
-    @patch("aphrodite.model_executor.layers.quantization.utils.quant_utils.current_platform")
+    @patch("sonar.model_executor.layers.quantization.utils.quant_utils.current_platform")
     def test_non_fnuz_platform_uses_finfo(self, mock_platform):
         """Test that non-fnuz platform uses finfo values."""
         mock_platform.is_fp8_fnuz.return_value = False

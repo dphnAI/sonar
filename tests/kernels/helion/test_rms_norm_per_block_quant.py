@@ -12,22 +12,22 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.ops.rms_norm_per_block_quant import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.ops.rms_norm_per_block_quant import (
     _pick_cache,
     baseline,
     pick_config,
     rms_norm_per_block_quant,
 )
-from aphrodite.utils.import_utils import has_helion
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.import_utils import has_helion
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.helion.utils import skip_if_platform_unsupported
 from tests.kernels.quant_utils import FP8_DTYPE
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
@@ -251,7 +251,7 @@ class TestRmsNormPerBlockQuantCorrectness:
 
 class TestRmsNormPerBlockQuantIntegration:
     def test_kernel_registration_integration(self):
-        from aphrodite.kernels.helion.register import get_registered_kernels
+        from sonar.kernels.helion.register import get_registered_kernels
 
         registered_kernels = get_registered_kernels()
         assert "rms_norm_per_block_quant" in registered_kernels

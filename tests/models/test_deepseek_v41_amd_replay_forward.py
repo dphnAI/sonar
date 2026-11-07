@@ -13,9 +13,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.forward_context import ForwardContext, override_forward_context
-from aphrodite.models.deepseek_v41.decoder_replay_layers import ReplayBatch
-from aphrodite.sequence import IntermediateTensors
+from sonar.forward_context import ForwardContext, override_forward_context
+from sonar.models.deepseek_v41.decoder_replay_layers import ReplayBatch
+from sonar.sequence import IntermediateTensors
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
@@ -35,7 +35,7 @@ class _RocmKvInsert:
     """SWA cache from ``forward_kv``, checked against the KV-only insert."""
 
     def __init__(self, num_tokens: int):
-        from aphrodite.models.deepseek_v41.attention import _use_v41_mxfp8_kv_record
+        from sonar.models.deepseek_v41.attention import _use_v41_mxfp8_kv_record
 
         if not hasattr(torch.ops._C, "fused_deepseek_v4_kv_rope_insert"):
             pytest.skip("fused DeepseekV4 KV insert op is not built")
@@ -81,10 +81,10 @@ class _RocmKvInsert:
         res_mix,
         residual,
     ):
-        from aphrodite.models.deepseek_v41.amd.rocm import (
+        from sonar.models.deepseek_v41.amd.rocm import (
             DeepseekV41ROCMAiterMLAAttention,
         )
-        from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
+        from sonar.models.deepseek_v41.attention import DeepseekV4Attention
 
         assert DeepseekV41ROCMAiterMLAAttention.forward_kv is DeepseekV4Attention.forward_kv
         self.last_rows = x.shape[0]
@@ -154,7 +154,7 @@ class _Layer(nn.Module):
 
 
 def _model(monkeypatch):
-    import aphrodite.models.deepseek_v41.amd.model as amd
+    import sonar.models.deepseek_v41.amd.model as amd
 
     monkeypatch.setattr(
         amd,
@@ -191,7 +191,7 @@ def _model(monkeypatch):
         candidate_source_layer_id=-1,
         candidate_topk_blocks=0,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=config, dtype=torch.bfloat16),
         quant_config=None,
         cache_config=SimpleNamespace(swa_bounded_replay=True),
@@ -204,7 +204,7 @@ def _model(monkeypatch):
         speculative_config=None,
         scheduler_config=SimpleNamespace(max_num_batched_tokens=FULL),
     )
-    model = amd.DeepseekV4Model(aphrodite_config=aphrodite_config)
+    model = amd.DeepseekV4Model(sonar_config=sonar_config)
     # Production requests aux at the first replay layer. Here that id is the cut.
     model.aux_hidden_state_layers = (model.decoder_replay_start,)
     model.topk_indices_buffer = model.topk_indices_buffer.to(DEVICE)

@@ -7,9 +7,9 @@ from unittest.mock import Mock
 
 import torch
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.ec_transfer import ECRole, ECTransferConfig
-from aphrodite.config.parallel import ParallelConfig
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.ec_transfer import ECRole, ECTransferConfig
+from sonar.config.parallel import ParallelConfig
 
 # The scheduler derives its per-load ack count from the PCP size only under the
 # `mp` backend -- which also keeps the world size off the local GPU count, so
@@ -21,7 +21,7 @@ _PCP_SIZE = 1
 _EMBED_WIDTH = 32
 
 
-def create_ec_aphrodite_config(
+def create_ec_sonar_config(
     *,
     ec_role: ECRole = "ec_both",
     tensor_parallel_size: int = 1,
@@ -29,7 +29,7 @@ def create_ec_aphrodite_config(
     dtype: torch.dtype = torch.float16,
     encoder_output_widths: dict[str, int] | None = None,
 ) -> Mock:
-    """Build a `AphroditeConfig` stand-in for EC connector unit tests.
+    """Build a `SonarConfig` stand-in for EC connector unit tests.
 
     `ec_transfer_config` and `parallel_config` are the real config objects, so
     role derivation and the rank arithmetic the connector depends on behave as
@@ -48,7 +48,7 @@ def create_ec_aphrodite_config(
             producer measures it at startup. Defaults to the embedding width.
 
     Returns:
-        A `AphroditeConfig`-specced mock carrying the configs above.
+        A `SonarConfig`-specced mock carrying the configs above.
 
     """
     parallel_config = ParallelConfig(
@@ -73,9 +73,9 @@ def create_ec_aphrodite_config(
     model_config.dtype = dtype
     model_config.get_inputs_embeds_size.return_value = _EMBED_WIDTH
 
-    aphrodite_config = Mock(spec=AphroditeConfig)
-    aphrodite_config.ec_transfer_config = ec_transfer_config
-    aphrodite_config.parallel_config = parallel_config
-    aphrodite_config.model_config = model_config
-    aphrodite_config.instance_id = f"ec-test-{uuid.uuid4()}"
-    return aphrodite_config
+    sonar_config = Mock(spec=SonarConfig)
+    sonar_config.ec_transfer_config = ec_transfer_config
+    sonar_config.parallel_config = parallel_config
+    sonar_config.model_config = model_config
+    sonar_config.instance_id = f"ec-test-{uuid.uuid4()}"
+    return sonar_config

@@ -17,8 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import aphrodite.v1.kv_offload.tiering.manager as tiering_manager
-from aphrodite.v1.kv_offload.base import (
+import sonar.v1.kv_offload.tiering.manager as tiering_manager
+from sonar.v1.kv_offload.base import (
     LookupResult,
     Medium,
     OffloadingManager,
@@ -27,14 +27,14 @@ from aphrodite.v1.kv_offload.base import (
     RequestOffloadingContext,
     ScheduleEndContext,
 )
-from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.cpu.manager import CPUOffloadingManager
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     ParentManager,
     SecondaryTierManager,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.manager import (
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
 )
@@ -94,7 +94,7 @@ class _FakeTier(SecondaryTierManager):
 
     def shutdown(self) -> None:
         self.shutdown_saw_live_thread = any(
-            t.name == "aphrodite_offload_tier_poll" and t.is_alive() for t in threading.enumerate()
+            t.name == "sonar_offload_tier_poll" and t.is_alive() for t in threading.enumerate()
         )
 
 
@@ -133,7 +133,7 @@ def manager_and_tier(request):
 
 
 def _live_control_threads() -> list[threading.Thread]:
-    return [t for t in threading.enumerate() if t.name == "aphrodite_offload_tier_poll" and t.is_alive()]
+    return [t for t in threading.enumerate() if t.name == "sonar_offload_tier_poll" and t.is_alive()]
 
 
 def test_control_thread_and_scheduler_never_overlap(manager_and_tier):

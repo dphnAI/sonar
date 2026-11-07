@@ -6,12 +6,6 @@ use std::num::NonZeroU32;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use aphrodite_engine_core_client::TransportMode;
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-use aphrodite_server::{
-    AccessLogConfig, ApiServerOptions, ChatTemplateContentFormatOption, Config, CoordinatorMode,
-    CorsConfig, HttpListenerMode, ParserSelection, RendererSelection, serve,
-};
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
@@ -21,12 +15,18 @@ use async_openai::types::chat::{
 use async_openai::types::models::ListModelResponse;
 use clap::Parser;
 use futures::StreamExt as _;
+use sonar_engine_core_client::TransportMode;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+use sonar_server::{
+    AccessLogConfig, ApiServerOptions, ChatTemplateContentFormatOption, Config, CoordinatorMode,
+    CorsConfig, HttpListenerMode, ParserSelection, RendererSelection, serve,
+};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[command(
-    about = "Smoke-test the Rust OpenAI server with async-openai against an external Qwen Aphrodite engine."
+    about = "Smoke-test the Rust OpenAI server with async-openai against an external Qwen Sonar engine."
 )]
 struct Args {
     #[arg(long)]
@@ -181,7 +181,7 @@ async fn stream_completion(
     // our OpenAI-compatible `reasoning_content` extension field, so this
     // example only validates the assistant role chunk, visible `content`
     // deltas, and terminal finish chunk. Reasoning coverage lives in our own
-    // route tests and in the `aphrodite-chat` smoke example.
+    // route tests and in the `sonar-chat` smoke example.
     let request: CreateChatCompletionRequest = CreateChatCompletionRequestArgs::default()
         .model(model)
         .stream(true)

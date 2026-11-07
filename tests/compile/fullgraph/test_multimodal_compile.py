@@ -4,18 +4,18 @@ from functools import partial
 
 import pytest
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
-from aphrodite.platforms import current_platform
+from sonar.compilation.counter import compilation_counter
+from sonar.config import SonarConfig
+from sonar.config.compilation import CompilationMode, CUDAGraphMode
+from sonar.platforms import current_platform
 from tests.models.utils import dummy_hf_overrides
 from tests.utils import create_new_process_for_each_test
 
 
 def test_compile():
-    aphrodite_config = AphroditeConfig()
+    sonar_config = SonarConfig()
     # Default configuration does not compile mm encoder
-    assert not aphrodite_config.compilation_config.compile_mm_encoder
+    assert not sonar_config.compilation_config.compile_mm_encoder
 
 
 @pytest.mark.core_model
@@ -52,7 +52,7 @@ def test_compile():
 )
 @create_new_process_for_each_test("spawn")
 def test_pixtral_compilation(
-    aphrodite_runner,
+    sonar_runner,
     monkeypatch,
     model: str,
     tokenizer: str | None,
@@ -63,12 +63,12 @@ def test_pixtral_compilation(
     expected_models: int,
 ):
     """Test compilation for both Pixtral vision encoder implementations."""
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "0")
 
     with (
         compilation_counter.expect(num_models_seen=expected_models),
-        aphrodite_runner(
+        sonar_runner(
             model,
             tokenizer_name=tokenizer,
             tokenizer_mode=tokenizer_mode,
@@ -80,7 +80,7 @@ def test_pixtral_compilation(
             gpu_memory_utilization=0.8,
             attention_backend="FLASH_ATTN",
             compilation_config={
-                "mode": CompilationMode.APHRODITE_COMPILE,
+                "mode": CompilationMode.SONAR_COMPILE,
                 "compile_mm_encoder": compile_mm_encoder,
                 "cudagraph_mode": CUDAGraphMode.NONE,
             },
@@ -91,7 +91,7 @@ def test_pixtral_compilation(
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Skip if not cuda")
 @create_new_process_for_each_test("spawn")
-def test_qwen2_5_vl_compilation(aphrodite_runner, monkeypatch):
+def test_qwen2_5_vl_compilation(sonar_runner, monkeypatch):
     """Test that Qwen2.5-VL vision submodules are compiled.
 
     This test verifies that the 3 vision submodules (Qwen2_5_VisionPatchEmbed,
@@ -99,22 +99,22 @@ def test_qwen2_5_vl_compilation(aphrodite_runner, monkeypatch):
     for compilation by checking that num_models_seen increases by at least 3.
     """
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         # NOTE: Qwen2.5-VL has 35 models in total - the LLM backend
         # Vision Patch Embed, Vision Patch Merger, and then 32 Vision Blocks
-        # (one for each layer) - in the future, we should fix Aphrodite compilation
+        # (one for each layer) - in the future, we should fix Sonar compilation
         # logic to handle this case and only compile the Vision submodules once
         # and reuse the compiled code for all layers
         # See https://github.com/vllm-project/vllm/issues/27590
         compilation_counter.expect(num_models_seen=35),
-        aphrodite_runner(
+        sonar_runner(
             "Qwen/Qwen2.5-VL-3B-Instruct",
             max_model_len=2048,
             gpu_memory_utilization=0.8,
             compilation_config={
-                "mode": CompilationMode.APHRODITE_COMPILE,
+                "mode": CompilationMode.SONAR_COMPILE,
                 "compile_mm_encoder": True,
             },
         ) as _,
@@ -124,21 +124,21 @@ def test_qwen2_5_vl_compilation(aphrodite_runner, monkeypatch):
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Skip if not cuda")
 @create_new_process_for_each_test("spawn")
-def test_qwen2_5_vl_no_vit_compilation(aphrodite_runner, monkeypatch):
+def test_qwen2_5_vl_no_vit_compilation(sonar_runner, monkeypatch):
     """Test that Qwen2.5-VL vision submodules are not compiled when the
     config is passed off
     """
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(num_models_seen=1),
-        aphrodite_runner(
+        sonar_runner(
             "Qwen/Qwen2.5-VL-3B-Instruct",
             max_model_len=2048,
             gpu_memory_utilization=0.8,
             compilation_config={
-                "mode": CompilationMode.APHRODITE_COMPILE,
+                "mode": CompilationMode.SONAR_COMPILE,
                 "compile_mm_encoder": False,
             },
         ) as _,
@@ -157,21 +157,21 @@ def test_qwen2_5_vl_no_vit_compilation(aphrodite_runner, monkeypatch):
     ],
 )
 @create_new_process_for_each_test("spawn")
-def test_paddleocr_vl_compilation(aphrodite_runner, monkeypatch, compile_mm_encoder: bool, expected_models: int):
+def test_paddleocr_vl_compilation(sonar_runner, monkeypatch, compile_mm_encoder: bool, expected_models: int):
     """Test that PaddleOCR-VL encoder layers compile only when enabled."""
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(num_models_seen=expected_models),
-        aphrodite_runner(
+        sonar_runner(
             "PaddlePaddle/PaddleOCR-VL",
             trust_remote_code=True,
             max_model_len=2048,
             limit_mm_per_prompt={"image": 1},
             gpu_memory_utilization=0.5,
             compilation_config={
-                "mode": CompilationMode.APHRODITE_COMPILE,
+                "mode": CompilationMode.SONAR_COMPILE,
                 "compile_mm_encoder": compile_mm_encoder,
             },
         ) as _,
@@ -182,7 +182,7 @@ def test_paddleocr_vl_compilation(aphrodite_runner, monkeypatch, compile_mm_enco
 # Requires Cuda and 8 gpus as well
 @pytest.mark.skip(reason="Skipping due to CI resource constraints")
 @create_new_process_for_each_test("spawn")
-def test_mllama4_vit_compilation(aphrodite_runner, monkeypatch):
+def test_mllama4_vit_compilation(sonar_runner, monkeypatch):
     """Test that Mllama4 vision submodules are compiled.
 
     This test verifies that the 2 vision submodules (Llama4VisionEncoder,
@@ -193,7 +193,7 @@ def test_mllama4_vit_compilation(aphrodite_runner, monkeypatch):
     work properly so we will just check the run succeeds rn
     """
     # Disable multiprocessing so that the counter is in the same process
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         monkeypatch.context(),
@@ -201,13 +201,13 @@ def test_mllama4_vit_compilation(aphrodite_runner, monkeypatch):
         # counter. We should fix this in the future, but leave for now
         # to make sure that compilation runs (no crash) with llama vision encoder
         compilation_counter.expect(num_models_seen=0),
-        aphrodite_runner(
+        sonar_runner(
             "meta-llama/Llama-4-Scout-17B-16E-Instruct",
             max_model_len=512,
             gpu_memory_utilization=0.8,
             tensor_parallel_size=8,
             compilation_config={
-                "mode": CompilationMode.APHRODITE_COMPILE,
+                "mode": CompilationMode.SONAR_COMPILE,
                 "compile_mm_encoder": True,
             },
         ),

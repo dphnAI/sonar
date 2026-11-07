@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
-from aphrodite.reasoning.hy_v3_reasoning_parser import HYV3ReasoningParser
-from aphrodite.tokenizers import get_tokenizer
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning.hy_v3_reasoning_parser import HYV3ReasoningParser
+from sonar.tokenizers import get_tokenizer
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "hy_v3"

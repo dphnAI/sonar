@@ -100,7 +100,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x H100/H200/B200 (or comparable)
-  - Aphrodite >= 0.10.1 (`pip install -U aphrodite`)
+  - Sonar >= 0.10.1 (`uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130`)
   - Docker with NVIDIA Container Toolkit (recommended)
 
   ## Launch command
@@ -108,7 +108,7 @@ guide: |
   ```bash
   wget https://huggingface.co/nvidia/NVIDIA-Nemotron-Nano-9B-v2/resolve/main/nemotron_toolcall_parser_no_streaming.py
 
-  aphrodite serve nvidia/NVIDIA-Nemotron-Nano-9B-v2 \
+  sonar serve nvidia/NVIDIA-Nemotron-Nano-9B-v2 \
     --trust-remote-code \
     --max-model-len 131072 \
     --tensor-parallel-size 1 \
@@ -120,7 +120,7 @@ guide: |
   FP8:
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-FP8 \
+  sonar serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 1
   ```
@@ -128,7 +128,7 @@ guide: |
   NVFP4 (Blackwell only):
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4 \
+  sonar serve nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4 \
     --trust-remote-code \
     --tensor-parallel-size 1
   ```
@@ -136,7 +136,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model nvidia/NVIDIA-Nemotron-Nano-9B-v2 \
     --trust-remote-code \
     --dataset-name random \

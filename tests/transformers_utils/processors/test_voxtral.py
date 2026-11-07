@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.transformers_utils.processors.voxtral import (
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.transformers_utils.processors.voxtral import (
     MistralCommonFeatureExtractor,
 )
 

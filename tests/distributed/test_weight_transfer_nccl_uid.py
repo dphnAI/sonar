@@ -8,7 +8,7 @@ trainer) initialize NCCL weight transfer from a unique id minted out of band.
 * Unit tests for the mutually-exclusive rendezvous-mode validation on the NCCL
   init infos.
 * Two-GPU integration tests driving the real worker engine against a peer: one
-  via Aphrodite's own ``PyNcclCommunicator``, one via a genuinely torch-free trainer
+  via Sonar's own ``PyNcclCommunicator``, one via a genuinely torch-free trainer
   (cupy buffer + raw ``ncclBroadcast``).
 
 The shared Ray helpers come from the sibling module (unchanged); the worker task
@@ -22,8 +22,8 @@ import pytest
 import ray
 import torch
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.nccl_engine import (
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer.nccl_engine import (
     NCCLTrainerInitInfo,
     NCCLWeightTransferEngine,
     NCCLWeightTransferInitInfo,
@@ -31,7 +31,7 @@ from aphrodite.distributed.weight_transfer.nccl_engine import (
 from tests.distributed.test_weight_transfer import (
     _init_ray_for_weight_transfer,
     _set_ray_assigned_device,
-    create_mock_aphrodite_config,
+    create_mock_sonar_config,
 )
 
 # Standard base64 of exactly 128 zero bytes: a well-formed (dummy) ncclUniqueId.
@@ -122,7 +122,7 @@ class TestNCCLRendezvousValidation:
     def test_parse_init_info_uid_valid(self):
         engine = NCCLWeightTransferEngine(
             WeightTransferConfig(backend="nccl"),
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -140,7 +140,7 @@ class TestNCCLRendezvousValidation:
     def test_parse_init_info_both_modes_raises(self):
         engine = NCCLWeightTransferEngine(
             WeightTransferConfig(backend="nccl"),
-            create_mock_aphrodite_config(),
+            create_mock_sonar_config(),
             torch.device("cuda"),
             MagicMock(spec=torch.nn.Module),
         )
@@ -164,7 +164,7 @@ class TestNCCLRendezvousValidation:
         ],
     )
     def test_from_unique_id_bytes_validation(self, unique_id_bytes, rank, world_size, match):
-        from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
+        from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
 
         with pytest.raises(ValueError, match=match):
             PyNcclCommunicator.from_unique_id_bytes(
@@ -192,9 +192,9 @@ def inference_receive_tensor(
 
     _set_ray_assigned_device()
 
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.config.weight_transfer import WeightTransferConfig
-    from aphrodite.distributed.weight_transfer.nccl_engine import (
+    from sonar.config.parallel import ParallelConfig
+    from sonar.config.weight_transfer import WeightTransferConfig
+    from sonar.distributed.weight_transfer.nccl_engine import (
         NCCLWeightTransferEngine,
         NCCLWeightTransferInitInfo,
         NCCLWeightTransferUpdateInfo,
@@ -210,22 +210,22 @@ def inference_receive_tensor(
                 self.received.append((name, tensor.clone()))
 
     config = WeightTransferConfig(backend="nccl")
-    aphrodite_config = MagicMock()
+    sonar_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    aphrodite_config.parallel_config = parallel_config
-    aphrodite_config.model_config = MagicMock()
+    sonar_config.parallel_config = parallel_config
+    sonar_config.model_config = MagicMock()
 
     recorder = Recorder()
-    engine = NCCLWeightTransferEngine(config, aphrodite_config, torch.device("cuda"), recorder)
-    # Transport-only test: bypass the set_current_aphrodite_config context that
-    # receive_weights enters, since aphrodite_config here is a mock.
-    import aphrodite.config as _aphrodite_config_mod
+    engine = NCCLWeightTransferEngine(config, sonar_config, torch.device("cuda"), recorder)
+    # Transport-only test: bypass the set_current_sonar_config context that
+    # receive_weights enters, since sonar_config here is a mock.
+    import sonar.config as _sonar_config_mod
 
-    _aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
+    _sonar_config_mod.set_current_sonar_config = lambda cfg: contextlib.nullcontext()
 
     try:
         engine.init_transfer_engine(NCCLWeightTransferInitInfo(**init_info_dict))
@@ -262,7 +262,7 @@ def trainer_broadcast_tensor_uid(
     tensor_shape: list[int],
     tensor_dtype: str,
 ) -> dict:
-    """Drive rank 0 via Aphrodite's own communicator from a pre-shared unique id.
+    """Drive rank 0 via Sonar's own communicator from a pre-shared unique id.
 
     A real torch-free trainer would mint the id and drive rank 0 itself; here we
     reuse the real send protocol by injecting the communicator into a sender
@@ -273,9 +273,9 @@ def trainer_broadcast_tensor_uid(
 
     _set_ray_assigned_device()
 
-    from aphrodite.distributed.weight_transfer import ModuleSource
-    from aphrodite.distributed.weight_transfer.nccl_common import uid_init_process_group
-    from aphrodite.distributed.weight_transfer.nccl_engine import (
+    from sonar.distributed.weight_transfer import ModuleSource
+    from sonar.distributed.weight_transfer.nccl_common import uid_init_process_group
+    from sonar.distributed.weight_transfer.nccl_engine import (
         NCCLTrainerWeightTransferEngine,
     )
 
@@ -331,7 +331,7 @@ def trainer_broadcast_tensor_torch_free(
     """Trainer peer that uses no torch and no PyNcclCommunicator (a JAX stand-in).
 
     Drives NCCL through the raw ctypes wrapper with a cupy send buffer, so it
-    exercises interop with a foreign NCCL peer rather than Aphrodite against itself.
+    exercises interop with a foreign NCCL peer rather than Sonar against itself.
     ``PyNcclCommunicator.__init__`` runs a one-element warm-up all_reduce right
     after ``ncclCommInitRank``; that is a collective, so this peer must issue the
     matching all_reduce before the broadcast or both ranks deadlock.
@@ -343,7 +343,7 @@ def trainer_broadcast_tensor_torch_free(
     device = _set_ray_assigned_device()
     cp.cuda.Device(device.index).use()
 
-    from aphrodite.distributed.device_communicators.pynccl_wrapper import (
+    from sonar.distributed.device_communicators.pynccl_wrapper import (
         NCCLLibrary,
         buffer_type,
         cudaStream_t,
@@ -396,7 +396,7 @@ def _run_uid_transfer(trainer_task) -> None:
     """Mint a unique id, run the worker and the given trainer peer concurrently,
     and assert the tensor round-trips. Both ranks must enter init together --
     there is no store barrier on the UID path."""
-    from aphrodite.distributed.device_communicators.pynccl_wrapper import NCCLLibrary
+    from sonar.distributed.device_communicators.pynccl_wrapper import NCCLLibrary
 
     _init_ray_for_weight_transfer()
 
@@ -436,7 +436,7 @@ def _run_uid_transfer(trainer_task) -> None:
 )
 def test_nccl_weight_transfer_between_processes_uid():
     """Weight transfer over a pre-shared ncclUniqueId (no TCPStore), with both
-    ranks on Aphrodite's ``PyNcclCommunicator``."""
+    ranks on Sonar's ``PyNcclCommunicator``."""
     _run_uid_transfer(trainer_broadcast_tensor_uid)
 
 
@@ -445,7 +445,7 @@ def test_nccl_weight_transfer_between_processes_uid():
     reason="Need at least 2 GPUs to run NCCL weight transfer test.",
 )
 def test_nccl_weight_transfer_torch_free_trainer():
-    """UID weight transfer against a foreign peer that uses no torch and no Aphrodite
+    """UID weight transfer against a foreign peer that uses no torch and no Sonar
     communicator, only a cupy buffer and raw ``ncclBroadcast``."""
     pytest.importorskip("cupy")
     _run_uid_transfer(trainer_broadcast_tensor_torch_free)

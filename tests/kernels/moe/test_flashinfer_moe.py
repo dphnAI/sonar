@@ -3,28 +3,28 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     FlashInferExperts,
     is_valid_flashinfer_cutlass_fused_moe,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_cutlass_fused_moe
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_cutlass_fused_moe
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_test_quant_config
 from tests.kernels.quantization.nvfp4_utils import (
     FLOAT4_E2M1_MAX,
@@ -84,7 +84,7 @@ def test_flashinfer_swigluoai_params_are_forwarded(activation, monkeypatch):
         call_args.update(kwargs)
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.flashinfer_cutlass_fused_moe",
+        "sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.flashinfer_cutlass_fused_moe",
         fake_flashinfer_cutlass_fused_moe,
     )
     experts.apply(
@@ -135,7 +135,7 @@ def test_flashinfer_fp4_moe_no_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         quant_blocksize = 16

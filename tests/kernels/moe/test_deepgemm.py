@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit-test DeepGEMM FP8 and FP4 kernels (no DeepEP).
-Compare DeepGEMM path against the Triton fallback inside Aphrodite's fused_experts.
+Compare DeepGEMM path against the Triton fallback inside Sonar's fused_experts.
 """
 
 import importlib
@@ -10,34 +10,34 @@ import math
 import pytest
 import torch
 
-# Aphrodite fused-expert reference (Triton fallback + DeepGEMM option)
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import (
+# Sonar fused-expert reference (Triton fallback + DeepGEMM option)
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import (
     MoEActivation,
 )
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     FusedMoEQuantDesc,
     fp8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_utils import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_utils import (
     deepgemm_moe_permute,
     ep_gather,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
     _fp8_workspace_shape,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import fused_experts
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.fused_moe.fused_moe import fused_experts
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.utils.deep_gemm import (
+from sonar.utils.deep_gemm import (
     calc_diff,
     is_deep_gemm_supported,
     per_block_cast_to_fp8,
@@ -183,8 +183,8 @@ def test_block_fp8_padding_on_graph_replay(num_tokens, with_metadata, monkeypatc
     """Both FP8 GEMMs consume only live rows as routing changes on replay."""
     from unittest.mock import Mock
 
-    import aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe as impl
-    from aphrodite.utils.deep_gemm import DeepGemmQuantScaleFMT
+    import sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe as impl
+    from sonar.utils.deep_gemm import DeepGemmQuantScaleFMT
 
     if not (
         impl.current_platform.is_device_capability_family(90)
@@ -280,8 +280,8 @@ def test_block_fp8_padding_on_graph_replay(num_tokens, with_metadata, monkeypatc
 @pytest.mark.skipif(not is_deep_gemm_supported(), reason="Requires deep_gemm kernels")
 def test_deepgemm_prefix_sum_leaves_unused_capacity_untouched(n, k):
     """Both projection shapes skip unused tiles as counts change on replay."""
-    from aphrodite.platforms import current_platform
-    from aphrodite.utils.deep_gemm import (
+    from sonar.platforms import current_platform
+    from sonar.utils.deep_gemm import (
         m_grouped_fp8_gemm_nt_contiguous,
         mk_alignment_scope,
     )
@@ -393,10 +393,10 @@ NUM_EXPERTS = [32]
 @pytest.mark.skipif(not is_deep_gemm_supported(), reason="Requires deep_gemm kernels")
 def test_deepgemm_vs_triton(m, n, k, topk, num_experts, monkeypatch, workspace_init):
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_USE_DEEP_GEMM", "1")
+        mp.setenv("SONAR_USE_DEEP_GEMM", "1")
 
         _DeepGemmExperts = importlib.import_module(
-            "aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe"
+            "sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe"
         ).DeepGemmExperts
 
         call_counter = {"cnt": 0}
@@ -503,10 +503,10 @@ def run_single_fp4_case(m, n, k, topk, num_experts):
     topk_weights, topk_ids = torch.topk(router_logits, k=topk, dim=-1)
     topk_weights = torch.nn.functional.softmax(topk_weights, dim=-1)
 
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         GroupShape,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     _fp8_dtype = current_platform.fp8_dtype()
     _block_shape = GroupShape(128, 128)
@@ -518,7 +518,7 @@ def run_single_fp4_case(m, n, k, topk, num_experts):
     )
     moe_config = make_dummy_moe_config()
 
-    from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
         DeepGemmFP4Experts,
     )
 
@@ -575,10 +575,10 @@ FP4_NUM_EXPERTS = [8]
 def test_deepgemm_fp4_vs_triton(m, n, k, topk, num_experts, monkeypatch, workspace_init):
     pytest.importorskip("deep_gemm.utils.math")
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_USE_DEEP_GEMM", "1")
+        mp.setenv("SONAR_USE_DEEP_GEMM", "1")
 
         _DeepGemmFP4Experts = importlib.import_module(
-            "aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe"
+            "sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe"
         ).DeepGemmFP4Experts
 
         call_counter = {"cnt": 0}

@@ -10,10 +10,10 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
+from sonar.model_executor.kernels.linear.cute_dsl.skinny_gemm import (
     shape_dynamic_skinny_gemm,
 )
-from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import (
+from sonar.models.kimi_k3.nvidia.low_latency_gemm import (
     KDA_PROJECTION_OVERLAP_MAX_TOKENS,
     run_kda_projection_overlap,
     try_low_latency_gemm,

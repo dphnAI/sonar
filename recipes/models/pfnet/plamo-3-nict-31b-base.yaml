@@ -56,22 +56,22 @@ guide: |
   ## Prerequisites
 
   - **Hardware:** H100/H200 80 GB for 4K context; use TP=2 for extra KV-cache headroom
-  - **Aphrodite:** >= 0.12.0
+  - **Sonar:** >= 0.12.0
   - **License:** gated Hugging Face access under the PLaMo community license
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   hf auth login
   ```
 
   ## Launching the Server
 
   ```bash
-  aphrodite serve pfnet/plamo-3-nict-31b-base \
+  sonar serve pfnet/plamo-3-nict-31b-base \
     --trust-remote-code \
     --max-model-len 4096
   ```
@@ -79,7 +79,7 @@ guide: |
   With tensor parallelism for more KV-cache headroom:
 
   ```bash
-  aphrodite serve pfnet/plamo-3-nict-31b-base \
+  sonar serve pfnet/plamo-3-nict-31b-base \
     --trust-remote-code \
     --max-model-len 4096 \
     --tensor-parallel-size 2
@@ -112,4 +112,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/pfnet/plamo-3-nict-31b-base)
-  - [Aphrodite PLaMo3 support](https://docs.vllm.ai/en/stable/models/supported_models.html)
+  - [Sonar PLaMo3 support](https://docs.vllm.ai/en/stable/models/supported_models.html)

@@ -38,7 +38,7 @@ def server():
         MODEL_NAME,
         args,
         env_dict={
-            "APHRODITE_USE_V2_MODEL_RUNNER": "1",
+            "SONAR_USE_V2_MODEL_RUNNER": "1",
         },
     ) as remote_server:
         yield remote_server

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytest.importorskip("triton")
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
@@ -16,11 +16,11 @@ if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
         allow_module_level=True,
     )
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.logits_processor import LogitsContext
-from aphrodite.v1.worker.gpu.sample.sampler import Sampler
-from aphrodite.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.logits_processor import LogitsContext
+from sonar.v1.worker.gpu.sample.sampler import Sampler
+from sonar.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
+from sonar.v1.worker.gpu.states import RequestState
 
 DEVICE = torch.device(current_platform.device_type)
 START = 90
@@ -198,7 +198,7 @@ def test_v2_greedy_sampling_applies_thinking_budget():
     """Greedy-only requests must not bypass thinking-budget processing."""
     req_states = _make_req_states([1, START, 10, 11, 12], prompt_len=1)
     sampler = Sampler(
-        aphrodite_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
+        sonar_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=DEVICE,

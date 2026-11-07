@@ -12,28 +12,28 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
-from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.multimodal import (
+from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+from sonar.config.cache import CacheConfig
+from sonar.config.multimodal import (
     AudioDummyOptions,
     BaseDummyOptions,
     ImageDummyOptions,
     MultiModalDummyOptions,
     VideoDummyOptions,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.models.interfaces import supports_multimodal
-from aphrodite.multimodal import MULTIMODAL_REGISTRY, BatchedTensorInputs
-from aphrodite.multimodal.processing import BaseMultiModalProcessor, InputProcessingContext
-from aphrodite.multimodal.utils import group_and_batch_mm_kwargs
-from aphrodite.platforms import current_platform
-from aphrodite.tokenizers import cached_tokenizer_from_config
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.model_executor.models.interfaces import supports_multimodal
+from sonar.multimodal import MULTIMODAL_REGISTRY, BatchedTensorInputs
+from sonar.multimodal.processing import BaseMultiModalProcessor, InputProcessingContext
+from sonar.multimodal.utils import group_and_batch_mm_kwargs
+from sonar.platforms import current_platform
+from sonar.tokenizers import cached_tokenizer_from_config
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 from ....utils import create_new_process_for_each_test
 from ...registry import HF_EXAMPLE_MODELS
@@ -117,8 +117,8 @@ def initialize_dummy_model(
 ):
     temp_file = tempfile.mkstemp()[1]
     current_device = torch.get_default_device()
-    aphrodite_config = AphroditeConfig(model_config=model_config, cache_config=CacheConfig(block_size=16))
-    with set_current_aphrodite_config(aphrodite_config=aphrodite_config):
+    sonar_config = SonarConfig(model_config=model_config, cache_config=CacheConfig(block_size=16))
+    with set_current_sonar_config(sonar_config=sonar_config):
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -130,7 +130,7 @@ def initialize_dummy_model(
 
         with set_default_torch_dtype(model_config.dtype):
             torch.set_default_device(current_platform.device_type)
-            model = model_cls(aphrodite_config=aphrodite_config)
+            model = model_cls(sonar_config=sonar_config)
             torch.set_default_device(current_device)
         yield model
 
@@ -156,7 +156,7 @@ def test_model_tensor_schema(model_id: str):
     model_info.check_transformers_version(
         on_fail="skip",
         check_max_version=False,
-        check_version_reason="aphrodite",
+        check_version_reason="sonar",
     )
 
     model_arch = next(arch for arch, info in HF_EXAMPLE_MODELS.hf_models.items() if info == model_info)

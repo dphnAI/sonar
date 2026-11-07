@@ -23,14 +23,14 @@
 #include "cta_iterator.h"
 #include "warp_iterator.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 __inline__ __device__ void mma_m16n8k16_row_col(Array<float, 4>& d,
                                                 const Array<half, 8>& a,
                                                 const Array<half, 4>& b,
                                                 Array<float, 4>& c) {
-#if APHRODITE_ARCH_SM80
+#if SONAR_ARCH_SM80
   uint32_t const* A = reinterpret_cast<uint32_t const*>(&a);
   uint32_t const* B = reinterpret_cast<uint32_t const*>(&b);
   float const* C = reinterpret_cast<float const*>(&c);
@@ -41,14 +41,14 @@ __inline__ __device__ void mma_m16n8k16_row_col(Array<float, 4>& d,
       : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(B[0]), "r"(B[1]),
         "f"(C[0]), "f"(C[1]), "f"(C[2]), "f"(C[3]));
 #else
-  assert(APHRODITE_ARCH_SM80);
+  assert(SONAR_ARCH_SM80);
 #endif
 }
 
 __inline__ __device__ void mma_m16n8k16_row_col(
     Array<float, 4>& d, const Array<__nv_bfloat16, 8>& a,
     const Array<__nv_bfloat16, 4>& b, Array<float, 4>& c) {
-#if APHRODITE_ARCH_SM80
+#if SONAR_ARCH_SM80
   uint32_t const* A = reinterpret_cast<uint32_t const*>(&a);
   uint32_t const* B = reinterpret_cast<uint32_t const*>(&b);
   float const* C = reinterpret_cast<float const*>(&c);
@@ -59,7 +59,7 @@ __inline__ __device__ void mma_m16n8k16_row_col(
       : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]), "r"(B[0]), "r"(B[1]),
         "f"(C[0]), "f"(C[1]), "f"(C[2]), "f"(C[3]));
 #else
-  assert(APHRODITE_ARCH_SM80);
+  assert(SONAR_ARCH_SM80);
 #endif
 }
 
@@ -82,12 +82,12 @@ __inline__ __device__ uint transpose_m8n8_b16_warp_shuffle(uint value,
 
 #if (__CUDACC_VER_MAJOR__ >= 11) && (__CUDACC_VER_MINOR__ >= 8)
 __inline__ __device__ uint transpose_m8n8_b16_movmatrix(uint a) {
-  #if APHRODITE_ARCH_SM75
+  #if SONAR_ARCH_SM75
   uint d;
   asm("movmatrix.sync.aligned.m8n8.trans.b16 %0, %1;\n" : "=r"(d) : "r"(a));
   return d;
   #else
-  assert(APHRODITE_ARCH_SM75);
+  assert(SONAR_ARCH_SM75);
   return 0;
   #endif
 }
@@ -130,27 +130,25 @@ struct Gemm {
 
   static_assert(SLICE_K % WARP_K == 0, "infeasible sliced-k setting");
 
-  using IteratorA = aphrodite::autoquant::IteratorA<kWarpCountMN, CTA_M, CTA_N,
-                                                    CTA_K, STAGES, SLICES>;
+  using IteratorA = sonar::autoquant::IteratorA<kWarpCountMN, CTA_M, CTA_N,
+                                                CTA_K, STAGES, SLICES>;
   using IteratorQ =
-      aphrodite::autoquant::IteratorQ<kWarpCountMN, CTA_M, CTA_N, CTA_K, STAGES,
-                                      SLICES, GROUP_SIZE, T_Q>;
-  using IteratorB =
-      aphrodite::autoquant::IteratorB<kWarpCountMN, CTA_M, CTA_N, CTA_K, STAGES,
-                                      SLICES, T_BC>;
+      sonar::autoquant::IteratorQ<kWarpCountMN, CTA_M, CTA_N, CTA_K, STAGES,
+                                  SLICES, GROUP_SIZE, T_Q>;
+  using IteratorB = sonar::autoquant::IteratorB<kWarpCountMN, CTA_M, CTA_N,
+                                                CTA_K, STAGES, SLICES, T_BC>;
 
   static constexpr int OP_M = 16;
   static constexpr int OP_N = 8;
   static constexpr int OP_K = 16;
 
-  using WarpIterA = aphrodite::autoquant::WarpIteratorA<
+  using WarpIterA = sonar::autoquant::WarpIteratorA<
       CTA_M, CTA_K, WARP_M, WARP_K, OP_M, OP_K, GROUP_SIZE, STAGES,
       IteratorA::kSizePerStage, IteratorQ::kSizePerStage, T_BC, T_Q>;
 
   using WarpIterB =
-      aphrodite::autoquant::WarpIteratorB<CTA_N, CTA_K, WARP_N, WARP_K, OP_N,
-                                          OP_K, IteratorB::kSmemPadCtaK, STAGES,
-                                          T_BC>;
+      sonar::autoquant::WarpIteratorB<CTA_N, CTA_K, WARP_N, WARP_K, OP_N, OP_K,
+                                      IteratorB::kSmemPadCtaK, STAGES, T_BC>;
 
   __device__ void warp_mma(IteratorA& iter_A, IteratorQ& iter_Q,
                            IteratorB& iter_B, WarpIterA& warp_iter_A,
@@ -457,4 +455,4 @@ __global__ void gemm_s4_f16_nn(T_BC* __restrict__ C, const uint* __restrict__ A,
 }
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

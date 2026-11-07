@@ -156,11 +156,11 @@ void moe_lora_align_block_size(
                 "fallback is not implemented yet.");
   }
 
-  APHRODITE_DISPATCH_INTEGRAL_TYPES(
+  SONAR_DISPATCH_INTEGRAL_TYPES(
       topk_ids.scalar_type(), "moe_lora_align_sum_kernel", [&] {
         dim3 blockDim(num_thread);
         auto kernel = moe_lora_align_sum_kernel<scalar_t, int32_t>;
-        AT_CUDA_CHECK(APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
+        AT_CUDA_CHECK(SONAR_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
             (void*)kernel, shared_mem));
         kernel<<<max_loras, blockDim, shared_mem, stream>>>(
             topk_ids.data_ptr<scalar_t>(),

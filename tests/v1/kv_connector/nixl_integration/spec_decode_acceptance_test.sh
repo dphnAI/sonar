@@ -6,7 +6,7 @@
 # Tests EAGLE3 acceptance length for both RDMA (cuda) and CPU host (cpu)
 # KV buffer device paths.
 #
-# For each kv_buffer_device setting, starts prefill + decode aphrodite servers
+# For each kv_buffer_device setting, starts prefill + decode sonar servers
 # with NixlConnector, then runs test_spec_decode_acceptance.py to validate
 # acceptance length matches the standalone SD baseline.
 #
@@ -26,8 +26,8 @@
 #                         ROCm options: TRITON_ATTN, ROCM_ATTN, ROCM_AITER_FA,
 #                                       ROCM_AITER_UNIFIED_ATTN
 #                         NVIDIA options: FLASH_ATTN, FLASHINFER
-#   APHRODITE_SSM_CONV_STATE_LAYOUT - SSM conv state layout (e.g. "DS" required for Mamba models)
-#   APHRODITE_SERVE_EXTRA_ARGS - comma-separated extra args for aphrodite serve
+#   SONAR_SSM_CONV_STATE_LAYOUT - SSM conv state layout (e.g. "DS" required for Mamba models)
+#   SONAR_SERVE_EXTRA_ARGS - comma-separated extra args for sonar serve
 set -ex
 
 # ── Model & spec decode config ──────────────────────────────────────────
@@ -87,8 +87,8 @@ echo "Using attention backend: ${ATTENTION_BACKEND}"
 # ── Extra serve args ─────────────────────────────────────────────────
 
 EXTRA_SERVE_ARGS=()
-if [[ -n "${APHRODITE_SERVE_EXTRA_ARGS:-}" ]]; then
-  IFS=',' read -r -a EXTRA_SERVE_ARGS <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+if [[ -n "${SONAR_SERVE_EXTRA_ARGS:-}" ]]; then
+  IFS=',' read -r -a EXTRA_SERVE_ARGS <<< "$SONAR_SERVE_EXTRA_ARGS"
   echo "Extra serve args: ${EXTRA_SERVE_ARGS[*]}"
 fi
 
@@ -100,7 +100,7 @@ cleanup_instances() {
   sleep 1
   # shellcheck disable=SC2046
   kill -9 $(jobs -pr) 2>/dev/null || true
-  pkill -9 -f "aphrodite serve.*${MODEL_NAME}" 2>/dev/null || true
+  pkill -9 -f "sonar serve.*${MODEL_NAME}" 2>/dev/null || true
   pkill -9 -f "toy_proxy_server.*8192" 2>/dev/null || true
   sleep 1
   echo "Cleanup done."
@@ -240,12 +240,12 @@ run_test_for_device() {
     echo "Starting prefill instance $i on GPU $GPU_ID, port $PORT"
     env \
     ${GPU_DEVICE_VAR}="$GPU_ID" \
-    APHRODITE_KV_CACHE_LAYOUT='LBHNC' \
+    SONAR_KV_CACHE_LAYOUT='LBHNC' \
     UCX_NET_DEVICES=all \
-    ${APHRODITE_SSM_CONV_STATE_LAYOUT:+APHRODITE_SSM_CONV_STATE_LAYOUT=$APHRODITE_SSM_CONV_STATE_LAYOUT} \
-    APHRODITE_NIXL_SIDE_CHANNEL_HOST="$NIXL_SIDE_CHANNEL_HOST" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    aphrodite serve "$MODEL_NAME" \
+    ${SONAR_SSM_CONV_STATE_LAYOUT:+SONAR_SSM_CONV_STATE_LAYOUT=$SONAR_SSM_CONV_STATE_LAYOUT} \
+    SONAR_NIXL_SIDE_CHANNEL_HOST="$NIXL_SIDE_CHANNEL_HOST" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    sonar serve "$MODEL_NAME" \
       --port $PORT \
       --enforce-eager \
       --max-model-len "$MAX_MODEL_LEN" \
@@ -279,12 +279,12 @@ run_test_for_device() {
     echo "Starting decode instance $i on GPU $GPU_ID, port $PORT"
     env \
     ${GPU_DEVICE_VAR}="$GPU_ID" \
-    APHRODITE_KV_CACHE_LAYOUT='LBHNC' \
+    SONAR_KV_CACHE_LAYOUT='LBHNC' \
     UCX_NET_DEVICES=all \
-    ${APHRODITE_SSM_CONV_STATE_LAYOUT:+APHRODITE_SSM_CONV_STATE_LAYOUT=$APHRODITE_SSM_CONV_STATE_LAYOUT} \
-    APHRODITE_NIXL_SIDE_CHANNEL_HOST="$NIXL_SIDE_CHANNEL_HOST" \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    aphrodite serve "$MODEL_NAME" \
+    ${SONAR_SSM_CONV_STATE_LAYOUT:+SONAR_SSM_CONV_STATE_LAYOUT=$SONAR_SSM_CONV_STATE_LAYOUT} \
+    SONAR_NIXL_SIDE_CHANNEL_HOST="$NIXL_SIDE_CHANNEL_HOST" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    sonar serve "$MODEL_NAME" \
       --port $PORT \
       --enforce-eager \
       --max-model-len "$MAX_MODEL_LEN" \

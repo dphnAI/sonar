@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
 
 from ..utils import compute_acceptance_len
 
@@ -34,7 +34,7 @@ def load_and_process_dataset(data_name: str):
 
 def run_acceptance_length_eval(
     monkeypatch: pytest.MonkeyPatch,
-    aphrodite_runner,
+    sonar_runner,
     spec_config: dict[str, Any],
     expected_acceptance_lengths: dict[str, float],
     chat_template_kwargs: dict[str, Any],
@@ -46,13 +46,13 @@ def run_acceptance_length_eval(
     through the spec decode engine and asserts the mean acceptance length
     stays within tolerance of the reference figure for each dataset.
     """
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_mrv2 else "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_mrv2 else "0")
     runner_config = spec_config.copy()
     model = runner_config.pop("model")
     runner_config.setdefault("block_size", None)
     runner_config.setdefault("enable_chunked_prefill", None)
     runner_config.setdefault("compilation_config", CompilationConfig())
-    with aphrodite_runner(model, **runner_config) as spec_runner:
+    with sonar_runner(model, **runner_config) as spec_runner:
         spec_llm = spec_runner.llm
         # MT-Bench has 80 prompts and HumanEval has 164; truncate GSM8K.
         max_prompts_per_dataset = 200

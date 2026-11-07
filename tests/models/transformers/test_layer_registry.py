@@ -3,14 +3,14 @@
 """Unit tests for resolving layers between the in-tree and hw-agnostic paths.
 
 `hw_agnostic.resolve` returns a layer from
-`aphrodite.model_executor.hw_agnostic.layers.<module>` when `APHRODITE_USE_HW_AGNOSTIC`
+`sonar.model_executor.hw_agnostic.layers.<module>` when `SONAR_USE_HW_AGNOSTIC`
 is set and the layer exists, and otherwise from
-`aphrodite.model_executor.layers.<module>`. The Transformers backend and out-of-tree
+`sonar.model_executor.layers.<module>`. The Transformers backend and out-of-tree
 plugins both use it, so a plugin's override reaches the class the backend
 builds.
 
 CPU-only: no engine is built. The end-to-end counterpart that serves a model
-through `aphrodite_runner` lives in `test_layer_registry_e2e.py` (GPU job).
+through `sonar_runner` lives in `test_layer_registry_e2e.py` (GPU job).
 """
 
 import importlib
@@ -20,10 +20,10 @@ import types
 import pytest
 import torch
 
-from aphrodite.model_executor import hw_agnostic
-from aphrodite.model_executor.models.transformers import layers
+from sonar.model_executor import hw_agnostic
+from sonar.model_executor.models.transformers import layers
 
-HW_MODULE = "aphrodite.model_executor.hw_agnostic.layers.layernorm"
+HW_MODULE = "sonar.model_executor.hw_agnostic.layers.layernorm"
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def fake_hw_layernorm(monkeypatch):
 def resolve_logs(monkeypatch):
     """Messages `resolve` logs, captured directly since the `*_once` methods
     deduplicate."""
-    from aphrodite.model_executor.hw_agnostic import _resolve
+    from sonar.model_executor.hw_agnostic import _resolve
 
     logged: list[str] = []
     for method in ("info_once", "warning_once"):
@@ -51,17 +51,17 @@ def resolve_logs(monkeypatch):
     return logged
 
 
-def test_falls_back_to_aphrodite_when_disabled(monkeypatch, fake_hw_layernorm):
+def test_falls_back_to_sonar_when_disabled(monkeypatch, fake_hw_layernorm):
     """Disabled: the in-tree class is used even if a hw-agnostic one exists."""
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "0")
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "0")
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
-    assert hw_agnostic.resolve("layernorm", "RMSNorm") is AphroditeRMSNorm
+    assert hw_agnostic.resolve("layernorm", "RMSNorm") is SonarRMSNorm
 
 
 def test_uses_hw_agnostic_when_enabled(monkeypatch, fake_hw_layernorm, resolve_logs):
     """Enabled and available: the hw-agnostic class is used and logged."""
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "1")
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "1")
     resolved = hw_agnostic.resolve("layernorm", "RMSNorm")
     assert resolved is fake_hw_layernorm.RMSNorm
     assert resolve_logs == ["Using hardware agnostic layer layernorm.RMSNorm"]
@@ -69,46 +69,46 @@ def test_uses_hw_agnostic_when_enabled(monkeypatch, fake_hw_layernorm, resolve_l
 
 def test_falls_back_when_symbol_missing(monkeypatch, resolve_logs):
     """Enabled but the symbol is not ported: fall back to in-tree and warn."""
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "1")
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "1")
     # A hw-agnostic module without the requested attribute triggers fallback.
     empty = types.ModuleType(HW_MODULE)
     monkeypatch.setitem(sys.modules, HW_MODULE, empty)
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
     resolved = hw_agnostic.resolve("layernorm", "RMSNorm")
-    assert resolved is AphroditeRMSNorm
+    assert resolved is SonarRMSNorm
     assert resolve_logs == ["hw-agnostic layer layernorm.RMSNorm is not available; using the in-tree layer"]
 
 
 def test_falls_back_when_module_missing(monkeypatch):
     """Enabled but the module is not ported: fall back to in-tree."""
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "1")
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "1")
     # `None` in `sys.modules` makes the import fail as for a missing module.
     monkeypatch.setitem(sys.modules, HW_MODULE, None)
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
-    assert hw_agnostic.resolve("layernorm", "RMSNorm") is AphroditeRMSNorm
+    assert hw_agnostic.resolve("layernorm", "RMSNorm") is SonarRMSNorm
 
 
 def test_broken_hw_agnostic_module_raises(monkeypatch, tmp_path):
     """A port that fails to import raises instead of falling back silently."""
     (tmp_path / "broken_port.py").write_text("import not_a_real_dependency\n")
-    hw_pkg = importlib.import_module("aphrodite.model_executor.hw_agnostic.layers")
+    hw_pkg = importlib.import_module("sonar.model_executor.hw_agnostic.layers")
     monkeypatch.setattr(hw_pkg, "__path__", [*hw_pkg.__path__, str(tmp_path)])
     importlib.invalidate_caches()
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "1")
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "1")
 
     with pytest.raises(ModuleNotFoundError, match="not_a_real_dependency"):
         hw_agnostic.resolve("broken_port", "Layer")
 
 
-def test_act_and_mul_falls_back_for_unknown_activation(monkeypatch, default_aphrodite_config):
-    """An activation with no hw-agnostic equivalent falls back to Aphrodite's.
+def test_act_and_mul_falls_back_for_unknown_activation(monkeypatch, default_sonar_config):
+    """An activation with no hw-agnostic equivalent falls back to Sonar's.
 
-    `default_aphrodite_config` supplies the config context the CustomOp needs.
+    `default_sonar_config` supplies the config context the CustomOp needs.
     """
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", "1")
-    from aphrodite.model_executor.layers.activation import GeluAndMul
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", "1")
+    from sonar.model_executor.layers.activation import GeluAndMul
 
     assert isinstance(layers.get_act_and_mul_fn("gelu"), GeluAndMul)
 
@@ -116,8 +116,8 @@ def test_act_and_mul_falls_back_for_unknown_activation(monkeypatch, default_aphr
 @pytest.fixture
 def oot_registries():
     """The in-tree and hw-agnostic `op_registry_oot`s, restored afterwards."""
-    from aphrodite.model_executor.custom_op import op_registry_oot as in_tree
-    from aphrodite.model_executor.hw_agnostic.custom_op import op_registry_oot as hw
+    from sonar.model_executor.custom_op import op_registry_oot as in_tree
+    from sonar.model_executor.hw_agnostic.custom_op import op_registry_oot as hw
 
     saved = [(registry, dict(registry)) for registry in (in_tree, hw)]
     yield in_tree, hw
@@ -129,9 +129,9 @@ def oot_registries():
 @pytest.fixture
 def reload_backend():
     """Re-import the backend modules that resolve layers at import, under the
-    test's `APHRODITE_USE_HW_AGNOSTIC`. Their original namespaces are restored
+    test's `SONAR_USE_HW_AGNOSTIC`. Their original namespaces are restored
     afterwards, so classes other tests imported stay current."""
-    from aphrodite.model_executor.models.transformers.fusers import rms_norm
+    from sonar.model_executor.models.transformers.fusers import rms_norm
 
     saved = [(module, dict(vars(module))) for module in (layers, rms_norm)]
     yield lambda: [importlib.reload(module) for module, _ in saved]
@@ -140,9 +140,9 @@ def reload_backend():
         vars(module).update(namespace)
 
 
-def _fused_rms_norm(backend, rms_norm, aphrodite_config):
+def _fused_rms_norm(backend, rms_norm, sonar_config):
     fuser = rms_norm.RMSNormFuser(zero_centered=False, source_cls="LlamaRMSNorm", eps=1e-6)
-    return fuser.fuse(torch.nn.RMSNorm(8), "norm", aphrodite_config)
+    return fuser.fuse(torch.nn.RMSNorm(8), "norm", sonar_config)
 
 
 @pytest.mark.parametrize(
@@ -179,7 +179,7 @@ def test_plugin_override_reaches_the_backend(
     monkeypatch,
     oot_registries,
     reload_backend,
-    default_aphrodite_config,
+    default_sonar_config,
     use_hw_agnostic,
     module,
     name,
@@ -188,31 +188,31 @@ def test_plugin_override_reaches_the_backend(
     """A plugin that subclasses `resolve`'s result overrides what the backend
     builds, on both paths and for a layer with no hw-agnostic port (GeluAndMul).
     """
-    monkeypatch.setenv("APHRODITE_USE_HW_AGNOSTIC", use_hw_agnostic)
+    monkeypatch.setenv("SONAR_USE_HW_AGNOSTIC", use_hw_agnostic)
     backend, rms_norm = reload_backend()
     for registry in oot_registries:
         registry.pop(name, None)  # e.g. already owned by a loaded plugin
     # The in-tree `get_act_and_mul_fn` caches the op it builds first; start empty,
     # as a process does where plugins load before any model is built.
-    from aphrodite.model_executor.layers import activation
+    from sonar.model_executor.layers import activation
 
     monkeypatch.setattr(activation._ACTIVATION_AND_MUL_REGISTRY, "_dict", {})
 
     base = hw_agnostic.resolve(module, name)
     override = base.register_oot(type(f"Plugin{name}", (base,), {}))
 
-    assert isinstance(build(backend, rms_norm, default_aphrodite_config), override)
+    assert isinstance(build(backend, rms_norm, default_sonar_config), override)
 
 
 def test_in_tree_override_warns_on_hw_agnostic_path(monkeypatch):
     """An override registered only for the in-tree class is not used on the
     hw-agnostic path, and the warning says how to opt in."""
-    from aphrodite.model_executor.custom_op import op_registry_oot as in_tree_registry
-    from aphrodite.model_executor.hw_agnostic import custom_op as hw_custom_op
-    from aphrodite.model_executor.hw_agnostic.layers.layernorm import RMSNorm as HwRMSNorm
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    from sonar.model_executor.custom_op import op_registry_oot as in_tree_registry
+    from sonar.model_executor.hw_agnostic import custom_op as hw_custom_op
+    from sonar.model_executor.hw_agnostic.layers.layernorm import RMSNorm as HwRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
-    plugin_cls = type("PluginRMSNorm", (AphroditeRMSNorm,), {})
+    plugin_cls = type("PluginRMSNorm", (SonarRMSNorm,), {})
     monkeypatch.setitem(in_tree_registry, "RMSNorm", plugin_cls)
     monkeypatch.delitem(hw_custom_op.op_registry_oot, "RMSNorm", raising=False)
     warned: list[str] = []
@@ -229,11 +229,11 @@ def test_in_tree_override_warns_on_hw_agnostic_path(monkeypatch):
 
 def test_override_not_derived_from_hw_agnostic_class_raises(monkeypatch):
     """Python would skip such an override's `__init__`, so it is rejected."""
-    from aphrodite.model_executor.hw_agnostic import custom_op as hw_custom_op
-    from aphrodite.model_executor.hw_agnostic.layers.layernorm import RMSNorm as HwRMSNorm
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    from sonar.model_executor.hw_agnostic import custom_op as hw_custom_op
+    from sonar.model_executor.hw_agnostic.layers.layernorm import RMSNorm as HwRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
-    plugin_cls = type("PluginRMSNorm", (AphroditeRMSNorm,), {})
+    plugin_cls = type("PluginRMSNorm", (SonarRMSNorm,), {})
     monkeypatch.setitem(hw_custom_op.op_registry_oot, "RMSNorm", plugin_cls)
 
     with pytest.raises(TypeError, match="PluginRMSNorm.*does not derive from"):

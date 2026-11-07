@@ -10,14 +10,14 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.model_executor.models.qwen2_vl import Qwen2VLProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.inputs import batched_tensors_equal
-from aphrodite.multimodal.processing.context import InputProcessingContext
-from aphrodite.platforms import current_platform
+from sonar.config.multimodal import MultiModalConfig
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.model_executor.models.qwen2_vl import Qwen2VLProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.inputs import batched_tensors_equal
+from sonar.multimodal.processing.context import InputProcessingContext
+from sonar.platforms import current_platform
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context
@@ -424,7 +424,7 @@ def test_qwen2_5_vl_video_fps_to_second_per_grid_ts(model_id: str) -> None:
         assert float(spg) == pytest.approx(temporal_patch_size / fps, rel=2e-2)
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("model_id", ["Qwen/Qwen2-VL-2B-Instruct", "Qwen/Qwen2.5-VL-3B-Instruct"])
 @pytest.mark.parametrize("num_imgs", [1, 2])
 def test_mm_device_do_normalize(image_assets: ImageTestAssets, model_id: str, num_imgs: int) -> None:

@@ -6,18 +6,18 @@ import pytest
 import torch
 from transformers import LlamaConfig
 
-import aphrodite.config.reasoning as reasoning_config_module
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.reasoning import ReasoningConfig as AphroditeReasoningConfig
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.watermarking.gumbel import (
+import sonar.config.reasoning as reasoning_config_module
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.reasoning import ReasoningConfig as SonarReasoningConfig
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.watermarking.gumbel import (
     DualKeyGumbelWatermarker,
     GumbelWatermarker,
 )
-from aphrodite.v1.worker.cpu.logits_processors import LogitsContext
-from aphrodite.v1.worker.cpu.sampler import (
+from sonar.v1.worker.cpu.logits_processors import LogitsContext
+from sonar.v1.worker.cpu.sampler import (
     CPUSampler,
     CPUSamplingMaskTensors,
     CPUThinkingBudgetState,
@@ -25,10 +25,10 @@ from aphrodite.v1.worker.cpu.sampler import (
     CPUWatermarkSampler,
     get_num_nans,
 )
-from aphrodite.v1.worker.cpu.states import CPURequestState
+from sonar.v1.worker.cpu.states import CPURequestState
 
 if current_platform.is_cpu():
-    import aphrodite._C  # noqa: F401
+    import sonar._C  # noqa: F401
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -84,7 +84,7 @@ def _make_req_states(tokens: list[int], prompt_len: int = 1) -> CPURequestState:
     return req_states
 
 
-def _aphrodite_config(monkeypatch: pytest.MonkeyPatch, tmp_path) -> AphroditeConfig:
+def _sonar_config(monkeypatch: pytest.MonkeyPatch, tmp_path) -> SonarConfig:
     LlamaConfig(
         hidden_size=16,
         intermediate_size=32,
@@ -101,7 +101,7 @@ def _aphrodite_config(monkeypatch: pytest.MonkeyPatch, tmp_path) -> AphroditeCon
         max_model_len=64,
         skip_tokenizer_init=True,
     )
-    reasoning_config = AphroditeReasoningConfig(
+    reasoning_config = SonarReasoningConfig(
         reasoning_start_str="<reasoning>",
         reasoning_end_str="</reasoning>",
     )
@@ -111,7 +111,7 @@ def _aphrodite_config(monkeypatch: pytest.MonkeyPatch, tmp_path) -> AphroditeCon
         lambda **_: _ReasoningTokenizer(),
     )
     reasoning_config.initialize_token_ids(model_config)
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=model_config,
         reasoning_config=reasoning_config,
     )
@@ -275,7 +275,7 @@ def test_cpu_greedy_sampling_applies_thinking_budget(monkeypatch, tmp_path) -> N
     req_states = _make_req_states([1, START, 10, 11, 12])
     req_idx = req_states.req_id_to_index["req"]
     sampler = CPUSampler(
-        aphrodite_config=_aphrodite_config(monkeypatch, tmp_path),
+        sonar_config=_sonar_config(monkeypatch, tmp_path),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -420,7 +420,7 @@ def _make_sampler(
         device=torch.device("cpu"),
     )
     sampler = CPUSampler(
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -565,7 +565,7 @@ def test_cpu_watermark_sampler_uses_cpu_sampler_pipeline(
     )
     sampler = CPUWatermarkSampler(
         watermarker,
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -601,7 +601,7 @@ def test_cpu_watermark_sampler_uses_cpu_sampler_pipeline(
     assert torch.isfinite(output_logits[0, sampled.item()])
 
     ordinary = CPUSampler(
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -638,7 +638,7 @@ def test_cpu_watermark_sampler_handles_mixed_rows() -> None:
 
     sampler = CPUWatermarkSampler(
         GumbelWatermarker(key=42, context_width=1),
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -646,7 +646,7 @@ def test_cpu_watermark_sampler_handles_mixed_rows() -> None:
         deduplicate_contexts="none",
     )
     ordinary = CPUSampler(
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -681,7 +681,7 @@ def test_cpu_watermark_sampler_detects_repeated_context() -> None:
     req_idx = req_states.req_id_to_index["req"]
     sampler = CPUWatermarkSampler(
         GumbelWatermarker(key=42, context_width=2),
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -702,7 +702,7 @@ def test_cpu_watermark_deduplication_scope_and_partial_context() -> None:
 
     single_turn = CPUWatermarkSampler(
         GumbelWatermarker(key=42, context_width=2),
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -711,7 +711,7 @@ def test_cpu_watermark_deduplication_scope_and_partial_context() -> None:
     )
     all_history = CPUWatermarkSampler(
         GumbelWatermarker(key=42, context_width=2),
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),
@@ -727,7 +727,7 @@ def test_cpu_watermark_deduplication_scope_and_partial_context() -> None:
     partial_idx = partial_states.req_id_to_index["req"]
     partial_sampler = CPUWatermarkSampler(
         GumbelWatermarker(key=42, context_width=2),
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),

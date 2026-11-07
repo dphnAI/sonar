@@ -7,18 +7,18 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode, ParallelConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID, get_dcp_local_seq_lens
-from aphrodite.v1.attention.ops import pcp as attention_pcp
-from aphrodite.v1.worker.gpu import cp_utils as gpu_cp_utils
-from aphrodite.v1.worker.gpu import pcp_manager as pcp_manager_module
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers, set_dummy_context
-from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
+from sonar.config import CUDAGraphMode, ParallelConfig, SonarConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID, get_dcp_local_seq_lens
+from sonar.v1.attention.ops import pcp as attention_pcp
+from sonar.v1.worker.gpu import cp_utils as gpu_cp_utils
+from sonar.v1.worker.gpu import pcp_manager as pcp_manager_module
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers, set_dummy_context
+from sonar.v1.worker.gpu.pcp_manager import PCPManager
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
 from tests.v1.spec_decode.utils import fake_speculative_config
 
 
@@ -746,7 +746,7 @@ def test_partition_defers_dcp_metadata_to_post_partition_batch():
 def test_moe_padding_matches_pcp_all_gather(monkeypatch):
     """The PCP batch carries the all-gather of every rank's local padding mask,
     the rows the MoE routes, even when ranks own different numbers of tokens."""
-    monkeypatch.setenv("APHRODITE_MOE_SKIP_PADDING", "1")
+    monkeypatch.setenv("SONAR_MOE_SKIP_PADDING", "1")
     device = torch.device("cuda:0")
     local_masks, batch_masks = [], []
     for pcp_rank in range(2):
@@ -775,7 +775,7 @@ def test_moe_padding_matches_pcp_all_gather(monkeypatch):
         num_tokens = batch_mask.numel()
         hidden_states = torch.randn(num_tokens, 4, device=device)
         router_logits = torch.randn(num_tokens, 8, device=device)
-        with set_forward_context(None, AphroditeConfig(), is_padding=batch_mask):
+        with set_forward_context(None, SonarConfig(), is_padding=batch_mask):
             _, topk_ids, _ = fused_topk(hidden_states, router_logits, 2, False)
         assert (topk_ids[~batch_mask] >= 0).all()
         assert (topk_ids[batch_mask] == -1).all()

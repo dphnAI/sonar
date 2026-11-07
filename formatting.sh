@@ -82,7 +82,7 @@ else
    # Check spelling only of the files that changed in last commit.
    spell_check_changed
 fi
-echo 'Aphrodite codespell: Done'
+echo 'Sonar codespell: Done'
 
 
 # Lint specified files
@@ -116,12 +116,12 @@ if [[ "$1" == '--files' ]]; then
    # If `--all` is passed, then any further arguments are ignored and the
    # entire python directory is linted.
 elif [[ "$1" == '--all' ]]; then
-   lint aphrodite tests
+   lint sonar tests
 else
    # Format only the files that changed in last commit.
    lint_changed
 fi
-echo 'Aphrodite ruff: Done'
+echo 'Sonar ruff: Done'
 
 # check spelling of specified files
 isort_check() {
@@ -161,7 +161,7 @@ else
    # Check spelling only of the files that changed in last commit.
    isort_check_changed
 fi
-echo 'Aphrodite isort: Done'
+echo 'Sonar isort: Done'
 
 # Clang-format section
 # Exclude some files for formatting because they are vendored
@@ -218,7 +218,7 @@ elif [[ "$1" == '--all' ]]; then
 else
    clang_format_changed
 fi
-echo 'Aphrodite clang-format: Done'
+echo 'Sonar clang-format: Done'
 
 
 if ! git diff --quiet &>/dev/null; then

@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aphrodite_metrics::{
+use sonar_metrics::{
     CacheHitSourceLabels, EngineLabels, EnginePositionLabels, EngineSleepStateLabels, F64Gauge,
     Family, HistogramMetric, KvFetchStageLabels, LoraAdapterNames, LoraInfoLabels,
     MooncakeOperationCounterFamily, MooncakeOperationHistogramFamily, MooncakeOperationLabels,
@@ -22,11 +22,11 @@ use crate::transport::ConnectedEngine;
 const WAITING_REASON_CAPACITY: &str = "capacity";
 const WAITING_REASON_DEFERRED: &str = "deferred";
 
-/// `sleep_state` label values of `aphrodite:engine_sleep_state`, in the order of
+/// `sleep_state` label values of `sonar:engine_sleep_state`, in the order of
 /// [`EngineSleepState::gauge_values`].
 const SLEEP_STATES: [&str; 3] = ["awake", "weights_offloaded", "discard_all"];
 
-/// Engine sleep state exported as `aphrodite:engine_sleep_state`.
+/// Engine sleep state exported as `sonar:engine_sleep_state`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EngineSleepState {
     Awake,
@@ -542,12 +542,12 @@ fn record_nixl_stats(handles: &SchedulerStatsHandles, stats: &NixlStats) {
         .inc_by(stats.num_notifications_after_expiry.iter().sum());
 }
 
-/// Exports `aphrodite:lora_requests_info` as a single series covering all LoRA
+/// Exports `sonar:lora_requests_info` as a single series covering all LoRA
 /// requests tracked by this client across every engine in the replica.
 ///
 /// The engine's `SchedulerStats` never carries adapter names: the Python
 /// frontend fills them in from per-request lifecycle events tracked by
-/// `LoRARequestStates` in `aphrodite/v1/engine/output_processor.py`. The Rust
+/// `LoRARequestStates` in `sonar/v1/engine/output_processor.py`. The Rust
 /// frontend mirrors that, deriving the sets from the request registry.
 #[derive(Default)]
 pub(crate) struct LoraInfoExporter {
@@ -592,9 +592,9 @@ fn now_unix_secs() -> f64 {
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use aphrodite_metrics::Metrics;
     use expect_test::expect;
     use itertools::Itertools as _;
+    use sonar_metrics::Metrics;
 
     use crate::metrics::LoraInfoExporter;
     use crate::protocol::stats::{
@@ -611,7 +611,7 @@ mod tests {
     fn lora_series(rendered: &str) -> String {
         rendered
             .lines()
-            .filter(|l| l.starts_with("aphrodite:lora_requests_info{"))
+            .filter(|l| l.starts_with("sonar:lora_requests_info{"))
             .map(|l| match l.rsplit_once("} ") {
                 Some((labels, _value)) => format!("{labels}}} <ts>"),
                 None => l.to_string(),
@@ -632,21 +632,21 @@ mod tests {
         // Two running (sorted), one waiting.
         exporter.update(&metrics.scheduler, names(&["b", "a"]), names(&["c"]));
         expect![[
-            r#"aphrodite:lora_requests_info{running_lora_adapters="a,b",waiting_lora_adapters="c"} <ts>"#
+            r#"sonar:lora_requests_info{running_lora_adapters="a,b",waiting_lora_adapters="c"} <ts>"#
         ]]
         .assert_eq(&lora_series(&metrics.render().unwrap()));
 
         // "c" gets scheduled and "d" arrives: the stale series is replaced.
         exporter.update(&metrics.scheduler, names(&["a", "b", "c"]), names(&["d"]));
         expect![[
-            r#"aphrodite:lora_requests_info{running_lora_adapters="a,b,c",waiting_lora_adapters="d"} <ts>"#
+            r#"sonar:lora_requests_info{running_lora_adapters="a,b,c",waiting_lora_adapters="d"} <ts>"#
         ]]
         .assert_eq(&lora_series(&metrics.render().unwrap()));
 
         // Everything but "d" finishes.
         exporter.update(&metrics.scheduler, names(&["d"]), names(&[]));
         expect![[
-            r#"aphrodite:lora_requests_info{running_lora_adapters="d",waiting_lora_adapters=""} <ts>"#
+            r#"sonar:lora_requests_info{running_lora_adapters="d",waiting_lora_adapters=""} <ts>"#
         ]]
         .assert_eq(&lora_series(&metrics.render().unwrap()));
 
@@ -683,7 +683,7 @@ mod tests {
     }
 
     /// Records a bare `MooncakeConnector` payload, in the shape Python's
-    /// `MooncakeKVConnectorStats` sends, into the `aphrodite:mooncake_*` transfer
+    /// `MooncakeKVConnectorStats` sends, into the `sonar:mooncake_*` transfer
     /// metrics.
     #[test]
     fn mooncake_transfer_stats_are_recorded_into_mooncake_metrics() {
@@ -710,27 +710,27 @@ mod tests {
         let mooncake_transfer_series = rendered
             .lines()
             .filter(|line| {
-                line.starts_with("aphrodite:mooncake_")
-                    && !line.starts_with("aphrodite:mooncake_store_")
+                line.starts_with("sonar:mooncake_")
+                    && !line.starts_with("sonar:mooncake_store_")
                     && !line.contains("_bucket{")
             })
             .collect::<Vec<_>>()
             .join("\n");
         expect![[r#"
-            aphrodite:mooncake_xfer_time_seconds_sum{model_name="model",engine="0"} 0.03
-            aphrodite:mooncake_xfer_time_seconds_count{model_name="model",engine="0"} 2
-            aphrodite:mooncake_bytes_transferred_sum{model_name="model",engine="0"} 12288.0
-            aphrodite:mooncake_bytes_transferred_count{model_name="model",engine="0"} 2
-            aphrodite:mooncake_num_descriptors_sum{model_name="model",engine="0"} 6.0
-            aphrodite:mooncake_num_descriptors_count{model_name="model",engine="0"} 2
-            aphrodite:mooncake_num_failed_transfers_total{model_name="model",engine="0"} 2
-            aphrodite:mooncake_num_failed_recvs_total{model_name="model",engine="0"} 1
-            aphrodite:mooncake_num_kv_expired_reqs_total{model_name="model",engine="0"} 0"#]]
+            sonar:mooncake_xfer_time_seconds_sum{model_name="model",engine="0"} 0.03
+            sonar:mooncake_xfer_time_seconds_count{model_name="model",engine="0"} 2
+            sonar:mooncake_bytes_transferred_sum{model_name="model",engine="0"} 12288.0
+            sonar:mooncake_bytes_transferred_count{model_name="model",engine="0"} 2
+            sonar:mooncake_num_descriptors_sum{model_name="model",engine="0"} 6.0
+            sonar:mooncake_num_descriptors_count{model_name="model",engine="0"} 2
+            sonar:mooncake_num_failed_transfers_total{model_name="model",engine="0"} 2
+            sonar:mooncake_num_failed_recvs_total{model_name="model",engine="0"} 1
+            sonar:mooncake_num_kv_expired_reqs_total{model_name="model",engine="0"} 0"#]]
         .assert_eq(&mooncake_transfer_series);
     }
 
     /// Records a bare `UMBPStoreConnector` payload, in the shape Python's
-    /// `UMBPStoreConnectorStats` sends, into the `aphrodite:umbp_transfer_*`
+    /// `UMBPStoreConnectorStats` sends, into the `sonar:umbp_transfer_*`
     /// counters, one series per reported operation.
     #[test]
     fn umbp_stats_are_recorded_into_umbp_transfer_metrics() {
@@ -742,7 +742,7 @@ mod tests {
                 .render()
                 .unwrap()
                 .lines()
-                .filter(|line| line.starts_with("aphrodite:umbp_transfer_"))
+                .filter(|line| line.starts_with("sonar:umbp_transfer_"))
                 .sorted()
                 .join("\n")
         };
@@ -763,14 +763,14 @@ mod tests {
         super::record_scheduler_stats_with_handles(&handles, &stats);
 
         expect![[r#"
-            aphrodite:umbp_transfer_bytes_total{model_name="model",engine="0",operation="load"} 16384
-            aphrodite:umbp_transfer_bytes_total{model_name="model",engine="0",operation="store"} 0
-            aphrodite:umbp_transfer_completed_total{model_name="model",engine="0",operation="load"} 4
-            aphrodite:umbp_transfer_completed_total{model_name="model",engine="0",operation="store"} 0
-            aphrodite:umbp_transfer_failed_total{model_name="model",engine="0",operation="load"} 2
-            aphrodite:umbp_transfer_failed_total{model_name="model",engine="0",operation="store"} 0
-            aphrodite:umbp_transfer_submitted_total{model_name="model",engine="0",operation="load"} 6
-            aphrodite:umbp_transfer_submitted_total{model_name="model",engine="0",operation="store"} 2"#]]
+            sonar:umbp_transfer_bytes_total{model_name="model",engine="0",operation="load"} 16384
+            sonar:umbp_transfer_bytes_total{model_name="model",engine="0",operation="store"} 0
+            sonar:umbp_transfer_completed_total{model_name="model",engine="0",operation="load"} 4
+            sonar:umbp_transfer_completed_total{model_name="model",engine="0",operation="store"} 0
+            sonar:umbp_transfer_failed_total{model_name="model",engine="0",operation="load"} 2
+            sonar:umbp_transfer_failed_total{model_name="model",engine="0",operation="store"} 0
+            sonar:umbp_transfer_submitted_total{model_name="model",engine="0",operation="load"} 6
+            sonar:umbp_transfer_submitted_total{model_name="model",engine="0",operation="store"} 2"#]]
         .assert_eq(&umbp_series());
     }
 
@@ -786,15 +786,15 @@ mod tests {
                 .render()
                 .unwrap()
                 .lines()
-                .filter(|line| line.starts_with("aphrodite:num_requests_kv_fetch_by_stage{"))
+                .filter(|line| line.starts_with("sonar:num_requests_kv_fetch_by_stage{"))
                 .sorted()
                 .join("\n")
         };
 
         expect![[r#"
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="completed_waiting"} 0
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="in_progress"} 0
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="waiting_to_start"} 0"#]]
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="completed_waiting"} 0
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="in_progress"} 0
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="waiting_to_start"} 0"#]]
         .assert_eq(&kv_fetch_series());
 
         let stats = SchedulerStats {
@@ -808,9 +808,9 @@ mod tests {
         super::record_scheduler_stats_with_handles(&handles, &stats);
 
         expect![[r#"
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="completed_waiting"} 2
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="in_progress"} 1
-            aphrodite:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="waiting_to_start"} 3"#]]
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="completed_waiting"} 2
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="in_progress"} 1
+            sonar:num_requests_kv_fetch_by_stage{model_name="model",engine="0",stage="waiting_to_start"} 3"#]]
         .assert_eq(&kv_fetch_series());
     }
 
@@ -840,34 +840,38 @@ mod tests {
 
         let rendered = metrics.render().unwrap();
         assert!(rendered.contains(
-            "aphrodite:mooncake_store_operation_total{model_name=\"model\",engine=\"0\",\
+            "sonar:mooncake_store_operation_total{model_name=\"model\",engine=\"0\",\
              operation=\"load_get\",status=\"ok\"} 1"
         ));
         assert!(rendered.contains(
-            "aphrodite:mooncake_store_operation_keys_total{model_name=\"model\",engine=\"0\",\
+            "sonar:mooncake_store_operation_keys_total{model_name=\"model\",engine=\"0\",\
              operation=\"load_get\",status=\"ok\"} 3"
         ));
         assert!(rendered.contains(
-            "aphrodite:mooncake_store_operation_bytes_total{model_name=\"model\",engine=\"0\",\
+            "sonar:mooncake_store_operation_bytes_total{model_name=\"model\",engine=\"0\",\
              operation=\"load_get\",status=\"ok\"} 1024"
         ));
+        assert!(
+            rendered.contains(
+                "sonar:nixl_num_kv_expired_reqs_total{model_name=\"model\",engine=\"0\"} 1"
+            )
+        );
         assert!(rendered.contains(
-            "aphrodite:nixl_num_kv_expired_reqs_total{model_name=\"model\",engine=\"0\"} 1"
+            "sonar:nixl_num_failed_transfers_total{model_name=\"model\",engine=\"0\"} 2"
         ));
         assert!(rendered.contains(
-            "aphrodite:nixl_num_failed_transfers_total{model_name=\"model\",engine=\"0\"} 2"
+            "sonar:nixl_num_notifications_after_expiry_total{model_name=\"model\",engine=\"0\"} 2"
+        ));
+        assert!(
+            rendered.contains(
+                "sonar:nixl_xfer_time_seconds_count{model_name=\"model\",engine=\"0\"} 2"
+            )
+        );
+        assert!(rendered.contains(
+            "sonar:mooncake_xfer_time_seconds_count{model_name=\"model\",engine=\"0\"} 1"
         ));
         assert!(rendered.contains(
-            "aphrodite:nixl_num_notifications_after_expiry_total{model_name=\"model\",engine=\"0\"} 2"
-        ));
-        assert!(rendered.contains(
-            "aphrodite:nixl_xfer_time_seconds_count{model_name=\"model\",engine=\"0\"} 2"
-        ));
-        assert!(rendered.contains(
-            "aphrodite:mooncake_xfer_time_seconds_count{model_name=\"model\",engine=\"0\"} 1"
-        ));
-        assert!(rendered.contains(
-            "aphrodite:mooncake_num_failed_recvs_total{model_name=\"model\",engine=\"0\"} 1"
+            "sonar:mooncake_num_failed_recvs_total{model_name=\"model\",engine=\"0\"} 1"
         ));
     }
 }

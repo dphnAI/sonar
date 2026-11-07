@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
-use aphrodite_text::{Prompt, TextDecodeOptions, TextRequest};
+use sonar_engine_core_client::protocol::multimodal::MmFeatures;
+use sonar_text::{Prompt, TextDecodeOptions, TextRequest};
 
 use super::types::GenerateRequest;
 use super::validate;
@@ -62,12 +62,12 @@ pub(super) fn prepare_generate_request(
     let include_prompt_logprobs = request.sampling_params.inner.prompt_logprobs.is_some();
     let return_token_ids = request.return_token_ids.unwrap_or(false);
     let mut sampling_params = request.sampling_params.inner;
-    sampling_params.aphrodite_xargs = merge_kv_transfer_params(
-        sampling_params.aphrodite_xargs,
+    sampling_params.sonar_xargs = merge_kv_transfer_params(
+        sampling_params.sonar_xargs,
         request.kv_transfer_params.as_ref(),
     );
-    sampling_params.aphrodite_xargs = merge_ec_transfer_params(
-        sampling_params.aphrodite_xargs,
+    sampling_params.sonar_xargs = merge_ec_transfer_params(
+        sampling_params.sonar_xargs,
         request.ec_transfer_params.as_ref(),
     );
 
@@ -108,8 +108,8 @@ pub(super) fn prepare_generate_request(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_text::Prompt;
     use serde_json::json;
+    use sonar_text::Prompt;
 
     use super::prepare_generate_request;
     use crate::lora::LoraModelResolution;
@@ -173,7 +173,7 @@ mod tests {
             prepared
                 .text_request
                 .sampling_params
-                .aphrodite_xargs
+                .sonar_xargs
                 .and_then(|mut xargs| xargs.remove("kv_transfer_params")),
             Some(json!({"connector": "x"}))
         );
@@ -196,7 +196,7 @@ mod tests {
         )
         .expect("prepare request");
 
-        let xargs = prepared.text_request.sampling_params.aphrodite_xargs.expect("xargs");
+        let xargs = prepared.text_request.sampling_params.sonar_xargs.expect("xargs");
         assert_eq!(xargs.get("custom"), Some(&json!(1)));
         assert_eq!(
             xargs.get("kv_transfer_params"),
@@ -254,7 +254,7 @@ mod tests {
         )
         .expect("prepare");
 
-        // The raw inference route shares `aphrodite_text::SamplingParams`, so the
+        // The raw inference route shares `sonar_text::SamplingParams`, so the
         // field is carried through to lowering exactly like the OpenAI routes
         // (normalization/validation then happens in `lower_sampling_params`).
         assert_eq!(

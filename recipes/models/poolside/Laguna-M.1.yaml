@@ -80,10 +80,10 @@ guide: |
 
   ## Prerequisites
 
-  Laguna M.1 support landed in Aphrodite via [PR #41129](https://github.com/vllm-project/vllm/pull/41129) (shared implementation with [Laguna XS.2](https://huggingface.co/poolside/Laguna-XS.2)) and ships in **Aphrodite 0.21.0 and later**.
+  Laguna M.1 support landed in Sonar via [PR #41129](https://github.com/vllm-project/vllm/pull/41129) (shared implementation with [Laguna XS.2](https://huggingface.co/poolside/Laguna-XS.2)) and ships in **Sonar 0.21.0 and later**.
 
   ```bash
-  uv pip install -U 'aphrodite-engine>=0.21.0'
+  uv pip install -U 'sonar>=0.21.0' --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   FP8 and NVFP4 quantized checkpoints are available at [Laguna-M.1-FP8](https://huggingface.co/poolside/Laguna-M.1-FP8) and [Laguna-M.1-NVFP4](https://huggingface.co/poolside/Laguna-M.1-NVFP4). Quantization is detected automatically from the checkpoint's `quantization_config`, so the launch command is identical — just swap the model ID (select the variant above).
@@ -92,7 +92,7 @@ guide: |
 
   ### Single node (8×H200, BF16)
   ```bash
-  aphrodite serve poolside/Laguna-M.1 \
+  sonar serve poolside/Laguna-M.1 \
     --tensor-parallel-size 8 \
     --served-model-name laguna \
     --enable-auto-tool-choice \
@@ -136,4 +136,4 @@ guide: |
   - [Model card](https://huggingface.co/poolside/Laguna-M.1)
   - [Release blog post](https://poolside.ai/blog/laguna-a-deeper-dive)
   - [Technical report](https://poolside.ai/assets/laguna/laguna-m1-xs2-technical-report.pdf)
-  - [Aphrodite support PR #41129](https://github.com/vllm-project/vllm/pull/41129)
+  - [Sonar support PR #41129](https://github.com/vllm-project/vllm/pull/41129)

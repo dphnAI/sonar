@@ -7,11 +7,11 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import CompilationConfig, CompilationMode
-from aphrodite.model_executor.warmup.jit_warmup import JitWarmupRegistry
-from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
-from aphrodite.v1.worker.gpu import eplb_utils as eplb
-from aphrodite.v1.worker.gpu import model_runner as mrv2
+from sonar.config import CompilationConfig, CompilationMode
+from sonar.model_executor.warmup.jit_warmup import JitWarmupRegistry
+from sonar.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
+from sonar.v1.worker.gpu import eplb_utils as eplb
+from sonar.v1.worker.gpu import model_runner as mrv2
 
 
 class FakeMemoryProfiler:
@@ -76,7 +76,7 @@ def _make_runner(**overrides: Any) -> Any:
         eplb_config=SimpleNamespace(log_balancedness=True),
     )
     runner.compilation_config = CompilationConfig(mode=CompilationMode.NONE)
-    runner.aphrodite_config = SimpleNamespace(
+    runner.sonar_config = SimpleNamespace(
         compilation_config=runner.compilation_config,
         load_config=runner.load_config,
         model_config=runner.model_config,
@@ -99,7 +99,7 @@ def _make_runner(**overrides: Any) -> Any:
         post_forward=lambda *_, **__: None,
     )
     runner.eplb = eplb.EPLBController(runner.parallel_config, runner.device)
-    runner.jit_warmup_registry = JitWarmupRegistry(runner.aphrodite_config)
+    runner.jit_warmup_registry = JitWarmupRegistry(runner.sonar_config)
     runner.pooling_runner = None
     runner.execute_model_state = None
     for key, value in overrides.items():

@@ -29,7 +29,7 @@ variants:
   default:
     precision: bf16
     vram_minimum_gb: 90
-    description: "BF16 serving runtime with native Aphrodite execution"
+    description: "BF16 serving runtime with native Sonar execution"
 compatible_strategies: [single_node_tep, multi_node_tep, multi_node_tp_pp]
 default_strategy: single_node_tep
 hardware_overrides: {}
@@ -54,7 +54,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  aphrodite serve IFM/Jais-3-MoVA-36B-A4B \
+  sonar serve IFM/Jais-3-MoVA-36B-A4B \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --chat-template-content-format string \

@@ -18,7 +18,7 @@ post-wake generation is neither degenerate (single repeated token) nor NaN.
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 # Small Qwen3-Next (GDN) model already used by the hybrid model test-suite.
 MODEL = "tiny-random/qwen3-next-moe"

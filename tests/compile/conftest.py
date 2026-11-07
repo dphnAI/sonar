@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.platforms.interface import DeviceCapability
+from sonar.platforms.interface import DeviceCapability
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def mock_cuda_platform():
             return current_capability.major == (requested_capability // 10)
 
         mock_platform.is_device_capability_family.side_effect = is_device_capability_family
-        with patch("aphrodite.platforms.current_platform", mock_platform):
+        with patch("sonar.platforms.current_platform", mock_platform):
             yield mock_platform
 
     return _mock_platform
@@ -55,7 +55,7 @@ def mock_xpu_platform():
         mock_platform = MagicMock()
         mock_platform.is_cuda.return_value = False
         mock_platform.is_xpu.return_value = True
-        with patch("aphrodite.platforms.current_platform", mock_platform):
+        with patch("sonar.platforms.current_platform", mock_platform):
             yield mock_platform
 
     return _mock_platform

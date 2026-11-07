@@ -6,9 +6,9 @@ from collections.abc import Sequence
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.reasoning.minimax_m3_reasoning_parser import MiniMaxM3ReasoningParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.reasoning import ReasoningParserManager
+from sonar.reasoning.minimax_m3_reasoning_parser import MiniMaxM3ReasoningParser
 
 pytestmark = pytest.mark.skip_global_cleanup
 

@@ -8,10 +8,10 @@ import pytest
 import torch
 from transformers import DeepseekV4Config
 
-from aphrodite.distributed.eplb.eplb_state import EplbState
-from aphrodite.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.eplb_utils import (
+from sonar.distributed.eplb.eplb_state import EplbState
+from sonar.models.deepseek_v4.common.eplb_util import dspark_draft_supports_eplb
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.eplb_utils import (
     EPLBController,
     draft_model_supports_eplb,
 )
@@ -110,7 +110,7 @@ def _make_dsv4_dspark_hf_config() -> DeepseekV4Config:
 
 
 @pytest.fixture
-def dspark_aphrodite_config():
+def dspark_sonar_config():
     hf_config = _make_dsv4_dspark_hf_config()
     model_config = SimpleNamespace(dtype=torch.bfloat16, hf_config=hf_config, model="dspark")
     return SimpleNamespace(
@@ -173,15 +173,15 @@ def test_eplb_state_rejects_mismatched_dsv4_draft_redundant_experts():
         ("deepseek_v41", False),
     ],
 )
-def test_dspark_draft_supports_eplb(dspark_aphrodite_config, model_type: str, expected: bool):
-    draft_model_config = dspark_aphrodite_config.speculative_config.draft_model_config
+def test_dspark_draft_supports_eplb(dspark_sonar_config, model_type: str, expected: bool):
+    draft_model_config = dspark_sonar_config.speculative_config.draft_model_config
     draft_model_config.hf_config.model_type = model_type
     assert dspark_draft_supports_eplb(draft_model_config) is expected
 
 
-def test_draft_model_supports_eplb_requires_draft_moe(dspark_aphrodite_config):
+def test_draft_model_supports_eplb_requires_draft_moe(dspark_sonar_config):
     assert not draft_model_supports_eplb(
-        dspark_aphrodite_config.speculative_config,
+        dspark_sonar_config.speculative_config,
         None,
     )
 
@@ -195,7 +195,7 @@ def test_draft_model_supports_eplb_requires_draft_moe(dspark_aphrodite_config):
     ],
 )
 def test_eplb_dspark_draft_registration(
-    dspark_aphrodite_config,
+    dspark_sonar_config,
     monkeypatch: pytest.MonkeyPatch,
     model_type,
     load_dummy_weights: bool,
@@ -204,18 +204,18 @@ def test_eplb_dspark_draft_registration(
     """Register V4 drafts; skip incompatible V4.1 drafts and dummy weights."""
     FakeEplbState.instances.clear()
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.eplb_utils.EplbState",
+        "sonar.v1.worker.gpu.eplb_utils.EplbState",
         FakeEplbState,
     )
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.eplb_utils.get_mixture_of_experts_model",
+        "sonar.v1.worker.gpu.eplb_utils.get_mixture_of_experts_model",
         lambda model: model,
     )
 
-    draft_model_config = dspark_aphrodite_config.speculative_config.draft_model_config
+    draft_model_config = dspark_sonar_config.speculative_config.draft_model_config
     draft_model_config.hf_config.model_type = model_type
     draft = SimpleNamespace()
-    controller = EPLBController(dspark_aphrodite_config.parallel_config, torch.device("cpu"))
+    controller = EPLBController(dspark_sonar_config.parallel_config, torch.device("cpu"))
     controller.prepare_load()
     speculator = SimpleNamespace(model=draft, eplb_state=None)
 
@@ -226,7 +226,7 @@ def test_eplb_dspark_draft_registration(
 
     registered = controller.maybe_register_speculator(
         speculator,
-        dspark_aphrodite_config.speculative_config,
+        dspark_sonar_config.speculative_config,
         load_dummy_weights=load_dummy_weights,
     )
 

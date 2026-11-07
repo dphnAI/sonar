@@ -25,7 +25,7 @@
 #include "gemm_s4_f16_kernel.h"
 #include "metric.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 extern bool g_dump_kernel_info_once;
@@ -92,4 +92,4 @@ class GemmS4F16 {
 };
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

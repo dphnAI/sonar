@@ -13,20 +13,20 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.events import EventType
-from aphrodite.parser.engine.parser_engine_config import ParserState
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.events import EventType
+from sonar.parser.engine.parser_engine_config import ParserState
+from sonar.parser.engine.registered_adapters import (
     InklingParserReasoningAdapter,
     InklingParserToolAdapter,
 )
-from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
-from aphrodite.parser.inkling import InklingParser, _inkling_arg_converter, inkling_config
-from aphrodite.parser.parser_manager import ParserManager
+from sonar.parser.engine.streaming_parser_engine import StreamingParserEngine
+from sonar.parser.inkling import InklingParser, _inkling_arg_converter, inkling_config
+from sonar.parser.parser_manager import ParserManager
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_content,
@@ -565,8 +565,8 @@ class TestToolCallFiltering:
 
 class TestRegisteredAdapters:
     def test_adapters_resolve(self):
-        from aphrodite.reasoning import ReasoningParserManager
-        from aphrodite.tool_parsers import ToolParserManager
+        from sonar.reasoning import ReasoningParserManager
+        from sonar.tool_parsers import ToolParserManager
 
         reasoning_cls = ReasoningParserManager.get_reasoning_parser("inkling")
         tool_cls = ToolParserManager.get_tool_parser("inkling")
@@ -577,7 +577,7 @@ class TestRegisteredAdapters:
         assert tool_cls.supports_required_and_named is False
 
     def test_adapter_round_trip(self, mock_tokenizer, mock_request):
-        from aphrodite.tool_parsers import ToolParserManager
+        from sonar.tool_parsers import ToolParserManager
 
         tool_cls = ToolParserManager.get_tool_parser("inkling")
         adapter = tool_cls(mock_tokenizer)

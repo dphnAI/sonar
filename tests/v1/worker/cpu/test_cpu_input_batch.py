@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu.input_batch import (
+from sonar import _custom_ops as ops
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu.input_batch import (
     InputBatch,
     InputBuffers,
     combine_sampled_and_draft_tokens,
@@ -15,7 +15,7 @@ from aphrodite.v1.worker.cpu.input_batch import (
     prepare_pos_seq_lens,
     prepare_prefill_inputs,
 )
-from aphrodite.v1.worker.cpu.rope import RopeState
+from sonar.v1.worker.cpu.rope import RopeState
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,

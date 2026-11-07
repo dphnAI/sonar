@@ -7,17 +7,17 @@ import torch
 from prometheus_client.parser import text_string_to_metric_families
 from transformers import AutoModelForCausalLM
 
-from aphrodite.distributed.weight_transfer import (
-    HTTPAphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer import (
+    HTTPSonarWeightSyncClient,
     ModuleSource,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.ipc_engine import IPCTrainerInitInfo
+from sonar.distributed.weight_transfer.ipc_engine import IPCTrainerInitInfo
 from tests.entrypoints.rl.conftest import MODEL_NAME
 from tests.utils import RemoteOpenAIServer
 
-DURATION = "aphrodite:rl_weight_update_operation_duration_seconds"
-IN_FLIGHT = "aphrodite:rl_weight_update_operations_in_flight"
+DURATION = "sonar:rl_weight_update_operation_duration_seconds"
+IN_FLIGHT = "sonar:rl_weight_update_operations_in_flight"
 SYNCS = 8
 
 
@@ -46,8 +46,8 @@ def test_weight_sync_metrics_aggregate_across_api_servers(tmp_path):
         '{"backend": "ipc"}',
     ]
     env = {
-        "APHRODITE_SERVER_DEV_MODE": "1",
-        "APHRODITE_ALLOW_INSECURE_SERIALIZATION": "1",
+        "SONAR_SERVER_DEV_MODE": "1",
+        "SONAR_ALLOW_INSECURE_SERIALIZATION": "1",
         "PROMETHEUS_MULTIPROC_DIR": str(tmp_path),
     }
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env) as server:
@@ -55,7 +55,7 @@ def test_weight_sync_metrics_aggregate_across_api_servers(tmp_path):
         trainer = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).cuda()
         engine = WeightTransferTrainerFactory.trainer_init(
             IPCTrainerInitInfo(rank=0),
-            client=HTTPAphroditeWeightSyncClient(url),
+            client=HTTPSonarWeightSyncClient(url),
             source=ModuleSource(trainer),
         )
         for _ in range(SYNCS):

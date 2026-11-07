@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import flashinfer_scaled_fp8_mm
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import flashinfer_scaled_fp8_mm
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.has_device_capability(100):
     pytest.skip(

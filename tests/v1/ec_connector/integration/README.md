@@ -24,7 +24,7 @@ Please refer to [Disaggregated Encoder Feature](../../../../docs/features/disagg
 ### Multimodal Prompts (Default)
 
 ```bash
-cd aphrodite
+cd sonar
 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -33,7 +33,7 @@ This runs the test with actual multimodal (image) prompts.
 ### Text-Only Prompts
 
 ```bash
-cd aphrodite
+cd sonar
 USE_MM_PROMPTS=0 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -107,23 +107,15 @@ correctness suite, not a performance benchmark or failure-injection suite.
 `SKIP_BASELINE=1` reuses a reference generated with the same model and test
 configuration. `USE_MM_PROMPTS=0` only checks text routing, not EC transfer.
 
-Buildkite runs this script as `mooncake-ec-tcp-e2e-2-gpus` on two L4 GPUs.
-The job is defined in `.buildkite/test_areas/disaggregated_mooncake.yaml` and
-selected for changes to EC, multimodal processing, scheduler/model-runner
-integration, the proxy, or these tests (subject to normal PR CI approval).
-It reuses the CI image's Python packages through a system-site-packages venv
-and installs the CUDA-compatible Mooncake wheel. It uses loopback networking
-and TCP only, without RDMA devices or peer-memory setup.
-
-The job fails on startup errors, request errors, or answer mismatches. On
-failure, the script prints the last 100 lines of each server/proxy log to
-the CI job log; full files remain under `LOG_PATH` while the container exists.
+The script fails on startup errors, request errors, or answer mismatches. On
+failure, it prints the last 100 lines of each server/proxy log.
+Full files remain under `LOG_PATH`.
 
 ### Step 1: Baseline
 
 1. Start a single Sonar instance on the GPU.
 2. Run test prompts (multimodal or text-only)
-3. Save outputs to `.aphrodite_epd_baseline.txt`
+3. Save outputs to `.sonar_epd_baseline.txt`
 4. Shutdown instance
 
 ### Step 2: EPD (1E + 1PD)
@@ -190,7 +182,7 @@ Quick sanity check:
 - Multiple GPUs (3 for 1E+1P+1D, 2 for 1E+1PD, 1 for baseline)
     - 1E+1P+1D is runnable with 2 GPU by assign E and P on the same GPU now.
 - Multimodal model (e.g., Qwen2.5-VL-3B-Instruct)
-- Internet access (for accessing aphrodite test images)
+- Internet access (for accessing sonar test images)
 
 ## Debugging
 

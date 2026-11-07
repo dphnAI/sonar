@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockTransferPlan,
     KVLayoutDescriptor,
     KVRange,
@@ -13,11 +13,11 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     RankTopology,
     TransferJobStatus,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
     EmbeddedRuntime,
     UMBPRuntimeConfig,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.v1.kv_connector.umbp_test_utils import mori_has_umbp
 
 pytestmark = pytest.mark.skipif(

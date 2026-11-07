@@ -12,42 +12,42 @@ import torch
 from fastapi.responses import ORJSONResponse
 from transformers import BertConfig, BertTokenizerFast
 
-from aphrodite import PoolingParams
-from aphrodite.config import AphroditeConfig, DeviceConfig, ModelConfig, PoolerConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.pooling.embed.io_processor import (
+from sonar import PoolingParams
+from sonar.config import DeviceConfig, ModelConfig, PoolerConfig, SonarConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.pooling.embed.io_processor import (
     JinaRankingTokenEmbedIOProcessor,
     TokenEmbedIOProcessor,
 )
-from aphrodite.entrypoints.pooling.offline import PoolingOfflineMixin
-from aphrodite.entrypoints.pooling.token_embed.late_chunking import (
+from sonar.entrypoints.pooling.offline import PoolingOfflineMixin
+from sonar.entrypoints.pooling.token_embed.late_chunking import (
     build_late_chunking_metadata,
 )
-from aphrodite.entrypoints.pooling.token_embed.protocol import (
+from sonar.entrypoints.pooling.token_embed.protocol import (
     TokenEmbeddingRequest,
     TokenEmbeddingResponse,
 )
-from aphrodite.entrypoints.pooling.token_embed.serving import ServingTokenEmbedding
-from aphrodite.entrypoints.pooling.typing import (
+from sonar.entrypoints.pooling.token_embed.serving import ServingTokenEmbedding
+from sonar.entrypoints.pooling.typing import (
     OfflineEncodeInputsContext,
     OfflineOutputsContext,
     PoolingServeContext,
 )
-from aphrodite.entrypoints.pooling.utils import encode_pooling_output_float_or_ndarray
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.outputs import (
+from sonar.entrypoints.pooling.utils import encode_pooling_output_float_or_ndarray
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.outputs import (
     EmbeddingRequestOutput,
     LateChunk,
     PoolingOutput,
     PoolingRequestOutput,
     RequestError,
 )
-from aphrodite.pooling_params import LateChunkingParams
-from aphrodite.renderers import TokenizeParams
-from aphrodite.renderers.chat_utils import ChatTemplateConfig
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.v1.engine.input_processor import InputProcessor
+from sonar.pooling_params import LateChunkingParams
+from sonar.renderers import TokenizeParams
+from sonar.renderers.chat_utils import ChatTemplateConfig
+from sonar.renderers.hf import HfRenderer
+from sonar.v1.engine.input_processor import InputProcessor
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ def late_chunk_processor():
         hf_config=SimpleNamespace(),
         pooler_config=PoolerConfig(seq_pooling_type="MEAN", tok_pooling_type="ALL"),
     )
-    processor.aphrodite_config = SimpleNamespace(
+    processor.sonar_config = SimpleNamespace(
         model_config=processor.model_config,
         cache_config=SimpleNamespace(enable_prefix_caching=False),
         scheduler_config=SimpleNamespace(enable_chunked_prefill=False),
@@ -123,7 +123,7 @@ def test_jina_ranking_rejects_chunking_before_tokenization(late_chunk_processor,
     assert count == 1
     request = next(factory())
     if chunk_size is not None:
-        with pytest.raises(AphroditeValidationError, match="JinaForRanking.*late chunking"):
+        with pytest.raises(SonarValidationError, match="JinaForRanking.*late chunking"):
             processor.render(request)
         late_chunk_processor.renderer.render_cmpl.assert_not_called()
     else:
@@ -159,7 +159,7 @@ def test_jina_ranking_rejects_chunking_before_tokenization(late_chunk_processor,
 )
 def test_late_chunking_rejects_unsupported_input_before_render(late_chunk_processor, prompts, kwargs, error):
     processor = late_chunk_processor
-    with pytest.raises(AphroditeValidationError, match=error):
+    with pytest.raises(SonarValidationError, match=error):
         factory, _ = processor.get_request_factory_offline(_late_chunk_context(prompts, **kwargs))
         processor.render(next(factory()))
     processor.renderer.render_cmpl.assert_not_called()
@@ -194,7 +194,7 @@ def test_late_chunk_ranges_keep_unicode_overlaps_and_special_only_chunks():
 
 @pytest.mark.parametrize("offsets", [None, [(0, 1)], [(-1, 1), (0, 0)], [(0, 4), (0, 0)], [(2, 3), (0, 1)]])
 def test_late_chunk_ranges_reject_missing_or_invalid_offsets(offsets):
-    with pytest.raises(AphroditeValidationError, match="offsets"):
+    with pytest.raises(SonarValidationError, match="offsets"):
         build_late_chunking_metadata("abc", 2, offsets, 2)
 
 
@@ -207,7 +207,7 @@ def _mock_chunk_llm(processor, outputs):
     llm.pooling_io_processors = {"token_embed": processor}
     llm._executor = SimpleNamespace(map=map)
     llm.llm_engine = mock.Mock()
-    llm.llm_engine.aphrodite_config.scheduler_config.max_num_seqs = 2
+    llm.llm_engine.sonar_config.scheduler_config.max_num_seqs = 2
     llm.llm_engine.has_unfinished_requests.return_value = False
     llm.llm_engine.step.side_effect = outputs
     llm._render_and_add_requests = mock.Mock(
@@ -398,12 +398,12 @@ def token_embedding_serving(tmp_path):
         max_model_len=32,
         pooler_config=PoolerConfig(task="token_embed"),
     )
-    config = AphroditeConfig(model_config=model_config, device_config=DeviceConfig(device="cpu"))
+    config = SonarConfig(model_config=model_config, device_config=DeviceConfig(device="cpu"))
     renderer = HfRenderer(config, tokenizer=BertTokenizerFast(vocab={"[UNK]": 0}))
     engine = Mock(
         spec=EngineClient,
         model_config=model_config,
-        aphrodite_config=config,
+        sonar_config=config,
         renderer=renderer,
         input_processor=InputProcessor(config, renderer),
     )

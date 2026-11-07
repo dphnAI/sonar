@@ -23,11 +23,11 @@ import pybase64 as base64
 import pytest
 import torch
 
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.embed_utils import (
+from sonar.exceptions import SonarValidationError
+from sonar.renderers.embed_utils import (
     _MAX_EMBED_ERROR_REASON_CHARS,
     safe_load_prompt_embeds,
 )
@@ -35,7 +35,7 @@ from aphrodite.renderers.embed_utils import (
 
 @pytest.fixture
 def model_config():
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
     return ModelConfig(
         model="facebook/opt-125m",
@@ -76,7 +76,7 @@ def _saved_tensor(tensor: torch.Tensor) -> bytes:
 )
 def test_prompt_embeds_input_width(model, hidden_size, input_size, buffer_size):
     """OPT uses its token width; dual encoders retain their text input width."""
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
     config = ModelConfig(
         model=model,
@@ -93,7 +93,7 @@ def test_prompt_embeds_input_width(model, hidden_size, input_size, buffer_size):
     torch.testing.assert_close(loaded, tensor)
 
     wrong_size = hidden_size if hidden_size != input_size else input_size + 1
-    with pytest.raises(AphroditeValidationError, match="does not match"):
+    with pytest.raises(SonarValidationError, match="does not match"):
         safe_load_prompt_embeds(config, _encode(_saved_tensor(torch.randn(4, wrong_size))))
 
 
@@ -112,7 +112,7 @@ UNPARSABLE_PAYLOADS = [
 
 @pytest.mark.parametrize("payload", UNPARSABLE_PAYLOADS)
 def test_unreadable_prompt_embeds_payload_is_a_client_error(model_config, payload):
-    with pytest.raises(AphroditeValidationError) as excinfo:
+    with pytest.raises(SonarValidationError) as excinfo:
         safe_load_prompt_embeds(model_config, _encode(payload))
 
     assert excinfo.value.parameter == "prompt_embeds"
@@ -127,7 +127,7 @@ def test_the_error_body_stays_bounded(model_config, payload):
     the caller chose; without a bound a large one would be reflected whole.
     """
     padding = b"A" * 100_000
-    with pytest.raises(AphroditeValidationError) as excinfo:
+    with pytest.raises(SonarValidationError) as excinfo:
         safe_load_prompt_embeds(model_config, _encode(payload + padding))
 
     assert len(str(excinfo.value)) < 500
@@ -144,8 +144,8 @@ def test_a_long_reason_is_truncated_and_says_how_much_was_left_out(model_config)
     reason = "E" * (_MAX_EMBED_ERROR_REASON_CHARS + 37)
 
     with (
-        patch("aphrodite.renderers.embed_utils.torch.load", side_effect=RuntimeError(reason)),
-        pytest.raises(AphroditeValidationError) as excinfo,
+        patch("sonar.renderers.embed_utils.torch.load", side_effect=RuntimeError(reason)),
+        pytest.raises(SonarValidationError) as excinfo,
     ):
         safe_load_prompt_embeds(model_config, _encode(b"ignored"))
 
@@ -162,8 +162,8 @@ def test_a_short_reason_is_passed_through_whole(model_config):
     assert len(reason) <= _MAX_EMBED_ERROR_REASON_CHARS
 
     with (
-        patch("aphrodite.renderers.embed_utils.torch.load", side_effect=RuntimeError(reason)),
-        pytest.raises(AphroditeValidationError) as excinfo,
+        patch("sonar.renderers.embed_utils.torch.load", side_effect=RuntimeError(reason)),
+        pytest.raises(SonarValidationError) as excinfo,
     ):
         safe_load_prompt_embeds(model_config, _encode(b"ignored"))
 

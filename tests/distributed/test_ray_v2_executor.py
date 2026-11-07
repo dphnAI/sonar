@@ -18,24 +18,24 @@ import pytest
 import ray
 from torch.distributed import TCPStore
 
-from aphrodite import LLM
-from aphrodite.config import AphroditeConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.v1.executor import ray_executor_v2
-from aphrodite.v1.executor.ray_executor_v2 import RayExecutorV2
+from sonar import LLM
+from sonar.config import SonarConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.v1.executor import ray_executor_v2
+from sonar.v1.executor.ray_executor_v2 import RayExecutorV2
 
 pytestmark = pytest.mark.usefixtures("enable_ray_v2_backend")
 
 MODEL = "facebook/opt-125m"
 
 
-def create_aphrodite_config(
+def create_sonar_config(
     tensor_parallel_size: int = 1,
     pipeline_parallel_size: int = 1,
     max_model_len: int = 256,
     gpu_memory_utilization: float = 0.3,
     placement_group=None,
-) -> AphroditeConfig:
+) -> SonarConfig:
     engine_args = EngineArgs(
         model=MODEL,
         tensor_parallel_size=tensor_parallel_size,
@@ -45,12 +45,12 @@ def create_aphrodite_config(
         distributed_executor_backend="ray",
         enforce_eager=True,
     )
-    aphrodite_config = engine_args.create_engine_config()
+    sonar_config = engine_args.create_engine_config()
 
     if placement_group is not None:
-        aphrodite_config.parallel_config.placement_group = placement_group
+        sonar_config.parallel_config.placement_group = placement_group
 
-    return aphrodite_config
+    return sonar_config
 
 
 def ensure_ray_initialized():
@@ -72,7 +72,7 @@ def create_placement_group(request):
 @pytest.fixture
 def executor(request):
     """Create a RayExecutorV2 and shut it down after the test."""
-    executor = RayExecutorV2(aphrodite_config=request.param)
+    executor = RayExecutorV2(sonar_config=request.param)
     yield executor
     executor.shutdown()
 
@@ -89,10 +89,9 @@ def assert_executor(executor, tp_size, pp_size):
 
     if pp_size > 1:
         expected_concurrent_batches = pp_size + int(
-            executor.aphrodite_config.scheduler_config.async_scheduling
-            and executor.aphrodite_config.use_v2_model_runner
+            executor.sonar_config.scheduler_config.async_scheduling and executor.sonar_config.use_v2_model_runner
         )
-        assert executor.aphrodite_config.max_concurrent_batches == expected_concurrent_batches
+        assert executor.sonar_config.max_concurrent_batches == expected_concurrent_batches
 
     executor.check_health()
     assert not executor.is_failed
@@ -159,11 +158,11 @@ def test_colocated_dist_init_stores_hold_distinct_ports(monkeypatch):
 @pytest.mark.parametrize("tp_size, pp_size", [(1, 1), (2, 1), (4, 1), (2, 2)])
 def test_ray_v2_executor(tp_size, pp_size):
     """Validate RayExecutorV2 with various TP/PP configs."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=tp_size,
         pipeline_parallel_size=pp_size,
     )
-    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
+    executor = RayExecutorV2(sonar_config=sonar_config)
     try:
         assert_executor(executor, tp_size, pp_size)
     finally:
@@ -177,12 +176,12 @@ def test_ray_v2_executor(tp_size, pp_size):
 )
 def test_ray_v2_executor_pg(tp_size, pp_size, create_placement_group):
     """Validate RayExecutorV2 with various TP/PP configs using external PG."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=tp_size,
         pipeline_parallel_size=pp_size,
         placement_group=create_placement_group,
     )
-    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
+    executor = RayExecutorV2(sonar_config=sonar_config)
     try:
         assert_executor(executor, tp_size, pp_size)
     finally:
@@ -191,7 +190,7 @@ def test_ray_v2_executor_pg(tp_size, pp_size, create_placement_group):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_aphrodite_config(tensor_parallel_size=2)],
+    [create_sonar_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_failure_callback(executor):
@@ -212,7 +211,7 @@ def test_ray_v2_executor_failure_callback(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_aphrodite_config(tensor_parallel_size=2)],
+    [create_sonar_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_collective_rpc(executor):
@@ -224,7 +223,7 @@ def test_ray_v2_executor_collective_rpc(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_aphrodite_config(tensor_parallel_size=2)],
+    [create_sonar_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_driver_node_rank_0(executor):
@@ -240,7 +239,7 @@ def test_ray_v2_executor_driver_node_rank_0(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_aphrodite_config(tensor_parallel_size=2)],
+    [create_sonar_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_worker_death(executor):
@@ -265,7 +264,7 @@ def test_ray_v2_executor_worker_death(executor):
 
 def test_ray_v2_executor_shutdown():
     """Validate graceful shutdown: ray.kill() terminates all worker actors."""
-    executor = RayExecutorV2(aphrodite_config=create_aphrodite_config(tensor_parallel_size=2))
+    executor = RayExecutorV2(sonar_config=create_sonar_config(tensor_parallel_size=2))
     assert executor.rpc_broadcast_mq is not None
     assert len(executor.response_mqs) == executor.world_size
 
@@ -282,7 +281,7 @@ def test_ray_v2_executor_shutdown():
 
 @pytest.mark.parametrize(
     "executor",
-    [create_aphrodite_config(tensor_parallel_size=2)],
+    [create_sonar_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_run_refs_stored_for_monitoring(executor):
@@ -329,13 +328,13 @@ def test_ray_v2_single_node_generation(tp_size, pp_size):
     indirect=["create_placement_group"],
 )
 def test_ray_v2_bundle_indices_env(bundle_indices, expected_bundle_ids, create_placement_group, monkeypatch):
-    """Validate explicit APHRODITE_RAY_BUNDLE_INDICES bundle placement."""
-    monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
-    aphrodite_config = create_aphrodite_config(
+    """Validate explicit SONAR_RAY_BUNDLE_INDICES bundle placement."""
+    monkeypatch.setenv("SONAR_RAY_BUNDLE_INDICES", bundle_indices)
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         placement_group=create_placement_group,
     )
-    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
+    executor = RayExecutorV2(sonar_config=sonar_config)
     try:
         actual = [h.bundle_id_idx for h in sorted(executor.ray_worker_handles, key=lambda h: h.rank)]
         assert actual == expected_bundle_ids
@@ -354,10 +353,10 @@ def test_ray_v2_bundle_indices_env(bundle_indices, expected_bundle_ids, create_p
 )
 def test_ray_v2_invalid_bundle_indices(bundle_indices, expected_error, create_placement_group, monkeypatch):
     """Validate invalid bundle indices are rejected."""
-    monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
-    aphrodite_config = create_aphrodite_config(tensor_parallel_size=2, placement_group=create_placement_group)
+    monkeypatch.setenv("SONAR_RAY_BUNDLE_INDICES", bundle_indices)
+    sonar_config = create_sonar_config(tensor_parallel_size=2, placement_group=create_placement_group)
     with pytest.raises(AssertionError, match=expected_error):
-        RayExecutorV2(aphrodite_config=aphrodite_config)
+        RayExecutorV2(sonar_config=sonar_config)
 
 
 @pytest.mark.parametrize("tp_size, pp_size", [(2, 1), (2, 2)])

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor, WorkerProc
-from aphrodite.v1.outputs import DraftTokenIds
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor, WorkerProc
+from sonar.v1.outputs import DraftTokenIds
 
 
 class _ExitWorkerLoop(RuntimeError):
@@ -80,7 +80,7 @@ def test_model_rpc_uses_execute_model_timeout(monkeypatch, method, result, stall
     """A wedged model RPC must not block EngineCore forever. For
     execute_dummy_batch this is an idle DP rank stuck in a collective with a
     hung peer."""
-    monkeypatch.setenv("APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS", "7")
+    monkeypatch.setenv("SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS", "7")
 
     def dequeue(*, timeout=None):
         assert timeout is not None and 0 < timeout <= 7
@@ -113,7 +113,7 @@ def test_model_rpc_uses_execute_model_timeout(monkeypatch, method, result, stall
     ],
 )
 def test_can_start_workers_concurrently(monkeypatch, inherited_fds, local_world_size, is_cpu, numa_bind, expected):
-    import aphrodite.v1.executor.multiproc_executor as mp_executor
+    import sonar.v1.executor.multiproc_executor as mp_executor
 
     monkeypatch.setattr(mp_executor, "current_platform", SimpleNamespace(is_cpu=lambda: is_cpu))
     executor: Any = SimpleNamespace(
@@ -156,7 +156,7 @@ def test_execute_worker_rpc_feeds_watchdog():
     watchdog.feed.side_effect = lambda: calls.append("feed")
 
     with patch(
-        "aphrodite.v1.executor.multiproc_executor.get_watch_dog",
+        "sonar.v1.executor.multiproc_executor.get_watch_dog",
         return_value=watchdog,
     ):
         worker_proc._execute_worker_rpc(("ok", (), {}, None))

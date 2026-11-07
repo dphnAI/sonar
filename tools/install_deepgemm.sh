@@ -112,7 +112,7 @@ fi
 # Default behaviour: install built wheel
 if command -v uv >/dev/null 2>&1; then
     echo "Installing DeepGEMM wheel using uv..."
-    if [ -n "$APHRODITE_DOCKER_BUILD_CONTEXT" ]; then
+    if [ -n "$SONAR_DOCKER_BUILD_CONTEXT" ]; then
         uv pip install --system dist/*.whl
     else
         uv pip install dist/*.whl

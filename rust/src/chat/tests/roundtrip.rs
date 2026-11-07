@@ -20,21 +20,21 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail, ensure};
-use aphrodite_chat::{
-    AssistantContentBlock, AssistantMessage, AssistantMessageExt as _, AssistantToolCall,
-    ChatEvent, ChatMessage, ChatRequest, ChatRole, ChatTool, ChatToolChoice, FinishReason,
-    GenerationPromptMode, LoadModelBackendsOptions, NewChatOutputProcessorOptions, ParserSelection,
-    RendererSelection, ToolStrictLevel, load_model_backends,
-};
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
-use aphrodite_parser::output_grammar::BuiltOutputGrammar;
-use aphrodite_text::{DecodedTextEvent, Finished, Prompt};
-use aphrodite_tokenizer::Tokenizer;
 use futures::{Stream, StreamExt as _, stream};
 use serde::ser::Error as _;
 use serde::{Serialize, Serializer};
 use serde_json_fmt::JsonFormat as JsonFmt;
 use serial_test::file_serial;
+use sonar_chat::{
+    AssistantContentBlock, AssistantMessage, AssistantMessageExt as _, AssistantToolCall,
+    ChatEvent, ChatMessage, ChatRequest, ChatRole, ChatTool, ChatToolChoice, FinishReason,
+    GenerationPromptMode, LoadModelBackendsOptions, NewChatOutputProcessorOptions, ParserSelection,
+    RendererSelection, ToolStrictLevel, load_model_backends,
+};
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
+use sonar_parser::output_grammar::BuiltOutputGrammar;
+use sonar_text::{DecodedTextEvent, Finished, Prompt};
+use sonar_tokenizer::Tokenizer;
 
 const TEXT_COMPLETION_CHUNK_CHARS: usize = 7;
 const TOKEN_COMPLETION_CHUNK_TOKENS: usize = 1;
@@ -643,7 +643,7 @@ roundtrip_tests! {
 /// Run the fixed reasoning+content fixture for one model/parser case.
 async fn run_roundtrip_reasoning_and_content(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
 ) -> Result<()> {
     for thinking in case.thinking_behavior.fixtures() {
         run_roundtrip_reasoning_and_content_inner(case, backends, thinking).await?;
@@ -653,7 +653,7 @@ async fn run_roundtrip_reasoning_and_content(
 
 async fn run_roundtrip_reasoning_and_content_inner(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
     thinking: Option<bool>,
 ) -> Result<()> {
     let request = roundtrip_request(
@@ -703,7 +703,7 @@ async fn run_roundtrip_reasoning_and_content_inner(
 /// once per tool-choice variant.
 async fn run_roundtrip_tool_call_mix(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
 ) -> Result<()> {
     let mut results = Vec::new();
     for &variant in ToolCallMixVariant::WITHOUT_SCHEMA.iter().chain(case.with_schema) {
@@ -717,7 +717,7 @@ async fn run_roundtrip_tool_call_mix(
 
 async fn run_roundtrip_tool_call_mix_inner(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
     variant: ToolCallMixVariant,
 ) -> Result<RoundtripResult> {
     let mut request = roundtrip_request(
@@ -852,9 +852,7 @@ fn sort_json_value(value: &mut serde_json::Value) {
 }
 
 /// Load the real model chat/text backend for one roundtrip case.
-async fn load_roundtrip_backends(
-    case: &RoundtripCase,
-) -> Result<aphrodite_chat::LoadedModelBackends> {
+async fn load_roundtrip_backends(case: &RoundtripCase) -> Result<sonar_chat::LoadedModelBackends> {
     load_model_backends(
         case.model_id,
         LoadModelBackendsOptions {
@@ -885,7 +883,7 @@ struct RoundtripResult {
 /// renderer/output-processor boundary.
 async fn run_roundtrip(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
     request: &ChatRequest,
     assistant: AssistantMessage,
 ) -> Result<RoundtripResult> {
@@ -915,7 +913,7 @@ struct RenderedTurn {
 /// Render `history` as a production prompt and `history + assistant` as closed
 /// history, then return the production prompt and the assistant completion.
 fn render_closed_completion(
-    renderer: &dyn aphrodite_chat::ChatRenderer,
+    renderer: &dyn sonar_chat::ChatRenderer,
     base_request: &ChatRequest,
     assistant: &AssistantMessage,
 ) -> Result<RenderedTurn> {
@@ -1017,7 +1015,7 @@ struct ParsedCompletion {
 /// the initialized processor builds for the request.
 async fn parse_completion(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
     base_request: &ChatRequest,
     rendered: &RenderedTurn,
 ) -> Result<ParsedCompletion> {
@@ -1074,7 +1072,7 @@ fn decoded_completion_stream(
     prompt_token_ids: Vec<u32>,
     completion: &Prompt,
     assistant_stop_suffix: &str,
-) -> Result<Pin<Box<dyn Stream<Item = aphrodite_chat::Result<DecodedTextEvent>> + Send>>> {
+) -> Result<Pin<Box<dyn Stream<Item = sonar_chat::Result<DecodedTextEvent>> + Send>>> {
     let mut events = vec![DecodedTextEvent::Start {
         prompt_token_ids: Arc::from(prompt_token_ids.clone().into_boxed_slice()),
         prompt_logprobs: None,
@@ -1087,7 +1085,7 @@ fn decoded_completion_stream(
             // chunks to exercise marker splits.
             let token_ids =
                 tokenizer.encode(body, false).context("failed to encode text completion")?;
-            let mut rest = aphrodite_text::DecodedText::default();
+            let mut rest = sonar_text::DecodedText::default();
             for chunk in incremental_decode_chunks(
                 tokenizer,
                 &prompt_token_ids,
@@ -1120,8 +1118,8 @@ fn decoded_completion_stream(
     if chunks.is_empty() {
         events.push({
             DecodedTextEvent::TextDelta {
-                decoded: aphrodite_text::DecodedText::default(),
-                sampled: aphrodite_text::SampledDelta::default(),
+                decoded: sonar_text::DecodedText::default(),
+                sampled: sonar_text::SampledDelta::default(),
                 finished: Some(Box::new(Finished {
                     usage: Default::default(),
                     finish_reason: FinishReason::stop_eos(),
@@ -1149,7 +1147,7 @@ fn decoded_completion_stream(
             });
             events.push(DecodedTextEvent::TextDelta {
                 decoded: chunk.delta,
-                sampled: aphrodite_text::SampledDelta {
+                sampled: sonar_text::SampledDelta {
                     token_ids: chunk.token_ids,
                     logprobs: None,
                 },
@@ -1206,7 +1204,7 @@ fn completion_body<'a>(
 /// One decoded completion chunk fed into the output processor.
 struct DecodedCompletionChunk {
     /// Attributed for token-id completions, as the production decoder emits it.
-    delta: aphrodite_text::DecodedText,
+    delta: sonar_text::DecodedText,
     token_ids: Vec<u32>,
 }
 
@@ -1248,7 +1246,7 @@ fn incremental_decode_chunks(
     let mut decoder = tokenizer.create_decode_stream(prompt_token_ids, false, 0);
     let mut chunks = Vec::new();
     for chunk_token_ids in split_by_count(token_ids, chunk_size) {
-        let mut delta = aphrodite_text::DecodedText::default();
+        let mut delta = sonar_text::DecodedText::default();
         for token_id in chunk_token_ids.iter().copied() {
             decoder.push_token(token_id)?;
             while let Some(chunk) = decoder.next_chunk() {
@@ -1332,7 +1330,7 @@ fn grammar_replay_dir() -> PathBuf {
 /// parser builds none.
 fn check_grammar_replay_file(
     case: &RoundtripCase,
-    backends: &aphrodite_chat::LoadedModelBackends,
+    backends: &sonar_chat::LoadedModelBackends,
     results: Vec<(ToolCallMixVariant, RoundtripResult)>,
 ) -> Result<()> {
     let model_name = case.model_id.rsplit_once('/').map_or(case.model_id, |(_, name)| name);
@@ -1422,7 +1420,7 @@ fn check_grammar_replay_file(
             variants.join(", "),
             coverage.as_str().context("coverage name")?,
         ));
-        outline.push_str(&aphrodite_parser::output_grammar::test_utils::outline(
+        outline.push_str(&sonar_parser::output_grammar::test_utils::outline(
             &case.grammar.format,
         ));
     }
@@ -1450,9 +1448,8 @@ fn roundtrip_request(
     thinking: Option<bool>,
     thinking_behavior: ThinkingBehavior,
 ) -> ChatRequest {
-    let tool_context =
-        aphrodite_chat::ResolvedToolContext::new(&messages, tools, tool_choice, true)
-            .expect("tool context should resolve");
+    let tool_context = sonar_chat::ResolvedToolContext::new(&messages, tools, tool_choice, true)
+        .expect("tool context should resolve");
     let mut request = ChatRequest {
         request_id: request_id.into(),
         messages,

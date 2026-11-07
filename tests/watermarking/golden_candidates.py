@@ -12,14 +12,14 @@ from typing import get_args
 
 import torch
 
-from aphrodite.config.watermarking import (
+from sonar.config.watermarking import (
     WatermarkConfig,
     WatermarkContextScope,
     WatermarkingAlgorithm,
     WatermarkPRFName,
     derive_watermark_key,
 )
-from aphrodite.v1.watermarking import (
+from sonar.v1.watermarking import (
     DualKeyGumbelWatermarkDetector,
     GumbelWatermarkDetector,
     WatermarkDetection,
@@ -27,7 +27,7 @@ from aphrodite.v1.watermarking import (
     create_prf,
     create_watermarker,
 )
-from aphrodite.v1.worker.gpu.sample.watermark import repeated_context_mask
+from sonar.v1.worker.gpu.sample.watermark import repeated_context_mask
 
 GOLDEN_SCHEMA_VERSION = 3
 
@@ -212,7 +212,7 @@ class WatermarkingCandidate:
         }
 
     def resolved(self) -> dict[str, object]:
-        """Return the Aphrodite-side state this candidate resolves to.
+        """Return the Sonar-side state this candidate resolves to.
 
         An allowlist rather than the whole dataclass, so a new production field
         is a deliberate golden change: WATERMARK_CONFIG_FIELDS names the fields

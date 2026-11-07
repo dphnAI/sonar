@@ -4,14 +4,14 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_qk_norm_rope import fused_qk_rmsnorm_rope_gate
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
-from aphrodite.model_executor.layers.rotary_embedding import (
+from sonar.model_executor.layers.fused_qk_norm_rope import fused_qk_rmsnorm_rope_gate
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm
+from sonar.model_executor.layers.rotary_embedding import (
     MRotaryEmbedding,
     RotaryEmbedding,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 # Qwen3.6 TP=1 attention geometry.
 HEAD_DIM = 256
@@ -36,7 +36,7 @@ ROPE_CASES = [
 @pytest.mark.parametrize("num_tokens", [1, 4, 37])
 @torch.inference_mode()
 def test_fused_qk_norm_rope_gate_matches_reference(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     num_q_heads: int,
     num_kv_heads: int,
@@ -119,7 +119,7 @@ def test_fused_qk_norm_rope_gate_matches_reference(
     reason="fused_qk_rmsnorm_rope_gate Triton kernel requires CUDA/ROCm/XPU",
 )
 @torch.inference_mode()
-def test_fused_qk_norm_rope_gate_int64_row_offset(default_aphrodite_config) -> None:
+def test_fused_qk_norm_rope_gate_int64_row_offset(default_sonar_config) -> None:
     # q_gate and k are views into the packed qkv output, so a token's input
     # offset is token * row_stride. Rows from 2^31 // row_stride + 1 on
     # (149,797 here, 209,716 for Qwen3.5-9B) need int64 offsets.

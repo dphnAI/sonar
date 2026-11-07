@@ -13,7 +13,7 @@ import pybase64 as base64
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import RandomMultiModalDataset, SampleRequest
+from sonar.benchmarks.datasets import RandomMultiModalDataset, SampleRequest
 
 
 @pytest.fixture(scope="session")

@@ -7,10 +7,10 @@ from concurrent.futures import Future
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import KVConnectorOutput
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.fault_tolerance.engine_core_sentinel import EngineCoreSentinel
-from aphrodite.v1.outputs import ModelRunnerOutput
+from sonar.distributed.kv_transfer.kv_connector.utils import KVConnectorOutput
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.fault_tolerance.engine_core_sentinel import EngineCoreSentinel
+from sonar.v1.outputs import ModelRunnerOutput
 
 
 def _model_output(kv_connector_output: KVConnectorOutput | None) -> ModelRunnerOutput:

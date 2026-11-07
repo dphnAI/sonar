@@ -10,17 +10,17 @@ equals N (not N // 2 like gated activations).
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     apply_moe_activation,
     apply_moe_activation_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+from sonar.platforms import current_platform
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 DEVICE = current_platform.device_type
@@ -190,7 +190,7 @@ def test_triton_experts_no_mul_activation(
 @torch.inference_mode()
 def test_workspace_shapes_no_mul_vs_gated():
     """Test that workspace shapes differ correctly between gated and non-gated."""
-    from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+    from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 
     M, N, K, topk = 64, 256, 128, 2
 
@@ -223,7 +223,7 @@ def test_workspace_shapes_no_mul_vs_gated():
 @torch.inference_mode()
 def test_adjust_n_for_activation():
     """Test the adjust_N_for_activation method."""
-    from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
+    from sonar.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 
     experts = TritonExperts(
         moe_config=make_dummy_moe_config(),

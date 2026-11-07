@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     LookupResult,
     OffloadKey,
     OffloadPolicy,
@@ -23,19 +23,19 @@ from aphrodite.v1.kv_offload.base import (
     ScheduleEndContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.tiering.backpressure import (
+from sonar.v1.kv_offload.tiering.backpressure import (
     DropAccountingPolicy,
     DropStorePolicy,
     EMABackpressureDetector,
     ThrottledDropPolicy,
 )
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     SecondaryTierManager,
     TieringOffloadingMetrics,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.manager import (
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
 )

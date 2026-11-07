@@ -3,12 +3,12 @@
 import pytest
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     apply_repetition_penalties_cuda,
     apply_repetition_penalties_torch,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import opcheck
 
 NUM_SEQS = [1, 2, 3, 4, 8, 13, 17, 32, 37, 256, 1023, 1024, 1025]

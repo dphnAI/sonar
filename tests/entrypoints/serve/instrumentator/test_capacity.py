@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aphrodite.entrypoints.serve.instrumentator.capacity import router
-from aphrodite.entrypoints.serve.middleware.authenticate import AuthenticationMiddleware
+from sonar.entrypoints.serve.instrumentator.capacity import router
+from sonar.entrypoints.serve.middleware.authenticate import AuthenticationMiddleware
 
 
 def test_capacity_auth_replica_scope_and_unavailable():

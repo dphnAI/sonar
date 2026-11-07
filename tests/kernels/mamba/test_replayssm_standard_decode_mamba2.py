@@ -31,12 +31,12 @@ is always fp32.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import selective_state_update
-from aphrodite.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import selective_state_update
+from sonar.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
     selective_state_update_replayssm_output_only,
 )
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 from tests.kernels.mamba.utils import (
     allocate_update_caches,
     selective_state_update_ref,

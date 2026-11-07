@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import OffloadingConnectorMetadata, TransferJob
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import get_dtype_size
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.common import OffloadingConnectorMetadata, TransferJob
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import get_dtype_size
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -21,7 +21,7 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     CanonicalKVCacheRef,
     CanonicalKVCaches,
     GPULoadStoreSpec,
@@ -31,7 +31,7 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingWorker,
     TransferResult,
 )
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingCacheConfig,
     OffloadingConfig,
     OffloadingModelConfig,
@@ -70,7 +70,7 @@ def _allocate_kv_caches(
     device: torch.device,
 ):
     """Allocate kv_caches exactly as the model runner does at startup."""
-    from aphrodite.v1.worker.utils import allocate_kv_cache
+    from sonar.v1.worker.utils import allocate_kv_cache
 
     kernel_block_sizes = [BLOCK_SIZE] * len(kv_cache_config.kv_cache_groups)
     return allocate_kv_cache(kv_cache_config, device, KVCacheLayout.LBNHC, kernel_block_sizes)
@@ -83,7 +83,7 @@ def _make_worker(
     canonical_layout: bool = False,
 ):
     """Create an OffloadingConnectorWorker with mocked dependencies."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
         OffloadingConnectorWorker,
     )
 
@@ -96,7 +96,7 @@ def _make_worker(
 
     worker = OffloadingConnectorWorker(
         spec=spec,
-        aphrodite_config=_single_rank_aphrodite_config(NUM_KV_HEADS),
+        sonar_config=_single_rank_sonar_config(NUM_KV_HEADS),
         kv_cache_config=kv_cache_config,
     )
     worker.worker = MagicMock()
@@ -353,7 +353,7 @@ def test_failed_sync_load_raises():
 
 
 def test_offloading_connector_worker_accepts_plugin_spec_default_layout():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
         OffloadingConnectorWorker,
     )
 
@@ -361,7 +361,7 @@ def test_offloading_connector_worker_accepts_plugin_spec_default_layout():
 
     OffloadingConnectorWorker(
         spec=spec,
-        aphrodite_config=_single_rank_aphrodite_config(NUM_KV_HEADS),
+        sonar_config=_single_rank_sonar_config(NUM_KV_HEADS),
         kv_cache_config=KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[]),
     )
 
@@ -385,11 +385,11 @@ def test_register_kv_caches(backend):
     Verifies that the canonicalized CanonicalKVCaches has the correct
     block tensors, tensor_idx references, and page sizes across all groups.
     """
-    from aphrodite.v1.attention.backend import AttentionBackend
-    from aphrodite.v1.attention.backends.mla.indexer import (
+    from sonar.v1.attention.backend import AttentionBackend
+    from sonar.v1.attention.backends.mla.indexer import (
         DeepseekV32IndexerBackend,
     )
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.v1.worker.utils import AttentionGroup
 
     MLA_HEAD_SIZE = NUM_KV_HEADS * HEAD_SIZE * 2
 
@@ -637,7 +637,7 @@ def test_register_kv_caches_uniform_type(backend):
     Verifies that each layer gets the correct tensor_idx and
     page_size_bytes in its block data ref.
     """
-    from aphrodite.v1.worker.utils import AttentionGroup
+    from sonar.v1.worker.utils import AttentionGroup
 
     backend_cls = AttentionBackendEnum[backend].get_class()
 
@@ -749,16 +749,16 @@ def test_register_kv_caches_uniform_type(backend):
     assert not layer_b_mapping.parallelism_agnostic
 
 
-def _single_rank_aphrodite_config(total_kv_heads: int):
+def _single_rank_sonar_config(total_kv_heads: int):
     """A one-rank (TP=1) parallel config, as canonical mappings are derived
     from it."""
-    aphrodite_config = MagicMock()
-    parallel_config = aphrodite_config.parallel_config
+    sonar_config = MagicMock()
+    parallel_config = sonar_config.parallel_config
     parallel_config.tensor_parallel_size = 1
     parallel_config.decode_context_parallel_size = 1
     parallel_config.prefill_context_parallel_size = 1
     parallel_config.cp_kv_cache_interleave_size = 1
     parallel_config.world_size = 1
     parallel_config.rank = 0
-    aphrodite_config.model_config.get_total_num_kv_heads.return_value = total_kv_heads
-    return aphrodite_config
+    sonar_config.model_config.get_total_num_kv_heads.return_value = total_kv_heads
+    return sonar_config

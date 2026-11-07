@@ -15,11 +15,11 @@ import torch
 from openai import BadRequestError
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.sampling_params import SamplingParams
+from sonar.sampling_params import SamplingParams
 from tests.utils import RemoteOpenAIServer
 
 # any model with a chat template should work here
@@ -29,7 +29,7 @@ MODEL_NAME = "HuggingFaceH4/zephyr-7b-beta"
 @pytest.fixture(scope="module")
 def zephyr_lora_files():
     """Download zephyr LoRA files once per test session."""
-    from aphrodite.transformers_utils.repo_utils import hf_api
+    from sonar.transformers_utils.repo_utils import hf_api
 
     return hf_api().snapshot_download(repo_id="typeof/zephyr-7b-beta-lora")
 
@@ -1075,13 +1075,13 @@ def test_chat_completion_request_n_parameter_exceeds_default_limit(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Test that n values exceeding the default limit are rejected."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.delenv("APHRODITE_MAX_N_SEQUENCES", raising=False)
+    monkeypatch.delenv("SONAR_MAX_N_SEQUENCES", raising=False)
     if hasattr(envs.__getattr__, "cache_clear"):
         envs.__getattr__.cache_clear()
 
-    max_n = envs.APHRODITE_MAX_N_SEQUENCES
+    max_n = envs.SONAR_MAX_N_SEQUENCES
     request = ChatCompletionRequest(
         model="test-model",
         messages=[{"role": "user", "content": "Test"}],
@@ -1100,13 +1100,13 @@ def test_chat_completion_request_n_parameter_at_limit(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Test that n at exactly the limit is accepted."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.delenv("APHRODITE_MAX_N_SEQUENCES", raising=False)
+    monkeypatch.delenv("SONAR_MAX_N_SEQUENCES", raising=False)
     if hasattr(envs.__getattr__, "cache_clear"):
         envs.__getattr__.cache_clear()
 
-    max_n = envs.APHRODITE_MAX_N_SEQUENCES
+    max_n = envs.SONAR_MAX_N_SEQUENCES
     request = ChatCompletionRequest(
         model="test-model",
         messages=[{"role": "user", "content": "Test"}],
@@ -1124,10 +1124,10 @@ def test_chat_completion_request_n_parameter_at_limit(
 def test_chat_completion_request_n_parameter_custom_limit(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Test that APHRODITE_MAX_N_SEQUENCES env var overrides the default limit."""
-    import aphrodite.envs as envs
+    """Test that SONAR_MAX_N_SEQUENCES env var overrides the default limit."""
+    import sonar.envs as envs
 
-    monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", "128")
+    monkeypatch.setenv("SONAR_MAX_N_SEQUENCES", "128")
     if hasattr(envs.__getattr__, "cache_clear"):
         envs.__getattr__.cache_clear()
 
@@ -1162,9 +1162,9 @@ def test_chat_completion_request_n_parameter_massive_value(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Test that astronomically large n values are rejected (CVE fix)."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    monkeypatch.delenv("APHRODITE_MAX_N_SEQUENCES", raising=False)
+    monkeypatch.delenv("SONAR_MAX_N_SEQUENCES", raising=False)
     if hasattr(envs.__getattr__, "cache_clear"):
         envs.__getattr__.cache_clear()
 

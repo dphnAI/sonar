@@ -14,7 +14,7 @@ import ray
 from packaging.version import Version
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 assert Version(ray.__version__) >= Version("2.22.0"), "Ray version must be at least 2.22.0"
 
@@ -56,7 +56,7 @@ ds = ray.data.read_text("s3://anonymous@air-example-data/prompts.txt")
 
 
 # For tensor_parallel_size > 1, we need to create placement groups for
-# Aphrodite to use. Every actor has to have its own placement group.
+# Sonar to use. Every actor has to have its own placement group.
 def scheduling_strategy_fn():
     # One bundle per tensor parallel worker
     pg = ray.util.placement_group(

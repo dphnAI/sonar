@@ -61,21 +61,21 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** latest stable
+  - **Sonar version:** latest stable
   - **Hardware:** single GPU (1B model)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launching the Server
 
   ```bash
-  aphrodite serve tencent/HunyuanOCR \
+  sonar serve tencent/HunyuanOCR \
       --no-enable-prefix-caching \
       --mm-processor-cache-gb 0
   ```

@@ -10,21 +10,21 @@ import pytest
 import torch
 from torch.nn.attention.flex_attention import create_block_mask, flex_attention
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import (
+from sonar.config import set_current_sonar_config
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import (
     is_strictly_contiguous,
     nvfp4_kv_cache_full_dim,
     set_random_seed,
 )
-from aphrodite.v1.attention.backends.utils import PerLayerParameters
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout, KVQuantMode
+from sonar.v1.attention.backends.utils import PerLayerParameters
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout, KVQuantMode
 from tests.kernels.attention.test_trtllm_kvfp8_dequant import make_random_kv_cache
 from tests.v1.attention.test_attention_backends import create_and_prepopulate_kv_cache
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 if not current_platform.is_device_capability_family(100):
@@ -33,7 +33,7 @@ if not current_platform.is_device_capability_family(100):
         allow_module_level=True,
     )
 
-from aphrodite.v1.attention.backends.flashinfer import (  # noqa: E402
+from sonar.v1.attention.backends.flashinfer import (  # noqa: E402
     FlashInferDecodeKernel,
     FlashInferImpl,
     FlashInferMetadataBuilder,
@@ -78,8 +78,8 @@ BATCH_SPECS = {
 }
 
 
-def _mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
-    head_size = aphrodite_config.model_config.get_head_size()
+def _mock_get_per_layer_parameters(sonar_config, layer_names, impl_cls):
+    head_size = sonar_config.model_config.get_head_size()
     return {
         name: PerLayerParameters(
             window_left=-1,
@@ -106,13 +106,13 @@ def test_prefill_dequant_scratch_ignores_unused_capacity(
 ):
     """Bound scratch by attended prefill KV, including cached prefixes."""
     device = torch.device("cuda")
-    config = create_aphrodite_config(model_name=MODEL, max_model_len=32768)
+    config = create_sonar_config(model_name=MODEL, max_model_len=32768)
     config.cache_config.cache_dtype = "fp8"
     config.cache_config.kv_cache_layout = "LBHNC"
     config.attention_config.use_trtllm_attention = True
     config.attention_config.disable_flashinfer_q_quantization = not quantize_query
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+        "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
         _mock_get_per_layer_parameters,
     )
     spec = FullAttentionSpec(
@@ -131,7 +131,7 @@ def test_prefill_dequant_scratch_ignores_unused_capacity(
     if not has_host_lengths:
         common.seq_lens_cpu_upper_bound = None
     live_pages = ((65 if has_host_lengths else 1024) + block_size - 1) // block_size
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         builder = FlashInferMetadataBuilder(spec, ["layer.0"], config, device)
         for capacity in (64, 256):
             # Unused columns can contain nonzero page IDs.
@@ -260,19 +260,19 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
     set_random_seed(42)
     device = torch.device(f"{DEVICE_TYPE}:0")
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name=model_name,
         max_model_len=max(batch_spec.seq_lens),
         block_size=BLOCK_SIZE,
         num_gpu_blocks=NUM_GPU_BLOCKS,
     )
-    aphrodite_config.attention_config.use_trtllm_attention = True
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.attention_config.use_trtllm_attention = True
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
 
-    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config)
-    head_size = aphrodite_config.model_config.get_head_size()
-    dtype = aphrodite_config.model_config.dtype
+    num_q_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+    num_kv_heads = sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config)
+    head_size = sonar_config.model_config.get_head_size()
+    dtype = sonar_config.model_config.dtype
     scale = 1.0 / (head_size**0.5)
 
     # 1. Generate data and compute SDPA reference
@@ -320,9 +320,9 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
         k_contexts.append(k_full[:ctx_len])
         v_contexts.append(v_full[:ctx_len])
 
-    query_aphrodite = torch.cat(all_q, dim=0)
-    key_aphrodite = torch.cat(all_k, dim=0)
-    value_aphrodite = torch.cat(all_v, dim=0)
+    query_sonar = torch.cat(all_q, dim=0)
+    key_sonar = torch.cat(all_k, dim=0)
+    value_sonar = torch.cat(all_v, dim=0)
     sdpa_output = torch.cat(all_sdpa_out, dim=0)
 
     common_attn_metadata = create_common_attn_metadata(batch_spec, BLOCK_SIZE, device)
@@ -361,7 +361,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
         )
 
     # 3. Run through FlashInfer with TRTLLM enabled
-    aphrodite_config.cache_config.kv_cache_layout = "LBHNC"
+    sonar_config.cache_config.kv_cache_layout = "LBHNC"
 
     is_nvfp4 = kv_cache_dtype == "nvfp4"
     kv_quant_mode = KVQuantMode.NVFP4 if is_nvfp4 else KVQuantMode.NONE
@@ -376,17 +376,17 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
     layer_names = ["test_layer_0"]
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         unittest.mock.patch(
-            "aphrodite.utils.flashinfer.supports_trtllm_attention",
+            "sonar.utils.flashinfer.supports_trtllm_attention",
             return_value=True,
         ),
         unittest.mock.patch(
-            "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+            "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
             _mock_get_per_layer_parameters,
         ),
     ):
-        builder = FlashInferMetadataBuilder(kv_cache_spec, layer_names, aphrodite_config, device)
+        builder = FlashInferMetadataBuilder(kv_cache_spec, layer_names, sonar_config, device)
         attn_metadata = builder.build(
             common_prefix_len=0,
             common_attn_metadata=common_attn_metadata,
@@ -425,12 +425,12 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
             mock_layer._v_scale = kv_scale_t
             mock_layer._k_scale_float = kv_scale_val
             mock_layer._v_scale_float = kv_scale_val
-        output = torch.empty_like(query_aphrodite)
+        output = torch.empty_like(query_sonar)
 
         impl.do_kv_cache_update(
             mock_layer,
-            key_aphrodite,
-            value_aphrodite,
+            key_sonar,
+            value_sonar,
             kv_cache,
             attn_metadata.slot_mapping,
         )
@@ -440,17 +440,17 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
         # quantize manually.
         if is_nvfp4:
             finfo = torch.finfo(torch.float8_e4m3fn)
-            q_amax = query_aphrodite.abs().amax().clamp(min=1e-12)
+            q_amax = query_sonar.abs().amax().clamp(min=1e-12)
             q_s = (finfo.max / q_amax * 0.1).item()
-            query_aphrodite = (query_aphrodite * q_s).clamp(finfo.min, finfo.max).to(torch.float8_e4m3fn)
+            query_sonar = (query_sonar * q_s).clamp(finfo.min, finfo.max).to(torch.float8_e4m3fn)
             mock_layer._q_scale = torch.tensor(1.0 / q_s, dtype=torch.float32, device=device)
             mock_layer._q_scale_float = 1.0 / q_s
 
         output = impl.forward(
             mock_layer,
-            query_aphrodite,
-            key_aphrodite,
-            value_aphrodite,
+            query_sonar,
+            key_sonar,
+            value_sonar,
             kv_cache,
             attn_metadata,
             output=output,
@@ -498,24 +498,24 @@ def test_trtllm_gen_draft_decode_metadata_tracks_in_place_seq_lens(
     """Fused draft steps reuse the step-1 build after advancing seq_lens in
     place, so its decode metadata must match the split path's step-2 rebuild."""
     monkeypatch.setattr(
-        "aphrodite.utils.flashinfer.supports_trtllm_attention",
+        "sonar.utils.flashinfer.supports_trtllm_attention",
         unittest.mock.Mock(return_value=True),
     )
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
+        "sonar.v1.attention.backends.flashinfer.get_per_layer_parameters",
         _mock_get_per_layer_parameters,
     )
-    aphrodite_config = create_aphrodite_config(model_name=MODEL, block_size=BLOCK_SIZE, num_gpu_blocks=NUM_GPU_BLOCKS)
-    model_config = aphrodite_config.model_config
+    sonar_config = create_sonar_config(model_name=MODEL, block_size=BLOCK_SIZE, num_gpu_blocks=NUM_GPU_BLOCKS)
+    model_config = sonar_config.model_config
     kv_cache_spec = FullAttentionSpec(
         block_size=BLOCK_SIZE,
-        num_kv_heads=model_config.get_num_kv_heads(aphrodite_config.parallel_config),
+        num_kv_heads=model_config.get_num_kv_heads(sonar_config.parallel_config),
         head_size=model_config.get_head_size(),
         dtype=model_config.dtype,
     )
     device = torch.device(f"{DEVICE_TYPE}:0")
-    with set_current_aphrodite_config(aphrodite_config):
-        builder = FlashInferMetadataBuilder(kv_cache_spec, ["test_layer_0"], aphrodite_config, device)
+    with set_current_sonar_config(sonar_config):
+        builder = FlashInferMetadataBuilder(kv_cache_spec, ["test_layer_0"], sonar_config, device)
     assert builder.supports_draft_decode_metadata_update
 
     step1 = create_common_attn_metadata(BATCH_SPECS["decode_only"], BLOCK_SIZE, device)

@@ -17,21 +17,21 @@ from uuid import uuid4
 
 import pytest
 
-import aphrodite.logger as aphrodite_logger
-from aphrodite.config import LoggingConfig
-from aphrodite.logger import (
+import sonar.logger as sonar_logger
+from sonar.config import LoggingConfig
+from sonar.logger import (
     _DATE_FORMAT,
     _FORMAT,
     _JSON_FORMAT,
-    _configure_aphrodite_root_logger,
+    _configure_sonar_root_logger,
     _use_color,
     configure_logging,
     enable_trace_function_call,
     init_logger,
 )
-from aphrodite.logging_utils import NewLineFormatter
-from aphrodite.logging_utils.dump_input import prepare_object_to_dump
-from aphrodite.utils.system_utils import decorate_logs
+from sonar.logging_utils import NewLineFormatter
+from sonar.logging_utils.dump_input import prepare_object_to_dump
+from sonar.utils.system_utils import decorate_logs
 
 
 def f1(x):
@@ -56,24 +56,24 @@ def test_trace_function_call():
     os.remove(path)
 
 
-def test_caplog_aphrodite_captures_info_before_runtime_logging_is_configured(caplog_aphrodite):
+def test_caplog_sonar_captures_info_before_runtime_logging_is_configured(caplog_sonar):
     message = "Capture this unconfigured INFO record"
-    logger = init_logger(f"aphrodite.test_logger.{uuid4()}")
+    logger = init_logger(f"sonar.test_logger.{uuid4()}")
 
     logger.info(message)
 
-    assert message in caplog_aphrodite.text
+    assert message in caplog_sonar.text
 
 
-def test_default_aphrodite_root_logger_configuration(monkeypatch):
-    """This test presumes that APHRODITE_CONFIGURE_LOGGING (default: True) and
-    APHRODITE_LOGGING_CONFIG_PATH (default: None) are not configured and default
+def test_default_sonar_root_logger_configuration(monkeypatch):
+    """This test presumes that SONAR_CONFIGURE_LOGGING (default: True) and
+    SONAR_LOGGING_CONFIG_PATH (default: None) are not configured and default
     behavior is activated."""
-    monkeypatch.setenv("APHRODITE_LOGGING_COLOR", "0")
-    early_logger = init_logger(f"aphrodite.test_logger.{uuid4()}")
+    monkeypatch.setenv("SONAR_LOGGING_COLOR", "0")
+    early_logger = init_logger(f"sonar.test_logger.{uuid4()}")
     configure_logging(LoggingConfig())
 
-    logger = logging.getLogger("aphrodite")
+    logger = logging.getLogger("sonar")
     assert logger.level == logging.INFO
     assert not logger.propagate
     assert early_logger.isEnabledFor(logging.INFO)
@@ -92,7 +92,7 @@ def test_default_aphrodite_root_logger_configuration(monkeypatch):
 
 
 def test_offline_llm_configures_logging_before_logging_args(monkeypatch):
-    import aphrodite.entrypoints.llm as llm_module
+    import sonar.entrypoints.llm as llm_module
 
     class StopInitialization(Exception):
         pass
@@ -122,7 +122,7 @@ def test_json_logging(monkeypatch, tmp_path):
         "formatters": {
             "json": {
                 "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
-                "format": ("%(asctime)s %(levelname)s %(name)s %(aphrodite_process_name)s %(process)d %(message)s"),
+                "format": ("%(asctime)s %(levelname)s %(name)s %(sonar_process_name)s %(process)d %(message)s"),
             },
         },
         "handlers": {
@@ -133,7 +133,7 @@ def test_json_logging(monkeypatch, tmp_path):
             },
         },
         "loggers": {
-            "aphrodite": {
+            "sonar": {
                 "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
@@ -148,17 +148,17 @@ def test_json_logging(monkeypatch, tmp_path):
         with monkeypatch.context() as context:
             context.setattr(sys, "stdout", output)
             # Restore this module-global state when the context exits.
-            context.setattr(aphrodite_logger, "_aphrodite_process_info", None)
-            _configure_aphrodite_root_logger(LoggingConfig(pylogging_config_file=str(logging_config_path)))
+            context.setattr(sonar_logger, "_sonar_process_info", None)
+            _configure_sonar_root_logger(LoggingConfig(pylogging_config_file=str(logging_config_path)))
             decorate_logs("Worker_DP0")
-            init_logger("aphrodite.structured_log_probe").info("structured log probe")
+            init_logger("sonar.structured_log_probe").info("structured log probe")
 
             log = json.loads(output.getvalue())
     finally:
-        _configure_aphrodite_root_logger(LoggingConfig())
+        _configure_sonar_root_logger(LoggingConfig())
 
     assert log["message"] == "structured log probe"
-    assert log["aphrodite_process_name"] == "Worker_DP0"
+    assert log["sonar_process_name"] == "Worker_DP0"
     assert log["process"] == os.getpid()
 
 
@@ -166,11 +166,11 @@ def test_json_logging(monkeypatch, tmp_path):
 def test_configure_logging_preserves_application_record_factory(monkeypatch, factory_order):
     """Application fields survive initial configuration and reconfiguration."""
     original_factory = logging.getLogRecordFactory()
-    monkeypatch.setattr(aphrodite_logger, "dictConfig", lambda _: None)
-    monkeypatch.setattr(aphrodite_logger, "_last_configured_logging_config", None)
-    monkeypatch.setattr(aphrodite_logger, "_aphrodite_process_info", None)
+    monkeypatch.setattr(sonar_logger, "dictConfig", lambda _: None)
+    monkeypatch.setattr(sonar_logger, "_last_configured_logging_config", None)
+    monkeypatch.setattr(sonar_logger, "_sonar_process_info", None)
     config = LoggingConfig()
-    formatter = logging.Formatter("%(request_id)s %(aphrodite_process_name)s %(message)s")
+    formatter = logging.Formatter("%(request_id)s %(sonar_process_name)s %(message)s")
 
     try:
         logging.setLogRecordFactory(logging.LogRecord)
@@ -201,24 +201,24 @@ def test_builtin_json_formatter(monkeypatch):
     try:
         with monkeypatch.context() as context:
             context.setattr(sys, "stdout", output)
-            context.setattr(aphrodite_logger, "_aphrodite_process_info", None)
-            _configure_aphrodite_root_logger(LoggingConfig(formatter="json"))
+            context.setattr(sonar_logger, "_sonar_process_info", None)
+            _configure_sonar_root_logger(LoggingConfig(formatter="json"))
             decorate_logs("Worker_DP0")
-            init_logger("aphrodite.structured_log_probe").info("structured log probe")
+            init_logger("sonar.structured_log_probe").info("structured log probe")
 
             log = json.loads(output.getvalue())
-            formatter = logging.getLogger("aphrodite").handlers[0].formatter
+            formatter = logging.getLogger("sonar").handlers[0].formatter
     finally:
-        _configure_aphrodite_root_logger(LoggingConfig())
+        _configure_sonar_root_logger(LoggingConfig())
 
     assert log == {
         "asctime": log["asctime"],
         "levelname": "INFO",
-        "name": "aphrodite.structured_log_probe",
+        "name": "sonar.structured_log_probe",
         "processName": multiprocessing.current_process().name,
         "process": os.getpid(),
         "message": "structured log probe",
-        "aphrodite_process_name": "Worker_DP0",
+        "sonar_process_name": "Worker_DP0",
     }
     assert formatter is not None
     assert formatter._fmt == _JSON_FORMAT
@@ -226,10 +226,10 @@ def test_builtin_json_formatter(monkeypatch):
 
 def test_use_color_force_color(monkeypatch):
     """FORCE_COLOR forces colored logs without a TTY, while NO_COLOR and an
-    explicit APHRODITE_LOGGING_COLOR=0 take precedence over it."""
+    explicit SONAR_LOGGING_COLOR=0 take precedence over it."""
     monkeypatch.setattr(sys, "stdout", io.StringIO())
     monkeypatch.setattr(sys, "stderr", io.StringIO())
-    for var in ("NO_COLOR", "FORCE_COLOR", "APHRODITE_LOGGING_COLOR"):
+    for var in ("NO_COLOR", "FORCE_COLOR", "SONAR_LOGGING_COLOR"):
         monkeypatch.delenv(var, raising=False)
 
     assert not _use_color()
@@ -237,25 +237,25 @@ def test_use_color_force_color(monkeypatch):
     monkeypatch.setenv("FORCE_COLOR", "1")
     assert _use_color()
 
-    monkeypatch.setenv("APHRODITE_LOGGING_COLOR", "0")
+    monkeypatch.setenv("SONAR_LOGGING_COLOR", "0")
     assert not _use_color()
-    monkeypatch.delenv("APHRODITE_LOGGING_COLOR")
+    monkeypatch.delenv("SONAR_LOGGING_COLOR")
 
     monkeypatch.setenv("NO_COLOR", "1")
     assert not _use_color()
 
 
 def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger(monkeypatch):
-    """This test presumes that APHRODITE_CONFIGURE_LOGGING (default: True) and
-    APHRODITE_LOGGING_CONFIG_PATH (default: None) are not configured and default
+    """This test presumes that SONAR_CONFIGURE_LOGGING (default: True) and
+    SONAR_LOGGING_CONFIG_PATH (default: None) are not configured and default
     behavior is activated."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
-    monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "1")
+    monkeypatch.delenv("SONAR_LOGGING_CONFIG_PATH", raising=False)
 
-    root_logger = logging.getLogger("aphrodite")
+    root_logger = logging.getLogger("sonar")
     root_handler = root_logger.handlers[0]
 
-    unique_name = f"aphrodite.{uuid4()}"
+    unique_name = f"sonar.{uuid4()}"
     logger = init_logger(unique_name)
     assert logger.name == unique_name
     assert logger.level == logging.NOTSET
@@ -276,47 +276,47 @@ def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger(monkeypa
 
 
 def test_logger_configuring_can_be_disabled(monkeypatch):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "0")
-    monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "0")
+    monkeypatch.delenv("SONAR_LOGGING_CONFIG_PATH", raising=False)
 
     original_factory = logging.getLogRecordFactory()
-    with patch("aphrodite.logger.dictConfig") as dict_config_mock:
+    with patch("sonar.logger.dictConfig") as dict_config_mock:
         configure_logging(LoggingConfig(configure_logging=False))
     dict_config_mock.assert_not_called()
     assert logging.getLogRecordFactory() is original_factory
 
 
 def test_an_error_is_raised_when_custom_logging_config_file_does_not_exist(monkeypatch):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "1")
     monkeypatch.setenv(
-        "APHRODITE_LOGGING_CONFIG_PATH",
+        "SONAR_LOGGING_CONFIG_PATH",
         "/if/there/is/a/file/here/then/you/did/this/to/yourself.json",
     )
 
     with pytest.raises(RuntimeError) as ex_info:
-        _configure_aphrodite_root_logger()
+        _configure_sonar_root_logger()
     assert ex_info.type == RuntimeError  # noqa: E721
     assert "File does not exist" in str(ex_info)
 
 
 def test_an_error_is_raised_when_custom_logging_config_is_invalid_json(monkeypatch):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "1")
 
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write("---\nloggers: []\nversion: 1")
         logging_config_file.flush()
-        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        monkeypatch.setenv("SONAR_LOGGING_CONFIG_PATH", logging_config_file.name)
         with pytest.raises(JSONDecodeError) as ex_info:
-            _configure_aphrodite_root_logger()
+            _configure_sonar_root_logger()
         assert ex_info.type == JSONDecodeError
         assert "Expecting value" in str(ex_info)
 
@@ -333,30 +333,30 @@ def test_an_error_is_raised_when_custom_logging_config_is_unexpected_json(
     monkeypatch,
     unexpected_config: Any,
 ):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "1")
 
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(unexpected_config))
         logging_config_file.flush()
-        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        monkeypatch.setenv("SONAR_LOGGING_CONFIG_PATH", logging_config_file.name)
         with pytest.raises(ValueError) as ex_info:
-            _configure_aphrodite_root_logger()
+            _configure_sonar_root_logger()
         assert ex_info.type == ValueError  # noqa: E721
         assert "Invalid logging config. Expected dict, got" in str(ex_info)
 
 
 def test_custom_logging_config_is_parsed_and_used_when_provided(monkeypatch):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "1")
 
     valid_logging_config = {
         "loggers": {
-            "aphrodite.test_logger.logger": {
+            "sonar.test_logger.logger": {
                 "handlers": [],
                 "propagate": False,
             }
@@ -366,21 +366,21 @@ def test_custom_logging_config_is_parsed_and_used_when_provided(monkeypatch):
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(valid_logging_config))
         logging_config_file.flush()
-        monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
-        with patch("aphrodite.logger.dictConfig") as dict_config_mock:
+        monkeypatch.delenv("SONAR_LOGGING_CONFIG_PATH", raising=False)
+        with patch("sonar.logger.dictConfig") as dict_config_mock:
             configure_logging(LoggingConfig(pylogging_config_file=logging_config_file.name))
             dict_config_mock.assert_called_with(valid_logging_config)
 
 
 def test_custom_logging_config_causes_an_error_if_configure_logging_is_off(monkeypatch):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_sonar_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
-    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "0")
+    monkeypatch.setenv("SONAR_CONFIGURE_LOGGING", "0")
 
     valid_logging_config = {
         "loggers": {
-            "aphrodite.test_logger.logger": {
+            "sonar.test_logger.logger": {
                 "handlers": [],
             }
         },
@@ -389,7 +389,7 @@ def test_custom_logging_config_causes_an_error_if_configure_logging_is_off(monke
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(valid_logging_config))
         logging_config_file.flush()
-        monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
+        monkeypatch.delenv("SONAR_LOGGING_CONFIG_PATH", raising=False)
         with pytest.raises(RuntimeError) as ex_info:
             configure_logging(
                 LoggingConfig(
@@ -402,9 +402,9 @@ def test_custom_logging_config_causes_an_error_if_configure_logging_is_off(monke
         assert expected_message_snippet in str(ex_info)
 
         # Remember! The root logger is assumed to have been configured as
-        # though APHRODITE_CONFIGURE_LOGGING=1 and APHRODITE_LOGGING_CONFIG_PATH=None.
-        root_logger = logging.getLogger("aphrodite")
-        other_logger_name = f"aphrodite.test_logger.{uuid4()}"
+        # though SONAR_CONFIGURE_LOGGING=1 and SONAR_LOGGING_CONFIG_PATH=None.
+        root_logger = logging.getLogger("sonar")
+        other_logger_name = f"sonar.test_logger.{uuid4()}"
         other_logger = init_logger(other_logger_name)
         assert other_logger.handlers != root_logger.handlers
         assert other_logger.level != root_logger.level
@@ -445,8 +445,8 @@ def test_prepare_object_to_dump():
     assert prepare_object_to_dump(CustomClass(1, "b")) == "CustomClass(a=1, b='b')"
 
 
-# Add aphrodite prefix to make sure logs go through the aphrodite logger
-test_logger = init_logger("aphrodite.test_logger")
+# Add sonar prefix to make sure logs go through the sonar logger
+test_logger = init_logger("sonar.test_logger")
 
 
 def mp_function(**kwargs):
@@ -459,8 +459,8 @@ def mp_function(**kwargs):
     test_logger.debug("This is a subprocess debug message: %s.", kwargs.get("b"))
 
 
-def test_caplog_mp_fork(caplog_aphrodite, caplog_mp_fork):
-    with caplog_aphrodite.at_level(logging.DEBUG, logger="aphrodite"), caplog_mp_fork():
+def test_caplog_mp_fork(caplog_sonar, caplog_mp_fork):
+    with caplog_sonar.at_level(logging.DEBUG, logger="sonar"), caplog_mp_fork():
         import multiprocessing
 
         ctx = multiprocessing.get_context("fork")
@@ -472,8 +472,8 @@ def test_caplog_mp_fork(caplog_aphrodite, caplog_mp_fork):
         p.start()
         p.join()
 
-    assert "AAAA" in caplog_aphrodite.text
-    assert "BBBBB" in caplog_aphrodite.text
+    assert "AAAA" in caplog_sonar.text
+    assert "BBBBB" in caplog_sonar.text
 
 
 def test_caplog_mp_spawn(caplog_mp_spawn):
@@ -487,7 +487,7 @@ def test_caplog_mp_spawn(caplog_mp_spawn):
             kwargs={
                 "a": "AAAA",
                 "b": "BBBBB",
-                "logging_config": LoggingConfig(pylogging_config_file=os.environ["APHRODITE_LOGGING_CONFIG_PATH"]),
+                "logging_config": LoggingConfig(pylogging_config_file=os.environ["SONAR_LOGGING_CONFIG_PATH"]),
             },
         )
         p.start()

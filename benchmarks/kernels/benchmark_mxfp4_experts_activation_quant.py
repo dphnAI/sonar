@@ -15,7 +15,7 @@ Sweeps expert count at a fixed hidden width (default 6144). Two timed regions
 Routing uses 32 rows (4 tokens, topk 8, two picks per expert 0..15). GEMMs are
 outside the timed region.
 
-Run from a CUDA-built Aphrodite checkout, for example:
+Run from a CUDA-built Sonar checkout, for example:
 
     .venv/bin/python benchmarks/kernels/benchmark_mxfp4_experts_activation_quant.py
     .venv/bin/python benchmarks/kernels/benchmark_mxfp4_experts_activation_quant.py \\
@@ -35,9 +35,9 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-import aphrodite._custom_ops  # noqa: E402, F401 -- registers torch.ops._C kernels
-from aphrodite import _custom_ops as ops  # noqa: E402
-from aphrodite.triton_utils import triton  # noqa: E402
+import sonar._custom_ops  # noqa: E402, F401 -- registers torch.ops._C kernels
+from sonar import _custom_ops as ops  # noqa: E402
+from sonar.triton_utils import triton  # noqa: E402
 
 ROUTED_ROWS = 32
 TOPK = 8

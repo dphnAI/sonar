@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.tokenizers import get_tokenizer
+from sonar.tokenizers import get_tokenizer
 
 from ...utils import RemoteOpenAIServer
 

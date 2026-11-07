@@ -7,9 +7,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.model_executor.models import deepseek_v2 as deepseek_mod
-from aphrodite.model_executor.models import mistral_large_3_eagle as eagle_mod
+from sonar.config.compilation import CompilationMode
+from sonar.model_executor.models import deepseek_v2 as deepseek_mod
+from sonar.model_executor.models import mistral_large_3_eagle as eagle_mod
 
 
 class DummyPPGroup:
@@ -60,7 +60,7 @@ class DummyDecoderLayer(nn.Module):
         return hidden_states, residual
 
 
-def make_aphrodite_config(*, model_type="mistral3", qk_nope_head_dim=128, qk_rope_head_dim=64):
+def make_sonar_config(*, model_type="mistral3", qk_nope_head_dim=128, qk_rope_head_dim=64):
     hf_config = SimpleNamespace(
         model_type=model_type,
         first_k_dense_replace=0,
@@ -113,13 +113,13 @@ def test_eagle_mistral_large3_initializes_deepseek_runtime_attrs(
     qk_rope_head_dim,
     expected_use_mha,
 ):
-    aphrodite_config = make_aphrodite_config(
+    sonar_config = make_sonar_config(
         model_type=model_type,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
     )
 
-    model = eagle_mod.EagleMistralLarge3Model(aphrodite_config=aphrodite_config)
+    model = eagle_mod.EagleMistralLarge3Model(sonar_config=sonar_config)
 
     assert model.aux_hidden_state_layers == ()
     assert model.use_mha is expected_use_mha
@@ -131,8 +131,8 @@ def test_eagle_mistral_large3_initializes_deepseek_runtime_attrs(
 
 @pytest.mark.cpu_test
 def test_eagle_mistral_large3_forward_reuses_deepseek_parent_forward():
-    aphrodite_config = make_aphrodite_config()
-    model = eagle_mod.EagleMistralLarge3Model(aphrodite_config=aphrodite_config)
+    sonar_config = make_sonar_config()
+    model = eagle_mod.EagleMistralLarge3Model(sonar_config=sonar_config)
 
     input_ids = torch.tensor([[1, 2, 3]])
     positions = torch.tensor([[0, 1, 2]])

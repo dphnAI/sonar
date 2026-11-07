@@ -10,37 +10,37 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.kernel import KernelConfig
-from aphrodite.config.model import ModelConfig
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention.attention import (
+from sonar import _custom_ops as ops
+from sonar.config import set_current_sonar_config
+from sonar.config.cache import CacheConfig
+from sonar.config.kernel import KernelConfig
+from sonar.config.model import ModelConfig
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention.attention import (
     set_default_quant_scales,
 )
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.fp8 import (
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.fp8 import (
     Fp8Config,
     Fp8LinearMethod,
     Fp8MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
-from aphrodite.model_executor.layers.quantization.utils import flashinfer_utils
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
+from sonar.model_executor.layers.quantization.utils import flashinfer_utils
+from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
     prepare_fp8_moe_layer_for_fi,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     process_fp8_input_tensor_strategy_moe,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.platforms import current_platform
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.platforms import current_platform
 from tests.quantization.utils import (
     is_quant_method_supported,
-    load_model_without_aphrodite_runner,
+    load_model_without_sonar_runner,
 )
 
 DEVICE_TYPE = current_platform.device_type
@@ -59,18 +59,18 @@ MODELS = [
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="DSV4.1 requires CUDA")
 @pytest.mark.parametrize("tp_rank", [0, 1])
 @pytest.mark.parametrize("scale_dtype", [torch.uint8, torch.float8_e8m0fnu])
-def test_deepseek_v41_mxfp8_scale_loading(dist_init, default_aphrodite_config, monkeypatch, tp_rank, scale_dtype):
+def test_deepseek_v41_mxfp8_scale_loading(dist_init, default_sonar_config, monkeypatch, tp_rank, scale_dtype):
     """Expand linear scales before TP slicing, including padded shared experts."""
-    from aphrodite.model_executor.layers import linear as linear_module
-    from aphrodite.model_executor.layers.linear import (
+    from sonar.model_executor.layers import linear as linear_module
+    from sonar.model_executor.layers.linear import (
         ColumnParallelLinear,
         MergedColumnParallelLinear,
         RowParallelLinear,
     )
-    from aphrodite.models.deepseek_v41 import quant_config as quant_module
-    from aphrodite.models.deepseek_v41.nvidia import model as model_module
+    from sonar.models.deepseek_v41 import quant_config as quant_module
+    from sonar.models.deepseek_v41.nvidia import model as model_module
 
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     quant_config = quant_module.DeepseekV4FP8Config(is_checkpoint_fp8_serialized=True, weight_block_size=[32, 32])
     quant_config._resolved_expert_dtype = "fp4"
     for module in (model_module, linear_module):
@@ -193,12 +193,12 @@ def test_deepseek_v41_vl_mapper_routes_linear_scales(weight_block_size, expert_d
     """The VL wrapper must map ``.scale`` keys to the parameter the linear
     quant method registers, as the text model does. A hardcoded
     ``weight_scale_inv`` raised KeyError for native MXFP8 checkpoints."""
-    from aphrodite.models.deepseek_v41.nvidia import model as model_module
-    from aphrodite.models.deepseek_v41.nvidia import vl_model as vl_module
+    from sonar.models.deepseek_v41.nvidia import model as model_module
+    from sonar.models.deepseek_v41.nvidia import vl_model as vl_module
 
-    aphrodite_config = SimpleNamespace(quant_config=SimpleNamespace(weight_block_size=weight_block_size))
+    sonar_config = SimpleNamespace(quant_config=SimpleNamespace(weight_block_size=weight_block_size))
     resolved = model_module._linear_scale_param_name(
-        aphrodite_config,
+        sonar_config,
         expert_dtype,
     )
     assert resolved == scale_name
@@ -219,10 +219,10 @@ def test_deepseek_v41_vl_exposes_quant_mappings_on_class():
     ``__init__`` builds the instance mapper. Without them a Quark config's
     per-layer keys never match this wrapper's ``language_model.``-rooted
     prefixes and every attention shard falls back to the global spec."""
-    from aphrodite.models.deepseek_v41.amd.vl_model import DeepseekV41ForCausalLM
+    from sonar.models.deepseek_v41.amd.vl_model import DeepseekV41ForCausalLM
 
     assert "fused_wqa_wkv" in DeepseekV41ForCausalLM.packed_modules_mapping
-    mapper = DeepseekV41ForCausalLM.hf_to_aphrodite_mapper.get_rename_mapper()
+    mapper = DeepseekV41ForCausalLM.hf_to_sonar_mapper.get_rename_mapper()
     assert mapper.apply_list(["layers.0.attn.wq_a"]) == ["language_model.model.layers.0.attn.wq_a"]
 
 
@@ -230,7 +230,7 @@ def test_deepseek_v41_engram_scale_accepts_quark_name():
     """Quark exports name the engram scale ``embed.weight_scale``; the
     ``\\.scale$`` rules only match a literal ``.scale`` suffix, so without an
     explicit rule the tensor is never routed and loading fails."""
-    from aphrodite.models.deepseek_v41.amd import model as model_module
+    from sonar.models.deepseek_v41.amd import model as model_module
 
     mapper = model_module._make_deepseek_v4_weights_mapper("fp4", "weight_scale")
     weight = torch.empty(0)
@@ -254,7 +254,7 @@ def test_deepseek_v41_declines_quark_configs():
     which would discard the per-layer specs of a mixed-precision export (MXFP4
     experts + 2-D block MXFP8 attention in DeepSeek-V4.1-Flash). QuarkConfig
     knows how to dispatch each scheme, so it must handle every Quark export."""
-    from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
+    from sonar.models.deepseek_v41.quant_config import DeepseekV4FP8Config
 
     hf_config = SimpleNamespace(model_type="deepseek_v41")
     mxfp4_global = {
@@ -321,9 +321,9 @@ def test_deepseek_v41_nvfp4_export_keeps_ignored_experts_mxfp4(monkeypatch, ckpt
     bundled DSpark draft (``mtp.*``, built as ``layers.{40 + k}``) of
     DeepSeek-V4.1-Flash-NVFP4. The ignore list is read from the checkpoint
     passed to ``from_config``: the current hf_config below carries none."""
-    import aphrodite.model_executor.layers.quantization.modelopt as modelopt
-    import aphrodite.models.deepseek_v41.quant_config as dsv41_qc
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
+    import sonar.model_executor.layers.quantization.modelopt as modelopt
+    import sonar.models.deepseek_v41.quant_config as dsv41_qc
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
 
     hf_config = SimpleNamespace(
         expert_dtype="fp4",
@@ -332,7 +332,7 @@ def test_deepseek_v41_nvfp4_export_keeps_ignored_experts_mxfp4(monkeypatch, ckpt
     model_config = SimpleNamespace(hf_config=hf_config, hf_text_config=SimpleNamespace(num_hidden_layers=40))
     monkeypatch.setattr(
         dsv41_qc,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(model_config=model_config),
     )
     monkeypatch.setattr(dsv41_qc, "Mxfp4MoEMethod", lambda moe_config, **kwargs: "mxfp4")
@@ -360,8 +360,8 @@ def test_deepseek_v41_nvfp4_export_keeps_ignored_experts_mxfp4(monkeypatch, ckpt
 )
 def test_deepgemm_mxfp8_preserves_weight_and_scale_values(scale_dtype, weight_shape, is_bmm):
     """DeepGEMM layout conversion preserves native weights and E8M0 scales."""
-    from aphrodite.model_executor.layers.quantization.utils import fp8_utils
-    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+    from sonar.model_executor.layers.quantization.utils import fp8_utils
+    from sonar.utils.deep_gemm import is_deep_gemm_supported
 
     if not is_deep_gemm_supported() or not current_platform.is_device_capability_family(100):
         pytest.skip("DeepGEMM MXFP8 requires Blackwell")
@@ -405,29 +405,29 @@ def test_deepgemm_mxfp8_preserves_weight_and_scale_values(scale_dtype, weight_sh
 @pytest.mark.parametrize("config_source", ["deepseek", "mxfp8"])
 @pytest.mark.parametrize("num_tokens", [1, 7, 128])
 def test_mxfp8_bmm_loads_and_projects_grouped_weights(
-    dist_init, default_aphrodite_config, monkeypatch, prequantized, config_source, num_tokens
+    dist_init, default_sonar_config, monkeypatch, prequantized, config_source, num_tokens
 ):
     """BMM metadata set after construction selects grouped weight processing."""
-    from aphrodite.model_executor.kernels.linear.mxfp8.deep_gemm import (
+    from sonar.model_executor.kernels.linear.mxfp8.deep_gemm import (
         DeepGemmMxfp8BmmLinearKernel,
     )
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-    from aphrodite.model_executor.layers.quantization import get_quantization_config
-    from aphrodite.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.model_executor.layers.quantization import get_quantization_config
+    from sonar.models.deepseek_v4.common.ops.fused_inv_rope_fp8_quant import (
         fused_inv_rope_fp8_quant,
     )
-    from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import (
+    from sonar.models.deepseek_v4.nvidia.ops.o_proj import (
         compute_fp8_einsum_recipe,
         deep_gemm_fp8_o_proj,
     )
-    from aphrodite.models.deepseek_v41.nvidia.model import DeepseekV4Model
-    from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
-    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+    from sonar.models.deepseek_v41.nvidia.model import DeepseekV4Model
+    from sonar.models.deepseek_v41.quant_config import DeepseekV4FP8Config
+    from sonar.utils.deep_gemm import is_deep_gemm_supported
 
     if not is_deep_gemm_supported() or not current_platform.is_device_capability_family(100):
         pytest.skip("DeepGEMM MXFP8 BMM requires Blackwell")
 
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16)
     deepseek_config = DeepseekV4FP8Config(is_checkpoint_fp8_serialized=True, weight_block_size=[32, 32])
     deepseek_config._resolved_expert_dtype = "fp4"
     quant_config: QuantizationConfig = deepseek_config
@@ -602,23 +602,23 @@ def test_model_load_and_run(
     workspace_init,
 ) -> None:
     if use_rocm_aiter:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
     kernel_config = KernelConfig(
         linear_backend=linear_backend,
         moe_backend="marlin" if linear_backend == "marlin" else "auto",
     )
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         model_id,
         model_config_kwargs={"hf_overrides": {"num_hidden_layers": 3}},
-        aphrodite_config_kwargs={"kernel_config": kernel_config},
+        sonar_config_kwargs={"kernel_config": kernel_config},
     )
     monkeypatch.setattr(Attention, "forward", lambda _, q, k, v: q.contiguous())
     input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
     positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         model(input_ids, positions, None)
 
@@ -709,7 +709,7 @@ def test_scaled_fp8_quant(dtype) -> None:
 # this is the case for marlin as well as per-tensor Fp8MoEMethod
 @pytest.mark.parametrize("use_marlin", [False])  # skip True
 def test_fp8_reloading(
-    default_aphrodite_config,
+    default_sonar_config,
     method_cls,
     weight_block_size,
     use_marlin,
@@ -719,7 +719,7 @@ def test_fp8_reloading(
     # NOTE(rob): this test fails when using DeepGEMM because the
     # shapes are invalid. Previously the test was passing because
     # we set fp8_backend to None, which sidestepped the issue.
-    monkeypatch.setenv("APHRODITE_USE_DEEP_GEMM", "0")
+    monkeypatch.setenv("SONAR_USE_DEEP_GEMM", "0")
 
     if method_cls is Fp8MoEMethod and weight_block_size is None:
         pytest.skip(
@@ -728,8 +728,8 @@ def test_fp8_reloading(
         )
 
     # Set model config as model_config.dtype is required in Fp8LinearMethod.
-    default_aphrodite_config.model_config = ModelConfig()
-    default_aphrodite_config.kernel_config.moe_backend = "triton"
+    default_sonar_config.model_config = ModelConfig()
+    default_sonar_config.kernel_config.moe_backend = "triton"
     layer_size = 128 if weight_block_size is not None else 1
     with torch.device(f"{DEVICE_TYPE}:0"):
         config = Fp8Config(
@@ -821,11 +821,11 @@ def test_kv_cache_scale_sync_to_host_copies():
 )
 def test_kv_cache_dtype_skip_layers(monkeypatch, dist_init, workspace_init):
     """Test that kv_cache_dtype_skip_layers skips quantization for specified layers."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    model, _ = load_model_without_aphrodite_runner(
+    model, _ = load_model_without_sonar_runner(
         "facebook/opt-125m",
-        aphrodite_config_kwargs={"cache_config": CacheConfig(cache_dtype="fp8", kv_cache_dtype_skip_layers=["0", "2"])},
+        sonar_config_kwargs={"cache_config": CacheConfig(cache_dtype="fp8", kv_cache_dtype_skip_layers=["0", "2"])},
     )
     for i, layer in enumerate(model.model.decoder.layers):
         expected = "auto" if str(i) in ["0", "2"] else "fp8"

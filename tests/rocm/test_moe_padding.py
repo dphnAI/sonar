@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for the `APHRODITE_ROCM_MOE_PADDING` weight memory-layout padding trick.
+"""Tests for the `SONAR_ROCM_MOE_PADDING` weight memory-layout padding trick.
 
-`APHRODITE_ROCM_MOE_PADDING` (see `UnquantizedFusedMoEMethod._maybe_pad_weight`)
+`SONAR_ROCM_MOE_PADDING` (see `UnquantizedFusedMoEMethod._maybe_pad_weight`)
 is a memory-stride trick, not a logical-shape one: when eligible, it enlarges
 a weight tensor's storage so per-expert allocations land farther apart in
 HBM. Shape and values are unaffected, but `stride(-2)` increases by
@@ -34,32 +34,32 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.envs as envs
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     ExpertMapManager,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 aiter_available = is_aiter_found_and_supported()
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="APHRODITE_ROCM_MOE_PADDING only takes effect on ROCm",
+    reason="SONAR_ROCM_MOE_PADDING only takes effect on ROCm",
 )
 requires_aiter = pytest.mark.skipif(
     not aiter_available,
@@ -81,17 +81,17 @@ INTERMEDIATE_SIZE = 256
 
 def _set_padding_env(monkeypatch: pytest.MonkeyPatch, padding: bool) -> None:
     """Sets the flag only; `_maybe_pad_weight` reads it lazily, no AITER needed."""
-    monkeypatch.setenv("APHRODITE_ROCM_MOE_PADDING", "1" if padding else "0")
+    monkeypatch.setenv("SONAR_ROCM_MOE_PADDING", "1" if padding else "0")
 
 
 def _set_padding_env_with_aiter(monkeypatch: pytest.MonkeyPatch, padding: bool) -> None:
     """Also enables AITER, for tests routing through RoutedExperts's backend
     selection."""
     _set_padding_env(monkeypatch, padding)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
 
@@ -240,7 +240,7 @@ def _assert_backend_is_aiter(layer: RoutedExperts) -> None:
 )
 def test_maybe_pad_weight_transparent(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
     padding: bool,
     hidden_size: int,
     intermediate_size: int,
@@ -250,9 +250,9 @@ def test_maybe_pad_weight_transparent(
     """Shape/values never change; storage only grows (`stride(-2) += num_pad`)
     when eligible and the flag is on. Otherwise it's a true no-op (identical
     object)."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     _set_padding_env(monkeypatch, padding)
-    assert envs.APHRODITE_ROCM_MOE_PADDING is padding
+    assert envs.SONAR_ROCM_MOE_PADDING is padding
 
     moe_config = _make_moe_config(hidden_size, intermediate_size, dtype=dtype)
     method = UnquantizedFusedMoEMethod(moe_config)
@@ -292,7 +292,7 @@ def test_maybe_pad_weight_transparent(
 )
 def test_maybe_pad_weight_asymmetric_w13_w2_eligibility(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
     hidden_size: int,
     intermediate_size: int,
     expect_w13_padded: bool,
@@ -300,7 +300,7 @@ def test_maybe_pad_weight_asymmetric_w13_w2_eligibility(
 ) -> None:
     """w13 and w2 key their alignment gate off different dims (hidden_size
     vs. intermediate_size), so they're independently eligible."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     _set_padding_env(monkeypatch, True)
 
     moe_config = _make_moe_config(hidden_size, intermediate_size)
@@ -318,13 +318,13 @@ def test_maybe_pad_weight_asymmetric_w13_w2_eligibility(
 
 def test_maybe_pad_weight_eplb_disables_padding(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
 ) -> None:
     """EPLB requires contiguous weights for its view/rearrangement
     operations, so `_maybe_pad_weight` must skip padding whenever it's
     enabled -- even for an otherwise-eligible (512-byte-aligned) shape with
     the flag on."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     _set_padding_env(monkeypatch, True)
 
     moe_config = _make_moe_config(HIDDEN_SIZE, INTERMEDIATE_SIZE)
@@ -349,14 +349,14 @@ def test_maybe_pad_weight_eplb_disables_padding(
 
 def test_maybe_pad_weight_non_unit_stride_disables_padding(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
 ) -> None:
     """`_maybe_pad_weight` requires a unit inner stride (`F.pad` on a
     non-contiguous-inner-dim view would not produce the intended memory-
     stride effect), so it must skip padding whenever `weight.stride(-1) !=
     1` -- even when the (would-be) outer-stride alignment check alone would
     otherwise pass."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     _set_padding_env(monkeypatch, True)
 
     moe_config = _make_moe_config(HIDDEN_SIZE, INTERMEDIATE_SIZE)
@@ -419,14 +419,14 @@ def _reference_moe_forward(
 @torch.inference_mode()
 def test_aiter_moe_padding_numerically_transparent(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     """`AiterExperts.apply()` output must match an independent reference
     (not just itself across flag settings) for an eligible weight shape,
-    regardless of `APHRODITE_ROCM_MOE_PADDING`. Persisted parameter storage size
+    regardless of `SONAR_ROCM_MOE_PADDING`. Persisted parameter storage size
     must also be unaffected by the flag (see module docstring)."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     assert workspace_init is None
 
     outputs: dict[bool, torch.Tensor] = {}
@@ -452,7 +452,7 @@ def test_aiter_moe_padding_numerically_transparent(
         outputs[padding] = _forward(layer, x, topk_weights, topk_ids).clone()
 
     assert storage_nbytes[True] == storage_nbytes[False], (
-        "APHRODITE_ROCM_MOE_PADDING must not change the persisted parameters' storage size for the AITER path"
+        "SONAR_ROCM_MOE_PADDING must not change the persisted parameters' storage size for the AITER path"
     )
 
     reference = _reference_moe_forward(
@@ -480,7 +480,7 @@ def test_aiter_moe_padding_numerically_transparent(
 @torch.inference_mode()
 def test_aiter_moe_padding_rl_reload_address_stable(
     monkeypatch: pytest.MonkeyPatch,
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     """`process_weights_after_loading` must `.copy_()` the padded weight
@@ -488,9 +488,9 @@ def test_aiter_moe_padding_rl_reload_address_stable(
     in-place weight reload (same `RoutedExperts` layer, new weight values)
     has to leave `w13_weight`/`w2_weight`'s storage address unchanged, or it
     would silently break CUDA-graph address capture. Covers the AITER path,
-    where APHRODITE_ROCM_MOE_PADDING's padded storage is transient (see module
+    where SONAR_ROCM_MOE_PADDING's padded storage is transient (see module
     docstring) but still goes through this same copy_-not-rebind step."""
-    assert default_aphrodite_config is not None
+    assert default_sonar_config is not None
     assert workspace_init is None
     _set_padding_env_with_aiter(monkeypatch, True)
 

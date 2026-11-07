@@ -4,10 +4,10 @@ import time
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 
 
 @torch.inference_mode()

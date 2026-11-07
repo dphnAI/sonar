@@ -19,10 +19,10 @@ def test_rust_build_without_git_metadata(tmp_path, version):
     shutil.copy2(root / "pyproject.toml", tmp_path / "pyproject.toml")
     env = os.environ.copy()
     for key in list(env):
-        if key.startswith("SETUPTOOLS_SCM_PRETEND_VERSION") or key == "APHRODITE_RS_BUILD_VERSION":
+        if key.startswith("SETUPTOOLS_SCM_PRETEND_VERSION") or key == "SONAR_RS_BUILD_VERSION":
             env.pop(key)
     if version:
-        env["APHRODITE_RS_BUILD_VERSION"] = version
+        env["SONAR_RS_BUILD_VERSION"] = version
     # Command help runs the actual setuptools initialization, without Cargo.
     result = subprocess.run(
         [sys.executable, "tools/build_rust.py", "--help"],

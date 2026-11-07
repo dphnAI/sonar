@@ -126,7 +126,7 @@ guide: |
     memory for the runtime and KV cache; the recipe budgets 692 GB aggregate VRAM.
   - A recent CUDA environment. Native FP8 uses DeepGEMM, while unquantized BF16
     uses the Triton MoE backend.
-  - Aphrodite 0.28.0 or newer, which includes native dots3-note-prev support.
+  - Sonar 0.28.0 or newer, which includes native dots3-note-prev support.
 
   ## Launch commands
 
@@ -145,7 +145,7 @@ guide: |
   lower `--max-model-len` or add `--language-model-only` for text workloads.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev \
+  sonar serve dots-studio/dots3-note-prev \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -164,7 +164,7 @@ guide: |
   deployment, but it does not enable expert parallelism.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -182,7 +182,7 @@ guide: |
   experts are distributed across the eight expert-parallel ranks.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -202,7 +202,7 @@ guide: |
   It therefore needs more GPU memory than TP+EP.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --data-parallel-size 8 \
@@ -222,7 +222,7 @@ guide: |
   The option can be combined with TP, TP+EP, or DP+EP.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -239,11 +239,11 @@ guide: |
   ### MTP speculative decoding
 
   Add the speculative configuration to any of the deployments above. The current
-  checkpoints expose an MTP prediction head that Aphrodite reuses for drafting without
+  checkpoints expose an MTP prediction head that Sonar reuses for drafting without
   loading a separate draft model. The example uses TP+EP with the native FP8 checkpoint.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -264,7 +264,7 @@ guide: |
   with any parallel strategy, `--language-model-only`, and MTP speculative decoding.
 
   ```bash
-  aphrodite serve dots-studio/dots3-note-prev-fp8 \
+  sonar serve dots-studio/dots3-note-prev-fp8 \
     --served-model-name dots3-note-prev \
     --host 0.0.0.0 \
     --tensor-parallel-size 8 \
@@ -314,5 +314,5 @@ guide: |
 
   - [dots3-note-prev FP8 on Hugging Face](https://huggingface.co/dots-studio/dots3-note-prev-fp8)
   - [dots3-note-prev BF16 on Hugging Face](https://huggingface.co/dots-studio/dots3-note-prev)
-  - [Aphrodite dots3-note-prev support PR](https://github.com/vllm-project/vllm/pull/51255)
-  - [Aphrodite parallelism and scaling guide](https://docs.vllm.ai/en/latest/serving/parallelism_scaling.html)
+  - [Sonar dots3-note-prev support PR](https://github.com/vllm-project/vllm/pull/51255)
+  - [Sonar parallelism and scaling guide](https://docs.vllm.ai/en/latest/serving/parallelism_scaling.html)

@@ -16,7 +16,7 @@ The Python library installer accepts `--workspace <dir>` for staging the build, 
 DeepEPv2 (`--all2all-backend deepep_v2`) uses the NCCL GIN (GPU-Initiated
 Networking) backend, which requires NCCL >= 2.30.4 both when DeepEP is built
 and at runtime. If PyTorch pins an older NCCL release, a plain `pip install`
-or `uv pip install` of Aphrodite is not enough.
+or `uv pip install` of Sonar is not enough.
 
 Upgrade NCCL before running `install_python_libraries.sh`. Use
 `nvidia-nccl-cu12` on CUDA 12.
@@ -26,7 +26,10 @@ Upgrade NCCL before running `install_python_libraries.sh`. Use
 ```bash
 echo "nvidia-nccl-cu13>=2.30.4" > /tmp/nccl-override.txt
 export UV_OVERRIDE=/tmp/nccl-override.txt
-uv pip install aphrodite-engine
+uv pip install sonar \
+  --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple \
+  --index-strategy first-index \
+  --torch-backend cu130
 ```
 
 Keep `UV_OVERRIDE` set for later installs into the same environment. Without
@@ -34,19 +37,21 @@ it, any `uv pip install` that resolves PyTorch again restores the pinned NCCL.
 
 **With pip**, or to fix an existing environment:
 
+Install Sonar using the [installer or wheel index](https://sonar.dphn.ai/getting-started/installation/)
+first, then override its NCCL dependency:
+
 ```bash
-pip install aphrodite-engine
 pip install "nvidia-nccl-cu13>=2.30.4" --no-deps
 ```
 
 The override must happen before building DeepEP and remain in place at runtime.
 `install_python_libraries.sh` warns when the installed NCCL is too old. If
 DeepEP was built against an older NCCL, upgrade NCCL and run the script again.
-When NCCL is too old at runtime, Aphrodite logs the reason at startup and
+When NCCL is too old at runtime, Sonar logs the reason at startup and
 `deepep_v2` fails with the same message. You can check with:
 
 ```bash
-python -c "from aphrodite.utils.import_utils import deep_ep_v2_unavailable_reason; print(deep_ep_v2_unavailable_reason() or 'deepep_v2 is available')"
+python -c "from sonar.utils.import_utils import deep_ep_v2_unavailable_reason; print(deep_ep_v2_unavailable_reason() or 'deepep_v2 is available')"
 ```
 
 ## Usage

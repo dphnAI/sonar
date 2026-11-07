@@ -16,36 +16,36 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-import aphrodite.envs as envs
-import aphrodite.kernels  # noqa: F401 to register kernels
-from aphrodite import ir
-from aphrodite.compilation.backends import AphroditeBackend
-from aphrodite.compilation.caching import (
-    AphroditeSerializableFunction,
+import sonar.envs as envs
+import sonar.kernels  # noqa: F401 to register kernels
+from sonar import ir
+from sonar.compilation.backends import SonarBackend
+from sonar.compilation.caching import (
+    SonarSerializableFunction,
     StandaloneCompiledArtifacts,
 )
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.counter import compilation_counter
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.envs import disable_envs_cache
-from aphrodite.forward_context import set_forward_context
-from aphrodite.ir import ops
-from aphrodite.model_executor.layers.activation import GeluAndMulSparse
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.envs import disable_envs_cache
+from sonar.forward_context import set_forward_context
+from sonar.ir import ops
+from sonar.model_executor.layers.activation import GeluAndMulSparse
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from ..utils import create_new_process_for_each_test
 
 
 @pytest.fixture
-def aphrodite_tmp_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Fixture that sets APHRODITE_CACHE_ROOT to a temporary directory."""
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path / "aphrodite_cache"))
+def sonar_tmp_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Fixture that sets SONAR_CACHE_ROOT to a temporary directory."""
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path / "sonar_cache"))
     return tmp_path
 
 
@@ -98,42 +98,42 @@ class SparseActivationAotModel(torch.nn.Module):
         return self.down_proj(self.activation(self.up_proj(x)))
 
 
-def make_aphrodite_config() -> AphroditeConfig:
-    return AphroditeConfig(
+def make_sonar_config() -> SonarConfig:
+    return SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             backend="inductor",
         )
     )
 
 
 @contextmanager
-def use_aphrodite_config(aphrodite_config: AphroditeConfig):
-    with set_forward_context({}, aphrodite_config), set_current_aphrodite_config(aphrodite_config):
+def use_sonar_config(sonar_config: SonarConfig):
+    with set_forward_context({}, sonar_config), set_current_sonar_config(sonar_config):
         yield
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_no_dynamo_cache_entry(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        aphrodite_config = make_aphrodite_config()
+        sonar_config = make_sonar_config()
         args = (torch.randn(10, 10),)
         expected = reference_fn(*args)
-        with use_aphrodite_config(aphrodite_config):
-            m.setenv("APHRODITE_USE_AOT_COMPILE", "0")
-            m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-            m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
+        with use_sonar_config(sonar_config):
+            m.setenv("SONAR_USE_AOT_COMPILE", "0")
+            m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+            m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
             with (
                 pytest.raises(RuntimeError, match="Detected recompile"),
                 torch.compiler.set_stance("fail_on_recompile"),
             ):
-                CompiledMod(aphrodite_config=aphrodite_config)(*args)
+                CompiledMod(sonar_config=sonar_config)(*args)
             disable_envs_cache()
 
-            m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+            m.setenv("SONAR_USE_AOT_COMPILE", "1")
             torch._dynamo.reset()
             with torch.compiler.set_stance("fail_on_recompile"):
-                actual = CompiledMod(aphrodite_config=aphrodite_config)(*args)
+                actual = CompiledMod(sonar_config=sonar_config)(*args)
             assert torch.allclose(actual, expected)
 
 
@@ -141,14 +141,14 @@ def test_no_dynamo_cache_entry(monkeypatch: pytest.MonkeyPatch):
 def test_force_aot_load(monkeypatch: pytest.MonkeyPatch):
     with tempfile.TemporaryDirectory() as tmpdirname, monkeypatch.context() as m:
         args = (torch.randn(10, 10),)
-        m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-        m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-        m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-        m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-        m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-        aphrodite_config = make_aphrodite_config()
-        with use_aphrodite_config(aphrodite_config), pytest.raises(FileNotFoundError):
-            CompiledMod(aphrodite_config=aphrodite_config)(*args)
+        m.setenv("SONAR_USE_AOT_COMPILE", "1")
+        m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+        m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
+        m.setenv("SONAR_FORCE_AOT_LOAD", "1")
+        m.setenv("SONAR_CACHE_ROOT", tmpdirname)
+        sonar_config = make_sonar_config()
+        with use_sonar_config(sonar_config), pytest.raises(FileNotFoundError):
+            CompiledMod(sonar_config=sonar_config)(*args)
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
@@ -157,37 +157,37 @@ def test_save_and_load(monkeypatch: pytest.MonkeyPatch):
         args = (torch.randn(10, 10),)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-            m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-            m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-            m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
+            m.setenv("SONAR_CACHE_ROOT", tmpdirname)
+            m.setenv("SONAR_USE_AOT_COMPILE", "1")
+            m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+            m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
             disable_envs_cache()
-            aphrodite_config = make_aphrodite_config()
+            sonar_config = make_sonar_config()
             with (
-                use_aphrodite_config(aphrodite_config),
+                use_sonar_config(sonar_config),
                 compilation_counter.expect(
                     num_aot_compiles=1,
                     num_aot_artifacts_saved=1,
                     num_aot_artifacts_loaded=0,
                 ),
             ):
-                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
+                compiled_mod = CompiledMod(sonar_config=sonar_config)
                 expected = compiled_mod(*args)
             assert isinstance(expected, torch.Tensor)
 
             disable_envs_cache()
 
-            m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            aphrodite_config = make_aphrodite_config()
+            m.setenv("SONAR_FORCE_AOT_LOAD", "1")
+            sonar_config = make_sonar_config()
             with (
-                use_aphrodite_config(aphrodite_config),
+                use_sonar_config(sonar_config),
                 compilation_counter.expect(
                     num_aot_compiles=0,
                     num_aot_artifacts_saved=0,
                     num_aot_artifacts_loaded=1,
                 ),
             ):
-                cached_mod = CompiledMod(aphrodite_config=aphrodite_config)
+                cached_mod = CompiledMod(sonar_config=sonar_config)
                 ret = cached_mod(*args)
             assert isinstance(ret, torch.Tensor)
             assert cached_mod.was_aot_compile_fn_loaded_from_disk, (
@@ -200,23 +200,23 @@ def test_save_and_load(monkeypatch: pytest.MonkeyPatch):
     current_platform.device_count() < 2 or not is_torch_equal_or_newer("2.14.0.dev"),
     reason="requires 2 GPUs and torch 2.14",
 )
-def test_load_on_another_device(monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path):
+def test_load_on_another_device(monkeypatch: pytest.MonkeyPatch, sonar_tmp_cache: Path):
     # With --device-ids, a rank can load a cache compiled on another device.
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-    monkeypatch.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-    monkeypatch.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-    monkeypatch.setenv("APHRODITE_COMPILE_ON_ONE_RANK", "1")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1")
+    monkeypatch.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+    monkeypatch.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
+    monkeypatch.setenv("SONAR_COMPILE_ON_ONE_RANK", "1")
     for device_index, loaded in ((0, 0), (1, 1)):
-        monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", str(loaded))
+        monkeypatch.setenv("SONAR_FORCE_AOT_LOAD", str(loaded))
         disable_envs_cache()
         x = torch.randn(10, 10, device=f"cuda:{device_index}")
-        aphrodite_config = make_aphrodite_config()
+        sonar_config = make_sonar_config()
         with (
             torch.accelerator.device_index(device_index),
-            use_aphrodite_config(aphrodite_config),
+            use_sonar_config(sonar_config),
             compilation_counter.expect(num_aot_compiles=1 - loaded, num_aot_artifacts_loaded=loaded),
         ):
-            out = CompiledMod(aphrodite_config=aphrodite_config)(x)
+            out = CompiledMod(sonar_config=sonar_config)(x)
         torch.testing.assert_close(out, reference_fn(x))
 
 
@@ -225,7 +225,7 @@ def test_load_on_another_device(monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_c
     reason="requires CUDA and torch 2.10",
 )
 def test_sparse_activation_standalone_aot_preserves_dependencies(
-    monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path
+    monkeypatch: pytest.MonkeyPatch, sonar_tmp_cache: Path
 ):
     def native_reference(model: SparseActivationAotModel, x: torch.Tensor):
         projected = torch.nn.functional.linear(x, model.up_proj.weight)
@@ -233,12 +233,12 @@ def test_sparse_activation_standalone_aot_preserves_dependencies(
         return torch.nn.functional.linear(activated, model.down_proj.weight)
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-        m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-        m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-        m.setenv("APHRODITE_CACHE_ROOT", str(aphrodite_tmp_cache / "aphrodite_cache"))
+        m.setenv("SONAR_USE_AOT_COMPILE", "1")
+        m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+        m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
+        m.setenv("SONAR_CACHE_ROOT", str(sonar_tmp_cache / "sonar_cache"))
 
-        aphrodite_config = make_aphrodite_config()
+        sonar_config = make_sonar_config()
         torch.manual_seed(0)
         inputs = [
             torch.randn(4, 32, device="cuda", dtype=torch.bfloat16),
@@ -246,13 +246,11 @@ def test_sparse_activation_standalone_aot_preserves_dependencies(
         ]
 
         with (
-            use_aphrodite_config(aphrodite_config),
-            aphrodite_config.kernel_config.ir_op_priority.set_priority(),
+            use_sonar_config(sonar_config),
+            sonar_config.kernel_config.ir_op_priority.set_priority(),
             ir.enable_torch_wrap(True),
         ):
-            compiled = SparseActivationAotModel(aphrodite_config=aphrodite_config).to(
-                device="cuda", dtype=torch.bfloat16
-            )
+            compiled = SparseActivationAotModel(sonar_config=sonar_config).to(device="cuda", dtype=torch.bfloat16)
             compiled.requires_grad_(False)
             expected = [native_reference(compiled, x) for x in inputs]
             actual = [compiled(x) for x in inputs]
@@ -274,16 +272,16 @@ def test_save_and_load_slice(monkeypatch: pytest.MonkeyPatch):
     def foo(x: torch.Tensor):
         return x[slice(0, x.shape[0])]
 
-    aphrodite_config = make_aphrodite_config()
+    sonar_config = make_sonar_config()
 
     example_input = torch.randn(10, 10)
     torch._dynamo.mark_dynamic(example_input, 0)
     gm = torch.fx.symbolic_trace(foo)
     assert "getitem_1 = x[slice(0, getitem, None)]" in gm.code
-    with use_aphrodite_config(aphrodite_config):
-        payload = AphroditeSerializableFunction.serialize_graph_module(gm)
+    with use_sonar_config(sonar_config):
+        payload = SonarSerializableFunction.serialize_graph_module(gm)
         fake_mode = FakeTensorMode(shape_env=ShapeEnv())
-        loaded_gm = AphroditeSerializableFunction.deserialize_graph_module(payload, fake_mode)
+        loaded_gm = SonarSerializableFunction.deserialize_graph_module(payload, fake_mode)
 
     assert gm.code == loaded_gm.code
 
@@ -301,15 +299,15 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
         args = (torch.randn(10, 10),)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-            m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-            m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-            m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            aphrodite_config = make_aphrodite_config()
+            m.setenv("SONAR_CACHE_ROOT", tmpdirname)
+            m.setenv("SONAR_USE_AOT_COMPILE", "1")
+            m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+            m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
+            sonar_config = make_sonar_config()
 
             # Fresh compilation with tuple-returning model
-            with use_aphrodite_config(aphrodite_config):
-                compiled_mod = CompiledModTuple(aphrodite_config=aphrodite_config)
+            with use_sonar_config(sonar_config):
+                compiled_mod = CompiledModTuple(sonar_config=sonar_config)
                 fresh_result = compiled_mod(*args)
                 fresh_result_type = type(fresh_result)
 
@@ -320,10 +318,10 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
             disable_envs_cache()
 
             # Load from cache
-            m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            aphrodite_config = make_aphrodite_config()
-            with use_aphrodite_config(aphrodite_config):
-                cached_mod = CompiledModTuple(aphrodite_config=aphrodite_config)
+            m.setenv("SONAR_FORCE_AOT_LOAD", "1")
+            sonar_config = make_sonar_config()
+            with use_sonar_config(sonar_config):
+                cached_mod = CompiledModTuple(sonar_config=sonar_config)
                 cached_result = cached_mod(*args)
                 cached_result_type = type(cached_result)
 
@@ -358,13 +356,13 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
         args = (torch.randn(10, 10),)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-            m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-            m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
-            m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            aphrodite_config = make_aphrodite_config()
-            with use_aphrodite_config(aphrodite_config):
-                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
+            m.setenv("SONAR_CACHE_ROOT", tmpdirname)
+            m.setenv("SONAR_USE_AOT_COMPILE", "1")
+            m.setenv("SONAR_USE_MEGA_AOT_ARTIFACT", "1")
+            m.setenv("SONAR_USE_STANDALONE_COMPILE", "1")
+            sonar_config = make_sonar_config()
+            with use_sonar_config(sonar_config):
+                compiled_mod = CompiledMod(sonar_config=sonar_config)
                 compiled_mod(*args)
                 artifacts = compiled_mod.aot_compiled_fn._artifacts
                 guards_string = artifacts.compiled_fn.shape_env.format_guards()
@@ -372,10 +370,10 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
 
             disable_envs_cache()
 
-            m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            aphrodite_config = make_aphrodite_config()
-            with use_aphrodite_config(aphrodite_config):
-                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
+            m.setenv("SONAR_FORCE_AOT_LOAD", "1")
+            sonar_config = make_sonar_config()
+            with use_sonar_config(sonar_config):
+                compiled_mod = CompiledMod(sonar_config=sonar_config)
                 compiled_mod(*args)
                 assert compiled_mod.was_aot_compile_fn_loaded_from_disk, (
                     "Expected was_aot_compile_fn_loaded_from_disk to be True"
@@ -386,7 +384,7 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path, mocker):
+def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, sonar_tmp_cache: Path, mocker):
     """Test that partition wrappers are applied when loading AOT cached functions.
 
     This test verifies the fix for GitHub issue #31439 where AOT compile
@@ -394,32 +392,32 @@ def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, 
     The root cause was that partition wrapper context was bypassed when
     loading from AOT cache.
     """
-    from aphrodite.config import CUDAGraphMode
+    from sonar.config import CUDAGraphMode
 
     args = (torch.randn(10, 10),)
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1")
 
     # Create config with partition enabled
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             use_inductor_graph_partition=True,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
         )
     )
 
     # First compilation - save to cache
-    with use_aphrodite_config(aphrodite_config):
-        compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
+    with use_sonar_config(sonar_config):
+        compiled_mod = CompiledMod(sonar_config=sonar_config)
         compiled_mod(*args)
 
     disable_envs_cache()
 
     # Second run - load from cache, verify partition wrapper applied
-    monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-    aphrodite_config = AphroditeConfig(
+    monkeypatch.setenv("SONAR_FORCE_AOT_LOAD", "1")
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             use_inductor_graph_partition=True,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
         )
@@ -428,8 +426,8 @@ def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, 
     # Use mocker to spy on set_customized_partition_wrappers
     spy = mocker.spy(torch._inductor.utils, "set_customized_partition_wrappers")
 
-    with use_aphrodite_config(aphrodite_config):
-        compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
+    with use_sonar_config(sonar_config):
+        compiled_mod = CompiledMod(sonar_config=sonar_config)
 
         # First call after restart: loads from AOT cache.
         # This tests the fix for the first call after a restart.
@@ -465,14 +463,14 @@ def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, 
 
 @create_new_process_for_each_test("spawn")
 def test_standalone_compile_correctness():
-    """Outputs must match regardless of APHRODITE_USE_STANDALONE_COMPILE."""
+    """Outputs must match regardless of SONAR_USE_STANDALONE_COMPILE."""
     import json
 
     from ..utils import compare_two_settings
 
     compilation_config = json.dumps(
         {
-            "mode": CompilationMode.APHRODITE_COMPILE,
+            "mode": CompilationMode.SONAR_COMPILE,
         }
     )
 
@@ -489,10 +487,10 @@ def test_standalone_compile_correctness():
         "facebook/opt-125m",
         common_args,
         common_args,
-        env1={"APHRODITE_USE_STANDALONE_COMPILE": "1"},
+        env1={"SONAR_USE_STANDALONE_COMPILE": "1"},
         env2={
-            "APHRODITE_USE_STANDALONE_COMPILE": "0",
-            "APHRODITE_USE_MEGA_AOT_ARTIFACT": "0",
+            "SONAR_USE_STANDALONE_COMPILE": "0",
+            "SONAR_USE_MEGA_AOT_ARTIFACT": "0",
         },
     )
 
@@ -506,10 +504,10 @@ def test_gpt2_cache_hit(monkeypatch: pytest.MonkeyPatch):
     ``LLM.collective_rpc`` so the test works under default V1
     multiprocessing (no shared memory between test and engine).
     """
-    from aphrodite import LLM
+    from sonar import LLM
 
     def _snap(self):
-        from aphrodite.compilation.counter import compilation_counter
+        from sonar.compilation.counter import compilation_counter
 
         return (
             compilation_counter.num_aot_compiles,
@@ -518,16 +516,16 @@ def test_gpt2_cache_hit(monkeypatch: pytest.MonkeyPatch):
         )
 
     # collective_rpc(callable) requires pickle-based serialization.
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     with monkeypatch.context() as m, tempfile.TemporaryDirectory() as tmpdirname:
-        m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-        m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+        m.setenv("SONAR_CACHE_ROOT", tmpdirname)
+        m.setenv("SONAR_USE_AOT_COMPILE", "1")
         # First compilation - initialize model and generate
         llm_model = LLM(
             model="gpt2",
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
             ),
             max_model_len=256,
         )
@@ -540,11 +538,11 @@ def test_gpt2_cache_hit(monkeypatch: pytest.MonkeyPatch):
         disable_envs_cache()
 
         # Second compilation - should hit cache
-        m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
+        m.setenv("SONAR_FORCE_AOT_LOAD", "1")
         llm_model = LLM(
             model="gpt2",
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
             ),
             max_model_len=256,
         )
@@ -778,11 +776,11 @@ class TestStandaloneCompiledArtifactsIntegration:
             assert cache.get(submod, shape) == shared_data
 
     @pytest.mark.skipif(
-        envs.APHRODITE_USE_MEGA_AOT_ARTIFACT,
+        envs.SONAR_USE_MEGA_AOT_ARTIFACT,
         reason="There's no AOT Autograd run with mega artifact",
     )
     def test_functorch_config(self):
-        aphrodite_config = make_aphrodite_config()
+        sonar_config = make_sonar_config()
         example_inputs = (torch.randn(10, 10),)
 
         def add_1(x: torch.Tensor):
@@ -796,24 +794,24 @@ class TestStandaloneCompiledArtifactsIntegration:
 
         with (
             torch._functorch.config.patch(bundled_autograd_cache=False),
-            set_current_aphrodite_config(aphrodite_config),
+            set_current_sonar_config(sonar_config),
         ):
             with torch._functorch.config.patch(bundled_autograd_cache=True):
-                fn = AphroditeSerializableFunction(gm, example_inputs, "", add_1)
+                fn = SonarSerializableFunction(gm, example_inputs, "", add_1)
 
-            payload = AphroditeSerializableFunction.serialize_compile_artifacts(fn)
+            payload = SonarSerializableFunction.serialize_compile_artifacts(fn)
 
             config = None
 
-            def backend(*args, **kwargs) -> AphroditeSerializableFunction:
+            def backend(*args, **kwargs) -> SonarSerializableFunction:
                 nonlocal config
                 # bundled_autograd_cache should be True even compiler backend
                 # runs with bundled_autograd_cache=False in ambient context.
                 config = torch._functorch.config.save_config_portable()
                 return fn
 
-            loaded_fn = AphroditeSerializableFunction.deserialize_compile_artifacts(payload)
-            with patch.object(AphroditeBackend, "__call__", backend):
+            loaded_fn = SonarSerializableFunction.deserialize_compile_artifacts(payload)
+            with patch.object(SonarBackend, "__call__", backend):
                 loaded_fn(*example_inputs)
 
         assert isinstance(config, dict)
@@ -822,31 +820,31 @@ class TestStandaloneCompiledArtifactsIntegration:
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_disable_compile_cache_skips_aot_save(monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str):
-    """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be saved."""
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+def test_disable_compile_cache_skips_aot_save(monkeypatch: pytest.MonkeyPatch, fresh_sonar_cache: str):
+    """When SONAR_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be saved."""
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1")
     disable_envs_cache()
 
     args = (torch.randn(10, 10),)
     expected = reference_fn(*args)
-    aphrodite_config = make_aphrodite_config()
+    sonar_config = make_sonar_config()
 
     with (
-        use_aphrodite_config(aphrodite_config),
+        use_sonar_config(sonar_config),
         compilation_counter.expect(
             num_aot_compiles=1,
             num_aot_artifacts_saved=0,
             num_aot_artifacts_loaded=0,
         ),
     ):
-        mod = CompiledMod(aphrodite_config=aphrodite_config)
+        mod = CompiledMod(sonar_config=sonar_config)
         actual = mod(*args)
 
     assert torch.allclose(actual, expected)
 
     # No cached artifact should exist on disk
-    aot_dir = os.path.join(fresh_aphrodite_cache, "torch_compile_cache", "torch_aot_compile")
+    aot_dir = os.path.join(fresh_sonar_cache, "torch_compile_cache", "torch_aot_compile")
     if os.path.isdir(aot_dir):
         for root, _dirs, files in os.walk(aot_dir):
             for f in files:
@@ -854,42 +852,42 @@ def test_disable_compile_cache_skips_aot_save(monkeypatch: pytest.MonkeyPatch, f
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_disable_compile_cache_skips_aot_load(monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str):
-    """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be loaded."""
+def test_disable_compile_cache_skips_aot_load(monkeypatch: pytest.MonkeyPatch, fresh_sonar_cache: str):
+    """When SONAR_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be loaded."""
     # Phase 1: compile and save with cache enabled
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1")
     disable_envs_cache()
 
     args = (torch.randn(10, 10),)
-    aphrodite_config = make_aphrodite_config()
+    sonar_config = make_sonar_config()
 
     with (
-        use_aphrodite_config(aphrodite_config),
+        use_sonar_config(sonar_config),
         compilation_counter.expect(num_aot_artifacts_saved=1),
     ):
-        CompiledMod(aphrodite_config=aphrodite_config)(*args)
+        CompiledMod(sonar_config=sonar_config)(*args)
 
     # Phase 2: disable cache, compile again — should NOT load from disk
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
     disable_envs_cache()
     torch._dynamo.reset()
 
-    aphrodite_config = make_aphrodite_config()
+    sonar_config = make_sonar_config()
     with (
-        use_aphrodite_config(aphrodite_config),
+        use_sonar_config(sonar_config),
         compilation_counter.expect(
             num_aot_compiles=1,
             num_aot_artifacts_saved=0,
             num_aot_artifacts_loaded=0,
         ),
     ):
-        mod = CompiledMod(aphrodite_config=aphrodite_config)
+        mod = CompiledMod(sonar_config=sonar_config)
         mod(*args)
 
     assert not mod.was_aot_compile_fn_loaded_from_disk
 
 
-_CACHE_OFFSET = int(os.environ.get("APHRODITE_TEST_CACHE_OFFSET", "0"))
+_CACHE_OFFSET = int(os.environ.get("SONAR_TEST_CACHE_OFFSET", "0"))
 
 
 def _capture_cache_offset(fn):
@@ -903,7 +901,7 @@ def _capture_cache_offset(fn):
 
 
 def _run_graph_cache_probe():
-    """Fresh-process probe; only the Aphrodite cache root survives between runs."""
+    """Fresh-process probe; only the Sonar cache root survives between runs."""
     from torch._inductor.runtime.cache_dir_utils import cache_dir
 
     @support_torch_compile(dynamic_arg_dims={"x": 0}, use_aot_compile=False)
@@ -916,11 +914,11 @@ def _run_graph_cache_probe():
             return x * 2 + 1
 
     cache_dir()  # Exercise a tmp default populated before backend initialization.
-    config = make_aphrodite_config()
+    config = make_sonar_config()
     x = torch.arange(64, device=current_platform.device_type).reshape(8, 8).float()
-    expected = x * 2 + 1 + int(os.environ["APHRODITE_TEST_CACHE_OFFSET"])
-    with use_aphrodite_config(config):
-        mod = GraphCacheMod(aphrodite_config=config)
+    expected = x * 2 + 1 + int(os.environ["SONAR_TEST_CACHE_OFFSET"])
+    with use_sonar_config(config):
+        mod = GraphCacheMod(sonar_config=config)
         assert torch.equal(mod(x), expected)
         traced = torch._dynamo.utils.counters["stats"]["unique_graphs"]
         assert traced > 0
@@ -943,18 +941,18 @@ def _run_graph_cache_probe():
         "fx_hits": torch._dynamo.utils.counters["inductor"]["fxgraph_cache_hit"],
         "autograd_hits": torch._dynamo.utils.counters["aot_autograd"]["autograd_cache_hit"],
     }
-    native = os.environ.get("APHRODITE_TEST_NATIVE_AOT")
+    native = os.environ.get("SONAR_TEST_NATIVE_AOT")
     if native:
         if native == "warm":
-            os.environ["APHRODITE_FORCE_AOT_LOAD"] = "1"
+            os.environ["SONAR_FORCE_AOT_LOAD"] = "1"
             disable_envs_cache()
-        with use_aphrodite_config(config):
-            native_mod = CompiledMod(aphrodite_config=config)
+        with use_sonar_config(config):
+            native_mod = CompiledMod(sonar_config=config)
             assert torch.equal(native_mod(x), reference_fn(x))
         assert compilation_counter.num_aot_artifacts_loaded == int(native == "warm")
         assert compilation_counter.num_aot_artifacts_saved == int(native == "cold")
         assert compilation_counter.num_aot_compiles == int(native == "cold")
-    Path(os.environ["APHRODITE_TEST_CACHE_RESULT"]).write_text(json.dumps(result))
+    Path(os.environ["SONAR_TEST_CACHE_RESULT"]).write_text(json.dumps(result))
 
 
 @pytest.fixture
@@ -970,16 +968,16 @@ def graph_cache_probe(tmp_path):
             env[key] = str(directory)
         result = private / "result.json"
         env.update(
-            APHRODITE_CACHE_ROOT=str(tmp_path / "shared"),
-            APHRODITE_USE_AOT_COMPILE="1",
-            APHRODITE_USE_MEGA_AOT_ARTIFACT="1",
-            APHRODITE_USE_STANDALONE_COMPILE=standalone,
-            APHRODITE_FORCE_AOT_LOAD="0",
-            APHRODITE_DISABLE_COMPILE_CACHE="0",
-            APHRODITE_USE_BYTECODE_HOOK="0",
-            APHRODITE_TEST_CACHE_OFFSET=str(offset),
-            APHRODITE_TEST_CACHE_RESULT=str(result),
-            APHRODITE_TEST_NATIVE_AOT=native,
+            SONAR_CACHE_ROOT=str(tmp_path / "shared"),
+            SONAR_USE_AOT_COMPILE="1",
+            SONAR_USE_MEGA_AOT_ARTIFACT="1",
+            SONAR_USE_STANDALONE_COMPILE=standalone,
+            SONAR_FORCE_AOT_LOAD="0",
+            SONAR_DISABLE_COMPILE_CACHE="0",
+            SONAR_USE_BYTECODE_HOOK="0",
+            SONAR_TEST_CACHE_OFFSET=str(offset),
+            SONAR_TEST_CACHE_RESULT=str(result),
+            SONAR_TEST_NATIVE_AOT=native,
             TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE="0",
             TORCHINDUCTOR_AUTOGRAD_REMOTE_CACHE="0",
         )
@@ -1022,11 +1020,11 @@ def test_compile_opt_out_preserves_native_aot_roundtrip(graph_cache_probe):
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_compile_opt_out_respected_in_dynamo_trace_once(monkeypatch, fresh_aphrodite_cache):
+def test_compile_opt_out_respected_in_dynamo_trace_once(monkeypatch, fresh_sonar_cache):
     """Opt-out skips model AOT without disabling tracing or causing retracing."""
-    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
-    monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", "0")
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "0")
+    monkeypatch.setenv("SONAR_USE_AOT_COMPILE", "1")
+    monkeypatch.setenv("SONAR_FORCE_AOT_LOAD", "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "0")
     disable_envs_cache()
 
     @support_torch_compile(dynamic_arg_dims={"x": 0}, use_aot_compile=False)
@@ -1034,17 +1032,17 @@ def test_compile_opt_out_respected_in_dynamo_trace_once(monkeypatch, fresh_aphro
         def forward(self, x):
             return x * 2 + 1
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(mode=CompilationMode.DYNAMO_TRACE_ONCE, backend="inductor")
     )
     x = torch.arange(64, device=current_platform.device_type).reshape(8, 8).float()
     counters = torch._dynamo.utils.counters["stats"]
     with (
-        use_aphrodite_config(config),
+        use_sonar_config(config),
         patch.object(OptOutMod, "aot_compile", side_effect=AssertionError("Model AOT")),
     ):
-        assert envs.APHRODITE_USE_AOT_COMPILE
-        mod = OptOutMod(aphrodite_config=config)
+        assert envs.SONAR_USE_AOT_COMPILE
+        mod = OptOutMod(sonar_config=config)
         before = counters["unique_graphs"]
         assert torch.equal(mod(x), x * 2 + 1)
         traced = counters["unique_graphs"]

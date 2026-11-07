@@ -90,14 +90,14 @@ variants:
       - "--gpu-memory-utilization"
       - "0.95"
     extra_env:
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
       HCCL_OP_EXPANSION_MODE: "AIV"
       HCCL_BUFFSIZE: "1024"
       OMP_PROC_BIND: "false"
       OMP_NUM_THREADS: "1"
       TASK_QUEUE_ENABLE: "1"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
-      APHRODITE_USE_RUST_FRONTEND: "1"
+      SONAR_USE_RUST_FRONTEND: "1"
     hardware_overrides:
       ascend_910c:
         docker_image: "swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:v0.23.0-a3"
@@ -139,7 +139,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 4x Xeon 6 CPUs, or 4x Intel Arc Pro B70 (32 GB per card).
-  - Aphrodite >= 0.8.5
+  - Sonar >= 0.8.5
 
   ### pip (Intel Xeon 6 CPUs)
 
@@ -166,7 +166,7 @@ guide: |
   not prescribe a Xeon 6 TP value or hard-code NUMA node IDs.
 
   ```bash
-  aphrodite serve Qwen/Qwen3-30B-A3B \
+  sonar serve Qwen/Qwen3-30B-A3B \
     --max-num-batched-tokens 16384 \
     --gpu-memory-utilization 0.8
   ```
@@ -188,7 +188,7 @@ guide: |
 
   ## Intel Arc Pro B70 (XPU)
 
-  Validated on 4x Intel Arc Pro B70 (32 GB per card) with the official Aphrodite XPU
+  Validated on 4x Intel Arc Pro B70 (32 GB per card) with the official Sonar XPU
   image `vllm/vllm-openai-xpu:latest`, BF16, TP=4.
 
   ```bash
@@ -225,5 +225,5 @@ guide: |
 
   - [Model card](https://huggingface.co/Qwen/Qwen3-30B-A3B)
   - [Ascend A3 W8A8 checkpoint](https://www.modelscope.cn/models/Eco-Tech/Qwen3-30B-A3B-w8a8)
-  - [Aphrodite Ascend](https://github.com/vllm-project/vllm-ascend)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar Ascend](https://github.com/vllm-project/vllm-ascend)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

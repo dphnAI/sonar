@@ -5,11 +5,11 @@
 
 import pytest
 
-from aphrodite.config import AphroditeConfig, DeviceConfig, KVTransferConfig, SchedulerConfig
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
+from sonar.config import DeviceConfig, KVTransferConfig, SchedulerConfig, SonarConfig
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import KVCacheConfig
 
 pytestmark = pytest.mark.cpu_test
 
@@ -76,15 +76,15 @@ def mock_hybrid_kv_cache_supported(monkeypatch):
     ids=["hma_connector", "non_hma_connector", "multi_all_hma", "multi_mixed"],
 )
 def test_hma_auto_config(kv_transfer_config, expect_disabled):
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         device_config=DeviceConfig("cpu"),
         kv_transfer_config=kv_transfer_config,
     )
-    assert aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
+    assert sonar_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
 
 
 def test_explicit_hma_with_non_hma_connector_errors_at_factory():
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         device_config=DeviceConfig("cpu"),
         scheduler_config=SchedulerConfig(
             max_model_len=16,
@@ -98,4 +98,4 @@ def test_explicit_hma_with_non_hma_connector_errors_at_factory():
     )
     kv_cache_config = KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[])
     with pytest.raises(ValueError, match="does not support HMA but HMA is enabled"):
-        KVConnectorFactory.create_connector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)
+        KVConnectorFactory.create_connector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)

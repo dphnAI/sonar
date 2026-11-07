@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use aphrodite_tokenizer::test_utils::TestTokenizer;
-use aphrodite_tokenizer::{DecodedText, Tokenizer as _};
 use serde_json::{Value, json};
+use sonar_tokenizer::test_utils::TestTokenizer;
+use sonar_tokenizer::{DecodedText, Tokenizer as _};
 use xgrammar_structural_tag::ToolChoice;
 use xgrammar_structural_tag::format::Format;
 

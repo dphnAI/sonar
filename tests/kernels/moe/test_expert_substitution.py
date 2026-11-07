@@ -6,21 +6,21 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.fused_moe.expert_substitution import (
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.fused_moe.expert_substitution import (
     ConstantExpertSubstitution,
     SubstitutedRoutedExperts,
     get_expert_substitution_spec,
     make_expert_substitution,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
     FlashInferExperts,
 )
-from aphrodite.model_executor.models.mixtral import MixtralMoE
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.models.mixtral import MixtralMoE
+from sonar.platforms import current_platform
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
     ProcessGroupInfo,
     parallel_launch_with_config,
@@ -263,11 +263,11 @@ def test_substituted_routed_experts_adds_constant_on_one_tp_rank(tp_rank, padded
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="requires a CUDA-like platform")
 def test_standard_fused_moe_model_discovers_substitution(dist_init):
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = _model_config({"0": [1]}, dtype=torch.bfloat16, is_moe=True)
-    aphrodite_config.kernel_config.moe_backend = "triton"
+    sonar_config = SonarConfig()
+    sonar_config.model_config = _model_config({"0": [1]}, dtype=torch.bfloat16, is_moe=True)
+    sonar_config.kernel_config.moe_backend = "triton"
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         moe = MixtralMoE(
             num_experts=4,
             top_k=2,
@@ -301,12 +301,12 @@ def test_standard_fused_moe_model_discovers_substitution(dist_init):
 )
 def test_fused_moe_combines_compact_experts_and_substitution(dist_init, moe_backend):
     hidden_size = 256
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = _model_config({"0": [1, 3]}, dtype=torch.bfloat16, is_moe=True)
-    aphrodite_config.compilation_config.static_forward_context = {}
-    aphrodite_config.kernel_config.moe_backend = moe_backend
+    sonar_config = SonarConfig()
+    sonar_config.model_config = _model_config({"0": [1, 3]}, dtype=torch.bfloat16, is_moe=True)
+    sonar_config.compilation_config.static_forward_context = {}
+    sonar_config.kernel_config.moe_backend = moe_backend
 
-    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
+    with set_current_sonar_config(sonar_config), set_forward_context(None, sonar_config):
         init_workspace_manager(torch.accelerator.current_device_index())
         layer = FusedMoEFactory(
             num_experts=4,
@@ -345,10 +345,10 @@ def test_fused_moe_combines_compact_experts_and_substitution(dist_init, moe_back
 
 def _tp_substitution_worker(
     process_group: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     _cpu_group,
 ) -> None:
-    with set_forward_context(None, aphrodite_config):
+    with set_forward_context(None, sonar_config):
         init_workspace_manager(process_group.local_rank)
         layer = FusedMoEFactory(
             num_experts=4,
@@ -380,14 +380,14 @@ def _tp_substitution_worker(
     reason="requires two CUDA-like devices",
 )
 def test_constant_substitution_is_added_once_with_tp2():
-    aphrodite_config = AphroditeConfig(parallel_config=ParallelConfig(tensor_parallel_size=2))
-    aphrodite_config.model_config = _model_config(
+    sonar_config = SonarConfig(parallel_config=ParallelConfig(tensor_parallel_size=2))
+    sonar_config.model_config = _model_config(
         {"0": [1]},
         dtype=torch.bfloat16,
         is_moe=True,
         sleep_mode_offload_cudagraph=False,
     )
-    aphrodite_config.compilation_config.static_forward_context = {}
-    aphrodite_config.kernel_config.moe_backend = "triton"
+    sonar_config.compilation_config.static_forward_context = {}
+    sonar_config.kernel_config.moe_backend = "triton"
 
-    parallel_launch_with_config(2, _tp_substitution_worker, aphrodite_config, None)
+    parallel_launch_with_config(2, _tp_substitution_worker, sonar_config, None)

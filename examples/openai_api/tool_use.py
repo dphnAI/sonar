@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-Set up this example by starting a Aphrodite OpenAI-compatible server with tool
+Set up this example by starting a Sonar OpenAI-compatible server with tool
 call options enabled. For example:
 
 IMPORTANT: for mistral, you must use one of the provided mistral tool call
 templates, or your own - the model default doesn't work for tool calls with
-Aphrodite.
+Sonar.
 
-See the Aphrodite docs on OpenAI server & tool calling for more details.
+See the Sonar docs on OpenAI server & tool calling for more details.
 
-aphrodite run mistralai/Mistral-7B-Instruct-v0.3 \
+sonar run mistralai/Mistral-7B-Instruct-v0.3 \
             --chat-template examples/chat_templates/mistral_tool.jinja \
             --enable-auto-tool-choice --tool-call-parser mistral
 
 OR
-aphrodite run NousResearch/Hermes-2-Pro-Llama-3-8B \
+sonar run NousResearch/Hermes-2-Pro-Llama-3-8B \
             --chat-template examples/chat_templates/hermes_tool.jinja \
             --enable-auto-tool-choice --tool-call-parser hermes
 """
@@ -24,7 +24,7 @@ import json
 
 from openai import OpenAI
 
-# Modify OpenAI's API key and API base to use Aphrodite's API server.
+# Modify OpenAI's API key and API base to use Sonar's API server.
 openai_api_key = "EMPTY"
 openai_api_base = "http://localhost:2242/v1"
 

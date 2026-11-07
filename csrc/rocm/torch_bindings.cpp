@@ -16,9 +16,9 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, rocm_ops) {
 
 // skinny_gemms.cu (LLMM1/wvSplitK/wvSplitKrc/wvSplitKQ) is excluded on gfx1250
 // (gfx9/gfx11 ISA, unsupported there); skip these registrations to avoid
-// undefined symbols. Aphrodite uses default/Triton GEMM for these ops on
+// undefined symbols. Sonar uses default/Triton GEMM for these ops on
 // gfx1250.
-#ifndef APHRODITE_SKIP_SKINNY_GEMMS
+#ifndef SONAR_SKIP_SKINNY_GEMMS
   // Custom gemm op for matrix-vector multiplication
   rocm_ops.def(
       "LLMM1(Tensor in_a, Tensor in_b, int rows_per_block) -> "
@@ -52,9 +52,9 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, rocm_ops) {
       "Tensor scale_a, "
       "          Tensor scale_b, int CuCount) -> ()");
   rocm_ops.impl("wvSplitKQ", torch::kCUDA, &wvSplitKQ);
-#endif  // APHRODITE_SKIP_SKINNY_GEMMS
+#endif  // SONAR_SKIP_SKINNY_GEMMS
 
-#ifdef APHRODITE_ROCM_GFX1100
+#ifdef SONAR_ROCM_GFX1100
   // MXFP4 weights x int8 activations GEMV for RDNA3/RDNA3.5 (gfx11) decode,
   // 1 <= M <= 8. Weights [N, K/2] uint8 E2M1, scales [N, K/32] uint8 E8M0.
   rocm_ops.def(

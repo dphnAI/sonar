@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
-from aphrodite.assets.image import VLM_IMAGES_DIR
-from aphrodite.outputs import RequestOutput
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.metrics.reader import Counter, Gauge, Metric
+from sonar import LLM, SamplingParams
+from sonar.assets.base import SONAR_S3_BUCKET_URL
+from sonar.assets.image import VLM_IMAGES_DIR
+from sonar.outputs import RequestOutput
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.metrics.reader import Counter, Gauge, Metric
 from tests.evals.gsm8k.gsm8k_eval import _build_gsm8k_prompts, evaluate_gsm8k_offline
 
 
@@ -67,7 +67,7 @@ def get_test_prompts(mm_enabled: bool, num_prompts: int = 100) -> list[Messages]
         placeholders = [
             {
                 "type": "image_url",
-                "image_url": {"url": f"{APHRODITE_S3_BUCKET_URL}/{VLM_IMAGES_DIR}/stop_sign.jpg"},
+                "image_url": {"url": f"{SONAR_S3_BUCKET_URL}/{VLM_IMAGES_DIR}/stop_sign.jpg"},
             }
         ]
         prompt = [
@@ -80,7 +80,7 @@ def get_test_prompts(mm_enabled: bool, num_prompts: int = 100) -> list[Messages]
 
 
 def get_instruct_coder_messages(n: int) -> list[Messages]:
-    from aphrodite.benchmarks.datasets import InstructCoderDataset
+    from sonar.benchmarks.datasets import InstructCoderDataset
 
     dataset = InstructCoderDataset(dataset_path="likaixin/InstructCoder", dataset_split="train")
     prompts: Iterable[str] = dataset.sample_prompts(n=n)
@@ -171,26 +171,26 @@ def get_spec_decode_metric_value(metrics: Sequence[Metric], metric_name: str) ->
 
 
 def compute_acceptance_rate(metrics: list[Metric], prev_metrics: list[Metric] | None = None) -> float:
-    n_draft_toks = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_draft_tokens")
+    n_draft_toks = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_draft_tokens")
     if n_draft_toks == 0:
         return float("nan")
-    n_accepted_toks = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_accepted_tokens")
+    n_accepted_toks = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_accepted_tokens")
     if prev_metrics is not None:
-        n_draft_toks -= get_spec_decode_metric_value(prev_metrics, "aphrodite:spec_decode_num_draft_tokens")
-        n_accepted_toks -= get_spec_decode_metric_value(prev_metrics, "aphrodite:spec_decode_num_accepted_tokens")
+        n_draft_toks -= get_spec_decode_metric_value(prev_metrics, "sonar:spec_decode_num_draft_tokens")
+        n_accepted_toks -= get_spec_decode_metric_value(prev_metrics, "sonar:spec_decode_num_accepted_tokens")
         if n_draft_toks <= 0:
             return float("nan")
     return n_accepted_toks / n_draft_toks
 
 
 def compute_acceptance_len(metrics: list[Metric], prev_metrics: list[Metric] | None = None) -> float:
-    n_drafts = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_drafts")
-    n_accepted_toks = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_accepted_tokens")
+    n_drafts = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_drafts")
+    n_accepted_toks = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_accepted_tokens")
     if n_drafts == 0:
         return 1
     if prev_metrics is not None:
-        n_drafts -= get_spec_decode_metric_value(prev_metrics, "aphrodite:spec_decode_num_drafts")
-        n_accepted_toks -= get_spec_decode_metric_value(prev_metrics, "aphrodite:spec_decode_num_accepted_tokens")
+        n_drafts -= get_spec_decode_metric_value(prev_metrics, "sonar:spec_decode_num_drafts")
+        n_accepted_toks -= get_spec_decode_metric_value(prev_metrics, "sonar:spec_decode_num_accepted_tokens")
         if n_drafts <= 0:
             return 1
     return 1 + (n_accepted_toks / n_drafts)

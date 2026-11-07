@@ -5,14 +5,14 @@ from typing import NamedTuple
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.rotary_embedding import get_rope
-from aphrodite.model_executor.layers.rotary_embedding.mrope import (
+from sonar.model_executor.layers.rotary_embedding import get_rope
+from sonar.model_executor.layers.rotary_embedding.mrope import (
     apply_interleaved_rope,
     triton_mrope,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.transformers_utils.config import get_config
+from sonar.utils.torch_utils import set_random_seed
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -113,7 +113,7 @@ def test_apply_interleaved_rope_torch_compile():
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @pytest.mark.parametrize("num_tokens", num_tokens_list)
 def test_mrope(
-    default_aphrodite_config,
+    default_sonar_config,
     model_name: str,
     model_info: MRoPETestInfo,
     tp_size: int,
@@ -235,7 +235,7 @@ def test_mrope_row_offset_int64():
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @pytest.mark.parametrize("num_tokens", num_tokens_list)
 def test_mrope_torch_compile_tracing(
-    default_aphrodite_config,
+    default_sonar_config,
     model_name: str,
     model_info: MRoPETestInfo,
     tp_size: int,

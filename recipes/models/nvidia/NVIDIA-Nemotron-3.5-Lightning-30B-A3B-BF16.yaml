@@ -35,7 +35,7 @@ model:
 
 dependencies:
   - command: 'uv pip install "fastokens>=0.2.0"'
-    note: "Required by the BF16 variant, which sets APHRODITE_USE_FASTOKENS=1; Aphrodite does not bundle it yet (vllm-project/vllm#47859)"
+    note: "Required by the BF16 variant, which sets SONAR_USE_FASTOKENS=1; Sonar does not bundle it yet (vllm-project/vllm#47859)"
 
 features:
   reasoning:
@@ -101,7 +101,7 @@ features:
       - "--max-model-len"
       - "1048576"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -138,7 +138,7 @@ variants:
           - "--max-num-batched-tokens"
           - "32768"
       dgx_spark_gb10:
-        # Validated 2026-08-31 on Aphrodite 0.28.1rc1.dev130+g44fe2a392 (Ubuntu
+        # Validated 2026-08-31 on Sonar 0.28.1rc1.dev130+g44fe2a392 (Ubuntu
         # 24.04.4, driver 580.159.03, CUDA 13.0). The nightly is newer than the
         # recipe-wide v0.28.0 image, so it is pinned here.
         docker_image: "vllm/vllm-openai:nightly"
@@ -182,7 +182,7 @@ variants:
       - "--moe-backend"
       - "flashinfer_cutlass"
     extra_env:
-      APHRODITE_USE_FASTOKENS: "1"
+      SONAR_USE_FASTOKENS: "1"
 
 compatible_strategies:
   - single_node_tp
@@ -202,7 +202,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** 0.27.1 or newer — `vllm/vllm-openai:v0.28.0`
+  - **Sonar:** 0.27.1 or newer — `vllm/vllm-openai:v0.28.0`
   - **Hardware:** 1x H100, 1x DGX Spark (GB10), or 1x DGX Station (GB300)
   - **Speculative decoding:** **MTP** (built into the checkpoint), **DSpark** (hybrid
     autoregressive + diffusion) and **DFlash** (diffusion) are all supported. DSpark
@@ -211,7 +211,7 @@ guide: |
 
   ## Client Usage
 
-  Once the Aphrodite server is running, consume it via the OpenAI-compatible API. Reasoning
+  Once the Sonar server is running, consume it via the OpenAI-compatible API. Reasoning
   is returned separately from the answer, on `message.reasoning`:
 
   ```python
@@ -227,7 +227,7 @@ guide: |
       model=SERVED_MODEL_NAME,
       messages=[
           {"role": "system", "content": "You are a helpful assistant."},
-          {"role": "user", "content": "Briefly explain: what is Aphrodite and why is it useful for large model inference?"},
+          {"role": "user", "content": "Briefly explain: what is Sonar and why is it useful for large model inference?"},
       ],
       temperature=1.0,
       top_p=0.95,
@@ -248,7 +248,7 @@ guide: |
   - **Speculative decoding**: DSpark is preferred on DGX Spark. On DGX Station, prefer
     MTP — choose it in the Speculative Decoding panel above.
   - **DGX Spark (GB10)**: the selectable config is the one measured on 2026-08-31 with
-    aiperf 0.12.0 on Aphrodite `0.28.1rc1.dev130+g44fe2a392` — DSpark drafting 7 tokens at
+    aiperf 0.12.0 on Sonar `0.28.1rc1.dev130+g44fe2a392` — DSpark drafting 7 tokens at
     `--gpu-memory-utilization 0.7`, `--mamba-cache-mode align` and fastsafetensors
     loading, served from `vllm/vllm-openai:nightly`. On SPEED-Bench at 8K input / 256
     output, concurrency 1, it reached 7,252 prefill tok/s and 93.3 decode tok/s at a

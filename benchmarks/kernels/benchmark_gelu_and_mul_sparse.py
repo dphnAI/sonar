@@ -5,12 +5,12 @@ import itertools
 
 import torch
 
-import aphrodite.kernels  # noqa: F401
-from aphrodite import ir
-from aphrodite.benchmarks.lib.utils import default_aphrodite_config
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
+import sonar.kernels  # noqa: F401
+from sonar import ir
+from sonar.benchmarks.lib.utils import default_sonar_config
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
 
 NUM_TOKENS = [1, 2, 8, 32, 128, 512, 2048]
 INTERMEDIATE_SIZES = [2048, 4096, 8192, 13824, 16384, 32768]
@@ -18,7 +18,7 @@ CONFIGS = list(itertools.product(NUM_TOKENS, INTERMEDIATE_SIZES))
 STD_MULTIPLIER = 1.6448536269514722
 
 
-@default_aphrodite_config()
+@default_sonar_config()
 def benchmark_gelu_and_mul_sparse(
     num_tokens: int,
     intermediate_size: int,

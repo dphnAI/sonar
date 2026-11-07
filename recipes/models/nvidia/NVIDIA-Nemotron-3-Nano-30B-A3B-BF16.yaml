@@ -47,7 +47,7 @@ features:
       - "--max-model-len"
       - "1048576"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - long_context
@@ -104,7 +104,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x H100/H200 or comparable; DGX Spark, Jetson Thor, and Intel Arc Pro B60/B70 supported
-  - Aphrodite >= 0.17.0 (0.28.0 recommended for full support)
+  - Sonar >= 0.17.0 (0.28.0 recommended for full support)
   - Docker with NVIDIA Container Toolkit (recommended)
 
   ### Pull Docker Image
@@ -137,7 +137,7 @@ guide: |
   FP8 with FlashInfer MoE backend (Blackwell/Hopper):
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 \
     --trust-remote-code \
     --async-scheduling \
     --kv-cache-dtype fp8 \
@@ -150,7 +150,7 @@ guide: |
   ```bash
   wget https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16/resolve/main/nano_v3_reasoning_parser.py
 
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16 \
     --max-num-seqs 8 \
     --tensor-parallel-size 1 \
     --max-model-len 262144 \
@@ -164,7 +164,7 @@ guide: |
   ### Intel XPU (B60, B70)
 
   Validated on 4× Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   FP8:
   ```bash
@@ -211,7 +211,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 \
     --trust-remote-code \
     --dataset-name random \

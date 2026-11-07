@@ -12,17 +12,17 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import get_current_aphrodite_config
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.cpu import CpuPlatform
-from aphrodite.platforms.cuda import CudaPlatform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.platforms.rocm import RocmPlatform, on_mi3xx
-from aphrodite.utils.torch_utils import set_default_torch_dtype, set_random_seed
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import _cached_get_attn_backend
+from sonar.config import get_current_sonar_config
+from sonar.config.multimodal import MultiModalConfig
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.platforms import current_platform
+from sonar.platforms.cpu import CpuPlatform
+from sonar.platforms.cuda import CudaPlatform
+from sonar.platforms.interface import DeviceCapability
+from sonar.platforms.rocm import RocmPlatform, on_mi3xx
+from sonar.utils.torch_utils import set_default_torch_dtype, set_random_seed
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import _cached_get_attn_backend
 
 
 @pytest.fixture(autouse=True)
@@ -47,43 +47,43 @@ if current_platform.is_rocm():
 
 
 @pytest.mark.parametrize("device", devices)
-def test_mha_attn_platform(default_aphrodite_config, device: str):
+def test_mha_attn_platform(default_sonar_config, device: str):
     """Test the attention selector between different platform and device."""
     torch.set_default_dtype(torch.float16)
 
     if device == "cpu":
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", CpuPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", CpuPlatform()),
         ):
             attn = MMEncoderAttention(16, 64, scale=1)
             assert attn.attn_backend == AttentionBackendEnum.TORCH_SDPA
     elif device == "hip":
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", RocmPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", RocmPlatform()),
         ):
             attn = MMEncoderAttention(16, 64, scale=1)
             assert attn.attn_backend == AttentionBackendEnum.FLASH_ATTN
     else:
         # Test CUDA with head_size=64 (divisible by 32)
-        # - should use Aphrodite's FlashAttention
+        # - should use Sonar's FlashAttention
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", CudaPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", CudaPlatform()),
         ):
             attn = MMEncoderAttention(16, 64, scale=1)
             assert attn.attn_backend == AttentionBackendEnum.FLASH_ATTN
 
         # Test CUDA with head_size=72 (not divisible by 32)
-        # - should use Aphrodite's FlashAttention
+        # - should use Sonar's FlashAttention
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", CudaPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", CudaPlatform()),
         ):
             attn = MMEncoderAttention(16, 72, scale=1)
             assert attn.attn_backend == AttentionBackendEnum.FLASH_ATTN
 
         # Test CUDA with head_size=72 (not divisible by 32)
-        # - should use Aphrodite's FlashAttention
+        # - should use Sonar's FlashAttention
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", CudaPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", CudaPlatform()),
             set_default_torch_dtype(torch.float32),
         ):
             attn = MMEncoderAttention(16, 72, scale=1)
@@ -93,7 +93,7 @@ def test_mha_attn_platform(default_aphrodite_config, device: str):
         # and Triton no longer supports MMA on Turing, so we expect that
         # TORCH_SDPA is used for MMEncoderAttention.
         with (
-            patch("aphrodite.model_executor.models.vision.current_platform", CudaPlatform()),
+            patch("sonar.model_executor.models.vision.current_platform", CudaPlatform()),
             patch.object(
                 CudaPlatform,
                 "get_device_capability",
@@ -143,7 +143,7 @@ CUDA_DEVICES = ["cuda"]
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_forward(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_size: int,
     seq_len: int,
     num_heads: int,
@@ -189,7 +189,7 @@ def test_mha_attn_forward(
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_varlen_forward(
-    default_aphrodite_config,
+    default_sonar_config,
     var_seq_len: list[int],
     num_heads: int,
     num_kv_heads: int,
@@ -239,7 +239,7 @@ def test_mha_attn_varlen_forward(
 )
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_varlen_forward_flashinfer(
-    default_aphrodite_config,
+    default_sonar_config,
     var_seq_len: list[int],
     dtype: torch.dtype,
     device: str,
@@ -258,10 +258,10 @@ def test_mha_attn_varlen_forward_flashinfer(
     torch.set_default_device(device)
     torch.set_default_dtype(dtype)
 
-    # Override aphrodite config so get_vit_attn_backend returns FLASHINFER (simulates
+    # Override sonar config so get_vit_attn_backend returns FLASHINFER (simulates
     # --mm-encoder-attn-backend=FLASHINFER).
-    aphrodite_config = get_current_aphrodite_config()
-    old_model_config = aphrodite_config.model_config
+    sonar_config = get_current_sonar_config()
+    old_model_config = sonar_config.model_config
     minimal_model_config = type(
         "MinimalModelConfig",
         (),
@@ -269,7 +269,7 @@ def test_mha_attn_varlen_forward_flashinfer(
             "multimodal_config": MultiModalConfig(mm_encoder_attn_backend=AttentionBackendEnum.FLASHINFER),
         },
     )()
-    aphrodite_config.model_config = minimal_model_config
+    sonar_config.model_config = minimal_model_config
     try:
         total_len = sum(var_seq_len)
         # Stride of second dim = 3 * num_heads * head_size (same as qwen2_5_vl
@@ -327,7 +327,7 @@ def test_mha_attn_varlen_forward_flashinfer(
         ref_output = torch.cat(ref_output, dim=1)
         torch.testing.assert_close(output, ref_output, atol=1e-2, rtol=1e-2)
     finally:
-        aphrodite_config.model_config = old_model_config
+        sonar_config.model_config = old_model_config
 
 
 @pytest.mark.skipif(
@@ -338,7 +338,7 @@ def test_mha_attn_varlen_forward_flashinfer(
 @pytest.mark.parametrize("head_size", [64, 72, 80])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.half])
 def test_mha_attn_varlen_forward_aiter_fp8(
-    default_aphrodite_config,
+    default_sonar_config,
     var_seq_len: list[int],
     head_size: int,
     dtype: torch.dtype,
@@ -353,8 +353,8 @@ def test_mha_attn_varlen_forward_aiter_fp8(
     torch.set_default_device("cuda")
     torch.set_default_dtype(dtype)
 
-    aphrodite_config = get_current_aphrodite_config()
-    old_model_config = aphrodite_config.model_config
+    sonar_config = get_current_sonar_config()
+    old_model_config = sonar_config.model_config
     minimal_model_config = type(
         "MinimalModelConfig",
         (),
@@ -365,7 +365,7 @@ def test_mha_attn_varlen_forward_aiter_fp8(
             ),
         },
     )()
-    aphrodite_config.model_config = minimal_model_config
+    sonar_config.model_config = minimal_model_config
     try:
         total_len = sum(var_seq_len)
         # Keep Q/K/V as non-contiguous views, matching interleaved ViT QKV.
@@ -410,14 +410,14 @@ def test_mha_attn_varlen_forward_aiter_fp8(
         assert diff.mean().item() <= 0.03
         assert diff.max().item() <= 0.30
     finally:
-        aphrodite_config.model_config = old_model_config
+        sonar_config.model_config = old_model_config
 
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="AITER FP8 attention requires ROCm")
-def test_mha_attn_aiter_fp8_rejects_unsupported_arch(default_aphrodite_config):
-    aphrodite_config = get_current_aphrodite_config()
-    old_model_config = aphrodite_config.model_config
-    aphrodite_config.model_config = type(
+def test_mha_attn_aiter_fp8_rejects_unsupported_arch(default_sonar_config):
+    sonar_config = get_current_sonar_config()
+    old_model_config = sonar_config.model_config
+    sonar_config.model_config = type(
         "MinimalModelConfig",
         (),
         {
@@ -429,19 +429,19 @@ def test_mha_attn_aiter_fp8_rejects_unsupported_arch(default_aphrodite_config):
     )()
     try:
         with (
-            patch("aphrodite.platforms.rocm.on_mi3xx", return_value=False),
+            patch("sonar.platforms.rocm.on_mi3xx", return_value=False),
             pytest.raises(ValueError, match="gfx942 or gfx950"),
         ):
             MMEncoderAttention(4, 64)
     finally:
-        aphrodite_config.model_config = old_model_config
+        sonar_config.model_config = old_model_config
 
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="AITER FP8 attention requires ROCm")
-def test_mha_attn_fp8_rejects_wrong_backend(default_aphrodite_config):
-    aphrodite_config = get_current_aphrodite_config()
-    old_model_config = aphrodite_config.model_config
-    aphrodite_config.model_config = type(
+def test_mha_attn_fp8_rejects_wrong_backend(default_sonar_config):
+    sonar_config = get_current_sonar_config()
+    old_model_config = sonar_config.model_config
+    sonar_config.model_config = type(
         "MinimalModelConfig",
         (),
         {
@@ -455,4 +455,4 @@ def test_mha_attn_fp8_rejects_wrong_backend(default_aphrodite_config):
         with pytest.raises(ValueError, match="requires either"):
             MMEncoderAttention(4, 64)
     finally:
-        aphrodite_config.model_config = old_model_config
+        sonar_config.model_config = old_model_config

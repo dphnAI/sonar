@@ -11,13 +11,13 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.transformers_utils.utils import maybe_model_redirect
-from aphrodite.utils.mem_constants import KiB_bytes, MiB_bytes
-from aphrodite.utils.mem_utils import format_mib
+from sonar import LLM, SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.transformers_utils.utils import maybe_model_redirect
+from sonar.utils.mem_constants import KiB_bytes, MiB_bytes
+from sonar.utils.mem_utils import format_mib
 from tests.models.registry import HF_EXAMPLE_MODELS
 
 MODEL_NAME = "Qwen/Qwen3-VL-4B-Instruct"
@@ -96,7 +96,7 @@ def _format_mib(num_bytes: int | None) -> str:
 
 @pytest.fixture(scope="function")
 def llm(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     # pytest caches the fixture so we use weakref.proxy to
     # enable garbage collection
@@ -192,7 +192,7 @@ def _live_mm_payloads(worker) -> dict[str, list[bool]]:
 @pytest.mark.core_model
 def test_consumed_cpu_inputs_released_during_generation(llm) -> None:
     """An M-RoPE model must release pixels while its request is still decoding."""
-    assert llm.llm_engine.aphrodite_config.use_v2_model_runner
+    assert llm.llm_engine.sonar_config.use_v2_model_runner
     engine = llm.llm_engine
     engine.add_request(
         "cpu-input-lifetime",

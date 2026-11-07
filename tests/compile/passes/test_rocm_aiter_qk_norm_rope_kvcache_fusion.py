@@ -8,47 +8,47 @@ import pytest
 import torch
 from packaging.version import Version
 
-import aphrodite.compilation.passes.fusion.qk_norm_rope_kvcache_fusion as fusion_module
-import aphrodite.config
-from aphrodite._aiter_ops import (
+import sonar.compilation.passes.fusion.qk_norm_rope_kvcache_fusion as fusion_module
+import sonar.config
+from sonar._aiter_ops import (
     IS_AITER_FOUND,
     is_aiter_found_and_supported,
     rocm_aiter_ops,
 )
-from aphrodite.compilation.passes.fusion.matcher_utils import MROPE_OP, ROTARY_OP
-from aphrodite.compilation.passes.fusion.qk_norm_rope_kvcache_fusion import (
+from sonar.compilation.passes.fusion.matcher_utils import MROPE_OP, ROTARY_OP
+from sonar.compilation.passes.fusion.qk_norm_rope_kvcache_fusion import (
     QkNormRopeKvCacheFusionPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.compilation.passes.utility.scatter_split_replace import (
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.compilation.passes.utility.scatter_split_replace import (
     ScatterSplitReplacementPass,
 )
-from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.split_coalescing import SplitCoalescingPass
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
-from aphrodite.v1.attention.backend import (
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import _USE_LAYERNAME, _encode_layer_name
+from sonar.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import AttentionSpec, KVCacheLayout
 from tests.compile.backend import TestBackend
 from tests.v1.attention.utils import (
     BatchSpec,
@@ -71,7 +71,7 @@ FP8_DTYPE = current_platform.fp8_dtype()
 @pytest.fixture(scope="module", autouse=True)
 def module_global_cleanup():
     # Cleanup once at the end of the module
-    from aphrodite.distributed import cleanup_dist_env_and_memory
+    from sonar.distributed import cleanup_dist_env_and_memory
 
     yield
     cleanup_dist_env_and_memory()
@@ -93,7 +93,7 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         attn_backend: AttentionBackendEnum,
         num_heads: int,
         num_kv_heads: int,
@@ -111,7 +111,7 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
         self.num_kv_heads = num_kv_heads
         self.head_size = head_size
         self.rotary_dim = rotary_dim if rotary_dim is not None else head_size
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         self.q_size = num_heads * head_size
         self.kv_size = num_kv_heads * head_size
         self.is_neox = is_neox
@@ -138,8 +138,8 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
             head_size=head_size,
             scale=1.0 / head_size**0.5,
             num_kv_heads=num_kv_heads,
-            cache_config=aphrodite_config.cache_config,
-            quant_config=aphrodite_config.quant_config,
+            cache_config=sonar_config.cache_config,
+            quant_config=sonar_config.quant_config,
             prefix=prefix,
             attn_backend=attn_backend.get_class(),
         )
@@ -150,7 +150,7 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
         assert not self.attn_backend.forward_includes_kv_cache_update, (
             f"Attention backend {self.attn_backend} does not support fuse_qk_norm_rope_kvcache."
         )
-        kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
+        kv_cache_dtype_str = sonar_config.cache_config.cache_dtype
         self.kv_cache_dtype = FP8_DTYPE if kv_cache_dtype_str.startswith("fp8") else self.dtype
 
         if self.kv_cache_dtype != self.dtype:
@@ -178,7 +178,7 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
         self.builder = self.attn.attn_backend.get_builder_cls()(
             kv_cache_spec=self.kv_cache_spec,
             layer_names=[self.attn.layer_name],
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
         )
 
@@ -241,7 +241,7 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
         q = q.view(-1, self.num_heads, self.head_size)
         k = k.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size)
-        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
+        kv_cache_dummy_dep = torch.ops.sonar.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
         return q, k, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
@@ -250,16 +250,16 @@ class QKNormRoPEKVCacheTestModel(torch.nn.Module):
         # directly in the graph based on `enable_rope_custom_op`.
         if self.enable_rope_custom_op:
             if rocm_aiter_ops.is_triton_rotary_embed_enabled():
-                ops.append(torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default)
+                ops.append(torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default)
             else:
                 ops.append(ROTARY_OP)
         else:
             ops.append(INDEX_SELECT_OP)
-        ops.append(torch.ops.aphrodite.unified_kv_cache_update.default)
+        ops.append(torch.ops.sonar.unified_kv_cache_update.default)
         return ops
 
     def ops_in_model_after(self) -> list[torch._ops.OpOverload]:
-        return [torch.ops.aphrodite.fused_qk_norm_rope_and_unified_kv_cache_update.default]
+        return [torch.ops.sonar.fused_qk_norm_rope_and_unified_kv_cache_update.default]
 
 
 class QKNormMRoPEKVCacheTestModel(QKNormRoPEKVCacheTestModel):
@@ -293,7 +293,7 @@ class QKNormMRoPEKVCacheTestModel(QKNormRoPEKVCacheTestModel):
             device=q.device,
             dtype=self.dtype,
         )
-        torch.ops.aphrodite.unified_attention_with_output(
+        torch.ops.sonar.unified_attention_with_output(
             q,
             k,
             v,
@@ -307,10 +307,10 @@ class QKNormMRoPEKVCacheTestModel(QKNormRoPEKVCacheTestModel):
         return q, output, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
-        return [MROPE_OP, torch.ops.aphrodite.unified_kv_cache_update.default]
+        return [MROPE_OP, torch.ops.sonar.unified_kv_cache_update.default]
 
     def ops_in_model_after(self) -> list[torch._ops.OpOverload]:
-        return [torch.ops.aphrodite.fused_qk_norm_mrope_and_unified_kv_cache_update.default]
+        return [torch.ops.sonar.fused_qk_norm_mrope_and_unified_kv_cache_update.default]
 
 
 class QKNormMRoPEObservableKTestModel(QKNormMRoPEKVCacheTestModel):
@@ -344,17 +344,17 @@ def _run_qk_norm_rope_kvcache_fusion_test(
     expect_fusion: bool = True,
     use_quark_scalar_query_scale: bool = False,
 ) -> None:
-    device = os.environ.get("APHRODITE_TEST_CUDA_DEVICE", "cuda")
+    device = os.environ.get("SONAR_TEST_CUDA_DEVICE", "cuda")
     torch.set_default_device(device)
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    # Set AITER toggles before AphroditeConfig initialization enables env caching.
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "1")
+    # Set AITER toggles before SonarConfig initialization enables env caching.
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR", "1")
     rocm_aiter_ops.refresh_env_variables()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         cache_config=CacheConfig(
             block_size=block_size,
@@ -362,7 +362,7 @@ def _run_qk_norm_rope_kvcache_fusion_test(
         ),
         quant_config=(QuarkConfig(quant_config={"exclude": []}) if use_quark_scalar_query_scale else None),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=[custom_op],
             pass_config=PassConfig(
                 fuse_qk_norm_rope_kvcache=True,
@@ -371,14 +371,14 @@ def _run_qk_norm_rope_kvcache_fusion_test(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "1")
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER_LINEAR", "1")
         m.setenv(
-            "APHRODITE_ROCM_USE_AITER_TRITON_ROPE",
+            "SONAR_ROCM_USE_AITER_TRITON_ROPE",
             "1" if enable_aiter_triton_rope else "0",
         )
-        m.setenv("APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT", use_shuffle_kv_layout)
+        m.setenv("SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT", use_shuffle_kv_layout)
         rocm_aiter_ops.refresh_env_variables()
 
         expected_query_quant_group_shape = None
@@ -388,7 +388,7 @@ def _run_qk_norm_rope_kvcache_fusion_test(
             )
 
         model_kwargs = {
-            "aphrodite_config": aphrodite_config,
+            "sonar_config": sonar_config,
             "attn_backend": attn_backend,
             "num_heads": num_heads,
             "num_kv_heads": num_kv_heads,
@@ -419,13 +419,13 @@ def _run_qk_norm_rope_kvcache_fusion_test(
                 mrope_interleaved=mrope_interleaved,
             )
 
-        fusion_pass = QkNormRopeKvCacheFusionPass(aphrodite_config)
+        fusion_pass = QkNormRopeKvCacheFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
-            SplitCoalescingPass(aphrodite_config),
-            ScatterSplitReplacementPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
+            SplitCoalescingPass(sonar_config),
+            ScatterSplitReplacementPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
 
@@ -445,7 +445,7 @@ def _run_qk_norm_rope_kvcache_fusion_test(
         pos_unfused = pos.clone()
 
         # Run unfused (eager) forward
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(num_tokens, kv_layout)
             forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
@@ -457,7 +457,7 @@ def _run_qk_norm_rope_kvcache_fusion_test(
         # Run fused (compiled) forward
         torch._dynamo.mark_dynamic(qkv, 0)
         torch._dynamo.mark_dynamic(pos, 0 if mrope_section is None else 1)
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(num_tokens, kv_layout)
@@ -479,7 +479,7 @@ def _run_qk_norm_rope_kvcache_fusion_test(
 
         if use_quark_scalar_query_scale:
             expected_quant_op = (
-                torch.ops.aphrodite.rocm_aiter_per_tensor_quant.default
+                torch.ops.sonar.rocm_aiter_per_tensor_quant.default
                 if num_kv_heads != 1
                 else torch.ops._C.static_scaled_fp8_quant.default
             )
@@ -774,22 +774,22 @@ def test_mrope_fusion_rejects_unaligned_rotary_dim(
 
 @pytest.mark.skipif(not _USE_LAYERNAME, reason="requires opaque LayerName")
 def test_opaque_layer_name_patterns_register_once(monkeypatch: pytest.MonkeyPatch):
-    device = os.environ.get("APHRODITE_TEST_CUDA_DEVICE", "cuda")
-    aphrodite_config = AphroditeConfig(
+    device = os.environ.get("SONAR_TEST_CUDA_DEVICE", "cuda")
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=torch.bfloat16),
         cache_config=CacheConfig(block_size=16, cache_dtype="fp8_e4m3"),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rotary_embedding"],
             pass_config=PassConfig(fuse_qk_norm_rope_kvcache=True),
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
         model_kwargs = {
-            "aphrodite_config": aphrodite_config,
+            "sonar_config": sonar_config,
             "attn_backend": AttentionBackendEnum.ROCM_AITER_UNIFIED_ATTN,
             "num_heads": 8,
             "num_kv_heads": 2,
@@ -809,7 +809,7 @@ def test_opaque_layer_name_patterns_register_once(monkeypatch: pytest.MonkeyPatc
 
         # Opaque layer names are wildcards in the pattern graph. Registering
         # once per physical layer raises "Duplicate pattern" on torch >= 2.11.
-        fusion_pass = QkNormRopeKvCacheFusionPass(aphrodite_config)
+        fusion_pass = QkNormRopeKvCacheFusionPass(sonar_config)
 
     assert models
     assert fusion_pass.patterns
@@ -870,24 +870,24 @@ def test_qk_norm_rope_kvcache_fusion_interleaves_every_layer(
     """The fused writer stores V interleaved in every layer it serves, so every
     eligible ROCM_ATTN layer must read V interleaved. With layer_name hoisted,
     only one layer registers the patterns, but all of them must switch."""
-    torch.set_default_device(os.environ.get("APHRODITE_TEST_CUDA_DEVICE", "cuda"))
+    torch.set_default_device(os.environ.get("SONAR_TEST_CUDA_DEVICE", "cuda"))
     torch.set_default_dtype(torch.bfloat16)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     rocm_aiter_ops.refresh_env_variables()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=torch.bfloat16),
         cache_config=CacheConfig(block_size=16),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rotary_embedding"],
             pass_config=PassConfig(fuse_qk_norm_rope_kvcache=True),
         ),
     )
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
+    with sonar.config.set_current_sonar_config(sonar_config):
         models = [
             QKNormRoPEKVCacheTestModel(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 attn_backend=AttentionBackendEnum.ROCM_ATTN,
                 num_heads=8,
                 num_kv_heads=2,
@@ -900,9 +900,9 @@ def test_qk_norm_rope_kvcache_fusion_interleaves_every_layer(
             )
             for i in range(3)
         ]
-        QkNormRopeKvCacheFusionPass(aphrodite_config)
+        QkNormRopeKvCacheFusionPass(sonar_config)
 
-    from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionImpl
+    from sonar.v1.attention.backends.rocm_attn import RocmAttentionImpl
 
     impls = [model.attn.impl for model in models]
     assert all(isinstance(impl, RocmAttentionImpl) and impl._use_interleaved_v_cache for impl in impls)

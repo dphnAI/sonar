@@ -5,7 +5,7 @@
 Example (record the baseline and candidate SHAs):
     baseline=$(git rev-parse origin/main)
     git rev-parse "$baseline" HEAD
-    git show "$baseline":aphrodite/model_executor/kernels/linear/mxfp8/rocm_native.py \
+    git show "$baseline":sonar/model_executor/kernels/linear/mxfp8/rocm_native.py \
         > /tmp/baseline_rocm_native.py
     .venv/bin/python benchmarks/kernels/benchmark_mxfp8_tp4.py \
         --baseline /tmp/baseline_rocm_native.py
@@ -24,12 +24,12 @@ from pathlib import Path
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.mxfp8 import rocm_native
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.kernels.linear.mxfp8 import rocm_native
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 SHAPES = [(m, n, k) for n, k in [(2560, 6144), (6144, 2048), (1536, 6144), (6144, 768)] for m in [1, 8, 16]]
 
@@ -101,7 +101,7 @@ def main():
     variants = {"candidate": rocm_native}
     if args.baseline:
         spec = importlib.util.spec_from_file_location(
-            "aphrodite.model_executor.kernels.linear.mxfp8.baseline_rocm_native",
+            "sonar.model_executor.kernels.linear.mxfp8.baseline_rocm_native",
             args.baseline,
         )
         baseline = importlib.util.module_from_spec(spec)

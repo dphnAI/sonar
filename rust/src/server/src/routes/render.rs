@@ -4,8 +4,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-use aphrodite_text::TextRequest;
 use axum::Json;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -13,6 +11,8 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use serde_json::Value;
+use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+use sonar_text::TextRequest;
 use thiserror_ext::AsReport as _;
 
 use crate::DEFAULT_REQUEST_BODY_LIMIT_BYTES;
@@ -57,7 +57,7 @@ async fn list_models(State(state): State<Arc<RenderState>>) -> Json<ListModelsRe
                 id: model.clone(),
                 object: "model".to_string(),
                 created,
-                owned_by: "aphrodite".to_string(),
+                owned_by: "sonar".to_string(),
                 root: Some(state.model.clone()),
                 parent: None,
                 max_model_len: state.max_model_len,
@@ -94,7 +94,7 @@ fn lower_render_request(
         .map_err(|error| text_submit_error("failed to prepare render request", error))?;
     let token_ids = prepared.generate_request.prompt_token_ids;
     let mut text_request = prepared.text_request;
-    let xargs = &mut text_request.sampling_params.aphrodite_xargs;
+    let xargs = &mut text_request.sampling_params.sonar_xargs;
     let kv_transfer_params = hoist_transfer_params(xargs, "kv_transfer_params");
     let ec_transfer_params = hoist_transfer_params(xargs, "ec_transfer_params");
 
@@ -130,10 +130,10 @@ fn lower_render_request(
     Ok(request)
 }
 
-/// Move KV/EC transfer params out of `aphrodite_xargs`.
+/// Move KV/EC transfer params out of `sonar_xargs`.
 ///
 /// Render emits them only as top-level `GenerateRequest` fields, like Python.
-/// Generate merges them back into `aphrodite_xargs` for the engine.
+/// Generate merges them back into `sonar_xargs` for the engine.
 fn hoist_transfer_params(
     xargs: &mut Option<HashMap<String, Value>>,
     key: &str,

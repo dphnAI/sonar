@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for the HIP/ROCm paths in aphrodite.v1.simple_kv_offload.cuda_mem_ops.
+"""Unit tests for the HIP/ROCm paths in sonar.v1.simple_kv_offload.cuda_mem_ops.
 
 Deliberately not skipped off ROCm: the version gate takes a plain version int
 and the library loader is monkeypatched, so nothing here needs a HIP runtime
@@ -13,8 +13,8 @@ import ctypes
 import numpy as np
 import pytest
 
-from aphrodite.v1.simple_kv_offload import cuda_mem_ops
-from aphrodite.v1.simple_kv_offload.cuda_mem_ops import (
+from sonar.v1.simple_kv_offload import cuda_mem_ops
+from sonar.v1.simple_kv_offload.cuda_mem_ops import (
     BatchMemcpyParams,
     _CUmemcpyAttributes,
     _load_hip_runtime,

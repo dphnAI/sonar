@@ -5,9 +5,9 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
 use indexmap::IndexMap;
+use sonar_engine_core_client::EngineCoreClient;
+use sonar_engine_core_client::protocol::lora::LoraRequest;
 use thiserror::Error;
 use thiserror_ext::Macro;
 use tokio::sync::{Mutex, RwLock};
@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::config::LoraModulePath;
 use crate::model_names::ServedModelNames;
 
-const RUNTIME_LORA_ALLOWED_PATH_PREFIXES_ENV: &str = "APHRODITE_RUNTIME_LORA_ALLOWED_PATH_PREFIXES";
+const RUNTIME_LORA_ALLOWED_PATH_PREFIXES_ENV: &str = "SONAR_RUNTIME_LORA_ALLOWED_PATH_PREFIXES";
 
 #[derive(Debug, Error, Macro)]
 pub(crate) enum LoraPathAccessError {
@@ -167,7 +167,7 @@ pub(crate) enum LoadLoraError {
     Engine {
         lora_name: String,
         #[source]
-        source: aphrodite_engine_core_client::Error,
+        source: sonar_engine_core_client::Error,
     },
     #[error("one or more engine ranks rejected LoRA adapter `{lora_name}`")]
     NotLoaded { lora_name: String },
@@ -191,7 +191,7 @@ pub(crate) enum UnloadLoraError {
     Engine {
         lora_name: String,
         #[source]
-        source: aphrodite_engine_core_client::Error,
+        source: sonar_engine_core_client::Error,
     },
     #[error("engine rejected removal of LoRA adapter `{lora_name}` with id {lora_int_id}")]
     NotRemoved { lora_name: String, lora_int_id: u64 },
@@ -373,7 +373,7 @@ mod tests {
             .expect("clock should be after unix epoch")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "aphrodite-lora-{test_name}-{}-{suffix}",
+            "sonar-lora-{test_name}-{}-{suffix}",
             std::process::id()
         ));
         fs::create_dir_all(&path).expect("create temp lora dir");
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn lora_path_rejects_existing_bare_relative_paths_without_prefixes() {
         let root =
-            PathBuf::from("target").join(format!("aphrodite-lora-relative-{}", std::process::id()));
+            PathBuf::from("target").join(format!("sonar-lora-relative-{}", std::process::id()));
         let adapter = root.join("adapter-a");
         fs::create_dir_all(&adapter).expect("create relative adapter dir");
 

@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ....utils import large_gpu_mark
 from ...registry import HF_EXAMPLE_MODELS
@@ -113,7 +113,7 @@ AITER_MODEL_LIST = [
 @pytest.mark.parametrize("use_prompt_embeds", [True, False])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     max_tokens: int,
@@ -127,7 +127,7 @@ def test_models(
     model_info.check_transformers_version(on_fail="skip")
 
     if use_rocm_aiter and (model in AITER_MODEL_LIST):
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     elif use_rocm_aiter and model not in AITER_MODEL_LIST:
         # Skip model that are not using AITER tests.
         # When more AITER kernels are added, this list will not be
@@ -138,7 +138,7 @@ def test_models(
     if model == "bigcode/starcoder2-3b":
         # Replace example.txt's Test1 (an NL prompt) with a code prompt:
         # starcoder2-3b is a code model, so NL prompts give near-uniform
-        # digit logits where HF<->Aphrodite bf16 drift can reorder top-K.
+        # digit logits where HF<->Sonar bf16 drift can reorder top-K.
         example_prompts = list(example_prompts)
         example_prompts[1] = "def add(a, b):\n    return a + b\n\ndef sub(a, b):\n    return a - "
 
@@ -167,21 +167,21 @@ def test_models(
                     embed = hf_model.model.get_input_embeddings()(token_ids)
 
                 # MiniCPM models apply scale_emb to embeddings internally.
-                # Aphrodite expects pre-scaled embeddings when using inputs_embeds.
+                # Sonar expects pre-scaled embeddings when using inputs_embeds.
                 if model in EMBED_SCALING_MODELS:
                     config = hf_model.model.config
                     embed = embed * config.scale_emb
 
                 prompt_embeds.append(embed.squeeze(0))
 
-    aphrodite_kwargs = {}
+    sonar_kwargs = {}
     if model == "bigscience/bloom-560m" and current_platform.is_device_capability_family(90):
         # On SM90, the metadata builder otherwise selects FA3 AOT scheduling
         # before Bloom's ALiBi layers fall back to FA2. Pinning FA2 keeps the
         # builder and layer consistent and preserves the L4 test path.
-        aphrodite_kwargs["attention_config"] = {"flash_attn_version": 2}
+        sonar_kwargs["attention_config"] = {"flash_attn_version": 2}
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         tokenizer_name=model_info.tokenizer or model,
         tokenizer_mode=model_info.tokenizer_mode,
@@ -193,30 +193,28 @@ def test_models(
         max_num_seqs=1 if current_platform.is_rocm() else 2,
         enable_prompt_embeds=use_prompt_embeds,
         compilation_config={"cudagraph_capture_sizes": [1, 2]},
-        **aphrodite_kwargs,
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+        **sonar_kwargs,
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
         if prompt_embeds is not None:
-            aphrodite_outputs_from_embeds = aphrodite_model.generate_greedy_logprobs(
-                prompt_embeds, max_tokens, num_logprobs
-            )
+            sonar_outputs_from_embeds = sonar_model.generate_greedy_logprobs(prompt_embeds, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
     if prompt_embeds is not None:
         check_logprobs_close(
-            outputs_0_lst=aphrodite_outputs,
-            outputs_1_lst=aphrodite_outputs_from_embeds,
-            name_0="aphrodite",
-            name_1="aphrodite_from_embeds",
+            outputs_0_lst=sonar_outputs,
+            outputs_1_lst=sonar_outputs_from_embeds,
+            name_0="sonar",
+            name_1="sonar_from_embeds",
         )
 
     if use_rocm_aiter:
-        # this is to ensure that aphrodite engine
+        # this is to ensure that sonar engine
         # has deallocated the memory before running the next
         # unit tests. On ROCm, when using AITER
         # the memory might not be deallocated completely

@@ -8,17 +8,17 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.models.bert import (
+from sonar.model_executor.models.bert import (
     BertMLMHead,
     SPLADESparsePooler,
 )
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.v1.pool.late_interaction_runner import LateInteractionRunner
-from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
-from aphrodite.v1.worker.gpu.input_batch import InputBatch
-from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
-from aphrodite.v1.worker.gpu.pool.pooling_runner import PoolingRunner
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.pooling_params import PoolingParams
+from sonar.v1.pool.late_interaction_runner import LateInteractionRunner
+from sonar.v1.pool.metadata import PoolingMetadata, PoolingStates
+from sonar.v1.worker.gpu.input_batch import InputBatch
+from sonar.v1.worker.gpu.model_runner import GPUModelRunner
+from sonar.v1.worker.gpu.pool.pooling_runner import PoolingRunner
+from sonar.v1.worker.gpu.states import RequestState
 
 # ---------------------------------------------------------------------
 # Functional test: SPLADE formula correctness (no HF download needed)
@@ -186,27 +186,27 @@ def test_encoder_cache_reset_clears_late_interaction_state() -> None:
 def test_pooling_runner_rejects_unsupported_selected_task() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"embed", "plugin"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "encoder_only"
-    aphrodite_config.model_config.get_pooling_task.return_value = "plugin"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "encoder_only"
+    sonar_config.model_config.get_pooling_task.return_value = "plugin"
 
     with (
         patch.object(PoolingRunner, "get_supported_tasks", return_value=["embed"]),
         pytest.raises(ValueError, match="selects 'plugin'"),
     ):
-        PoolingRunner(model, aphrodite_config)
+        PoolingRunner(model, sonar_config)
 
 
 def test_pooling_runner_supports_encoder_token_classification() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"token_classify"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "encoder_only"
-    aphrodite_config.model_config.get_pooling_task.return_value = "token_classify"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "encoder_only"
+    sonar_config.model_config.get_pooling_task.return_value = "token_classify"
 
-    runner = PoolingRunner(model, aphrodite_config)
+    runner = PoolingRunner(model, sonar_config)
 
     assert runner.supported_tasks == {"token_classify"}
 
@@ -214,12 +214,12 @@ def test_pooling_runner_supports_encoder_token_classification() -> None:
 def test_pooling_runner_supports_encoder_token_embedding() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"token_embed"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "encoder_only"
-    aphrodite_config.model_config.get_pooling_task.return_value = "token_embed"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "encoder_only"
+    sonar_config.model_config.get_pooling_task.return_value = "token_embed"
 
-    runner = PoolingRunner(model, aphrodite_config)
+    runner = PoolingRunner(model, sonar_config)
 
     assert runner.supported_tasks == {"token_embed"}
 
@@ -227,12 +227,12 @@ def test_pooling_runner_supports_encoder_token_embedding() -> None:
 def test_pooling_runner_supports_decoder_token_classification() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"token_classify"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "decoder"
-    aphrodite_config.model_config.get_pooling_task.return_value = "token_classify"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "decoder"
+    sonar_config.model_config.get_pooling_task.return_value = "token_classify"
 
-    runner = PoolingRunner(model, aphrodite_config)
+    runner = PoolingRunner(model, sonar_config)
 
     assert runner.supported_tasks == {"token_classify"}
 
@@ -240,12 +240,12 @@ def test_pooling_runner_supports_decoder_token_classification() -> None:
 def test_pooling_runner_keeps_decoder_token_classification() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"embed", "token_classify"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "decoder"
-    aphrodite_config.model_config.get_pooling_task.return_value = "embed"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "decoder"
+    sonar_config.model_config.get_pooling_task.return_value = "embed"
 
-    runner = PoolingRunner(model, aphrodite_config)
+    runner = PoolingRunner(model, sonar_config)
 
     assert runner.supported_tasks == {"embed", "token_classify"}
 
@@ -253,12 +253,12 @@ def test_pooling_runner_keeps_decoder_token_classification() -> None:
 def test_pooling_runner_keeps_decoder_token_embedding() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"embed", "token_embed"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
-    aphrodite_config.model_config.attn_type = "decoder"
-    aphrodite_config.model_config.get_pooling_task.return_value = "embed"
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
+    sonar_config.model_config.attn_type = "decoder"
+    sonar_config.model_config.get_pooling_task.return_value = "embed"
 
-    runner = PoolingRunner(model, aphrodite_config)
+    runner = PoolingRunner(model, sonar_config)
 
     assert runner.supported_tasks == {"embed", "token_embed"}
 
@@ -266,12 +266,12 @@ def test_pooling_runner_keeps_decoder_token_embedding() -> None:
 def test_pooling_runner_supports_embed_token_classification() -> None:
     model = MagicMock()
     model.pooler.get_supported_tasks.return_value = {"embed", "embed&token_classify"}
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_seqs = 2
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_seqs = 2
 
-    aphrodite_config.model_config.attn_type = "encoder_only"
-    aphrodite_config.model_config.get_pooling_task.return_value = "embed&token_classify"
-    assert PoolingRunner(model, aphrodite_config).supported_tasks == {
+    sonar_config.model_config.attn_type = "encoder_only"
+    sonar_config.model_config.get_pooling_task.return_value = "embed&token_classify"
+    assert PoolingRunner(model, sonar_config).supported_tasks == {
         "embed",
         "embed&token_classify",
     }

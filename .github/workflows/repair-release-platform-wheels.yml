@@ -71,12 +71,12 @@ jobs:
 
       - name: Build CPU wheel
         env:
-          APHRODITE_VERSION_OVERRIDE: ${{ inputs.release_tag }}+cpu
+          SONAR_VERSION_OVERRIDE: ${{ inputs.release_tag }}+cpu
           TARGET_PLATFORM: ${{ matrix.platform }}
           PYTHON_VERSION: "3.13"
           CACHE_SCOPE: cpu-${{ matrix.architecture }}
         run: |
-          APHRODITE_VERSION_OVERRIDE="${APHRODITE_VERSION_OVERRIDE#v}" \
+          SONAR_VERSION_OVERRIDE="${SONAR_VERSION_OVERRIDE#v}" \
             .github/scripts/build_cpu_wheel.sh \
             "dist/cpu-${{ matrix.architecture }}"
 
@@ -142,11 +142,11 @@ jobs:
 
       - name: Build Metal wheel
         env:
-          APHRODITE_VERSION_OVERRIDE: ${{ inputs.release_tag }}+metal
+          SONAR_VERSION_OVERRIDE: ${{ inputs.release_tag }}+metal
           MACOSX_DEPLOYMENT_TARGET: "14.0"
           METAL_BUILD_PYTHON: ${{ github.workspace }}/.metal-build-venv/bin/python
         run: |
-          APHRODITE_VERSION_OVERRIDE="${APHRODITE_VERSION_OVERRIDE#v}" \
+          SONAR_VERSION_OVERRIDE="${SONAR_VERSION_OVERRIDE#v}" \
             .github/scripts/build_metal_wheel.sh dist/metal-aarch64
 
       - name: Verify Metal wheel
@@ -235,10 +235,10 @@ jobs:
           )
           while IFS= read -r asset; do
             case "$asset" in
-              "aphrodite_engine-${version}+cpu-"*.whl)
+              "sonar-${version}+cpu-"*.whl)
                 [[ "${{ inputs.target }}" != metal ]] || continue
                 ;;
-              "aphrodite_engine-${version}+metal-"*.whl)
+              "sonar-${version}+metal-"*.whl)
                 [[ "${{ inputs.target }}" != cpu ]] || continue
                 ;;
               *)

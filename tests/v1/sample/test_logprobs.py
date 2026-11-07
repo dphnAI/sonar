@@ -13,13 +13,13 @@ import pytest
 import torch
 from pydantic import TypeAdapter, ValidationError
 
-from aphrodite import SamplingParams, TokensPrompt
-from aphrodite.config.model import LogprobsMode
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.logprobs import Logprob
-from aphrodite.platforms import current_platform
-from aphrodite.v1.engine.input_processor import InputProcessor
+from sonar import SamplingParams, TokensPrompt
+from sonar.config.model import LogprobsMode
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.exceptions import SonarValidationError
+from sonar.logprobs import Logprob
+from sonar.platforms import current_platform
+from sonar.v1.engine.input_processor import InputProcessor
 from tests.utils import large_gpu_mark
 from tests.v1.sample.utils import (
     BatchLogprobsComposition,
@@ -29,7 +29,7 @@ from tests.v1.sample.utils import (
     get_test_batch,
 )
 
-from ...conftest import AphroditeRunner, HfRunner
+from ...conftest import HfRunner, SonarRunner
 
 MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 DTYPE = "half"
@@ -60,8 +60,8 @@ else:
     # Parameterize APC
     params=[False, True],
 )
-def aphrodite_model(aphrodite_runner, request) -> Generator[AphroditeRunner, None, None]:
-    with aphrodite_runner(
+def sonar_model(sonar_runner, request) -> Generator[SonarRunner, None, None]:
+    with sonar_runner(
         MODEL,
         dtype=DTYPE,
         max_logprobs=7,
@@ -76,8 +76,8 @@ def aphrodite_model(aphrodite_runner, request) -> Generator[AphroditeRunner, Non
         # prompt logprobs.
         enable_prefix_caching=request.param,
         gpu_memory_utilization=0.4,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as sonar_model:
+        yield sonar_model
 
 
 @pytest.fixture(scope="module")
@@ -144,9 +144,9 @@ def _repeat_logprob_config(
 
 
 def _run_and_validate(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
     test_prompts: list[str],
-    aphrodite_sampling_params: SamplingParams | list[SamplingParams],
+    sonar_sampling_params: SamplingParams | list[SamplingParams],
     hf_logprobs: list[list[torch.Tensor]],
     hf_outputs: list[tuple[list[int], str]],
     logprob_prompt_logprob_list: BatchLogprobsSpecType,
@@ -154,31 +154,31 @@ def _run_and_validate(
     max_tokens: int,
     do_apc: bool,
 ) -> None:
-    aphrodite_results = aphrodite_model.llm.generate(test_prompts, sampling_params=aphrodite_sampling_params)
+    sonar_results = sonar_model.llm.generate(test_prompts, sampling_params=sonar_sampling_params)
 
-    for aphrodite_result, hf_logprob, hf_output, logprob_prompt_logprob in zip(
-        aphrodite_results, hf_logprobs, hf_outputs, logprob_prompt_logprob_list
+    for sonar_result, hf_logprob, hf_output, logprob_prompt_logprob in zip(
+        sonar_results, hf_logprobs, hf_outputs, logprob_prompt_logprob_list
     ):
         # Extract request-level (prompt)logprobs config
         num_top_logprobs, num_top_prompt_logprobs = logprob_prompt_logprob
 
-        assert aphrodite_result.prompt_token_ids is not None
-        # Test whether sampled token output is consistent between Aphrodite and HF
-        # Aphrodite prompt+completion should match HF output
+        assert sonar_result.prompt_token_ids is not None
+        # Test whether sampled token output is consistent between Sonar and HF
+        # Sonar prompt+completion should match HF output
         if temperature == 0.0:
-            assert aphrodite_result.prompt_token_ids + list(aphrodite_result.outputs[0].token_ids) == hf_output[0]
+            assert sonar_result.prompt_token_ids + list(sonar_result.outputs[0].token_ids) == hf_output[0]
         else:
             # Sampled tokens won't match if not greedy
-            assert aphrodite_result.prompt_token_ids == hf_output[0][: len(aphrodite_result.prompt_token_ids)]
+            assert sonar_result.prompt_token_ids == hf_output[0][: len(sonar_result.prompt_token_ids)]
 
         # Validate sample logprobs
         if num_top_logprobs is not None:
             assert num_top_logprobs is not None
             # Confirm that the structure of the sample logprobs in the result is
             # correct
-            assert aphrodite_result.outputs[0].logprobs is not None
-            assert len(aphrodite_result.outputs[0].logprobs) == max_tokens
-            for logprobs, token_id in zip(aphrodite_result.outputs[0].logprobs, aphrodite_result.outputs[0].token_ids):
+            assert sonar_result.outputs[0].logprobs is not None
+            assert len(sonar_result.outputs[0].logprobs) == max_tokens
+            for logprobs, token_id in zip(sonar_result.outputs[0].logprobs, sonar_result.outputs[0].token_ids):
                 assert logprobs is not None
 
                 # Confirm that the output token appears among the logprobs
@@ -199,9 +199,9 @@ def _run_and_validate(
                     all_ranks = {lp.rank for lp in logprobs.values()}
                     assert all(r in all_ranks for r in range(1, num_top_logprobs + 1))
 
-            output_text = aphrodite_result.outputs[0].text
+            output_text = sonar_result.outputs[0].text
             output_string_from_most_likely_tokens_lst: list[str] = []
-            for output_logprobs in aphrodite_result.outputs[0].logprobs:
+            for output_logprobs in sonar_result.outputs[0].logprobs:
                 assert output_logprobs is not None
                 top_logprob = next(iter(output_logprobs.values()))
                 assert top_logprob.decoded_token is not None
@@ -216,9 +216,9 @@ def _run_and_validate(
                 "result.",
             )
 
-            # Compare Aphrodite sample logprobs to HF
-            aphrodite_sample_logprobs = aphrodite_result.outputs[0].logprobs
-            for i, sample_logprobs in enumerate(aphrodite_sample_logprobs):
+            # Compare Sonar sample logprobs to HF
+            sonar_sample_logprobs = sonar_result.outputs[0].logprobs
+            for i, sample_logprobs in enumerate(sonar_sample_logprobs):
                 assert sample_logprobs is not None
                 for token_id, sample_logprob in sample_logprobs.items():
                     if temperature == 0.0 or i == 0:
@@ -238,26 +238,26 @@ def _run_and_validate(
             # For each request, assert that the returned cumulative logprob
             # matches the correct value, which is computed below.
             torch.testing.assert_close(
-                aphrodite_result.outputs[0].cumulative_logprob,
-                compute_correct_cumulative_logprob(aphrodite_result.outputs[0]),
+                sonar_result.outputs[0].cumulative_logprob,
+                compute_correct_cumulative_logprob(sonar_result.outputs[0]),
                 atol=1e-6,
                 rtol=1e-6,
             )
         else:
             # Logprobs disabled for this request; should be None
-            assert aphrodite_result.outputs[0].logprobs is None
+            assert sonar_result.outputs[0].logprobs is None
 
         # Validate prompt logprobs
         if num_top_prompt_logprobs is not None:
             # Confirm that structure of prompt logprobs in result is correct
-            assert aphrodite_result.prompt_logprobs is not None
+            assert sonar_result.prompt_logprobs is not None
             # - The first prompt logprob is always None
-            assert aphrodite_result.prompt_logprobs[0] is None
+            assert sonar_result.prompt_logprobs[0] is None
             # - Prompt logprobs are returned for all indices in
             #   the prompt
-            assert len(aphrodite_result.prompt_logprobs) == len(aphrodite_result.prompt_token_ids)
+            assert len(sonar_result.prompt_logprobs) == len(sonar_result.prompt_token_ids)
             for prompt_logprobs, prompt_token_id in zip(
-                aphrodite_result.prompt_logprobs[1:], aphrodite_result.prompt_token_ids[1:]
+                sonar_result.prompt_logprobs[1:], sonar_result.prompt_token_ids[1:]
             ):
                 assert prompt_logprobs is not None
 
@@ -282,10 +282,10 @@ def _run_and_validate(
             # Compare prompt logprobs to HF
             # The first prompt logprob is always None, so we compare it from
             # 1:.
-            aphrodite_prompt_logprobs = aphrodite_result.prompt_logprobs[1:]
-            for i, aphrodite_prompt_logprob_dict in enumerate(aphrodite_prompt_logprobs):
-                assert aphrodite_prompt_logprob_dict is not None
-                for token_id, prompt_lp in aphrodite_prompt_logprob_dict.items():
+            sonar_prompt_logprobs = sonar_result.prompt_logprobs[1:]
+            for i, sonar_prompt_logprob_dict in enumerate(sonar_prompt_logprobs):
+                assert sonar_prompt_logprob_dict is not None
+                for token_id, prompt_lp in sonar_prompt_logprob_dict.items():
                     torch.testing.assert_close(
                         prompt_lp.logprob,
                         hf_logprob[0][i][token_id].item(),
@@ -293,14 +293,14 @@ def _run_and_validate(
                         rtol=2e-2,
                     )
         else:
-            assert aphrodite_result.prompt_logprobs is None
+            assert sonar_result.prompt_logprobs is None
 
 
 @pytest.mark.parametrize("batch_logprobs_composition", [NONE, SAMPLE, PROMPT, SAMPLE_PROMPT])
 @pytest.mark.parametrize("temperature", [0.0, 2.0])
 def test_get_logprobs_and_prompt_logprobs(
     hf_model,
-    aphrodite_model,
+    sonar_model,
     batch_logprobs_composition: BatchLogprobsComposition,
     temperature: float,
     example_prompts: list[str],
@@ -326,14 +326,14 @@ def test_get_logprobs_and_prompt_logprobs(
 
     Args:
       hf_model: HuggingFace reference model fixture
-      aphrodite_model: Aphrodite model fixture
+      sonar_model: Sonar model fixture
       batch_logprobs_composition: logprobs configuration for test batch
       temperature: "temperature" sampling parameter
       example_prompts: example prompt fixture
 
     """
-    aphrodite_config = aphrodite_model.llm.llm_engine.aphrodite_config
-    do_apc = aphrodite_config.cache_config.enable_prefix_caching
+    sonar_config = sonar_model.llm.llm_engine.sonar_config
+    do_apc = sonar_config.cache_config.enable_prefix_caching
     if do_apc and (temperature < 2.0 or batch_logprobs_composition != SAMPLE_PROMPT):
         # Skip some test-cases to save time.
         pytest.skip()
@@ -356,7 +356,7 @@ def test_get_logprobs_and_prompt_logprobs(
     # Ensure that each test prompt has a logprob config for testing
     logprob_prompt_logprob_list = _repeat_logprob_config(test_prompts, logprob_prompt_logprob_list)
     # Generate SamplingParams
-    aphrodite_sampling_params = [
+    sonar_sampling_params = [
         SamplingParams(
             max_tokens=max_tokens,
             logprobs=num_lp,
@@ -368,9 +368,9 @@ def test_get_logprobs_and_prompt_logprobs(
     ]
     for _ in range(2 if do_apc else 1):
         _run_and_validate(
-            aphrodite_model=aphrodite_model,
+            sonar_model=sonar_model,
             test_prompts=test_prompts,
-            aphrodite_sampling_params=aphrodite_sampling_params,
+            sonar_sampling_params=sonar_sampling_params,
             hf_logprobs=hf_logprobs,
             hf_outputs=hf_outputs,
             logprob_prompt_logprob_list=logprob_prompt_logprob_list,
@@ -381,20 +381,20 @@ def test_get_logprobs_and_prompt_logprobs(
 
 
 def test_max_logprobs():
-    """APHRODITE v1 engine should fail a request with `logprobs > max_logprobs`
+    """SONAR v1 engine should fail a request with `logprobs > max_logprobs`
     Should also fail for `prompt_logprobs > max_logprobs`
     APC should not matter as this test checks basic request validation.
     """
-    with AphroditeRunner(
+    with SonarRunner(
         "facebook/opt-125m",
         max_logprobs=1,
         enable_prefix_caching=False,
         gpu_memory_utilization=0.15,
         max_model_len=256,
     ) as runner:
-        aphrodite_sampling_params = SamplingParams(logprobs=1)
+        sonar_sampling_params = SamplingParams(logprobs=1)
         # should pass
-        runner.generate(["Hello world"], sampling_params=aphrodite_sampling_params)
+        runner.generate(["Hello world"], sampling_params=sonar_sampling_params)
 
         bad_sampling_params = SamplingParams(logprobs=2)
         with pytest.raises(ValueError):
@@ -413,7 +413,7 @@ def test_logprob_token_ids_validate_vocab_bounds_valid(token_ids: list[int]):
 
 @pytest.mark.parametrize("token_ids", [[-1], [10], [-35, 1873042417]])
 def test_logprob_token_ids_validate_vocab_bounds_invalid(token_ids: list[int]):
-    with pytest.raises(AphroditeValidationError, match="logprob_token_ids"):
+    with pytest.raises(SonarValidationError, match="logprob_token_ids"):
         SamplingParams(logprob_token_ids=token_ids).verify(
             _model_config(),
             speculative_config=None,
@@ -453,33 +453,33 @@ def test_prompt_logprob_token_ids_validation():
         with pytest.raises(ValidationError):
             adapter.validate_json(f'{{"prompt_logprob_token_ids": {bad}}}')
 
-    with pytest.raises(AphroditeValidationError, match=r"shape \[num_rows, num_ids\]"):
+    with pytest.raises(SonarValidationError, match=r"shape \[num_rows, num_ids\]"):
         verify(prompt_logprob_token_ids=np.array([1, 2]))
-    with pytest.raises(AphroditeValidationError, match=r"shape \[num_rows, num_ids\]"):
+    with pytest.raises(SonarValidationError, match=r"shape \[num_rows, num_ids\]"):
         verify(prompt_logprob_token_ids=[1, 2])
     for bad_ids in ([[None]], [[2**63]], [[[1]]], [[[1], 2]]):
-        with pytest.raises(AphroditeValidationError, match="integer token ids"):
+        with pytest.raises(SonarValidationError, match="integer token ids"):
             verify(prompt_logprob_token_ids=bad_ids)
-    with pytest.raises(AphroditeValidationError, match="out-of-vocab"):
+    with pytest.raises(SonarValidationError, match="out-of-vocab"):
         verify(prompt_logprob_token_ids=np.array([[2**64 - 1]], dtype=np.uint64))
     # The error names the value to raise max_logprobs to.
-    with pytest.raises(AphroditeValidationError, match=r"max_logprobs.*at least 5"):
+    with pytest.raises(SonarValidationError, match=r"max_logprobs.*at least 5"):
         verify(prompt_logprob_token_ids=[[1], [1, 2, 3, 4, 5]])
-    with pytest.raises(AphroditeValidationError, match="out-of-vocab"):
+    with pytest.raises(SonarValidationError, match="out-of-vocab"):
         verify(prompt_logprob_token_ids=[[1], [100]])
-    with pytest.raises(AphroditeValidationError, match="out-of-vocab"):
+    with pytest.raises(SonarValidationError, match="out-of-vocab"):
         verify(prompt_logprob_token_ids=[[1], [-2]])
-    with pytest.raises(AphroditeValidationError, match="non-empty"):
+    with pytest.raises(SonarValidationError, match="non-empty"):
         verify(prompt_logprob_token_ids=[[], []])
     # Rows are bounded by max_model_len before the table is padded.
-    with pytest.raises(AphroditeValidationError, match="at most 15 scored rows"):
+    with pytest.raises(SonarValidationError, match="at most 15 scored rows"):
         verify(prompt_logprob_token_ids=[[]] * 15 + [[1]])
     # prompt_logprob_start alone is a caller mistake, not a silent no-op.
-    with pytest.raises(AphroditeValidationError, match="requires prompt_logprobs or"):
+    with pytest.raises(SonarValidationError, match="requires prompt_logprobs or"):
         verify(prompt_logprob_start=3)
     # It also offsets top-K prompt logprobs.
     verify(prompt_logprobs=1, prompt_logprob_start=3)
-    with pytest.raises(AphroditeValidationError, match="non-negative"):
+    with pytest.raises(SonarValidationError, match="non-negative"):
         verify(prompt_logprobs=1, prompt_logprob_start=-1)
 
 
@@ -488,7 +488,7 @@ def test_prompt_logprob_token_ids_require_v2_model_runner():
     kv-sharing fast prefill would score rows the cross-decoder never ran."""
     processor = SimpleNamespace(
         model_config=SimpleNamespace(return_sampling_mask=False, enable_trace_replay=False, is_diffusion=False),
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             reasoning_config=None,
             use_v2_model_runner=False,
             cache_config=SimpleNamespace(kv_sharing_fast_prefill=False),
@@ -501,28 +501,28 @@ def test_prompt_logprob_token_ids_require_v2_model_runner():
     )
     params = SamplingParams(prompt_logprob_token_ids=[[1, 2]])
     with patch.object(SamplingParams, "verify"):
-        with pytest.raises(AphroditeValidationError, match="V2 model runner"):
+        with pytest.raises(SonarValidationError, match="V2 model runner"):
             InputProcessor._validate_params(processor, params, ("generate",))
-        processor.aphrodite_config.use_v2_model_runner = True
+        processor.sonar_config.use_v2_model_runner = True
         InputProcessor._validate_params(processor, params, ("generate",))
-        processor.aphrodite_config.cache_config.kv_sharing_fast_prefill = True
-        with pytest.raises(AphroditeValidationError, match="fast-prefill"):
+        processor.sonar_config.cache_config.kv_sharing_fast_prefill = True
+        with pytest.raises(SonarValidationError, match="fast-prefill"):
             InputProcessor._validate_params(processor, params, ("generate",))
 
         # Top-K prompt logprobs only honor prompt_logprob_start on the V2 runner.
-        processor.aphrodite_config.cache_config.kv_sharing_fast_prefill = False
+        processor.sonar_config.cache_config.kv_sharing_fast_prefill = False
         params = SamplingParams(prompt_logprobs=1, prompt_logprob_start=2)
         InputProcessor._validate_params(processor, params, ("generate",))
-        processor.aphrodite_config.use_v2_model_runner = False
-        with pytest.raises(AphroditeValidationError, match="V2 model runner"):
+        processor.sonar_config.use_v2_model_runner = False
+        with pytest.raises(SonarValidationError, match="V2 model runner"):
             InputProcessor._validate_params(processor, params, ("generate",))
 
 
-def test_none_logprobs(aphrodite_model, example_prompts):
+def test_none_logprobs(sonar_model, example_prompts):
     """Engine should return `logprobs` and `prompt_logprobs` as `None`.
 
     Args:
-      aphrodite_model: Aphrodite model fixture
+      sonar_model: Sonar model fixture
       example_prompts: list of example prompts (test fixture)
 
     """
@@ -534,7 +534,7 @@ def test_none_logprobs(aphrodite_model, example_prompts):
         prompt_logprobs=None,
         temperature=0.0,
     )
-    results_logprobs_none = aphrodite_model.llm.generate(
+    results_logprobs_none = sonar_model.llm.generate(
         example_prompts,
         sampling_params=sampling_params_logprobs_none,
     )
@@ -547,11 +547,11 @@ def test_none_logprobs(aphrodite_model, example_prompts):
         assert results_logprobs_none[i].prompt_logprobs is None
 
 
-def test_zero_logprobs(aphrodite_model, example_prompts):
+def test_zero_logprobs(sonar_model, example_prompts):
     """Engine should return sampled token and prompt token logprobs.
 
     Args:
-      aphrodite_model: Aphrodite model fixture
+      sonar_model: Sonar model fixture
       example_prompts: list of example prompts (test fixture)
 
     """
@@ -560,7 +560,7 @@ def test_zero_logprobs(aphrodite_model, example_prompts):
     sampling_params_logprobs_zero = SamplingParams(
         max_tokens=max_tokens, logprobs=0, prompt_logprobs=0, temperature=0.0
     )
-    results_logprobs_zero = aphrodite_model.llm.generate(example_prompts, sampling_params=sampling_params_logprobs_zero)
+    results_logprobs_zero = sonar_model.llm.generate(example_prompts, sampling_params=sampling_params_logprobs_zero)
 
     for i in range(len(results_logprobs_zero)):
         # Check that there is one sample logprob dict for each
@@ -585,7 +585,7 @@ def test_all_logprobs(example_prompts):
       example_prompts: list of example prompts (test fixture)
 
     """
-    with AphroditeRunner(
+    with SonarRunner(
         "facebook/opt-125m",
         max_logprobs=-1,
         enable_prefix_caching=False,
@@ -614,7 +614,7 @@ def test_logprobs_mode(logprobs_mode: LogprobsMode):
     For logprobs, we should have non-positive values.
     For logits, we should expect at least one positive values.
     """
-    from aphrodite import LLM
+    from sonar import LLM
 
     llm = LLM(
         "facebook/opt-125m",
@@ -627,8 +627,8 @@ def test_logprobs_mode(logprobs_mode: LogprobsMode):
         logprobs_mode=logprobs_mode,
     )
     try:
-        aphrodite_sampling_params = SamplingParams(logprobs=1)
-        results = llm.generate(["Hello world"], sampling_params=aphrodite_sampling_params)
+        sonar_sampling_params = SamplingParams(logprobs=1)
+        results = llm.generate(["Hello world"], sampling_params=sonar_sampling_params)
 
         total_token_with_logprobs = 0
         positive_values = 0
@@ -656,7 +656,7 @@ def test_prompt_logprobs_mode():
     """prompt_logprobs must respect logprobs_mode: *_logits and *_logprobs
     must return different values. Prompt tokens skip sampling processors,
     so processed_* == raw_* on the prompt side."""
-    from aphrodite import LLM
+    from sonar import LLM
 
     values: dict[str, float] = {}
     for mode in get_args(LogprobsMode):
@@ -713,7 +713,7 @@ class TestCorrectDecodedToken:
     @pytest.fixture
     def processor(self, mock_tokenizer):
         """Create a LogprobsProcessor."""
-        from aphrodite.v1.engine.logprobs import LogprobsProcessor
+        from sonar.v1.engine.logprobs import LogprobsProcessor
 
         processor = LogprobsProcessor(
             tokenizer=mock_tokenizer,
@@ -908,7 +908,7 @@ class TestCorrectDecodedToken:
         into byte-fallback tokens. Each token is corrected using only
         the preceding sampled tokens as context.
         """
-        from aphrodite.v1.engine.logprobs import LogprobsProcessor
+        from sonar.v1.engine.logprobs import LogprobsProcessor
 
         processor = LogprobsProcessor(
             tokenizer=mock_tokenizer,
@@ -977,7 +977,7 @@ class TestCorrectDecodedToken:
         When token 44 returns "" (incomplete), the space it carried
         must be attributed to the completing token (48).
         """
-        from aphrodite.v1.engine.logprobs import LogprobsProcessor
+        from sonar.v1.engine.logprobs import LogprobsProcessor
 
         processor = LogprobsProcessor(
             tokenizer=mock_tokenizer,
@@ -1028,7 +1028,7 @@ def test_verify_tokens_integration():
     corrects tokens ending with the replacement character "�".
     Uses facebook/opt-125m which is known to produce these issues.
     """
-    with AphroditeRunner(
+    with SonarRunner(
         "facebook/opt-125m",
         max_logprobs=0,
         enable_prefix_caching=False,
@@ -1068,7 +1068,7 @@ def test_utf8_edge_cases_with_real_model():
     Tests prompts that are likely to trigger byte-fallback tokenization
     and multi-byte UTF-8 splitting.
     """
-    with AphroditeRunner(
+    with SonarRunner(
         "facebook/opt-125m",
         max_logprobs=1,
         enable_prefix_caching=False,
@@ -1115,7 +1115,7 @@ def test_correct_decoded_token_preserves_valid_tokens():
     ending with "�", but this test verifies the broader _verify_tokens
     logic doesn't affect valid tokens.
     """
-    with AphroditeRunner(
+    with SonarRunner(
         "facebook/opt-125m",
         max_logprobs=2,
         enable_prefix_caching=False,
@@ -1212,7 +1212,7 @@ def test_spec_decode_logprobs(
             speculative_config dict, top_logprobs).
 
     """
-    from aphrodite import LLM
+    from sonar import LLM
 
     method, model_name, spec_config, top_logprobs = model_setup
 
@@ -1315,7 +1315,7 @@ def test_prompt_logprobs_with_chunking_and_preemption():
         prompt_logprobs=2,  # Request prompt logprobs
     )
 
-    with AphroditeRunner(
+    with SonarRunner(
         "Qwen/Qwen3-0.6B",
         max_model_len=512,
         enable_chunked_prefill=True,
@@ -1323,12 +1323,12 @@ def test_prompt_logprobs_with_chunking_and_preemption():
         num_gpu_blocks_override=33,  # Force preemptions (32 usable + null block)
         disable_log_stats=False,
         gpu_memory_utilization=0.25,
-    ) as aphrodite_model:
-        metrics_before = aphrodite_model.llm.get_metrics()
+    ) as sonar_model:
+        metrics_before = sonar_model.llm.get_metrics()
 
         # Generate with prompt logprobs using generate_w_logprobs which
         # returns (output_ids, output_str, output_logprobs, prompt_logprobs)
-        outputs = aphrodite_model.generate_w_logprobs(
+        outputs = sonar_model.generate_w_logprobs(
             prompts, sampling_params=sampling_params, include_prompt_token_ids=True
         )
 
@@ -1350,9 +1350,9 @@ def test_prompt_logprobs_with_chunking_and_preemption():
                     )
 
         # Check that we actually had preemptions
-        metrics_after = aphrodite_model.llm.get_metrics()
-        preemptions_before = next((m.value for m in metrics_before if m.name == "aphrodite:num_preemptions"), 0)
-        preemptions_after = next((m.value for m in metrics_after if m.name == "aphrodite:num_preemptions"), 0)
+        metrics_after = sonar_model.llm.get_metrics()
+        preemptions_before = next((m.value for m in metrics_before if m.name == "sonar:num_preemptions"), 0)
+        preemptions_after = next((m.value for m in metrics_after if m.name == "sonar:num_preemptions"), 0)
         preemptions = preemptions_after - preemptions_before
         assert preemptions > 0, "Test did not trigger any preemptions"
 
@@ -1361,7 +1361,7 @@ def test_prompt_logprobs_with_chunking_and_preemption():
 
 def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
     """Per-row scores stay row-aligned across chunked prefill and preemption."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
 
     prompts = [
         "The following numbers of the sequence " + ", ".join(str(i) for i in range(10)) + " are:",
@@ -1373,7 +1373,7 @@ def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
     def candidate_ids(j):
         return [10 + j, 100 + j, 1000 + j, 10000 + j]
 
-    with AphroditeRunner(
+    with SonarRunner(
         "Qwen/Qwen3-0.6B",
         max_model_len=512,
         enable_chunked_prefill=True,
@@ -1381,8 +1381,8 @@ def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
         num_gpu_blocks_override=33,  # Force preemptions (32 usable + null block)
         disable_log_stats=False,
         gpu_memory_utilization=0.25,
-    ) as aphrodite_model:
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+    ) as sonar_model:
+        tokenizer = sonar_model.llm.get_tokenizer()
         token_prompts = [TokensPrompt(prompt_token_ids=tokenizer(p).input_ids) for p in prompts]
 
         def make_params(row_ids):
@@ -1397,11 +1397,11 @@ def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
                 for p in token_prompts
             ]
 
-        metrics_before = aphrodite_model.llm.get_metrics()
+        metrics_before = sonar_model.llm.get_metrics()
         full_params = make_params(candidate_ids)
         for params in full_params:  # the array form, as a top-k tensor would be
             params.prompt_logprob_token_ids = np.array(params.prompt_logprob_token_ids)
-        outputs = aphrodite_model.llm.generate(token_prompts, full_params)
+        outputs = sonar_model.llm.generate(token_prompts, full_params)
 
         for i, output in enumerate(outputs):
             scores = output.prompt_token_id_logprobs
@@ -1420,7 +1420,7 @@ def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
         # tails by up to 0.19; a misaligned row is off by nats either way.
         ragged_atol = 0.2 if current_platform.is_rocm() else 1e-2
         ragged_params = make_params(lambda j: candidate_ids(j)[: 1 + j % 4])
-        ragged_outputs = aphrodite_model.llm.generate(token_prompts, ragged_params)
+        ragged_outputs = sonar_model.llm.generate(token_prompts, ragged_params)
         for output, ragged_output in zip(outputs, ragged_outputs):
             expected = np.full_like(output.prompt_token_id_logprobs, -np.inf)
             for j in range(len(expected)):
@@ -1429,18 +1429,18 @@ def test_prompt_logprob_token_ids_with_chunking_and_preemption(monkeypatch):
             np.testing.assert_allclose(ragged_output.prompt_token_id_logprobs, expected, atol=ragged_atol)
 
         # The row count is checked against the prompt at admission.
-        with pytest.raises(AphroditeValidationError, match="scored rows"):
-            aphrodite_model.llm.generate(token_prompts[0], ragged_params[1])
+        with pytest.raises(SonarValidationError, match="scored rows"):
+            sonar_model.llm.generate(token_prompts[0], ragged_params[1])
 
-        metrics_after = aphrodite_model.llm.get_metrics()
-        preemptions_before = next((m.value for m in metrics_before if m.name == "aphrodite:num_preemptions"), 0)
-        preemptions_after = next((m.value for m in metrics_after if m.name == "aphrodite:num_preemptions"), 0)
+        metrics_after = sonar_model.llm.get_metrics()
+        preemptions_before = next((m.value for m in metrics_before if m.name == "sonar:num_preemptions"), 0)
+        preemptions_after = next((m.value for m in metrics_after if m.name == "sonar:num_preemptions"), 0)
         assert preemptions_after - preemptions_before > 0, "Test did not trigger any preemptions"
 
     # Row alignment is numerical: chunked and preempted scores must match an
     # unchunked, unpreempted run of the same requests. Batch composition moves
     # bf16 tail logprobs by a few percent; a misaligned row differs by nats.
-    with AphroditeRunner("Qwen/Qwen3-0.6B", max_model_len=512, gpu_memory_utilization=0.25) as reference:
+    with SonarRunner("Qwen/Qwen3-0.6B", max_model_len=512, gpu_memory_utilization=0.25) as reference:
         reference_outputs = reference.llm.generate(token_prompts, full_params)
         self_scored = reference.llm.generate(
             token_prompts,
@@ -1471,22 +1471,22 @@ def test_prompt_logprob_token_ids_preserve_scores_with_prefix_cache(monkeypatch)
     """Prefix reuse preserves every requested suffix score, for both fixed-ID
     scores and top-K prompt logprobs offset by prompt_logprob_start."""
     start = 17
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     # Cached and uncached prefills have different execution shapes; batch
     # invariance makes their scores comparable bit for bit.
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
     text = "The capital of France is Paris. " * 20
 
-    with AphroditeRunner(
+    with SonarRunner(
         "Qwen/Qwen3-0.6B",
         max_model_len=512,
         enable_prefix_caching=True,
         block_size=16,
         gpu_memory_utilization=0.25,
-    ) as aphrodite_model:
-        token_ids = aphrodite_model.llm.get_tokenizer()(text).input_ids
+    ) as sonar_model:
+        token_ids = sonar_model.llm.get_tokenizer()(text).input_ids
         prompt = TokensPrompt(prompt_token_ids=token_ids)
         sampling_params = SamplingParams(
             temperature=0.0,
@@ -1497,7 +1497,7 @@ def test_prompt_logprob_token_ids_preserve_scores_with_prefix_cache(monkeypatch)
             skip_reading_prefix_cache=True,
         )
 
-        first = aphrodite_model.llm.generate([prompt], sampling_params)[0]
+        first = sonar_model.llm.generate([prompt], sampling_params)[0]
         assert first.prompt_token_id_logprobs is not None
         assert math.isfinite(float(first.prompt_token_id_logprobs.min()))
         # Top-K prompt logprobs start at the same row: position p is predicted
@@ -1508,7 +1508,7 @@ def test_prompt_logprob_token_ids_preserve_scores_with_prefix_cache(monkeypatch)
         assert all(first.prompt_logprobs[start + 1 :])
 
         sampling_params.skip_reading_prefix_cache = False
-        second = aphrodite_model.llm.generate([prompt], sampling_params)[0]
+        second = sonar_model.llm.generate([prompt], sampling_params)[0]
         assert second.num_cached_tokens == 16
         assert second.prompt_token_id_logprobs.shape == (len(token_ids) - 1 - start, 3)
         np.testing.assert_array_equal(second.prompt_token_id_logprobs, first.prompt_token_id_logprobs)
@@ -1528,7 +1528,7 @@ def test_token_logprobs_large_batch_int64_row_offset():
     """
     if not current_platform.is_cuda():
         pytest.skip("int32 row-offset overflow is a CUDA kernel issue")
-    from aphrodite.v1.worker.gpu.sample.logprob import compute_token_logprobs
+    from sonar.v1.worker.gpu.sample.logprob import compute_token_logprobs
 
     device = torch.device("cuda")
     vocab_size = 131072
@@ -1552,8 +1552,8 @@ def test_chunked_prompt_logprobs_match_unchunked(num_prompt_logprobs: int):
     """Chunks written into preallocated outputs must match one unchunked pass."""
     if not current_platform.is_cuda_alike():
         pytest.skip("the logprob kernels are Triton")
-    from aphrodite.v1.worker.gpu.sample.logprob import compute_topk_scores
-    from aphrodite.v1.worker.gpu.sample.prompt_logprob import (
+    from sonar.v1.worker.gpu.sample.logprob import compute_topk_scores
+    from sonar.v1.worker.gpu.sample.prompt_logprob import (
         CHUNK_SIZE,
         compute_prompt_logprobs_with_chunking,
     )
@@ -1580,7 +1580,7 @@ def test_chunked_prompt_logprobs_match_unchunked(num_prompt_logprobs: int):
 
 
 def test_trace_replay_with_spec_decode(monkeypatch):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
 
     prompt = "Hello world " * 50
     llm_kwargs = dict(
@@ -1607,7 +1607,7 @@ def test_trace_replay_with_spec_decode(monkeypatch):
             results.append((list(completion.token_ids), completion.logprobs))
         return results
 
-    with AphroditeRunner("Qwen/Qwen3-0.6B", **llm_kwargs) as ref_runner:
+    with SonarRunner("Qwen/Qwen3-0.6B", **llm_kwargs) as ref_runner:
         sampled = ref_runner.llm.generate(
             [prompt, prompt],
             [
@@ -1621,7 +1621,7 @@ def test_trace_replay_with_spec_decode(monkeypatch):
         traces = [greedy_trace, sampled_trace, diverged_trace]
         ref_results = replay(ref_runner, traces)
 
-    with AphroditeRunner(
+    with SonarRunner(
         "Qwen/Qwen3-0.6B",
         speculative_config={
             "method": "ngram",
@@ -1634,7 +1634,7 @@ def test_trace_replay_with_spec_decode(monkeypatch):
     ) as spec_runner:
         spec_results = replay(spec_runner, traces)
         num_accepted = sum(
-            m.value for m in spec_runner.llm.get_metrics() if m.name == "aphrodite:spec_decode_num_accepted_tokens"
+            m.value for m in spec_runner.llm.get_metrics() if m.name == "sonar:spec_decode_num_accepted_tokens"
         )
     assert num_accepted > 0
 

@@ -3,17 +3,17 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::AbortCause;
-use aphrodite_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
-use aphrodite_engine_core_client::protocol::sampling_mask::SamplingMask;
-use aphrodite_llm::{
-    FinishReason, GenerateOutput, PromptCacheUsage, RequestTimestamps, TokenUsage,
-    WeightVersionSpan,
-};
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, IncrementalDecoder};
 use asynk_strim_attr::{TryYielder, try_stream};
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
+use sonar_engine_core_client::AbortCause;
+use sonar_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
+use sonar_engine_core_client::protocol::sampling_mask::SamplingMask;
+use sonar_llm::{
+    FinishReason, GenerateOutput, PromptCacheUsage, RequestTimestamps, TokenUsage,
+    WeightVersionSpan,
+};
+use sonar_tokenizer::{DecodedText, DynTokenizer, IncrementalDecoder};
 use tracing::{Level, debug, trace};
 
 use super::logprobs::{
@@ -72,7 +72,7 @@ pub struct Finished {
     pub usage: TokenUsage,
     pub finish_reason: FinishReason,
     /// Connector-specific KV transfer parameters for disaggregated serving.
-    /// Kept boxed as received from `aphrodite-llm`, so the chat events built from
+    /// Kept boxed as received from `sonar-llm`, so the chat events built from
     /// this stay small without boxing again.
     pub kv_transfer_params: Option<Box<serde_json::Value>>,
     /// Connector-specific encoder cache transfer parameters for disaggregated
@@ -143,7 +143,7 @@ pub enum DecodedTextEvent {
 struct TokenOnlyDecoder;
 
 impl IncrementalDecoder for TokenOnlyDecoder {
-    fn push_token(&mut self, _token_id: u32) -> aphrodite_tokenizer::Result<usize> {
+    fn push_token(&mut self, _token_id: u32) -> sonar_tokenizer::Result<usize> {
         Ok(0)
     }
 
@@ -154,7 +154,7 @@ impl IncrementalDecoder for TokenOnlyDecoder {
     fn flush(
         &mut self,
         _truncate_output_to: Option<usize>,
-    ) -> aphrodite_tokenizer::Result<(Option<DecodedText>, DecodedText)> {
+    ) -> sonar_tokenizer::Result<(Option<DecodedText>, DecodedText)> {
         Ok((None, DecodedText::default()))
     }
 
@@ -163,13 +163,13 @@ impl IncrementalDecoder for TokenOnlyDecoder {
     }
 }
 
-/// Convert the output token stream from the `aphrodite_llm` layer into incrementally
+/// Convert the output token stream from the `sonar_llm` layer into incrementally
 /// decoded text.
 #[try_stream]
 pub async fn decoded_text_event_stream(
     request_id: String,
     tokenizer: DynTokenizer,
-    mut raw_stream: impl Stream<Item = aphrodite_llm::Result<GenerateOutput>> + Unpin,
+    mut raw_stream: impl Stream<Item = sonar_llm::Result<GenerateOutput>> + Unpin,
     mut decode_options: TextDecodeOptions,
     intermediate: bool,
     mut y: TryYielder<DecodedTextEvent, Error>,
@@ -308,7 +308,7 @@ pub async fn decoded_text_event_stream(
             if let Some(mask) = sampling_mask.as_ref()
                 && mask.rows.len() != output_token_count
             {
-                return Err(aphrodite_llm::Error::SamplingMaskTokenCountMismatch {
+                return Err(sonar_llm::Error::SamplingMaskTokenCountMismatch {
                     request_id,
                     token_count: output_token_count,
                     row_count: mask.rows.len(),
@@ -433,14 +433,12 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::task::{Context, Poll};
 
-    use aphrodite_engine_core_client::AbortCause;
-    use aphrodite_engine_core_client::protocol::logprobs::{
-        Logprobs, PositionLogprobs, TokenLogprob,
-    };
-    use aphrodite_llm::GenerateOutput;
-    use aphrodite_tokenizer::test_utils::{PanickingTokenizer, TestTokenizer};
-    use aphrodite_tokenizer::{TokenAnchor, TokenAttribution};
     use futures::{Stream, StreamExt as _, stream};
+    use sonar_engine_core_client::AbortCause;
+    use sonar_engine_core_client::protocol::logprobs::{Logprobs, PositionLogprobs, TokenLogprob};
+    use sonar_llm::GenerateOutput;
+    use sonar_tokenizer::test_utils::{PanickingTokenizer, TestTokenizer};
+    use sonar_tokenizer::{TokenAnchor, TokenAttribution};
 
     use super::*;
     use crate::output::TextOutputStreamExt as _;
@@ -528,7 +526,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::Error::Llm(aphrodite_llm::Error::SamplingMaskTokenCountMismatch {
+            crate::Error::Llm(sonar_llm::Error::SamplingMaskTokenCountMismatch {
                 token_count: 2,
                 row_count: 1,
                 ..
@@ -789,12 +787,12 @@ mod tests {
     }
 
     struct DropRecordingStream {
-        next: Option<aphrodite_llm::Result<GenerateOutput>>,
+        next: Option<sonar_llm::Result<GenerateOutput>>,
         dropped_cause: Arc<Mutex<Option<AbortCause>>>,
     }
 
     impl Stream for DropRecordingStream {
-        type Item = aphrodite_llm::Result<GenerateOutput>;
+        type Item = sonar_llm::Result<GenerateOutput>;
 
         fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             Poll::Ready(self.next.take())

@@ -7,17 +7,17 @@ from typing import Any
 import pytest
 import torch._dynamo.config as dynamo_config
 
-from aphrodite import SamplingParams
-from aphrodite.logprobs import Logprob
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.v1.metrics.reader import Counter, Metric
+from sonar import SamplingParams
+from sonar.logprobs import Logprob
+from sonar.platforms import current_platform
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.v1.metrics.reader import Counter, Metric
 from tests.utils import (
     large_gpu_mark,
     single_gpu_only,
 )
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 from ....models.utils import check_outputs_equal
 
 MODEL = "Qwen/Qwen3-0.6B"
@@ -204,7 +204,7 @@ def run_tests(
 
     with monkeypatch.context() as m:
         # lock matmul precision to full FP32 (IEEE)
-        m.setenv("APHRODITE_FLOAT32_MATMUL_PRECISION", "highest")
+        m.setenv("SONAR_FLOAT32_MATMUL_PRECISION", "highest")
         outputs: list[tuple[str, list, list]] = []
         for n, (
             test_preemption,
@@ -335,7 +335,7 @@ def run_test(
     print(f"---- TESTING {test_str}: {test_config}")
     print("-" * 80)
 
-    with AphroditeRunner(
+    with SonarRunner(
         model,
         enable_chunked_prefill=test_prefill_chunking,
         # Force prefill chunking
@@ -349,27 +349,27 @@ def run_test(
         attention_config=attention_config,
         enable_prefix_caching=False if current_platform.is_rocm() else None,
         **cache_arg,
-    ) as aphrodite_model:
+    ) as sonar_model:
         results = []
         acceptance_lengths: list[float] | None = [] if spec_decoding else None
         for override_params in sampling_param_tests:
-            metrics_before = aphrodite_model.llm.get_metrics()
+            metrics_before = sonar_model.llm.get_metrics()
             print(f"----------- RUNNING PARAMS: {override_params}")
             results.append(
-                aphrodite_model.generate(
+                sonar_model.generate(
                     example_prompts,
                     sampling_params=SamplingParams(**default_params, **override_params),
                     return_logprobs=True,
                 )
             )
-            metrics_after = aphrodite_model.llm.get_metrics()
+            metrics_after = sonar_model.llm.get_metrics()
             if acceptance_lengths is not None:
                 acceptance_length = _get_acceptance_length(metrics_before, metrics_after)
                 acceptance_lengths.append(acceptance_length)
                 print(f"ACCEPTANCE RATE {acceptance_length}")
 
             if test_preemption:
-                preemptions = _get_count(metrics_before, metrics_after, "aphrodite:num_preemptions")
+                preemptions = _get_count(metrics_before, metrics_after, "sonar:num_preemptions")
                 assert preemptions > 0, "preemption test had no preemptions"
 
     if len(results) > 1:
@@ -419,8 +419,8 @@ def _logprobs_match(
 
 
 def _get_acceptance_length(before: list[Metric], after: list[Metric]) -> float:
-    draft = _get_count(before, after, "aphrodite:spec_decode_num_drafts")
-    accept = _get_count(before, after, "aphrodite:spec_decode_num_accepted_tokens")
+    draft = _get_count(before, after, "sonar:spec_decode_num_drafts")
+    accept = _get_count(before, after, "sonar:spec_decode_num_accepted_tokens")
     return 1 + accept / draft if draft > 0 else 1.0
 
 

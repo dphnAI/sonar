@@ -4,15 +4,15 @@
 import pytest
 import torch
 
-from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
-from aphrodite.pooling_params import LateInteractionParams, PoolingParams
-from aphrodite.v1.pool.late_interaction import (
+from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from sonar.pooling_params import LateInteractionParams, PoolingParams
+from sonar.v1.pool.late_interaction import (
     LATE_INTERACTION_MODE_CACHE_QUERY,
     build_late_interaction_doc_params,
     build_late_interaction_query_params,
     compute_maxsim_score_batched,
 )
-from aphrodite.v1.pool.late_interaction_runner import LateInteractionRunner
+from sonar.v1.pool.late_interaction_runner import LateInteractionRunner
 
 
 def _make_pooling_params(
@@ -252,7 +252,7 @@ def test_disabled_flag_uses_reference_path():
 # Autotune config pruning.
 # ---------------------------------------------------------------------------
 def _prune(monkeypatch, budget: int, named_args: dict):
-    from aphrodite.v1.pool.flash_maxsim import _common
+    from sonar.v1.pool.flash_maxsim import _common
 
     monkeypatch.setattr(_common, "_smem_budget", lambda: budget)
     return _common._prune_configs(_common._get_configs(), named_args)
@@ -275,7 +275,7 @@ def test_prune_configs_uses_padded_dim(monkeypatch):
 def test_prune_configs_no_rejected_fallback(monkeypatch):
     """When nothing fits, the fallback is the single smallest-footprint
     config — never a slice of rejected configs."""
-    from aphrodite.v1.pool.flash_maxsim import _common
+    from sonar.v1.pool.flash_maxsim import _common
 
     survivors = _prune(monkeypatch, 10_000, {"Lq": 1024, "d_pad": 1024})
     assert len(survivors) == 1

@@ -40,7 +40,7 @@ inline constexpr int kStages = 5;
 
 // One ldmatrix.x4 loads a full m16k16 activation fragment from smem in
 // tensor-core register order.
-template <aphrodite::ScalarTypeId type_id>
+template <sonar::ScalarTypeId type_id>
 __device__ __forceinline__ void ldsm4(
     typename marlin::MarlinScalarType<type_id>::FragA& frag_a,
     const void* smem_ptr) {
@@ -156,7 +156,7 @@ inline void launch_prep(const void* a, const int32_t* perm, void* a_perm,
 // into a zeroed C, freeing 16 KB smem per CTA and both __syncthreads, and
 // making cross-CTA split-K free. Summation order is nondeterministic. The
 // launcher uses it for the decode window (M <= 47).
-template <aphrodite::ScalarTypeId type_id, bool ATOMIC_EPI, int M_TILES = 1,
+template <sonar::ScalarTypeId type_id, bool ATOMIC_EPI, int M_TILES = 1,
           bool HAS_ZP = false, bool W8 = false>
 __global__ void swordfish_decode_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
@@ -301,16 +301,16 @@ __global__ void swordfish_decode_kernel(
       if constexpr (W8) {
         // One int32 per n8 tile; n16 groups 2 and 3 sit in the second I4.
         const marlin::I4& src = j < 2 ? bqa : bqb;
-        marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+        marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
             src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
-        marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+        marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
             src.elems[(2 * j + 1) & 3], reinterpret_cast<scalar_t2*>(&frag_b1));
       } else {
         const int b_quant_0 = bqa.elems[j];
         const int b_quant_1 = b_quant_0 >> 8;
-        marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+        marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
             b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
-        marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+        marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
             b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
       }
 
@@ -557,7 +557,7 @@ __global__ void swordfish_decode_kernel(
 // untouched -- the quad buys 4x-amortized claim bookkeeping and adjacent
 // column addressing (the four B streams walk consecutive column blocks and
 // all four warps touch the same A slices while they are L2-resident).
-template <aphrodite::ScalarTypeId type_id, int M_TILES, bool HAS_ZP = false,
+template <sonar::ScalarTypeId type_id, int M_TILES, bool HAS_ZP = false,
           bool W8 = false, bool CTA_QUAD = false>
 __global__ void swordfish_decode_streamk_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
@@ -673,17 +673,17 @@ __global__ void swordfish_decode_streamk_kernel(
         FragB frag_b0, frag_b1;
         if constexpr (W8) {
           const marlin::I4& src = j < 2 ? bqa : bqb;
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
               src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
               src.elems[(2 * j + 1) & 3],
               reinterpret_cast<scalar_t2*>(&frag_b1));
         } else {
           const int b_quant_0 = bqa.elems[j];
           const int b_quant_1 = b_quant_0 >> 8;
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
               b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
               b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
         }
         if constexpr (HAS_ZP) {

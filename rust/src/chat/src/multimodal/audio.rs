@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
 use llm_multimodal::{AudioClip, Modality, PreprocessedEncoderInputs};
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
 
 use super::timing::MM_STAGE_TARGET;
 use super::{AudioModalitySupport, MultimodalModelInfo, PreparedMedia, item};
@@ -77,10 +77,10 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use aphrodite_engine_core_client::protocol::multimodal::{MmField, MmKwargValue};
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
     use llm_multimodal::{MediaContentPart, ModelSpecificValue, PreProcessorConfig};
     use ndarray::ArrayD;
+    use sonar_engine_core_client::protocol::multimodal::{MmField, MmKwargValue};
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::super::{MultimodalModelContext, TokenizerResolver};
     use super::*;

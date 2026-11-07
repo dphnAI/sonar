@@ -10,10 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from aphrodite.entrypoints.generate.base.protocol import StreamOptions
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.entrypoints.serve.utils import api_utils
-from aphrodite.entrypoints.serve.utils.api_utils import (
+from sonar.entrypoints.generate.base.protocol import StreamOptions
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.entrypoints.serve.utils import api_utils
+from sonar.entrypoints.serve.utils.api_utils import (
     get_max_tokens,
     should_include_usage,
 )

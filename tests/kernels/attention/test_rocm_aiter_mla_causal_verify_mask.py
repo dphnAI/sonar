@@ -20,8 +20,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite._aiter_ops import is_aiter_found
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import is_aiter_found
+from sonar.platforms import current_platform
 
 
 def _on_rocm_with_aiter() -> bool:
@@ -61,7 +61,7 @@ MAX_NUM_SEQS = 8
 # The builder resolves the verify routing and records it on the metadata, so
 # the gfx950 feature probe has to be forced for the build as well as for the
 # forward; ROCm CI also runs gfx942, where the real probe is False.
-_GLUON_SUPPORTED_TARGET = "aphrodite.v1.attention.backends.mla.rocm_aiter_mla._gluon_mla_decode_supported"
+_GLUON_SUPPORTED_TARGET = "sonar.v1.attention.backends.mla.rocm_aiter_mla._gluon_mla_decode_supported"
 
 
 def _seq_lens() -> list[int]:
@@ -73,16 +73,16 @@ def _run_verify_block():
 
     Returns ``(metadata, captured)`` where ``captured`` holds the Gluon kwargs.
     """
-    from aphrodite.config import SpeculativeConfig
-    from aphrodite.config.aphrodite import set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-    from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
-    from aphrodite.v1.worker.workspace import init_workspace_manager
+    from sonar.config import SpeculativeConfig
+    from sonar.config.sonar import set_current_sonar_config
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.kv_cache_interface import MLAAttentionSpec
+    from sonar.v1.worker.workspace import init_workspace_manager
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
     )
 
     device = torch.device("cuda:0")
@@ -91,7 +91,7 @@ def _run_verify_block():
     # One flat page per token, arange block indices, plus room to spare.
     num_gpu_blocks = num_reqs * max(seq_lens) + 256
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-R1",
         max_model_len=MAX_MODEL_LEN,
         num_gpu_blocks=num_gpu_blocks,
@@ -102,17 +102,17 @@ def _run_verify_block():
     )
     # What raises reorder_batch_threshold to QLEN, so a QLEN-token block is
     # classified as a decode instead of a prefill. ngram needs no draft model.
-    aphrodite_config.speculative_config = SpeculativeConfig(method="ngram", num_speculative_tokens=QLEN - 1)
-    aphrodite_config.model_config.get_num_attention_heads = types.MethodType(  # type: ignore[method-assign]
+    sonar_config.speculative_config = SpeculativeConfig(method="ngram", num_speculative_tokens=QLEN - 1)
+    sonar_config.model_config.get_num_attention_heads = types.MethodType(  # type: ignore[method-assign]
         lambda self, parallel_config, arch_config=None: NUM_QUERY_HEADS,
-        aphrodite_config.model_config,
+        sonar_config.model_config,
     )
 
     spec = MLAAttentionSpec(
         block_size=PAGE_SIZE,
         num_kv_heads=1,
-        head_size=aphrodite_config.model_config.get_head_size(),
-        dtype=aphrodite_config.model_config.dtype,
+        head_size=sonar_config.model_config.get_head_size(),
+        dtype=sonar_config.model_config.dtype,
         cache_dtype_str="auto",
     )
 
@@ -123,7 +123,7 @@ def _run_verify_block():
     # The builder reads layer.prefill_backend from static_forward_context; a
     # stub with the attribute is enough for metadata construction.
     layer_name = "placeholder"
-    aphrodite_config.compilation_config.static_forward_context[layer_name] = types.SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context[layer_name] = types.SimpleNamespace(
         prefill_backend=torch.empty((1,)),
         q_lora_rank=None,
         kv_lora_rank=KV_LORA_RANK,
@@ -146,9 +146,9 @@ def _run_verify_block():
 
     with (
         patch(_GLUON_SUPPORTED_TARGET, lambda: True),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        builder = builder_cls(spec, [layer_name], aphrodite_config, device)
+        builder = builder_cls(spec, [layer_name], sonar_config, device)
         common_attn_metadata = create_common_attn_metadata(batch_spec, PAGE_SIZE, device, arange_block_indices=True)
         metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
@@ -183,7 +183,7 @@ def _run_verify_block():
     with (
         patch(_GLUON_SUPPORTED_TARGET, lambda: True),
         patch(
-            "aphrodite.v1.attention.backends.mla.rocm_aiter_mla._get_mla_gluon",
+            "sonar.v1.attention.backends.mla.rocm_aiter_mla._get_mla_gluon",
             lambda: spy,
         ),
     ):

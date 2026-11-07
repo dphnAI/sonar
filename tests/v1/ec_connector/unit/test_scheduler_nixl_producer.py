@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import uuid
 
-import aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+import sonar.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 _N, _BS = 16, 64
 
@@ -40,7 +40,7 @@ def _sched_gate_off(monkeypatch):
         return ECSharedRegion(engine_id="eng-" + str(uuid.uuid4()), num_blocks=_N, block_size_bytes=_BS)
 
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", _region)
-    return ECCPUScheduler(create_ec_aphrodite_config(ec_role="ec_both"))
+    return ECCPUScheduler(create_ec_sonar_config(ec_role="ec_both"))
 
 
 def test_request_finished_gate_off_returns_none(monkeypatch):

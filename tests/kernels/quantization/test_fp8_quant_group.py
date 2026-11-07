@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import (
+from sonar.model_executor.layers.quantization.input_quant_fp8 import (
     _FP8_MIN_SCALING_FACTOR,
     QuantFP8,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.utils.torch_utils import set_random_seed
 
 
 @pytest.mark.parametrize(
@@ -26,7 +26,7 @@ from aphrodite.utils.torch_utils import set_random_seed
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
 def test_quantfp8_group_functionality(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_size: int,
     hidden_dim: int,
     group_size: int,
@@ -101,7 +101,7 @@ def test_quantfp8_group_functionality(
 @pytest.mark.parametrize("seed", [42])
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
-def test_quantfp8_group_multidimensional(default_aphrodite_config, seed: int, use_ue8m0: bool) -> None:
+def test_quantfp8_group_multidimensional(default_sonar_config, seed: int, use_ue8m0: bool) -> None:
     set_random_seed(seed)
 
     group_size = 64
@@ -146,7 +146,7 @@ def test_quantfp8_group_multidimensional(default_aphrodite_config, seed: int, us
 
 @pytest.mark.parametrize("seed", [42])
 @torch.inference_mode()
-def test_quantfp8_group_edge_cases(default_aphrodite_config, seed: int) -> None:
+def test_quantfp8_group_edge_cases(default_sonar_config, seed: int) -> None:
     set_random_seed(seed)
 
     batch_size = 16

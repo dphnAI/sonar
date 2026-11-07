@@ -58,8 +58,8 @@ if(DEEPSELECT_ARCHS)
         SRCS "${DeepSelect_SOURCES}"
         CUDA_ARCHS "${DEEPSELECT_ARCHS}")
 
-    set(APHRODITE_DEEPSELECT_GPU_FLAGS ${APHRODITE_GPU_FLAGS})
-    list(APPEND APHRODITE_DEEPSELECT_GPU_FLAGS
+    set(SONAR_DEEPSELECT_GPU_FLAGS ${SONAR_GPU_FLAGS})
+    list(APPEND SONAR_DEEPSELECT_GPU_FLAGS
         "-O3" "--expt-relaxed-constexpr" "--expt-extended-lambda"
         "--use_fast_math" "--ftz=false"
         "-U__CUDA_NO_HALF_OPERATORS__" "-U__CUDA_NO_HALF_CONVERSIONS__"
@@ -67,11 +67,11 @@ if(DEEPSELECT_ARCHS)
 
     define_extension_target(
         _deepselect_C
-        DESTINATION aphrodite
-        LANGUAGE ${APHRODITE_GPU_LANG}
+        DESTINATION sonar
+        LANGUAGE ${SONAR_GPU_LANG}
         SOURCES ${DeepSelect_SOURCES}
-        COMPILE_FLAGS ${APHRODITE_DEEPSELECT_GPU_FLAGS}
-        ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+        COMPILE_FLAGS ${SONAR_DEEPSELECT_GPU_FLAGS}
+        ARCHITECTURES ${SONAR_GPU_ARCHES}
         INCLUDE_DIRECTORIES ${DeepSelect_INCLUDES}
         USE_SABI 3
         WITH_SOABI)
@@ -82,7 +82,7 @@ if(DEEPSELECT_ARCHS)
         TORCH_TARGET_VERSION=0x020A000000000000ULL)
 
     # Needed to use cuda APIs from C-shim
-    if(APHRODITE_GPU_LANG STREQUAL "CUDA")
+    if(SONAR_GPU_LANG STREQUAL "CUDA")
         target_compile_definitions(_deepselect_C PRIVATE USE_CUDA)
     endif()
 

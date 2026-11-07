@@ -1,6 +1,6 @@
 # FP8 KV Cache
 
-This utility extracts the KV cache scaling factors from a quantized HF (Hugging Face) model. The extracted scaling factors are saved to a JSON file, which can later be used by Aphrodite (variable-length language model) during runtime. This tool is particularly useful when the KV cache data type is FP8 and is intended for use on ROCm (AMD GPU) platforms.
+This utility extracts the KV cache scaling factors from a quantized HF (Hugging Face) model. The extracted scaling factors are saved to a JSON file, which can later be used by Sonar (variable-length language model) during runtime. This tool is particularly useful when the KV cache data type is FP8 and is intended for use on ROCm (AMD GPU) platforms.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Before incorporating the FP8 datatype for inference workloads, you must adhere t
 1. Install all necessary prerequisites and dependencies.
 2. Convert HF model into a quantized HF model.
 3. Extract KV Cache Scaling Factors from quantized HF model.
-4. Load KV Cache Scaling Factors into Aphrodite.
+4. Load KV Cache Scaling Factors into Sonar.
 
 ### 2. Convert HF model into a quantized HF model
 
@@ -32,7 +32,7 @@ The detailed quantization toolkit (AMMO) conversion guide for FP8 can be found a
 
 1. **File Structure**: The utility operates under the assumption that all parameters, including KV cache scaling factors, corresponding to a particular Tensor Parallelism (TP) rank are stored in a single file. These files must adhere to a specific naming convention where the TP rank is immediately identified after a specific keyword (e.g., "rank") in the filename.
 
-2. **TP Decomposition**: The utility assumes consistency between the TP decomposition employed by the quantizer tool and that used by Aphrodite.
+2. **TP Decomposition**: The utility assumes consistency between the TP decomposition employed by the quantizer tool and that used by Sonar.
 
 3. **AMMO Compatibility**: Currently, the generated KV cache scaling factors for AMMO remain uniform across all TP ranks.
 
@@ -60,16 +60,16 @@ Example:
 python3 examples/fp8/extract_scales.py --quantized_model <QUANTIZED_MODEL_DIR> --tp_size <TENSOR_PARALLEL_SIZE> --output_dir <PATH_TO_OUTPUT_DIR>
 ```
 
-### 4. Load KV Cache Scaling Factors into Aphrodite
+### 4. Load KV Cache Scaling Factors into Sonar
 
-This script evaluates the inference throughput of language models using various backends such as Aphrodite. It measures the time taken to process a given number of prompts and generate sequences for each prompt. The recently generated KV cache scaling factors are now integrated into the benchmarking process and allow for KV cache scaling factors to be utilized for FP8.
+This script evaluates the inference throughput of language models using various backends such as Sonar. It measures the time taken to process a given number of prompts and generate sequences for each prompt. The recently generated KV cache scaling factors are now integrated into the benchmarking process and allow for KV cache scaling factors to be utilized for FP8.
 
 ```python
 # prerequisites:
 # -  LLaMa 2 kv_cache_scales.json file
 
 python3 benchmarks/benchmark_throughput.py --help 
-usage: benchmark_throughput.py [-h] [--backend {aphrodite,hf,mii}] [--dataset DATASET] [--input-len INPUT_LEN] [--output-len OUTPUT_LEN] [--model MODEL]
+usage: benchmark_throughput.py [-h] [--backend {sonar,hf,mii}] [--dataset DATASET] [--input-len INPUT_LEN] [--output-len OUTPUT_LEN] [--model MODEL]
                                [--tokenizer TOKENIZER] [--quantization {awq,gptq,squeezellm,None}] [--tensor-parallel-size TENSOR_PARALLEL_SIZE] [--n N]
                                [--use-beam-search] [--num-prompts NUM_PROMPTS] [--seed SEED] [--hf-max-batch-size HF_MAX_BATCH_SIZE] [--trust-remote-code]
                                [--max-model-len MAX_MODEL_LEN] [--dtype {auto,half,float16,bfloat16,float,float32}] [--enforce-eager] [--kv-cache-dtype {auto,fp8}]
@@ -78,7 +78,7 @@ usage: benchmark_throughput.py [-h] [--backend {aphrodite,hf,mii}] [--dataset DA
 Benchmark Throughput Example  
 optional arguments:
   -h, --help  show this help message and exit
-  --backend {aphrodite,hf,mii}
+  --backend {sonar,hf,mii}
   --dataset DATASET  Path to the dataset.
   --input-len INPUT_LEN  Input prompt length for each request
   --output-len OUTPUT_LEN  Output length for each request. Overrides the output length from the dataset.

@@ -29,9 +29,9 @@ from __future__ import annotations
 
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.mamba_utils import _TEMPORAL_TILES, _memcpy_u64_tiled
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.mamba_utils import _TEMPORAL_TILES, _memcpy_u64_tiled
 
 try:
     import pytest

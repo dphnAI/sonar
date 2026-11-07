@@ -17,8 +17,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 pytestmark = pytest.mark.cpu_test
 

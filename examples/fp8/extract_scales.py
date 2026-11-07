@@ -12,7 +12,7 @@ import torch
 from safetensors.torch import safe_open
 
 
-# Adapted from aphrodite/modeling/model_loader/weight_utils.py
+# Adapted from sonar/modeling/model_loader/weight_utils.py
 # The main differences are that we add the NPZ format and simplify
 # its functionality drastically for our purposes (e.g. we assume that
 # the quantized model exists locally and there is no need to download it)
@@ -65,7 +65,7 @@ def _prepare_hf_weights(
     return hf_weights_files, use_safetensors
 
 
-# Adapted from aphrodite/modeling/model_loader/weight_utils.py
+# Adapted from sonar/modeling/model_loader/weight_utils.py
 def _hf_tensorfile_iterator(filename: str, load_format: str, use_safetensors: bool):
     if load_format == "npz":
         assert not use_safetensors

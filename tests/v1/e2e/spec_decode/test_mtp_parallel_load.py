@@ -10,14 +10,14 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.reader import Counter, Metric
+from sonar import LLM, SamplingParams
+from sonar.config import CompilationConfig
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.reader import Counter, Metric
 from tests.utils import multi_gpu_marks
 
 DEEPSEEK_MTP_MAIN_RANDOM = "luccafong/deepseek_mtp_main_random"
@@ -73,7 +73,7 @@ def _inline_kwargs(config: InlineConfig, *, with_spec: bool) -> dict[str, Any]:
         "trust_remote_code": True,
         "disable_log_stats": False,
         # MLA + batch invariance currently disables prefix caching at runtime
-        # (see aphrodite/v1/attention/backends/mla/common.py); set explicitly so
+        # (see sonar/v1/attention/backends/mla/common.py); set explicitly so
         # the configuration is unambiguous.
         "enable_prefix_caching": False,
     }
@@ -81,7 +81,7 @@ def _inline_kwargs(config: InlineConfig, *, with_spec: bool) -> dict[str, Any]:
         kwargs["enable_eplb"] = True
         # Rearrangement first fires after step_interval // 4 forward steps
         # (the step counter starts at 3/4 of step_interval, see
-        # aphrodite/distributed/eplb/eplb_state.py). Keep these small so the
+        # sonar/distributed/eplb/eplb_state.py). Keep these small so the
         # routine actually runs within the short MAX_TOKENS generation.
         kwargs["eplb_config"] = {
             "num_redundant_experts": config.tp_size,
@@ -111,7 +111,7 @@ def _generate_token_ids_inline(llm: LLM) -> tuple[int, ...]:
 
 def _spec_decode_num_drafts(metrics: list[Metric]) -> int:
     name2metric = {m.name: m for m in metrics}
-    counter = name2metric.get("aphrodite:spec_decode_num_drafts")
+    counter = name2metric.get("sonar:spec_decode_num_drafts")
     assert counter is not None, "spec_decode_num_drafts metric missing; check disable_log_stats=False"
     assert isinstance(counter, Counter)
     return int(counter.value)
@@ -122,9 +122,9 @@ def _enable_batch_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
     # varlen API lacks the num_splits argument used by batch invariance, so
     # explicitly override any ambient setting on that path.
     if current_platform.is_cuda():
-        monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
+        monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
     else:
-        monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "0")
+        monkeypatch.setenv("SONAR_BATCH_INVARIANT", "0")
 
 
 @pytest.mark.parametrize(
@@ -134,7 +134,7 @@ def _enable_batch_invariance(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_deepseek_mtp_load_inline(
     monkeypatch: pytest.MonkeyPatch,
     config: InlineConfig,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """MTP loads and drafts under TP/EP/EPLB; spec output matches no-spec greedy."""
     if config.skip_reason is not None:
@@ -146,7 +146,7 @@ def test_deepseek_mtp_load_inline(
 
     spec_kwargs = _inline_kwargs(config, with_spec=True)
     spec_model = spec_kwargs.pop("model")
-    with aphrodite_runner(
+    with sonar_runner(
         spec_model,
         block_size=None,
         enable_chunked_prefill=None,
@@ -158,7 +158,7 @@ def test_deepseek_mtp_load_inline(
 
     no_spec_kwargs = _inline_kwargs(config, with_spec=False)
     no_spec_model = no_spec_kwargs.pop("model")
-    with aphrodite_runner(
+    with sonar_runner(
         no_spec_model,
         block_size=None,
         enable_chunked_prefill=None,
@@ -169,7 +169,7 @@ def test_deepseek_mtp_load_inline(
 
     # Non-vacuity: a silently-broken MTP drafter that falls back to
     # verifier-only decoding would still produce matching output below.
-    assert n_drafts > 0, f"MTP drafter never fired under {config.id}: aphrodite:spec_decode_num_drafts == 0"
+    assert n_drafts > 0, f"MTP drafter never fired under {config.id}: sonar:spec_decode_num_drafts == 0"
     match_ratio = _token_match_ratio(spec_tokens, no_spec_tokens)
     print(f"\n{config.id}: spec/no-spec match_ratio={match_ratio:.3f}")
     assert match_ratio >= MIN_MATCH_RATIO, (

@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use aphrodite_text::Prompt;
-use aphrodite_text::tokenizer::{DynTokenizer, Tokenizer};
 use serde_json::{Map, Value, json};
+use sonar_text::Prompt;
+use sonar_text::tokenizer::{DynTokenizer, Tokenizer};
 use thiserror_ext::AsReport as _;
 
 use super::{ChatRenderer, RenderedPrompt};

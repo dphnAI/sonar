@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if current_platform.is_cuda():
     pytest.skip(
@@ -14,14 +14,14 @@ if current_platform.is_cuda():
         allow_module_level=True,
     )
 
-from aphrodite.model_executor.layers import utils
+from sonar.model_executor.layers import utils
 
 
 def _on_gfx11() -> bool:
     """gfx11 check that is safe to evaluate at collection time on any platform."""
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx11
+    from sonar.platforms.rocm import on_gfx11
 
     return on_gfx11()
 
@@ -32,11 +32,11 @@ def test_rocm_unquantized_gemm_gfx1x_wvsplitk_path(monkeypatch, m):
     weight = torch.randn(m, 64, dtype=torch.float16)
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitk_mock = MagicMock(side_effect=lambda w, x_view, _, __: x_view @ w.t())
@@ -73,11 +73,11 @@ def test_rocm_unquantized_gemm_makes_skinny_activation_contiguous(monkeypatch):
     assert x.stride() == (1, 4)
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitk_mock = MagicMock(side_effect=lambda w, x_view, _, __: x_view @ w.t())
@@ -99,11 +99,11 @@ def test_rocm_unquantized_gemm_makes_llmm1_activation_contiguous(monkeypatch):
     assert x.stride() == (128, 2)
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     llmm1_mock = MagicMock(side_effect=lambda w, x_view, _: x_view @ w.t())
@@ -132,11 +132,11 @@ def test_rocm_unquantized_gemm_rejects_unsupported_skinny_layouts(monkeypatch, n
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
     monkeypatch.setattr(utils.rocm_aiter_ops, "is_tgemm_enabled", lambda: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitk_mock = MagicMock()
@@ -169,12 +169,12 @@ def test_rocm_unquantized_gemm_wvsplitk_accepts_row_stride_padded_weight(monkeyp
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
     monkeypatch.setattr(utils.rocm_aiter_ops, "is_tgemm_enabled", lambda: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx11", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx11", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitk_mock = MagicMock(side_effect=lambda w, x_view, _, __: x_view @ w.t())
@@ -207,7 +207,7 @@ def test_cache_aliasing_pad_elems(k, element_size, expected):
 def test_maybe_pad_weight_avoid_cache_aliasing_skips_non_gfx11(monkeypatch):
     # Padding is gfx11-only, even for a K whose row stride would alias there.
     monkeypatch.setattr(utils.current_platform, "is_rocm", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx11", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx11", lambda: False)
 
     weight = torch.randn(128, 4096, dtype=torch.bfloat16)
     assert utils.maybe_pad_weight_avoid_cache_aliasing(weight) is weight
@@ -215,7 +215,7 @@ def test_maybe_pad_weight_avoid_cache_aliasing_skips_non_gfx11(monkeypatch):
 
 def test_maybe_pad_weight_avoid_cache_aliasing(monkeypatch):
     monkeypatch.setattr(utils.current_platform, "is_rocm", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx11", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx11", lambda: True)
 
     weight = torch.randn(128, 4096, dtype=torch.bfloat16)
     padded = utils.maybe_pad_weight_avoid_cache_aliasing(weight)
@@ -239,7 +239,7 @@ def test_maybe_pad_weight_avoid_cache_aliasing(monkeypatch):
 )
 def test_maybe_pad_weight_avoid_cache_aliasing_skips(monkeypatch, weight):
     monkeypatch.setattr(utils.current_platform, "is_rocm", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx11", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx11", lambda: True)
 
     assert utils.maybe_pad_weight_avoid_cache_aliasing(weight).data_ptr() == weight.data_ptr()
 
@@ -251,7 +251,7 @@ def test_rocm_unquantized_gemm_noncontiguous_activation_real_kernel(monkeypatch,
     weight = torch.randn(128, 64, device="cuda", dtype=dtype)
     assert x.stride() == (1, 4)
 
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
     original_wvsplitk = utils.ops.wvSplitK
     wvsplitk_mock = MagicMock(side_effect=original_wvsplitk)
     monkeypatch.setattr(utils.ops, "wvSplitK", wvsplitk_mock)
@@ -269,7 +269,7 @@ def test_rocm_unquantized_gemm_padded_weight_real_kernel(monkeypatch, dtype):
     x = torch.randn(4, 4096, device="cuda", dtype=dtype)
     weight = _row_stride_padded(torch.randn(128, 4096, device="cuda", dtype=dtype), 64)
 
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
     original_wvsplitk = utils.ops.wvSplitK
     wvsplitk_mock = MagicMock(side_effect=original_wvsplitk)
     monkeypatch.setattr(utils.ops, "wvSplitK", wvsplitk_mock)
@@ -289,11 +289,11 @@ def test_rocm_unquantized_gemm_gfx1x_n_gt_5_falls_back(monkeypatch, m):
     weight = torch.randn(m, 64, dtype=torch.float16)
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: False)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: False)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitk_mock = MagicMock(side_effect=lambda w, x_view, _, __: x_view @ w.t())
@@ -315,11 +315,11 @@ def test_rocm_unquantized_gemm_gfx950_wvsplitkrc_path(monkeypatch):
     assert x.stride() == (1, 16)
 
     monkeypatch.setattr(utils, "use_aiter_triton_gemm", lambda *args: False)
-    monkeypatch.setattr(utils.envs, "APHRODITE_ROCM_USE_SKINNY_GEMM", True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1x", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx9", lambda: False)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: True)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx1250", lambda: True)
+    monkeypatch.setattr(utils.envs, "SONAR_ROCM_USE_SKINNY_GEMM", True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1x", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx9", lambda: False)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx1250", lambda: True)
     monkeypatch.setattr(utils, "num_compute_units", lambda: 120)
 
     wvsplitkrc_mock = MagicMock(side_effect=lambda x_view, w, _, __: x_view @ w.t())

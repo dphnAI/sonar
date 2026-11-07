@@ -8,13 +8,13 @@ import ray
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
-from aphrodite.distributed.device_communicators import custom_all_reduce as car
-from aphrodite.distributed.device_communicators.all_reduce_utils import (
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
+from sonar.distributed.device_communicators import custom_all_reduce as car
+from sonar.distributed.device_communicators.all_reduce_utils import (
     gpu_p2p_access_check,
 )
-from aphrodite.distributed.parallel_state import get_tp_group, graph_capture
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import get_tp_group, graph_capture
+from sonar.platforms import current_platform
 
 from ..utils import (
     ensure_model_parallel_initialized,
@@ -60,7 +60,7 @@ def _unfused_all_reduce_mhc(peers, residual, post, comb, pre, weight, eps):
 
 @ray.remote(num_gpus=1, max_calls=1)
 def _all_reduce_mhc(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
-    from aphrodite.models.deepseek_v41.nvidia.ops.cute_dsl import AllReduceMHC
+    from sonar.models.deepseek_v41.nvidia.ops.cute_dsl import AllReduceMHC
 
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
@@ -185,14 +185,14 @@ def _swizzled_scale_rows(scales: torch.Tensor, rows: int, cols: int) -> torch.Te
 
 @ray.remote(num_gpus=1, max_calls=1)
 def _finalize_all_reduce_gemma_norm_mxfp8(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
-    from aphrodite.model_executor.layers.fused_moe.moe_output import (
+    from sonar.model_executor.layers.fused_moe.moe_output import (
         MoEOutput,
         UnfinalizedMoEOutput,
     )
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
     )
-    from aphrodite.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
+    from sonar.models.minimax_m3.nvidia.ops.finalize_allreduce_norm import (
         FinalizeAllReduceGemmaRMSNormMxfp8,
     )
 
@@ -497,7 +497,7 @@ def test_mnnvl_reduce_scatter_backend_gate(
     expected,
 ):
     monkeypatch.setattr(car.current_platform, "is_cuda", lambda: True)
-    monkeypatch.setattr(car.envs, "APHRODITE_BATCH_INVARIANT", batch_invariant)
+    monkeypatch.setattr(car.envs, "SONAR_BATCH_INVARIANT", batch_invariant)
     communicator = car.CustomAllreduce.__new__(car.CustomAllreduce)
     communicator.disabled = False
     communicator._ptr = 0
@@ -790,7 +790,7 @@ def chunked_allreduce(
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         m.delenv("HIP_VISIBLE_DEVICES", raising=False)
-        m.setenv("APHRODITE_CUSTOM_ALLREDUCE_ALGO", "1stage")
+        m.setenv("SONAR_CUSTOM_ALLREDUCE_ALGO", "1stage")
         device = torch.device(f"cuda:{rank}")
         torch.accelerator.set_device_index(device)
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)

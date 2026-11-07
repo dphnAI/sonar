@@ -25,7 +25,7 @@
 
 #include "qdq_util.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 __forceinline__ __device__ void shuffle_6bit_16(uint32_t* q, int stride) {}
@@ -47,6 +47,6 @@ __forceinline__ __device__ void dequant_6bit_16(const uint32_t q_0,
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the prefix for environment variables to look for
-PREFIX="SM_APHRODITE_"
+PREFIX="SM_SONAR_"
 ARG_PREFIX="--"
 
 # Initialize an array for storing the arguments
@@ -21,4 +21,4 @@ while IFS='=' read -r key value; do
 done < <(env | grep "^${PREFIX}")
 
 # Pass the collected arguments to the main entrypoint
-exec aphrodite run "${ARGS[@]}"
+exec sonar run "${ARGS[@]}"

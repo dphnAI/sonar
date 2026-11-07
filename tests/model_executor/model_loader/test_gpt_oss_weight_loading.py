@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.models.gpt_oss import (
+from sonar.model_executor.models.gpt_oss import (
     GptOssForCausalLM,
     GptOssModel,
     GptOssRoutedExperts,
@@ -58,7 +58,7 @@ def _load(
 def test_streamed_expert_resolves_wrapped_parameter(base_layer_prefix: str) -> None:
     experts = _TestExperts("w13_weight", (2, 4, 3))
     checkpoint_name = "model.layers.2.mlp.experts.7.gate_up_proj"
-    mapped_name = GptOssForCausalLM.hf_to_aphrodite_mapper.apply_list([checkpoint_name])[0]
+    mapped_name = GptOssForCausalLM.hf_to_sonar_mapper.apply_list([checkpoint_name])[0]
     fused_name = f"model.layers.2.mlp.experts.{base_layer_prefix}routed_experts.w13_weight"
     params_dict = {fused_name: experts.w13_weight}
     loaded_params: set[str] = set()

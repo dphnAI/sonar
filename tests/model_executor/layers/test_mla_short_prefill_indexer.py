@@ -6,12 +6,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.sparse_attn_indexer as sparse_indexer
-import aphrodite.models.deepseek_v32.attention as deepseek_attention
-from aphrodite.config import CUDAGraphMode
-from aphrodite.models.deepseek_v32 import attention as deepseek_v32_attention
-from aphrodite.models.deepseek_v32.attention import DeepseekV32Attention
-from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadata
+import sonar.model_executor.layers.sparse_attn_indexer as sparse_indexer
+import sonar.models.deepseek_v32.attention as deepseek_attention
+from sonar.config import CUDAGraphMode
+from sonar.models.deepseek_v32 import attention as deepseek_v32_attention
+from sonar.models.deepseek_v32.attention import DeepseekV32Attention
+from sonar.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadata
 
 INDEXER_LAYER = "model.layers.0.self_attn.indexer.k_cache"
 MLA_LAYER = "model.layers.0.self_attn.attn"
@@ -381,7 +381,7 @@ def test_candidate_selection_keeps_valid_blocks_with_nan_scores(score, start):
 )
 def test_candidate_kernels_preserve_packed_bounds_and_padding(width, block_size, k, decode):
     """Preserve top-k ties, newest blocks, empty rows and candidate clamping."""
-    from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
+    from sonar.model_executor.kernels.attention.dsa.candidate_blocks import (
         apply_candidate_mask,
         select_candidate_blocks,
     )
@@ -553,7 +553,7 @@ def _expand_candidates_reference(
 def test_candidate_blocks_to_sparse_indices_math():
     """Candidate->sparse-block expansion: ks anchoring, range filtering,
     repeat-last padding, and the per-row valid column count (``end``)."""
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         candidate_blocks_to_sparse_indices,
     )
 
@@ -604,7 +604,7 @@ def test_candidate_blocks_to_sparse_indices_matches_reference(cbk: int, sbk: int
     """The Triton expansion equals the PyTorch reference on production-shaped
     random inputs, including strided (column-sliced) candidate rows and
     strided output buffers."""
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         candidate_blocks_to_sparse_indices,
     )
 
@@ -648,13 +648,13 @@ def test_candidate_blocks_to_sparse_indices_matches_reference(cbk: int, sbk: int
 def test_sparse_topk_remap_bounds_nan_rows():
     """DeepSelect writes an out-of-range sentinel to slot 0 of NaN rows (the
     rest is left untouched); the remap turns it into -1."""
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         has_deep_select,
         sparse_topk_remap,
     )
 
     if not has_deep_select():
-        pytest.skip("DeepSelect extension (aphrodite._deepselect_C) required")
+        pytest.skip("DeepSelect extension (sonar._deepselect_C) required")
     rows, num_sparse, sbk, topk = 4, 128, 8, 512
     width = num_sparse * sbk
     logits = torch.randn(rows, width, dtype=torch.bfloat16, device="cuda")
@@ -681,20 +681,20 @@ def test_sparse_topk_remap_bounds_nan_rows():
 def _skip_unless_sm100_sparse_kernels():
     if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] != 10:
         pytest.skip("SM100 required")
-    deep_gemm = pytest.importorskip("aphrodite.third_party.deep_gemm")
+    deep_gemm = pytest.importorskip("sonar.third_party.deep_gemm")
     if not hasattr(deep_gemm, "fp8_fp4_sparse_mqa_logits"):
         pytest.skip("DeepGEMM >= 2.8 required for sparse MQA logits")
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         has_deep_select,
     )
 
     if not has_deep_select():
-        pytest.skip("DeepSelect extension (aphrodite._deepselect_C) required")
+        pytest.skip("DeepSelect extension (sonar._deepselect_C) required")
     return deep_gemm
 
 
 def _quant_fp4(x: torch.Tensor):
-    from aphrodite.third_party.deep_gemm.utils import per_token_cast_to_fp4
+    from sonar.third_party.deep_gemm.utils import per_token_cast_to_fp4
 
     return per_token_cast_to_fp4(x, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
 
@@ -707,7 +707,7 @@ def _quant_k(x: torch.Tensor, kv_dtype: str):
     e4m3 with one power-of-two scale per row, stored as four equal UE8M0
     bytes (the SM100 FP8 indexer cache layout)."""
     if kv_dtype == "mxfp4":
-        from aphrodite.third_party.deep_gemm.utils import cast_back_from_fp4
+        from sonar.third_party.deep_gemm.utils import cast_back_from_fp4
 
         fp, sf = _quant_fp4(x)
         deq = cast_back_from_fp4(fp, sf, gran_k=32, use_packed_ue8m0=True)
@@ -740,7 +740,7 @@ def test_sparse_mqa_logits_prefill_matches_dense_masked(capture: bool, kv_dtype:
     graph capture, and a later layer reusing the step's expansion/schedule
     selects the same values."""
     deep_gemm = _skip_unless_sm100_sparse_kernels()
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         sparse_mqa_logits_prefill_chunk,
     )
 
@@ -873,7 +873,7 @@ def test_sparse_mqa_logits_paged_matches_dense_masked(next_n: int, capture: bool
     one query row each), CUDA graph capture/replay and schedule reuse by a
     later layer."""
     deep_gemm = _skip_unless_sm100_sparse_kernels()
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         sparse_mqa_logits_paged_decode,
     )
 
@@ -978,10 +978,10 @@ def test_sparse_mqa_logits_accuracy_vs_torch(kv_dtype: str):
     """Sparse-kernel numerics vs a PyTorch fp32 reference on the dequantized
     MXFP4 / FP8 inputs."""
     _skip_unless_sm100_sparse_kernels()
-    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+    from sonar.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
         candidate_blocks_to_sparse_indices,
     )
-    from aphrodite.utils.deep_gemm import (
+    from sonar.utils.deep_gemm import (
         fp8_fp4_sparse_mqa_logits,
         get_sparse_mqa_logits_metadata,
     )

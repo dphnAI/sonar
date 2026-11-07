@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 from PIL import Image
 
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.multimodal.utils import encode_image_url
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-VL-2B-Instruct"

@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use aphrodite_tokenizer::Tokenizer;
 use serde_json::{Map, Value, json};
+use sonar_tokenizer::Tokenizer;
 
 use super::super::MediaPartSource;
 use crate::EffortValue;

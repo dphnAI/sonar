@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::DecodedText;
-#[cfg(test)]
-use aphrodite_tokenizer::{DynTokenizer, Tokenizer};
 use serde_json::json;
+use sonar_tokenizer::DecodedText;
+#[cfg(test)]
+use sonar_tokenizer::{DynTokenizer, Tokenizer};
 
 use super::{ToolParser, ToolParserOutput};
 use crate::tool::Tool;
@@ -95,7 +95,7 @@ pub fn test_tools() -> Vec<Tool> {
 /// A tokenizer for parsers that do not resolve any tokens.
 #[cfg(test)]
 pub fn test_tokenizer() -> DynTokenizer {
-    std::sync::Arc::new(aphrodite_tokenizer::test_utils::TestTokenizer::new())
+    std::sync::Arc::new(sonar_tokenizer::test_utils::TestTokenizer::new())
 }
 
 /// Push chunks through a streaming parser and coalesce its tool-call deltas.

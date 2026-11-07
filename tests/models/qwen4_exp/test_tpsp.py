@@ -12,46 +12,46 @@ import torch.multiprocessing as mp
 from torch import nn
 from transformers import Qwen4ExpTextConfig
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda_alike():
     pytest.skip("Qwen4Exp SP requires CUDA or ROCm", allow_module_level=True)
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     EngramConfig,
     ParallelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import (
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
-from aphrodite.models.common.ops.sequence_parallel import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
+from sonar.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
     sp_shard,
 )
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.v1.attention.backends.short_conv_attn import PleShortConvAttentionMetadata
-from aphrodite.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
+from sonar.utils.network_utils import get_open_port
+from sonar.v1.attention.backends.short_conv_attn import PleShortConvAttentionMetadata
+from sonar.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
 from tests.utils import multi_gpu_test
 
 from .test_ple import _ConvBatchCase, _make_conv_metadata
 
 if current_platform.is_rocm():
-    from aphrodite.models.qwen4_exp.amd import model as qwen4_model
-    from aphrodite.models.qwen4_exp.amd.model import Qwen4ExpDecoderLayer
+    from sonar.models.qwen4_exp.amd import model as qwen4_model
+    from sonar.models.qwen4_exp.amd.model import Qwen4ExpDecoderLayer
 else:
-    from aphrodite.models.qwen4_exp.nvidia import (  # type: ignore[no-redef]
+    from sonar.models.qwen4_exp.nvidia import (  # type: ignore[no-redef]
         model as qwen4_model,
     )
-    from aphrodite.models.qwen4_exp.nvidia.model import Qwen4ExpDecoderLayer
+    from sonar.models.qwen4_exp.nvidia.model import Qwen4ExpDecoderLayer
 
 
 class _TPAttentionProjection(nn.Module):
@@ -71,9 +71,9 @@ class _TPAttentionProjection(nn.Module):
         return self.proj(hidden_states)[0]
 
 
-def _make_config(rank: int, *, hc_sp: bool = False, moe_sp: bool = False) -> AphroditeConfig:
+def _make_config(rank: int, *, hc_sp: bool = False, moe_sp: bool = False) -> SonarConfig:
     """Configure HC SP explicitly or MoE SP through TP=2, DP=2 and EP."""
-    config = AphroditeConfig(
+    config = SonarConfig(
         parallel_config=ParallelConfig(
             tensor_parallel_size=2,
             data_parallel_size=2 if moe_sp else 1,
@@ -111,10 +111,10 @@ def _make_config(rank: int, *, hc_sp: bool = False, moe_sp: bool = False) -> Aph
     return config
 
 
-def _make_decoder(config: AphroditeConfig, rank: int) -> Qwen4ExpDecoderLayer:
+def _make_decoder(config: SonarConfig, rank: int) -> Qwen4ExpDecoderLayer:
     """Use the production constructor and identical initial weights for both modes."""
     with (
-        set_current_aphrodite_config(config),
+        set_current_sonar_config(config),
         patch.object(qwen4_model, "QwenGatedDeltaNetAttention", _TPAttentionProjection),
     ):
         layer = Qwen4ExpDecoderLayer(config, config.model_config.hf_text_config.layer_types[0], "model.layers.0")
@@ -170,7 +170,7 @@ def _check_decoder_ple(rank: int) -> None:
             if config.parallel_config.enable_hc_sp:
                 inputs = tuple(sp_shard(x) for x in inputs)
             with (
-                set_current_aphrodite_config(config),
+                set_current_sonar_config(config),
                 set_forward_context({layer.ple.prefix: metadata}, config),
             ):
                 if hasattr(layer.ple, "start_prefetch"):
@@ -191,7 +191,7 @@ def _check_decoder_ple(rank: int) -> None:
         torch.testing.assert_close(states[1], states[0], atol=0.002, rtol=0.02)
 
 
-def _check_moe_sp(rank: int, config: AphroditeConfig) -> None:
+def _check_moe_sp(rank: int, config: SonarConfig) -> None:
     """Compare native SP with full-token GR and the MoE wrapper's public interface."""
     layer = _make_decoder(config, rank)
     dp_rank = config.parallel_config.data_parallel_rank
@@ -203,7 +203,7 @@ def _check_moe_sp(rank: int, config: AphroditeConfig) -> None:
     # Include runner padding in addition to the padding introduced by SP.
     padding = sp_padding_mask(positions == num_tokens - 1, hidden)
     with (
-        set_current_aphrodite_config(config),
+        set_current_sonar_config(config),
         set_forward_context(
             None,
             config,
@@ -235,7 +235,7 @@ def _check_moe_sp(rank: int, config: AphroditeConfig) -> None:
 
 def _check_compiled_sp_ops() -> None:
     """Compiled SP collectives stay correct for token counts unseen at trace time."""
-    from aphrodite.models.qwen4_exp.amd.ops.sequence_parallel import (
+    from sonar.models.qwen4_exp.amd.ops.sequence_parallel import (
         sp_reduce_scatter,
         sp_shard,
     )
@@ -245,7 +245,7 @@ def _check_compiled_sp_ops() -> None:
         reduced = sp_all_gather(sp_reduce_scatter(x))[: x.shape[0]]
         return gathered, reduced
 
-    # Aphrodite drops Dynamo guards, so one trace must serve every token count.
+    # Sonar drops Dynamo guards, so one trace must serve every token count.
     compiled = torch.compile(
         collectives,
         fullgraph=True,
@@ -274,7 +274,7 @@ def _run_sp(rank: int, port: int, moe_sp: bool, compiled_ops: bool = False) -> N
     try:
         # Spawned ranks bypass the GPU worker's workspace initialization.
         init_workspace_manager(torch.device(f"cuda:{rank}"))
-        with set_current_aphrodite_config(config):
+        with set_current_sonar_config(config):
             initialize_model_parallel(tensor_model_parallel_size=2)
             with torch.device(f"cuda:{rank}"), torch.inference_mode():
                 torch.set_default_dtype(torch.bfloat16)
@@ -298,7 +298,7 @@ def test_hc_sp_decoder_and_ple() -> None:
 @multi_gpu_test(num_gpus=4)
 def test_moe_sp_equivalence(monkeypatch) -> None:
     """Native MoE SP preserves outputs with unequal DP batches and padding."""
-    monkeypatch.setenv("APHRODITE_MOE_SKIP_PADDING", "1")
+    monkeypatch.setenv("SONAR_MOE_SKIP_PADDING", "1")
     mp.spawn(_run_sp, args=(get_open_port(), True), nprocs=4)
 
 

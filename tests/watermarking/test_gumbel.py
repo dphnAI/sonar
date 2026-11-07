@@ -4,19 +4,19 @@
 import pytest
 import torch
 
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.watermarking import (
+from sonar.config.watermarking import WatermarkConfig
+from sonar.platforms import current_platform
+from sonar.v1.watermarking import (
     DualKeyGumbelWatermarkDetector,
     DualKeyGumbelWatermarker,
     GumbelWatermarkDetector,
     GumbelWatermarker,
     derive_watermark_key,
 )
-from aphrodite.v1.watermarking.gumbel import _gamma_survival_integer_shape
-from aphrodite.v1.watermarking.watermarker import RandomSampler
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_sample
+from sonar.v1.watermarking.gumbel import _gamma_survival_integer_shape
+from sonar.v1.watermarking.watermarker import RandomSampler
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_sample
 
 DEVICE = current_platform.device_type
 

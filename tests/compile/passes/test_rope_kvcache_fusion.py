@@ -5,39 +5,39 @@ import pytest
 import torch
 from torch._higher_order_ops import auto_functionalized
 
-import aphrodite.config
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.compilation.passes.fusion import rope_kvcache_fusion
-from aphrodite.compilation.passes.fusion.matcher_utils import ROTARY_OP
-from aphrodite.compilation.passes.fusion.rope_kvcache_fusion import RopeKVCacheFusionPass
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.compilation.passes.utility.scatter_split_replace import (
+import sonar.config
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.compilation.passes.fusion import rope_kvcache_fusion
+from sonar.compilation.passes.fusion.matcher_utils import ROTARY_OP
+from sonar.compilation.passes.fusion.rope_kvcache_fusion import RopeKVCacheFusionPass
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.compilation.passes.utility.scatter_split_replace import (
     ScatterSplitReplacementPass,
 )
-from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.split_coalescing import SplitCoalescingPass
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.config.utils import Range
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.attention import attention as attention_module
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import _encode_layer_name
-from aphrodite.v1.attention.backend import (
+from sonar.config.cache import CacheDType
+from sonar.config.utils import Range
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.attention import attention as attention_module
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import _encode_layer_name
+from sonar.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheLayout,
 )
@@ -49,7 +49,7 @@ from tests.v1.attention.utils import (
 )
 
 INDEX_SELECT_OP = torch.ops.aten.index.Tensor
-APHRODITE_UNIFIED_KV_CACHE_UPDATE_OP = torch.ops.aphrodite.unified_kv_cache_update
+SONAR_UNIFIED_KV_CACHE_UPDATE_OP = torch.ops.sonar.unified_kv_cache_update
 FP8_DTYPE = current_platform.fp8_dtype()
 
 
@@ -83,13 +83,13 @@ def test_kv_cache_update_ops_fake_tensor_metadata(monkeypatch: pytest.MonkeyPatc
 
 
 def test_rope_kvcache_fusion_default_keeps_large_ranges_unfused():
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(fuse_rope_kvcache=True),
         ),
     )
-    fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
+    fusion_pass = RopeKVCacheFusionPass(sonar_config)
 
     assert fusion_pass.is_applicable_for_range(Range(1, 256))
     assert not fusion_pass.is_applicable_for_range(Range(257, 11650))
@@ -99,7 +99,7 @@ def test_rope_kvcache_fusion_default_keeps_large_ranges_unfused():
 class QKRoPEKVCacheTestModel(torch.nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         attn_backend: AttentionBackendEnum,
         num_heads: int,
         num_kv_heads: int,
@@ -113,7 +113,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
         self.head_size = head_size
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         self.q_size = num_heads * head_size
         self.kv_size = num_kv_heads * head_size
         self.is_neox = is_neox
@@ -139,8 +139,8 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
             head_size=head_size,
             scale=1.0 / head_size**0.5,
             num_kv_heads=num_kv_heads,
-            cache_config=aphrodite_config.cache_config,
-            quant_config=aphrodite_config.quant_config,
+            cache_config=sonar_config.cache_config,
+            quant_config=sonar_config.quant_config,
             prefix=prefix,
             attn_backend=attn_backend.get_class(),
         )
@@ -151,7 +151,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.attn._k_scale = self.attn._k_scale.to(device)
         self.attn._v_scale = self.attn._v_scale.to(device)
 
-        kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
+        kv_cache_dtype_str = sonar_config.cache_config.cache_dtype
         self.kv_cache_dtype = FP8_DTYPE if kv_cache_dtype_str.startswith("fp8") else self.dtype
 
         # Mirror the worker spec-collection loop: the backend publishes its
@@ -169,7 +169,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.builder = self.attn_backend.get_builder_cls()(
             kv_cache_spec=self.kv_cache_spec,
             layer_names=[self.attn.layer_name],
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
         )
 
@@ -221,23 +221,23 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         q = q.view(-1, self.num_heads, self.head_size)
         k = k.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size)
-        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
+        kv_cache_dummy_dep = torch.ops.sonar.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
         return q, k, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
         ops = []
         if self.enable_rope_custom_op:
             if rocm_aiter_ops.is_triton_rotary_embed_enabled():
-                ops.append(torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default)
+                ops.append(torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default)
             else:
                 ops.append(ROTARY_OP)
         else:
             ops.append(INDEX_SELECT_OP)
-        ops.append(torch.ops.aphrodite.unified_kv_cache_update.default)
+        ops.append(torch.ops.sonar.unified_kv_cache_update.default)
         return ops
 
     def ops_in_model_after(self) -> list[torch._ops.OpOverload]:
-        return [torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default]
+        return [torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default]
 
 
 class QKRoPEStaticQKVCacheTestModel(QKRoPEKVCacheTestModel):
@@ -264,23 +264,23 @@ class QKRoPEStaticQKVCacheTestModel(QKRoPEKVCacheTestModel):
         q = q_fp8.view(-1, self.num_heads, self.head_size)
         k = k.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size)
-        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
+        kv_cache_dummy_dep = torch.ops.sonar.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
         return q, k, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
         ops = []
         if self.enable_rope_custom_op:
             if rocm_aiter_ops.is_triton_rotary_embed_enabled():
-                ops.append(torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding.default)
+                ops.append(torch.ops.sonar.rocm_aiter_triton_rotary_embedding.default)
             else:
                 ops.append(ROTARY_OP)
         else:
             ops.append(INDEX_SELECT_OP)
-        ops.append(torch.ops.aphrodite.unified_kv_cache_update.default)
+        ops.append(torch.ops.sonar.unified_kv_cache_update.default)
         return ops
 
     def ops_in_model_after(self) -> list[torch._ops.OpOverload]:
-        return [torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default]
+        return [torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default]
 
 
 @pytest.mark.parametrize(
@@ -332,14 +332,14 @@ def test_rope_kvcache_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         cache_config=CacheConfig(
             block_size=block_size,
             cache_dtype=kv_cache_dtype,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops,
             pass_config=PassConfig(
                 fuse_rope_kvcache=True,
@@ -348,13 +348,13 @@ def test_rope_kvcache_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEKVCacheTestModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             attn_backend=attn_backend,
             num_heads=num_heads,
             num_kv_heads=num_kv_heads,
@@ -366,13 +366,13 @@ def test_rope_kvcache_fusion(
         if interleaved_v:
             model.attn.impl.set_interleaved_v_cache()
 
-        fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
+        fusion_pass = RopeKVCacheFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
-            SplitCoalescingPass(aphrodite_config),
-            ScatterSplitReplacementPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
+            SplitCoalescingPass(sonar_config),
+            ScatterSplitReplacementPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
 
@@ -384,7 +384,7 @@ def test_rope_kvcache_fusion(
         qkv_unfused = qkv.clone()
         pos_unfused = pos.clone()
 
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
@@ -395,7 +395,7 @@ def test_rope_kvcache_fusion(
 
         torch._dynamo.mark_dynamic(qkv, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
@@ -470,14 +470,14 @@ def test_rope_static_qquant_kvcache_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=dtype),
         cache_config=CacheConfig(
             block_size=block_size,
             cache_dtype=kv_cache_dtype,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops,
             pass_config=PassConfig(
                 fuse_rope_kvcache=True,
@@ -486,13 +486,13 @@ def test_rope_static_qquant_kvcache_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEStaticQKVCacheTestModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             attn_backend=attn_backend,
             num_heads=num_heads,
             num_kv_heads=num_kv_heads,
@@ -502,13 +502,13 @@ def test_rope_static_qquant_kvcache_fusion(
             device=torch.get_default_device(),
         )
 
-        fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
+        fusion_pass = RopeKVCacheFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
-            SplitCoalescingPass(aphrodite_config),
-            ScatterSplitReplacementPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
+            SplitCoalescingPass(sonar_config),
+            ScatterSplitReplacementPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
 
@@ -519,7 +519,7 @@ def test_rope_static_qquant_kvcache_fusion(
         qkv_unfused = qkv.clone()
         pos_unfused = pos.clone()
 
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
@@ -530,7 +530,7 @@ def test_rope_static_qquant_kvcache_fusion(
 
         torch._dynamo.mark_dynamic(qkv, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
@@ -561,18 +561,18 @@ def test_rope_static_qquant_kvcache_fusion(
                 "_supports_static_q_fp8_quant_fusion",
                 lambda: False,
             )
-            generic_pass = RopeKVCacheFusionPass(aphrodite_config)
+            generic_pass = RopeKVCacheFusionPass(sonar_config)
             generic_backend = TestBackend(
-                NoOpEliminationPass(aphrodite_config),
-                SplitCoalescingPass(aphrodite_config),
-                ScatterSplitReplacementPass(aphrodite_config),
+                NoOpEliminationPass(sonar_config),
+                SplitCoalescingPass(sonar_config),
+                ScatterSplitReplacementPass(sonar_config),
                 generic_pass,
-                PostCleanupPass(aphrodite_config),
+                PostCleanupPass(sonar_config),
             )
             # Reset dynamo so the model is recompiled through generic_backend
             # instead of reusing the cached compilation from above.
             torch._dynamo.reset()
-            with set_forward_context(None, aphrodite_config):
+            with set_forward_context(None, sonar_config):
                 model_generic = torch.compile(model, backend=generic_backend)
                 forward_context = get_forward_context()
                 attn_metadata = model_generic.build_attn_metadata(T)
@@ -581,7 +581,7 @@ def test_rope_static_qquant_kvcache_fusion(
             # op_count reads the post-pass graph, so it also confirms the pass ran
             # (a no-op pass would raise instead of silently passing on count 0).
             assert generic_pass.matched_count == 0
-            assert generic_backend.op_count(torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default) == 0
+            assert generic_backend.op_count(torch.ops.sonar.fused_rope_and_unified_kv_cache_update.default) == 0
 
         if dtype == torch.float16:
             ATOL, RTOL = (2e-3, 2e-3)

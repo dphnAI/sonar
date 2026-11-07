@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.example_hidden_states_connector import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.example_hidden_states_connector import (  # noqa: E501
     ExampleHiddenStatesConnector,
 )
-from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_planning import get_kv_cache_groups
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     HiddenStateCacheSpec,
     KVCacheGroupSpec,
@@ -80,15 +80,15 @@ def test_find_group_id_raises_when_multiple_hidden_groups():
 
 def test_get_block_size_reads_hidden_group_spec_not_global():
     # Hidden group keeps block size 22; the global is bumped to 528 for hybrids.
-    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=528))
+    sonar_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=528))
     cfg = _config(_full(528), _hidden(22))
-    block_size = ExampleHiddenStatesConnector._get_cache_block_size(aphrodite_config, cfg, cache_kv_group_id=1)
+    block_size = ExampleHiddenStatesConnector._get_cache_block_size(sonar_config, cfg, cache_kv_group_id=1)
     assert block_size == 22
 
 
 def test_get_block_size_falls_back_to_cache_config_when_no_kv_cache_config():
-    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
-    block_size = ExampleHiddenStatesConnector._get_cache_block_size(aphrodite_config, None, cache_kv_group_id=0)
+    sonar_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
+    block_size = ExampleHiddenStatesConnector._get_cache_block_size(sonar_config, None, cache_kv_group_id=0)
     assert block_size == 16
 
 
@@ -106,12 +106,12 @@ def test_hidden_state_group_isolated_from_packed_mla_groups():
         ),
         "cache_only_layers.61": _hidden(64),
     }
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(get_resolved_kv_cache_layout=lambda: KVCacheLayout.BLHNC),
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
         speculative_config=None,
     )
-    groups = get_kv_cache_groups(aphrodite_config, spec)
+    groups = get_kv_cache_groups(sonar_config, spec)
     hidden_group_ids = [i for i, group in enumerate(groups) if isinstance(group.kv_cache_spec, HiddenStateCacheSpec)]
     assert len(hidden_group_ids) == 1
     cfg = SimpleNamespace(kv_cache_groups=groups)
@@ -127,12 +127,12 @@ def test_hidden_state_group_isolated_from_packed_mixed_page_groups():
         "layers.1.mamba": MambaSpec(block_size=16, shapes=((1024,),), dtypes=(torch.float32,)),
         "cache_only_layers.61": hidden,
     }
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(get_resolved_kv_cache_layout=lambda: KVCacheLayout.BLHNC),
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
         speculative_config=None,
     )
-    groups = get_kv_cache_groups(aphrodite_config, spec)
+    groups = get_kv_cache_groups(sonar_config, spec)
     page_sizes = {g.kv_cache_spec.page_size_bytes for g in groups}
     assert len(page_sizes) > 1, "spec must exercise the packed grouping path"
     hidden_group_ids = [i for i, group in enumerate(groups) if isinstance(group.kv_cache_spec, HiddenStateCacheSpec)]

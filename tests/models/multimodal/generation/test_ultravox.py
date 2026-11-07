@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from transformers import AutoTokenizer
 
-from ....conftest import AUDIO_ASSETS, AphroditeRunner, AudioTestAssets
+from ....conftest import AUDIO_ASSETS, AudioTestAssets, SonarRunner
 from ....utils import RemoteOpenAIServer
 from ...registry import HF_EXAMPLE_MODELS
 
@@ -26,7 +26,7 @@ MULTI_AUDIO_PROMPT = "Describe each of the audios above."
 
 AudioTuple = tuple[np.ndarray, float]
 
-APHRODITE_PLACEHOLDER = "<|audio|>"
+SONAR_PLACEHOLDER = "<|audio|>"
 HF_PLACEHOLDER = "<|audio|>"
 
 CHUNKED_PREFILL_KWARGS = {
@@ -67,7 +67,7 @@ def server(request, audio_assets: AudioTestAssets):
         "--trust-remote-code",
     ] + params_kwargs_to_cli_args(request.param)
 
-    with RemoteOpenAIServer(MODEL_NAME, args, env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"}) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, args, env_dict={"SONAR_AUDIO_FETCH_TIMEOUT": "30"}) as remote_server:
         yield remote_server
 
 
@@ -89,7 +89,7 @@ def _get_prompt(audio_count, question, placeholder):
 
 
 def run_multi_audio_test(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     prompts_and_audios: list[tuple[str | list[int], list[AudioTuple]]],
     model: str,
     *,
@@ -102,14 +102,14 @@ def run_multi_audio_test(
     model_info.check_available_online(on_fail="skip")
     model_info.check_transformers_version(on_fail="skip")
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         enforce_eager=True,
         limit_mm_per_prompt={"audio": max((len(audio) for _, audio in prompts_and_audios))},
         **kwargs,
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
             [prompt for prompt, _ in prompts_and_audios],
             max_tokens,
             num_logprobs=num_logprobs,
@@ -118,7 +118,7 @@ def run_multi_audio_test(
 
     # The HuggingFace model doesn't support multiple audios yet, so
     # just assert that some tokens were generated.
-    assert all(tokens for tokens, *_ in aphrodite_outputs)
+    assert all(tokens for tokens, *_ in sonar_outputs)
 
 
 @pytest.mark.core_model
@@ -126,29 +126,29 @@ def run_multi_audio_test(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [5])
 @pytest.mark.parametrize(
-    "aphrodite_kwargs",
+    "sonar_kwargs",
     [
         pytest.param({}, marks=pytest.mark.cpu_model),
         pytest.param(CHUNKED_PREFILL_KWARGS),
     ],
 )
 def test_models_with_multiple_audios(
-    aphrodite_runner,
+    sonar_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
-    aphrodite_kwargs: dict,
+    sonar_kwargs: dict,
 ) -> None:
-    aphrodite_prompt = _get_prompt(len(audio_assets), MULTI_AUDIO_PROMPT, APHRODITE_PLACEHOLDER)
+    sonar_prompt = _get_prompt(len(audio_assets), MULTI_AUDIO_PROMPT, SONAR_PLACEHOLDER)
     run_multi_audio_test(
-        aphrodite_runner,
-        [(aphrodite_prompt, [audio.audio_and_sample_rate for audio in audio_assets])],
+        sonar_runner,
+        [(sonar_prompt, [audio.audio_and_sample_rate for audio in audio_assets])],
         MODEL_NAME,
         dtype=dtype,
         max_tokens=max_tokens,
         num_logprobs=num_logprobs,
-        **aphrodite_kwargs,
+        **sonar_kwargs,
     )
 
 
@@ -156,7 +156,7 @@ def test_models_with_multiple_audios(
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_tokens", [32])
 def test_variable_length_audio_batching(
-    aphrodite_runner,
+    sonar_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
@@ -174,18 +174,18 @@ def test_variable_length_audio_batching(
     # Create prompts with single audio each (different durations)
     prompts_and_audios = []
     for audio, question in zip(audio_assets, AUDIO_PROMPTS):
-        prompt = _get_prompt(1, question, APHRODITE_PLACEHOLDER)
+        prompt = _get_prompt(1, question, SONAR_PLACEHOLDER)
         prompts_and_audios.append((prompt, [audio.audio_and_sample_rate]))
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL_NAME,
         dtype=dtype,
         enforce_eager=True,
         limit_mm_per_prompt={"audio": 1},
-    ) as aphrodite_model:
+    ) as sonar_model:
         # Generate for all prompts in a single batch
         # This triggers the variable-length batching code path
-        outputs = aphrodite_model.generate_greedy(
+        outputs = sonar_model.generate_greedy(
             [prompt for prompt, _ in prompts_and_audios],
             max_tokens,
             audios=[audios for _, audios in prompts_and_audios],

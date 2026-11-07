@@ -111,7 +111,7 @@ hardware_overrides:
       - "--load_format"
       - "mistral"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 strategy_overrides: {}
 
 guide: |
@@ -129,20 +129,20 @@ guide: |
 
   - Hardware: 1x H200 (sufficient for all three sizes thanks to FP8 weights);
     1x MI300X (verified) / MI325X / MI355X
-  - Aphrodite >= 0.11.0
+  - Sonar >= 0.11.0
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve mistralai/Ministral-3-14B-Instruct-2512 \
+  sonar serve mistralai/Ministral-3-14B-Instruct-2512 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral
   ```
@@ -165,7 +165,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:latest mistralai/Ministral-3-3B-Instruct-2512 \
       --tokenizer_mode mistral \
@@ -182,7 +182,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:latest mistralai/Ministral-3-8B-Instruct-2512 \
       --tokenizer_mode mistral \
@@ -201,7 +201,7 @@ guide: |
   docker run --device=/dev/kfd --device=/dev/dri \
     --security-opt seccomp=unconfined --group-add video \
     --privileged --ipc=host -p 8000:8000 \
-    -e APHRODITE_ROCM_USE_AITER=1 \
+    -e SONAR_ROCM_USE_AITER=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-rocm:latest mistralai/Ministral-3-14B-Instruct-2512 \
       --tokenizer_mode mistral \
@@ -257,7 +257,7 @@ guide: |
 
   ## Benchmarking (MI300X verification)
 
-  Serving benchmarks used `aphrodite bench serve` with random 1024-token input/output,
+  Serving benchmarks used `sonar bench serve` with random 1024-token input/output,
   `--max-concurrency 32`, and `--num-prompts 100` against each variant above.
   Accuracy used `lm-eval` GSM8K (5-shot, `flexible-extract` / `strict-match` filters).
 
@@ -277,7 +277,7 @@ guide: |
   | 8B | 0.8560 ± 0.0097 | 0.8491 ± 0.0099 |
   | 14B | 0.8795 ± 0.0090 | 0.8764 ± 0.0091 |
 
-  **14B** full `aphrodite bench serve` output (TP=1, MI300X):
+  **14B** full `sonar bench serve` output (TP=1, MI300X):
 
   ```shell
   ============ Serving Benchmark Result ============

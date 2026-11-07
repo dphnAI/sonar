@@ -13,7 +13,7 @@ DOCKER_BUILDKIT=1 docker build . -f docker/Dockerfile --target build --tag alpin
     ${MAX_JOBS:+--build-arg max_jobs=$MAX_JOBS} \
     ${NVCC_THREADS:+--build-arg nvcc_threads=$NVCC_THREADS}
 
-docker run -d --name aphrodite-build-container alpindale/aphrodite-build tail -f /dev/null
+docker run -d --name sonar-build-container alpindale/aphrodite-build tail -f /dev/null
 # copies to dist/ within working directory
-docker cp aphrodite-build-container:/workspace/dist .
-docker stop aphrodite-build-container && docker rm aphrodite-build-container
+docker cp sonar-build-container:/workspace/dist .
+docker stop sonar-build-container && docker rm sonar-build-container

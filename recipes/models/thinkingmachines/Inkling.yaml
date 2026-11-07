@@ -32,11 +32,11 @@ model:
     - "--tokenizer-mode"
     - "inkling"
   base_env:
-    APHRODITE_USE_V2_MODEL_RUNNER: "1"
+    SONAR_USE_V2_MODEL_RUNNER: "1"
 
 dependencies:
   - note: "Audio extras — only needed when serving the audio modality"
-    command: 'uv pip install "aphrodite-engine[audio]"'
+    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
     optional: true
 
 features:
@@ -105,8 +105,8 @@ variants:
           - "0.95"
           - "--enforce-eager"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
       mi325x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
@@ -119,8 +119,8 @@ variants:
           - "0.95"
           - "--enforce-eager"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
       mi355x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
@@ -132,8 +132,8 @@ variants:
           - "--gpu-memory-utilization"
           - "0.90"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
   bf16:
     model_id: "thinkingmachines/Inkling"
@@ -239,7 +239,7 @@ guide: |
 
   TML Inkling is a natively multimodal 1T-parameter Mixture-of-Experts model from Thinking
   Machines Lab. It accepts text, image, and audio inputs and generates text, with a context
-  length of up to 1M tokens. Aphrodite supports Inkling on Day 0 with full feature parity — LoRA,
+  length of up to 1M tokens. Sonar supports Inkling on Day 0 with full feature parity — LoRA,
   speculative decoding (MTP), TP/DP/EP/PP parallelism, prefix caching, and disaggregated serving.
 
   Architectural highlights:
@@ -248,7 +248,7 @@ guide: |
     layers — all grouped-query attention with head size 128. Inkling replaces RoPE with
     **relative attention**: a learned relative-position term added to the pre-softmax logits.
   - **Short convolution (sconv).** Each layer applies four window-4 sconv modules (on attention
-    keys, values, output, and MoE output). Aphrodite manages the sconv cache as the KV cache of a
+    keys, values, output, and MoE output). Sonar manages the sconv cache as the KV cache of a
     virtual sliding-window layer, so prefix caching works seamlessly, and shards sconv across
     the channel dimension (reduce-scatter / all-gather) to avoid replicating cache and compute
     across TP ranks.
@@ -274,7 +274,7 @@ guide: |
 
   - **Hardware:** NVIDIA Hopper (H200/H20) or Blackwell for NVFP4 and BF16;
     AMD MI300X, MI325X, or MI355X with TP4 for MXFP4.
-  - **Aphrodite:** Nightly wheels (Day-0 support just landed).
+  - **Sonar:** Nightly wheels (Day-0 support just landed).
   - **Parallelism:** 1T parameters requires multi-GPU. The featured configuration is 4x GB200
     (`--tensor-parallel-size 4`) for the NVFP4 variant. On Hopper, NVFP4 uses TP8 on H200;
     the BF16 variant needs multi-node.
@@ -283,10 +283,10 @@ guide: |
 
   Launch the server (NVFP4 on 4x GB200):
   ```bash
-  export APHRODITE_USE_V2_MODEL_RUNNER=1
+  export SONAR_USE_V2_MODEL_RUNNER=1
   export FLASH_ATTENTION_CUTE_DSL_CACHE_ENABLED=1
 
-  aphrodite serve thinkingmachines/Inkling-NVFP4 \
+  sonar serve thinkingmachines/Inkling-NVFP4 \
     --tokenizer-mode inkling \
     --reasoning-parser inkling \
     --tool-call-parser inkling \
@@ -298,7 +298,7 @@ guide: |
 
   For a multi-node BF16 deployment on Hopper (H200/H20), select the
   **Multi-Node TP + Data Parallel** strategy with **Nodes = 2** in the command
-  builder above — it renders the per-node `aphrodite serve` commands (TP within
+  builder above — it renders the per-node `sonar serve` commands (TP within
   each node, DP across nodes, EP over all ranks).
 
   On AMD, select the **MXFP4** variant. TP4 is validated with the native
@@ -306,12 +306,12 @@ guide: |
 
   Equivalent MI355X launch:
   ```bash
-  export APHRODITE_USE_V2_MODEL_RUNNER=1
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
+  export SONAR_USE_V2_MODEL_RUNNER=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
   export INKLING_GFX950_GLUON=0
 
-  aphrodite serve lightseekorg/Inkling-MXFP4 \
+  sonar serve lightseekorg/Inkling-MXFP4 \
     --tensor-parallel-size 4 \
     --tokenizer-mode inkling \
     --reasoning-parser inkling \
@@ -343,7 +343,7 @@ guide: |
 
   ## Performance
 
-  Aphrodite implements Inkling with a series of optimizations: sconv-aware TP sharding (each rank
+  Sonar implements Inkling with a series of optimizations: sconv-aware TP sharding (each rank
   stores only its channel shard of the sconv cache), low-latency fused reduce-scatter /
   all-gather collectives built on FlashInfer's Lamport-protocol all-reduce, the FA4
   sheared-bias attention kernel for relative attention, plus kernel fusion, PDL, and
@@ -354,4 +354,4 @@ guide: |
   - [TML Inkling (NVFP4)](https://huggingface.co/thinkingmachines/Inkling-NVFP4)
   - [TML Inkling (BF16)](https://huggingface.co/thinkingmachines/Inkling)
   - [Inkling MXFP4](https://huggingface.co/lightseekorg/Inkling-MXFP4)
-  - [Aphrodite integration PR](https://github.com/Inferact/mlj/pull/16)
+  - [Sonar integration PR](https://github.com/Inferact/mlj/pull/16)

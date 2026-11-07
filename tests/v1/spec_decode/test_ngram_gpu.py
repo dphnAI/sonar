@@ -3,7 +3,7 @@
 """Unit tests for the V2 GPU-accelerated n-gram speculator.
 
 These tests target the Triton proposer in
-``aphrodite.v1.worker.gpu.spec_decode.ngram.speculator`` and complement the CPU
+``sonar.v1.worker.gpu.spec_decode.ngram.speculator`` and complement the CPU
 ``NgramProposer`` tests in ``test_ngram.py``. The GPU speculator follows a
 slightly different policy than the CPU one: when multiple n-gram matches of
 the same length exist, the GPU kernel picks the right-most (most recent)
@@ -18,15 +18,15 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     ModelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.ngram.speculator import NgramGPUSpeculator
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.ngram.speculator import NgramGPUSpeculator
+from sonar.v1.worker.gpu.states import RequestState
 
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
     pytest.skip(
@@ -37,14 +37,14 @@ if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
 DEVICE = torch.device(current_platform.device_type)
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     min_n: int,
     max_n: int,
     k: int,
     max_num_seqs: int = 8,
     max_model_len: int = 64,
     method: str = "ngram_gpu",
-) -> AphroditeConfig:
+) -> SonarConfig:
     model_config = ModelConfig(
         model="facebook/opt-125m",
         max_model_len=max_model_len,
@@ -60,14 +60,14 @@ def _make_aphrodite_config(
         prompt_lookup_max=max_n,
         num_speculative_tokens=k,
     )
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
         speculative_config=speculative_config,
     )
 
 
-def _make_request_state(cfg: AphroditeConfig) -> RequestState:
+def _make_request_state(cfg: SonarConfig) -> RequestState:
     assert cfg.speculative_config is not None
     return RequestState(
         max_num_reqs=cfg.scheduler_config.max_num_seqs,
@@ -87,7 +87,7 @@ def _make_speculator(
     max_num_seqs: int = 8,
     max_model_len: int = 32,
 ) -> NgramGPUSpeculator:
-    cfg = _make_aphrodite_config(
+    cfg = _make_sonar_config(
         min_n=min_n,
         max_n=max_n,
         k=k,

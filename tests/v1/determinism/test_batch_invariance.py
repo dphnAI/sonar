@@ -17,10 +17,10 @@ from utils import (
     skip_unsupported,
 )
 
-import aphrodite.envs as envs
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TokensPrompt
-from aphrodite.platforms import current_platform
+import sonar.envs as envs
+from sonar import LLM, SamplingParams
+from sonar.inputs import TokensPrompt
+from sonar.platforms import current_platform
 
 
 @skip_unsupported
@@ -30,7 +30,7 @@ from aphrodite.platforms import current_platform
     "backend",
     BACKENDS,
 )
-@pytest.mark.parametrize("rms_norm_impl", ["default", "aphrodite_c"])
+@pytest.mark.parametrize("rms_norm_impl", ["default", "sonar_c"])
 def test_v1_generation_is_deterministic_across_batch_sizes_with_needle(
     backend,
     rms_norm_impl,
@@ -56,38 +56,38 @@ def test_v1_generation_is_deterministic_across_batch_sizes_with_needle(
     - Keep max_tokens and max_model_len bounded for speed and memory use.
 
     """
-    seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
+    seed = int(os.getenv("SONAR_TEST_SEED", "12345"))
     random.seed(seed)
 
     attention_config = {"backend": backend}
     # Force the C++ RMSNorm implementation so we actually exercise the
     # num_tokens-dependent block-size branches.
     kernel_config = None
-    if rms_norm_impl == "aphrodite_c":
+    if rms_norm_impl == "sonar_c":
         kernel_config = {
             "ir_op_priority": {
-                "rms_norm": ["aphrodite_c"],
-                "fused_add_rms_norm": ["aphrodite_c"],
+                "rms_norm": ["sonar_c"],
+                "fused_add_rms_norm": ["sonar_c"],
             }
         }
     # Allow overrides from environment (useful for CI tuning)
     # "facebook/opt-125m" is too small, doesn't reliably test determinism
     model = TEST_MODEL
-    num_trials = int(os.getenv("APHRODITE_NEEDLE_TRIALS", "5"))
-    max_batch_size = int(os.getenv("APHRODITE_NEEDLE_BATCH_SIZE", "128"))
-    min_random_prompt = int(os.getenv("APHRODITE_MIN_PROMPT", "1024"))
-    max_random_prompt = int(os.getenv("APHRODITE_MAX_PROMPT", "2048"))
+    num_trials = int(os.getenv("SONAR_NEEDLE_TRIALS", "5"))
+    max_batch_size = int(os.getenv("SONAR_NEEDLE_BATCH_SIZE", "128"))
+    min_random_prompt = int(os.getenv("SONAR_MIN_PROMPT", "1024"))
+    max_random_prompt = int(os.getenv("SONAR_MAX_PROMPT", "2048"))
     assert max_batch_size >= 2, "Batch size should be >= 2 to mix needle."
 
     # Keep GPU memory usage low to avoid startup allocation failures.
-    gpu_mem_util = float(os.getenv("APHRODITE_GPU_MEMORY_UTILIZATION", "0.5"))
-    max_model_len = int(os.getenv("APHRODITE_MAX_MODEL_LEN", "5120"))
+    gpu_mem_util = float(os.getenv("SONAR_GPU_MEMORY_UTILIZATION", "0.5"))
+    max_model_len = int(os.getenv("SONAR_MAX_MODEL_LEN", "5120"))
 
     # Sampling parameters: longer outputs with a more random-sounding
     # continuation,but still deterministic due to fixed seed.
-    temperature = float(os.getenv("APHRODITE_NEEDLE_TEMPERATURE", "0.0"))
-    top_p = float(os.getenv("APHRODITE_NEEDLE_TOP_P", "0.95"))
-    max_tokens = int(os.getenv("APHRODITE_NEEDLE_MAX_TOKENS", "128"))
+    temperature = float(os.getenv("SONAR_NEEDLE_TEMPERATURE", "0.0"))
+    top_p = float(os.getenv("SONAR_NEEDLE_TOP_P", "0.95"))
+    max_tokens = int(os.getenv("SONAR_NEEDLE_MAX_TOKENS", "128"))
 
     sampling = SamplingParams(
         temperature=temperature,
@@ -174,14 +174,14 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
     block_m,
     block_n,
 ):
-    seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
+    seed = int(os.getenv("SONAR_TEST_SEED", "12345"))
     random.seed(seed)
-    tp_size = int(os.getenv("APHRODITE_TEST_TP_SIZE", "1"))
+    tp_size = int(os.getenv("SONAR_TEST_TP_SIZE", "1"))
 
     llm = LLM(
         model=TEST_MODEL,
         tensor_parallel_size=tp_size,
-        disable_custom_all_reduce=os.getenv("APHRODITE_TEST_DISABLE_CUSTOM_AR") == "1",
+        disable_custom_all_reduce=os.getenv("SONAR_TEST_DISABLE_CUSTOM_AR") == "1",
         max_num_seqs=128,
         max_model_len=8192,
         dtype="auto",  # not everything is supported
@@ -363,7 +363,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
 )
 def test_logprobs_bitwise_batch_invariance_ragged_chunked_prefill(backend):
     """Batch invariance must hold when a prefill is split across chunks."""
-    random.seed(int(os.getenv("APHRODITE_TEST_SEED", "12345")))
+    random.seed(int(os.getenv("SONAR_TEST_SEED", "12345")))
 
     prompts = (
         [_random_prompt(10, 50) for _ in range(8)]
@@ -388,7 +388,7 @@ def test_logprobs_bitwise_batch_invariance_ragged_chunked_prefill(backend):
     llm = LLM_with_max_seqs(
         model=TEST_MODEL,
         max_num_seqs=len(prompts),
-        gpu_memory_utilization=float(os.getenv("APHRODITE_GPU_MEMORY_UTILIZATION", "0.5")),
+        gpu_memory_utilization=float(os.getenv("SONAR_GPU_MEMORY_UTILIZATION", "0.5")),
         max_model_len=4096,
         attention_config={"backend": backend},
         max_num_batched_tokens=max_num_batched_tokens,
@@ -439,7 +439,7 @@ def test_simple_generation(backend):
     llm = LLM(
         model=model,
         max_num_seqs=1,
-        tensor_parallel_size=int(os.getenv("APHRODITE_TP_SIZE", "1")),
+        tensor_parallel_size=int(os.getenv("SONAR_TP_SIZE", "1")),
         gpu_memory_utilization=0.9,
         max_model_len=2048,
         dtype="auto",
@@ -489,11 +489,11 @@ def test_logprobs_without_batch_invariance_should_fail(backend, monkeypatch: pyt
     The test will FAIL if everything matches (suggesting batch invariance isn't needed).
     """
     # CRITICAL: Disable batch invariance for this test
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "0")
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", False)
-    seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "0")
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", False)
+    seed = int(os.getenv("SONAR_TEST_SEED", "12345"))
     random.seed(seed)
-    tp_size = int(os.getenv("APHRODITE_TEST_TP_SIZE", "1"))
+    tp_size = int(os.getenv("SONAR_TEST_TP_SIZE", "1"))
 
     print(f"\n{'=' * 80}")
     print("BATCH INVARIANCE DISABLED: Expecting non-deterministic behavior")
@@ -509,8 +509,8 @@ def test_logprobs_without_batch_invariance_should_fail(backend, monkeypatch: pyt
     )
 
     # build ragged prompts to change shapes significantly across BS=1 vs BS=N
-    long_min = int(os.getenv("APHRODITE_MIN_PROMPT", "768"))
-    long_max = int(os.getenv("APHRODITE_MAX_PROMPT", "2048"))
+    long_min = int(os.getenv("SONAR_MIN_PROMPT", "768"))
+    long_max = int(os.getenv("SONAR_MAX_PROMPT", "2048"))
     prompts: list[str] = []
     options = [
         (max(long_min, 1536), max(long_max, 3072)),  # very long
@@ -692,9 +692,9 @@ def test_decode_logprobs_match_prefill_logprobs(
     This ensures that the logprobs from decode are consistent with what
     we would get if we ran prefill on each prefix.
     """
-    seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
+    seed = int(os.getenv("SONAR_TEST_SEED", "12345"))
     random.seed(seed)
-    tp_size = int(os.getenv("APHRODITE_TEST_TP_SIZE", "1"))
+    tp_size = int(os.getenv("SONAR_TEST_TP_SIZE", "1"))
 
     llm = LLM(
         model=TEST_MODEL,
@@ -706,11 +706,11 @@ def test_decode_logprobs_match_prefill_logprobs(
     )
 
     # Use a few test prompts
-    num_test_prompts = int(os.getenv("APHRODITE_DECODE_PREFILL_NUM_PROMPTS", "4"))
+    num_test_prompts = int(os.getenv("SONAR_DECODE_PREFILL_NUM_PROMPTS", "4"))
     prompts = [_random_prompt(10, 50) for _ in range(num_test_prompts)]
 
     # Generate longer sequences to test multiple decode steps
-    max_tokens = int(os.getenv("APHRODITE_DECODE_PREFILL_MAX_TOKENS", "16"))
+    max_tokens = int(os.getenv("SONAR_DECODE_PREFILL_MAX_TOKENS", "16"))
 
     sp = SamplingParams(
         temperature=0.0,  # Greedy for determinism
@@ -887,7 +887,7 @@ def test_decode_logprobs_match_prefill_logprobs(
 def _supports_online_fp8() -> bool:
     if current_platform.is_rocm():
         # Imported lazily: this module resolves the GPU arch at import time.
-        from aphrodite.platforms.rocm import on_mi3xx
+        from sonar.platforms.rocm import on_mi3xx
 
         return on_mi3xx()
     return current_platform.has_device_capability(89)
@@ -908,7 +908,7 @@ def test_online_fp8_moe_logprobs_bitwise_bs1_vs_bsN():
     every token of every co-batched request, so greedy tokens and logprobs
     change with batch composition even though each batch is deterministic.
     """
-    random.seed(int(os.getenv("APHRODITE_TEST_SEED", "12345")))
+    random.seed(int(os.getenv("SONAR_TEST_SEED", "12345")))
     prompts = [_random_prompt(10, 50) for _ in range(8)]
     sp = SamplingParams(temperature=0.0, max_tokens=32, logprobs=1)
 
@@ -960,7 +960,7 @@ def LLM_with_max_seqs(
         gpu_memory_utilization=gpu_memory_utilization,
         max_model_len=max_model_len,
         dtype="auto",
-        tensor_parallel_size=int(os.getenv("APHRODITE_TP_SIZE", "1")),
+        tensor_parallel_size=int(os.getenv("SONAR_TP_SIZE", "1")),
         enable_prefix_caching=False,
         attention_config=attention_config,
         # Enable for MOE models

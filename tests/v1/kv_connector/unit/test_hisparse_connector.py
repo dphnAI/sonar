@@ -7,38 +7,38 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.example_connector import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.example_connector import (
     ExampleConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse import (
     worker as worker_module,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
     HiSparseConnector,
     HiSparseConnectorMetadata,
     HiSparseConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
     HiSparseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
-from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
-from aphrodite.v1.hisparse import runtime as runtime_module
-from aphrodite.v1.hisparse.coordinator import get_hisparse_coordinator
-from aphrodite.v1.hisparse.runtime import (
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector
+from sonar.v1.core.kv_cache_metrics import KVCacheMetricsCollector
+from sonar.v1.hisparse import runtime as runtime_module
+from sonar.v1.hisparse.coordinator import get_hisparse_coordinator
+from sonar.v1.hisparse.runtime import (
     HiSparseCacheHandle,
     update_hisparse_residency,
 )
-from aphrodite.v1.hisparse.types import (
+from sonar.v1.hisparse.types import (
     SparseKVOffloadCommand,
     SparseKVPageTransfer,
     SparseKVResidencyUpdate,
     SparseKVRowMirror,
 )
-from aphrodite.v1.metrics.stats import KVCacheEvictionEvent
-from aphrodite.v1.worker.gpu.kv_connector import ActiveKVConnector
+from sonar.v1.metrics.stats import KVCacheEvictionEvent
+from sonar.v1.worker.gpu.kv_connector import ActiveKVConnector
 
 
 @pytest.mark.parametrize("nested", [False, True])
@@ -71,7 +71,7 @@ def test_hisparse_requires_block_outermost_device_layout():
 
 def test_scheduler_stats_report_host_pool_usage():
     """The scheduler-side stats sample the coordinator's host pool level."""
-    from aphrodite.v1.core.kv_cache_utils import init_none_hash
+    from sonar.v1.core.kv_cache_utils import init_none_hash
     from tests.v1.core.test_prefix_caching import (
         HISPARSE_BLOCK_SIZE,
         make_hisparse_kv_cache_manager,
@@ -429,7 +429,7 @@ def test_zero_token_step_holds_tp_ranks_after_host_write_wait(monkeypatch, share
 def test_scheduled_prefix_hit_publishes_adopted_copies():
     """Copies adopted after scheduling reach the worker as a residency update,
     leaving the block-table row the scheduler output carries untouched."""
-    from aphrodite.v1.core.kv_cache_utils import init_none_hash
+    from sonar.v1.core.kv_cache_utils import init_none_hash
     from tests.v1.core.test_prefix_caching import (
         HISPARSE_BLOCK_SIZE,
         _allocate_scheduled,

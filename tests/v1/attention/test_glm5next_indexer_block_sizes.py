@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla import indexer
-from aphrodite.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla import indexer
+from sonar.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
 
 KPOOL = 4
 
@@ -32,7 +32,7 @@ def test_glm5next_indexer_kernel_block_sizes(monkeypatch, rocm, sm120, expected)
     )
     model_config = SimpleNamespace(hf_text_config=SimpleNamespace(index_kpool=KPOOL))
     config = SimpleNamespace(model_config=model_config)
-    monkeypatch.setattr(indexer, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(indexer, "get_current_sonar_config", lambda: config)
 
     spec = SimpleNamespace(tokens_per_state=KPOOL)
     assert Glm5NextIndexerBackend.get_supported_kernel_block_sizes(spec) == expected

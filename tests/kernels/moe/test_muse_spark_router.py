@@ -6,8 +6,8 @@
 import pytest
 import torch
 
-from aphrodite.models.muse_spark.common.ops.fused_routing import fused_musespark1x_routing
-from aphrodite.models.muse_spark.nvidia.muse_moe_runner import MuseSpark1xRouter
+from sonar.models.muse_spark.common.ops.fused_routing import fused_musespark1x_routing
+from sonar.models.muse_spark.nvidia.muse_moe_runner import MuseSpark1xRouter
 
 LOGITS = torch.tensor(
     [
@@ -216,8 +216,8 @@ def test_routing_padding_is_zero_with_nonfinite_logits(num_experts):
 
 
 def _triton_routing_reference(logits, bias, multiplier, scale, eps, padding):
-    from aphrodite.models.muse_spark.common.ops.fused_routing import _routing_kernel
-    from aphrodite.platforms import current_platform
+    from sonar.models.muse_spark.common.ops.fused_routing import _routing_kernel
+    from sonar.platforms import current_platform
 
     tokens = logits.shape[0]
     weights = torch.empty((tokens, 8), device=logits.device)
@@ -260,7 +260,7 @@ def _triton_routing_reference(logits, bias, multiplier, scale, eps, padding):
 @pytest.mark.parametrize("case", ["random", "ties", "near_ties", "negative", "strided"])
 def test_cuda_muse_routing_matches_triton(tokens, case):
     """Preserve expert choices, FP32 rounding, padding, and caller-owned buffers."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     torch.manual_seed(17)
     width = 260 if case == "strided" else 256

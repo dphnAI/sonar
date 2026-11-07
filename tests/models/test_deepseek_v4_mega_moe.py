@@ -7,26 +7,26 @@ import pytest
 import torch
 from transformers import DeepseekV4Config
 
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     DeepGemmMegaMoEExperts,
     MegaMoEActivation,
 )
-from aphrodite.model_executor.models.interfaces import (
+from sonar.model_executor.models.interfaces import (
     get_mixture_of_experts_model,
     is_mixture_of_experts,
 )
-from aphrodite.models.deepseek_v4.nvidia.dspark import DSparkDeepseekV4ForCausalLM
-from aphrodite.models.deepseek_v4.nvidia.model import (
+from sonar.models.deepseek_v4.nvidia.dspark import DSparkDeepseekV4ForCausalLM
+from sonar.models.deepseek_v4.nvidia.model import (
     DeepseekV4ForCausalLM,
     DeepseekV4MoE,
     make_deepseek_v4_expert_params_mapping,
     prepare_mega_gate_routing_metadata,
 )
-from aphrodite.models.deepseek_v41.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
-from aphrodite.models.deepseek_v41.nvidia.model import DeepseekV4MoE as DeepseekV41MoE
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.deepseek_v41 import DeepseekV41Config
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.models.deepseek_v41.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
+from sonar.models.deepseek_v41.nvidia.model import DeepseekV4MoE as DeepseekV41MoE
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.deepseek_v41 import DeepseekV41Config
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda(),
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 def sm100_mega_moe_layout(monkeypatch):
     """Build the SM100 kernel layout on any GPU; kernels are gated per test."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe.check_deep_gemm_mega_moe_supported",
+        "sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe.check_deep_gemm_mega_moe_supported",
         lambda *args: None,
     )
 
@@ -195,7 +195,7 @@ def test_deepseek_v41_fused_moe_uses_draft_counts_or_main_defaults(
         captured.update(kwargs)
         return torch.nn.Identity()
 
-    monkeypatch.setattr("aphrodite.models.deepseek_v4.nvidia.model.FusedMoEFactory", make_experts)
+    monkeypatch.setattr("sonar.models.deepseek_v4.nvidia.model.FusedMoEFactory", make_experts)
     moe = DeepseekV41MoE(v41_moe_config, prefix="model.layers.2.ffn")
     assert moe.gate.weight.shape == (expected[0], 128)
     assert (captured["num_experts"], captured["top_k"]) == expected
@@ -370,7 +370,7 @@ def test_dspark_draft_registers_mixture_of_experts(v4_dspark_config, monkeypatch
 
     hf_config = v4_dspark_config.model_config.hf_config
     monkeypatch.setattr(
-        "aphrodite.models.deepseek_v4.nvidia.dspark.get_current_aphrodite_config",
+        "sonar.models.deepseek_v4.nvidia.dspark.get_current_sonar_config",
         lambda: v4_dspark_config,
     )
 
@@ -378,7 +378,7 @@ def test_dspark_draft_registers_mixture_of_experts(v4_dspark_config, monkeypatch
         set_default_torch_dtype(v4_dspark_config.model_config.dtype),
         torch.device("cuda"),
     ):
-        draft = DSparkDeepseekV4ForCausalLM(aphrodite_config=v4_dspark_config)
+        draft = DSparkDeepseekV4ForCausalLM(sonar_config=v4_dspark_config)
 
     assert is_mixture_of_experts(draft)
     assert get_mixture_of_experts_model(draft) is draft

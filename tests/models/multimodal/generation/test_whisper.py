@@ -8,16 +8,16 @@ import pytest
 import torch
 from transformers import AutoModelForSpeechSeq2Seq
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.multimodal.audio import AudioResampler
-from aphrodite.platforms import current_platform
+from sonar.assets.audio import AudioAsset
+from sonar.multimodal.audio import AudioResampler
+from sonar.platforms import current_platform
 
-from ....conftest import AphroditeRunner, HfRunner, PromptAudioInput
+from ....conftest import HfRunner, PromptAudioInput, SonarRunner
 from ....utils import create_new_process_for_each_test, multi_gpu_test
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
 
-APHRODITE_PROMPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
+SONAR_PROMPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
 HF_PROMPT = ""
 # Whisper expects 16kHz audio
 WHISPER_SAMPLE_RATE = 16000
@@ -27,12 +27,12 @@ BEAM_WIDTHS = (1, 2)
 @pytest.fixture(autouse=True)
 def use_spawn_for_whisper(monkeypatch):
     """Whisper has issues with forked workers, use spawn instead."""
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 def run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     inputs: Sequence[tuple[list[str], list[str], PromptAudioInput]],
     model: str,
     *,
@@ -45,14 +45,14 @@ def run_test(
     enforce_eager: bool = True,
     gpu_memory_utilization: float = 0.9,
 ) -> None:
-    """Inference result should be the same between hf and aphrodite.
+    """Inference result should be the same between hf and sonar.
 
     All the audio fixtures for the test are from AudioAsset.
     For huggingface runner, we provide the audio as input.
-    For aphrodite runner, we provide MultiModalDataDict objects
+    For sonar runner, we provide MultiModalDataDict objects
     and corresponding MultiModalConfig as input.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         max_model_len=max_model_len,
@@ -62,15 +62,15 @@ def run_test(
         enforce_eager=enforce_eager,
         gpu_memory_utilization=gpu_memory_utilization,
         disable_custom_all_reduce=True,
-    ) as aphrodite_model:
-        aphrodite_outputs_per_case = [
-            aphrodite_model.generate_greedy_logprobs(
-                aphrodite_prompts,
+    ) as sonar_model:
+        sonar_outputs_per_case = [
+            sonar_model.generate_greedy_logprobs(
+                sonar_prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
                 audios=audios,
             )
-            for aphrodite_prompts, _, audios in inputs
+            for sonar_prompts, _, audios in inputs
         ]
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModelForSpeechSeq2Seq) as hf_model:
@@ -84,12 +84,12 @@ def run_test(
             for _, hf_prompts, audios in inputs
         ]
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, sonar_outputs in zip(hf_outputs_per_case, sonar_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=aphrodite_outputs,
+            outputs_1_lst=sonar_outputs,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
         )
 
 
@@ -116,8 +116,8 @@ def input_audios(
     inputs = []
     # audio assets are resampled to WHISPER_SAMPLE_RATE
     for audio_info in resampled_assets:
-        # Aphrodite prompts, HF prompts, audio inputs
-        inputs.append(([APHRODITE_PROMPT], [HF_PROMPT], [audio_info]))
+        # Sonar prompts, HF prompts, audio inputs
+        inputs.append(([SONAR_PROMPT], [HF_PROMPT], [audio_info]))
     return inputs
 
 
@@ -131,7 +131,7 @@ def check_model_available(model: str) -> None:
 @pytest.mark.parametrize("max_tokens", [64])
 def test_beam_search_encoder_decoder(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     dtype: str,
     max_tokens: int,
     resampled_assets,
@@ -157,7 +157,7 @@ def test_beam_search_encoder_decoder(
         ]
 
     # Test both explicit encoder/decoder prompts
-    aphrodite_prompts = [
+    sonar_prompts = [
         # Implicit encoder/decoder prompt
         {
             "prompt": "<|startoftranscript|>",
@@ -173,7 +173,7 @@ def test_beam_search_encoder_decoder(
         },
     ]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype="half",
         max_model_len=448,
@@ -181,41 +181,41 @@ def test_beam_search_encoder_decoder(
         max_num_seqs=4,
         limit_mm_per_prompt={"audio": 2},
         enforce_eager=True,
-    ) as aphrodite_model:
-        aphrodite_outputs_by_beam_width = [
-            aphrodite_model.generate_beam_search(
-                aphrodite_prompts,
+    ) as sonar_model:
+        sonar_outputs_by_beam_width = [
+            sonar_model.generate_beam_search(
+                sonar_prompts,
                 beam_width=beam_width,
                 max_tokens=max_tokens,
             )
             for beam_width in BEAM_WIDTHS
         ]
 
-    for beam_width, hf_outputs, aphrodite_outputs in zip(
-        BEAM_WIDTHS, hf_outputs_by_beam_width, aphrodite_outputs_by_beam_width
+    for beam_width, hf_outputs, sonar_outputs in zip(
+        BEAM_WIDTHS, hf_outputs_by_beam_width, sonar_outputs_by_beam_width
     ):
-        for i in range(len(aphrodite_prompts)):
+        for i in range(len(sonar_prompts)):
             hf_output_ids, hf_output_texts = hf_outputs[i]
-            aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
+            sonar_output_ids, sonar_output_texts = sonar_outputs[i]
 
-            for j, (hf_text, aphrodite_text) in enumerate(zip(hf_output_texts, aphrodite_output_texts)):
+            for j, (hf_text, sonar_text) in enumerate(zip(hf_output_texts, sonar_output_texts)):
                 print(f">>>{j}-th hf output [NOTE: special tokens are filtered]:")
                 print(hf_text)
-                print(f">>>{j}-th aphrodite output:")
-                print(aphrodite_text)
+                print(f">>>{j}-th sonar output:")
+                print(sonar_text)
 
             # Check that we got the same number of beams
-            assert len(hf_output_ids) == len(aphrodite_output_ids) == beam_width
+            assert len(hf_output_ids) == len(sonar_output_ids) == beam_width
 
             # For encoder-decoder models, we primarily want to verify that:
             # 1. Beam search completes without errors
             # 2. We get the expected number of beams
             # 3. Outputs are reasonable (non-empty, diverse beams)
-            for j in range(len(aphrodite_output_ids)):
+            for j in range(len(sonar_output_ids)):
                 # Check that outputs are not empty
-                assert len(aphrodite_output_ids[j]) > 0, f"Prompt {i}, beam {j}: empty output"
+                assert len(sonar_output_ids[j]) > 0, f"Prompt {i}, beam {j}: empty output"
                 # Check that decoded text is not empty
-                assert len(aphrodite_output_texts[j].strip()) > 0, f"Prompt {i}, beam {j}: empty text output"
+                assert len(sonar_output_texts[j].strip()) > 0, f"Prompt {i}, beam {j}: empty text output"
 
 
 def test_parse_language_detection_output():
@@ -225,7 +225,7 @@ def test_parse_language_detection_output():
     """
     from unittest.mock import MagicMock
 
-    from aphrodite.model_executor.models.whisper import (
+    from sonar.model_executor.models.whisper import (
         WhisperForConditionalGeneration,
     )
 
@@ -257,7 +257,7 @@ def test_parse_language_detection_output():
 
 def test_create_fake_bias_for_k_proj_injects_out_features():
     """Packed k_proj weights get a zeros bias of length ``out_features``."""
-    from aphrodite.model_executor.models.whisper import _create_fake_bias_for_k_proj
+    from sonar.model_executor.models.whisper import _create_fake_bias_for_k_proj
 
     packed = torch.ones(2, 16)
     result = dict(
@@ -276,7 +276,7 @@ def test_create_fake_bias_for_k_proj_injects_out_features():
 
 def test_create_fake_bias_for_k_proj_forwards_real_bias():
     """A checkpoint bias is forwarded and no extra fake bias is emitted."""
-    from aphrodite.model_executor.models.whisper import _create_fake_bias_for_k_proj
+    from sonar.model_executor.models.whisper import _create_fake_bias_for_k_proj
 
     weight = torch.ones(8, 16)
     real_bias = torch.ones(8)
@@ -306,7 +306,7 @@ def test_create_fake_bias_for_k_proj_forwards_real_bias():
 @pytest.mark.parametrize("enforce_eager", [True, False])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
     num_logprobs: int,
@@ -318,7 +318,7 @@ def test_models(
         pytest.skip("Skipping test for CPU with non-eager mode")
     run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_audios,
         model,
         dtype=dtype,
@@ -340,7 +340,7 @@ def test_models(
 @create_new_process_for_each_test("spawn")
 def test_models_distributed(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     distributed_executor_backend: str,
     dtype: str,
@@ -351,7 +351,7 @@ def test_models_distributed(
     check_model_available(model)
     run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_audios,
         model,
         dtype=dtype,
@@ -368,7 +368,7 @@ def test_models_distributed(
 @pytest.mark.core_model
 @pytest.mark.parametrize("model", ["openai/whisper-large-v3-turbo"])
 def test_encoder_cache_cleanup(
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     input_audios,
     monkeypatch,
@@ -380,24 +380,24 @@ def test_encoder_cache_cleanup(
     them.
     """
     # Set single-process mode to access the model runner's encoder cache directly
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     check_model_available(model)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype="half",
         max_model_len=448,
         tensor_parallel_size=1,
         limit_mm_per_prompt={"audio": 2},
         enforce_eager=True,
-    ) as aphrodite_model:
-        engine_core = aphrodite_model.llm.llm_engine.engine_core.engine_core
+    ) as sonar_model:
+        engine_core = sonar_model.llm.llm_engine.engine_core.engine_core
         model_runner = engine_core.model_executor.driver_worker.worker.model_runner
         encoder_cache = model_runner.encoder_cache
 
         # Run multiple sequential requests to ensure cache is properly managed
-        for aphrodite_prompts, _, audios in input_audios:
-            aphrodite_model.generate_greedy(aphrodite_prompts, max_tokens=50, audios=audios)
+        for sonar_prompts, _, audios in input_audios:
+            sonar_model.generate_greedy(sonar_prompts, max_tokens=50, audios=audios)
 
         # After all requests complete, encoder cache should be empty
         cache_size = len(encoder_cache)

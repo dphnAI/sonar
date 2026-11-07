@@ -13,8 +13,8 @@ import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 # This test module is ROCm/Triton specific. Avoid import-time failures on
 # non-ROCm or environments without Triton by skipping early.
@@ -25,7 +25,7 @@ pytest.importorskip("triton")
 
 device = "cuda"
 
-triton_w4a16_module = importlib.import_module("aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16")
+triton_w4a16_module = importlib.import_module("sonar.model_executor.kernels.linear.mixed_precision.triton_w4a16")
 triton_w4a16_gemm = triton_w4a16_module.triton_w4a16_gemm
 TritonW4A16LinearKernel = triton_w4a16_module.TritonW4A16LinearKernel
 
@@ -130,7 +130,7 @@ def test_triton_w4a16_gemm_fake_impl():
         )
 
         assert any(
-            node.op == "call_function" and node.target == torch.ops.aphrodite.triton_w4a16_gemm.default
+            node.op == "call_function" and node.target == torch.ops.sonar.triton_w4a16_gemm.default
             for node in graph.graph.nodes
         )
 
@@ -216,22 +216,22 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.distributed import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.distributed import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
     )
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.model_executor.parameter import (
+    from sonar.model_executor.parameter import (
         GroupQuantScaleParameter,
-        PackedAphroditeParameter,
         PackedColumnParameter,
+        PackedSonarParameter,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -274,7 +274,7 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
         w_zp_param_name="weight_zero_point",
     )
 
-    # Build dummy layer with Aphrodite parameter wrappers.
+    # Build dummy layer with Sonar parameter wrappers.
     weight_loader = lambda *args, **kwargs: None
 
     class DummyLayer(torch.nn.Module):
@@ -283,7 +283,7 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
     layer = DummyLayer()
     layer.register_parameter(
         "weight_packed",
-        PackedAphroditeParameter(
+        PackedSonarParameter(
             data=w_ckpt_nk8,
             weight_loader=weight_loader,
             input_dim=1,
@@ -336,21 +336,21 @@ def test_triton_w4a16_process_weights_after_loading_keeps_gptq_qzeros_layout():
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.distributed import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.distributed import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
     )
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.model_executor.parameter import (
+    from sonar.model_executor.parameter import (
         GroupQuantScaleParameter,
-        PackedAphroditeParameter,
+        PackedSonarParameter,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -393,7 +393,7 @@ def test_triton_w4a16_process_weights_after_loading_keeps_gptq_qzeros_layout():
     layer = DummyLayer()
     layer.register_parameter(
         "qweight",
-        PackedAphroditeParameter(
+        PackedSonarParameter(
             data=w_gptq_k8n,
             weight_loader=weight_loader,
             input_dim=0,
@@ -413,7 +413,7 @@ def test_triton_w4a16_process_weights_after_loading_keeps_gptq_qzeros_layout():
     )
     layer.register_parameter(
         "qzeros",
-        PackedAphroditeParameter(
+        PackedSonarParameter(
             data=zeros_gptq_gn8,
             weight_loader=weight_loader,
             input_dim=0,
@@ -439,10 +439,10 @@ def test_triton_w4a16_process_weights_after_loading_keeps_gptq_qzeros_layout():
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm only")
 def test_triton_w4a16_symmetric_apply_ignores_qzeros(monkeypatch):
     """For symmetric (uint4b8) layers, apply_weights must pass qzeros=None."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     K, N, G = 256, 256, 32
     config = MPLinearLayerConfig(

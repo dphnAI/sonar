@@ -5,8 +5,8 @@ import weakref
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.image import ImageAsset
+from sonar import LLM, SamplingParams
+from sonar.assets.image import ImageAsset
 
 MODEL = "llava-hf/llava-1.5-7b-hf"
 PROMPT = "USER: <image>\nDescribe this image briefly.\nASSISTANT:"
@@ -14,9 +14,9 @@ TEXT_ONLY_PROMPT = "USER: What is 2 + 2?\nASSISTANT:"
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
+def llm(sonar_runner):
     """LLM with enable_mm_embeds=True and all modality limits zeroed out."""
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         max_model_len=2048,
         enforce_eager=True,
@@ -25,7 +25,7 @@ def llm(aphrodite_runner):
         limit_mm_per_prompt={"image": 0},
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

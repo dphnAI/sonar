@@ -8,13 +8,13 @@ from typing import Protocol
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.models.glm5next.common.attention import Glm5NextIndexerCache
-from aphrodite.v1.attention.backend import MultipleOf
-from aphrodite.v1.attention.backends.mla import indexer as indexer_mod
-from aphrodite.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
-from aphrodite.v1.kv_cache_interface import KVCacheSpec, MLAAttentionSpec
-from aphrodite.v1.worker.utils import prepare_kernel_block_sizes, select_common_block_size
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.models.glm5next.common.attention import Glm5NextIndexerCache
+from sonar.v1.attention.backend import MultipleOf
+from sonar.v1.attention.backends.mla import indexer as indexer_mod
+from sonar.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
+from sonar.v1.kv_cache_interface import KVCacheSpec, MLAAttentionSpec
+from sonar.v1.worker.utils import prepare_kernel_block_sizes, select_common_block_size
 
 pytestmark = pytest.mark.cpu_test
 
@@ -37,7 +37,7 @@ def _mock_rocm_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _kpool_storage_spec(manager_block: int) -> MLAAttentionSpec:
     """Real Glm5NextIndexerCache spec for the given cache block size."""
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         cache = Glm5NextIndexerCache(
             head_dim=128,
             dtype=torch.bfloat16,
@@ -45,7 +45,7 @@ def _kpool_storage_spec(manager_block: int) -> MLAAttentionSpec:
             cache_config=SimpleNamespace(block_size=manager_block),
             index_kpool=INDEX_KPOOL,
         )
-        spec = cache.get_kv_cache_spec(AphroditeConfig())
+        spec = cache.get_kv_cache_spec(SonarConfig())
     assert isinstance(spec, MLAAttentionSpec)
     return spec
 

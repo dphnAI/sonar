@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use aphrodite_metrics::METRICS;
 use axum::Json;
 use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use sonar_metrics::METRICS;
 
 use crate::error::{ApiError, invalid_request};
 use crate::state::AppState;
@@ -159,7 +159,7 @@ pub async fn finish_weight_update(
     State(state): State<Arc<AppState>>,
     body: Result<Option<Json<FinishWeightUpdateRequest>>, JsonRejection>,
 ) -> Result<Json<MessageResponse>, ApiError> {
-    // HTTPAphroditeWeightSyncClient omits the body when no version is supplied.
+    // HTTPSonarWeightSyncClient omits the body when no version is supplied.
     let request = body?.map(|Json(request)| request).unwrap_or_default();
 
     let client = state.engine_core_client();

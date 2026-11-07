@@ -6,22 +6,22 @@ import random
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed import (
+from sonar import _custom_ops as ops
+from sonar.distributed import (
     init_distributed_environment,
     initialize_model_parallel,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.lora.ops.triton_ops import fused_moe_lora
-from aphrodite.lora.ops.triton_ops.utils import FUSED_MOE_LORA_TWO_KERNEL_MAX_TOKENS
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import set_random_seed
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
+from sonar.lora.ops.triton_ops import fused_moe_lora
+from sonar.lora.ops.triton_ops.utils import FUSED_MOE_LORA_TWO_KERNEL_MAX_TOKENS
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_sonar_config, multi_gpu_test
 
 # The tensor-parallel cases build their distributed environment inside processes
 # spawned by torch.multiprocessing.spawn, so this process never has one to tear down.
@@ -749,7 +749,7 @@ def use_fused_moe_lora_kernel_tensor_parallel(
         distributed_init_method=init_method,
         backend=current_platform.dist_backend,
     )
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(world_size, 1)
     tp_size = get_tensor_model_parallel_world_size()
 
@@ -1020,7 +1020,7 @@ def test_fused_moe_lora_kernel_npid_path(
 
 
 def _record_fast_paths(monkeypatch):
-    from aphrodite.lora.ops.triton_ops import fused_moe_lora_op
+    from sonar.lora.ops.triton_ops import fused_moe_lora_op
 
     calls = []
 
@@ -1275,7 +1275,7 @@ def _call_one_shot(
     add_inputs=True,
 ):
     """Direct call into fused_moe_lora with one-shot-routed defaults."""
-    from aphrodite.lora.ops.triton_ops import fused_moe_lora as _op
+    from sonar.lora.ops.triton_ops import fused_moe_lora as _op
 
     _op(
         output,

@@ -12,19 +12,19 @@ from collections.abc import Iterable
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.models.interfaces import EagleModelMixin
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.sequence import IntermediateTensors
+from sonar.config import SonarConfig
+from sonar.model_executor.models.interfaces import EagleModelMixin
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.sequence import IntermediateTensors
 
 
 class PredictableLlamaModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = ""):
         super().__init__()
-        self.config = aphrodite_config.model_config.hf_config
+        self.config = sonar_config.model_config.hf_config
 
         # Create minimal embed_tokens for embedding
-        from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+        from sonar.model_executor.layers.vocab_parallel_embedding import (
             VocabParallelEmbedding,
         )
 
@@ -34,7 +34,7 @@ class PredictableLlamaModel(nn.Module, EagleModelMixin):
         )
 
         # Required for pipeline parallelism
-        from aphrodite.model_executor.models.utils import (
+        from sonar.model_executor.models.utils import (
             make_empty_intermediate_tensors_factory,
         )
 
@@ -109,12 +109,12 @@ class PredictableLlamaForCausalLM(LlamaForCausalLM):
 
     def _init_model(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         prefix: str = "",
         layer_type: type[nn.Module] | None = None,
     ):
         """Initialize with predictable model."""
-        return PredictableLlamaModel(aphrodite_config=aphrodite_config, prefix=prefix)
+        return PredictableLlamaModel(sonar_config=sonar_config, prefix=prefix)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Skip weight loading for dummy model."""

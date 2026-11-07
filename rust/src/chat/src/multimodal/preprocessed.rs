@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use aphrodite_engine_core_client::protocol::dtype::TensorDtype;
-use aphrodite_engine_core_client::protocol::multimodal::{
+use sonar_engine_core_client::protocol::dtype::TensorDtype;
+use sonar_engine_core_client::protocol::multimodal::{
     MmFeatureSpec, MmField, MmKwargValue, MmKwargsItem,
 };
 
@@ -133,11 +133,11 @@ fn same_batching(left: &MmField, right: &MmField) -> bool {
 mod tests {
     use std::collections::BTreeMap;
 
-    use aphrodite_engine_core_client::protocol::multimodal::{
+    use sonar_engine_core_client::protocol::multimodal::{
         MmBatchedField, MmFieldElem, MmFlatField, MmModality, MmSharedField, MmSlice,
         PlaceholderRange, SliceSpec,
     };
-    use aphrodite_engine_core_client::protocol::tensor::{WireArrayData, WireTensor};
+    use sonar_engine_core_client::protocol::tensor::{WireArrayData, WireTensor};
 
     use super::*;
     use crate::multimodal::tests::qwen3_vl_info;

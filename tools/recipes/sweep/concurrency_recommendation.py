@@ -189,7 +189,7 @@ def _select_candidate(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Select max_concurrency from Aphrodite Workload Explorer results.")
+    parser = argparse.ArgumentParser(description="Select max_concurrency from Sonar Workload Explorer results.")
     parser.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--ttft-sla-ms", type=float, default=DEFAULT_TTFT_SLA_MS)
     parser.add_argument("--tpot-sla-ms", type=float, default=DEFAULT_TPOT_SLA_MS)

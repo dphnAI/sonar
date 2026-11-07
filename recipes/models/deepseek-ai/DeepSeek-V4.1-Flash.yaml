@@ -29,7 +29,7 @@ meta:
 
 model:
   model_id: "deepseek-ai/DeepSeek-V4.1-Flash"
-  # Opt in to SMG gRPC PD; parsing runs on the router, not Aphrodite.
+  # Opt in to SMG gRPC PD; parsing runs on the router, not Sonar.
   smg_grpc:
     reasoning_parser: deepseek_v41
     tool_call_parser: deepseek_v41
@@ -55,7 +55,7 @@ model:
     - "--tokenizer-mode"
     - "deepseek_v41"
   base_env:
-    APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+    SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 dependencies: []
 
@@ -72,7 +72,7 @@ features:
       - "--reasoning-parser"
       - "deepseek_v41"
   spec_decoding:
-    description: "DSpark multi-token drafting, 5 tokens per round (the trained block size). On NVIDIA, adaptive verification scores each (request, position) slot and only high-scoring slots are verified, up to a startup-profiled compute budget. On AMD, Aphrodite currently refuses that flag, so the generated command sets enable_adaptive_verification:false and verifies the full 5-token block. Remove the AMD override only after a serve with the true flag actually starts on ROCm."
+    description: "DSpark multi-token drafting, 5 tokens per round (the trained block size). On NVIDIA, adaptive verification scores each (request, position) slot and only high-scoring slots are verified, up to a startup-profiled compute budget. On AMD, Sonar currently refuses that flag, so the generated command sets enable_adaptive_verification:false and verifies the full 5-token block. Remove the AMD override only after a serve with the true flag actually starts on ROCm."
     args:
       - "--speculative-config"
       - '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":true}'
@@ -87,7 +87,7 @@ features:
       # UNIFORM_BATCH. Features emit last in resolveCommand, so this
       # replacement must live here rather than in
       # hardware_overrides.amd.extra_args. Remove this override only when
-      # a Aphrodite serve with enable_adaptive_verification:true starts on AMD.
+      # a Sonar serve with enable_adaptive_verification:true starts on AMD.
       amd:
         args:
           - "--speculative-config"
@@ -146,7 +146,7 @@ variants:
           - "--gpu-memory-utilization"
           - "0.92"
         extra_env:
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
           PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
       # --monokernel is on main, not in the 0.31.0 wheel, which rejects the
       # flag. MI355X also needs the ROCm MXFP4 indexer. Drop these once a
@@ -221,14 +221,14 @@ hardware_overrides:
       - "--moe-backend"
       - "aiter"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MOE: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MOE: "1"
       # Suppress repeated Gluon-unavailable warnings on gfx950.
       AITER_TRITON_LOG_LEVEL: "ERROR"
       # DeepseekV41ForCausalLM does not support torch.compile. The ROCm sparse
       # SWA backend only reports UNIFORM_BATCH, so default FULL_AND_PIECEWISE
       # cannot start unless breakable CUDA graphs are on.
-      APHRODITE_USE_BREAKABLE_CUDAGRAPH: "1"
+      SONAR_USE_BREAKABLE_CUDAGRAPH: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -250,7 +250,7 @@ strategy_overrides:
       # checkpoint, so TP2 offloads them to pinned host memory. TP4 leaves them
       # resident. vllm-project/vllm#57491 widened two is_cuda() gates to
       # is_cuda_alike(), which is what makes the offload resolve on gfx950; on
-      # builds carrying it cpu_offload also defaults on via APHRODITE_PLE_CPU_OFFLOAD,
+      # builds carrying it cpu_offload also defaults on via SONAR_PLE_CPU_OFFLOAD,
       # so set it explicitly rather than inheriting the default.
       # 256 GB per card (gfx942). MI325X takes the TP4 default rather than the
       # MI355X TP2: at TP2 the resident weights are ~145 GiB per rank, which
@@ -276,7 +276,7 @@ strategy_overrides:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
         extra_env:
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
       mi325x:
         extra_args:
           - "--engram-config"
@@ -286,7 +286,7 @@ strategy_overrides:
           # gfx942 mono decode (vllm-project/vllm#60731): TP4, up to 42 rows.
           - "--monokernel"
         extra_env:
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
       mi355x:
         extra_args:
           - "--engram-config"
@@ -302,14 +302,14 @@ strategy_overrides:
           # launches a layer on all 40 backbone layers for decode steps of up to
           # 48 rows, i.e. up to concurrency 8 with five DSpark drafts. Larger
           # steps take the regular path, so the gain fades as concurrency rises.
-          # Replaces the APHRODITE_ROCM_MONO_DECODE environment variable.
+          # Replaces the SONAR_ROCM_MONO_DECODE environment variable.
           - "--monokernel"
         extra_env:
           # Aiter's Gluon sparse-MLA kernel, gfx950 only
           # (vllm-project/vllm#53492).
-          APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
+          SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
           # INT4 quantization for faster all-reduce
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
       blackwell:
         extra_args:
           - "--attention-config"
@@ -350,7 +350,7 @@ strategy_overrides:
           - "--engram-config"
           - '{"cpu_offload":true}'
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
           - "--max-cudagraph-capture-size"
           - "8190"
           - "--max-num-batched-tokens"
@@ -384,7 +384,7 @@ strategy_overrides:
     # Verified 1P1D on GB200 NVL4: one tray per role, TP4 each, NIXL transfer.
     # GB300's DEP4 prefill + DEP16 decode is the gb300_agentx_pd preset.
     env:
-      APHRODITE_DEEP_GEMM_WARMUP: "skip"
+      SONAR_DEEP_GEMM_WARMUP: "skip"
     prefill:
       nodes: 1
       vllm_args:
@@ -420,9 +420,9 @@ presets:
       - "--engram-config"
       - '{"cpu_offload":true,"use_thp":true}'
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
       # FlashInfer autotuning lengthens the first startup.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
     # The lane verifies every DSpark block (no adaptive verification).
     json_args:
       "--speculative-config": { enable_adaptive_verification: false }
@@ -441,7 +441,7 @@ presets:
           - "--max-num-batched-tokens"
           - "4096"
           - "--compilation-config"
-          - &dsv41_b200_cg4092 '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+          - &dsv41_b200_cg4092 '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
           - "--max-cudagraph-capture-size"
           - "4092"
       tp4_c1:
@@ -480,7 +480,7 @@ presets:
           - "--max-num-batched-tokens"
           - "8192"
           - "--compilation-config"
-          - &dsv41_cg8190 '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+          - &dsv41_cg8190 '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
           - "--max-cudagraph-capture-size"
           - "8190"
       tp4_c16:
@@ -493,7 +493,7 @@ presets:
           - "--max-num-batched-tokens"
           - "8192"
           - "--compilation-config"
-          - &dsv41_cg8190_replay '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - &dsv41_cg8190_replay '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - "--max-cudagraph-capture-size"
           - "8190"
       tp4_c32:
@@ -531,7 +531,7 @@ presets:
     variants: [fp8, default]
     workload: "Agentic (InferenceX AgentX)"
     default: true
-    description: "DEP2 for concurrency 8 to 32, DEP2 with a host-DRAM KV tier at 64 and 128, and DEP4 at 96 and 128: FlashInfer sparse MLA, MegaMoE and Engram tables in host memory, behind a consistent-hash Aphrodite Router."
+    description: "DEP2 for concurrency 8 to 32, DEP2 with a host-DRAM KV tier at 64 and 128, and DEP4 at 96 and 128: FlashInfer sparse MLA, MegaMoE and Engram tables in host memory, behind a consistent-hash Sonar Router."
     source: { label: "InferenceX #3837", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/3837", key: "dsv41flash-fp4-b200-vllm-agentic-dspark", revision: f817514 }
     image: "vllm/vllm-openai:nightly-dev-x86_64-cu130-ac9126e58aa7"
     select:
@@ -539,7 +539,7 @@ presets:
       features: { spec_decoding: true, text_only: true, encoder_parallel: false }
     # TP1 x DP2 (or DP4) with expert parallelism on part of the node. --max-num-seqs
     # is per DP rank; a prefill-schedule-interval admits new prefills every N
-    # engine steps, aligned across DP ranks (the Aphrodite default of 1 admits on every step).
+    # engine steps, aligned across DP ranks (the Sonar default of 1 admits on every step).
     args:
       - "--data-parallel-size"
       - "2"
@@ -554,9 +554,9 @@ presets:
       - "--max-num-batched-tokens"
       - "4096"
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
       # FlashInfer autotuning lengthens the first startup.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
     # The lane verifies every DSpark block (no adaptive verification).
     json_args:
       "--speculative-config": { enable_adaptive_verification: false }
@@ -568,7 +568,7 @@ presets:
           - "--max-num-seqs"
           - "16"
           - "--compilation-config"
-          - &dsv41_b200_cg576 '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
+          - &dsv41_b200_cg576 '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576]}'
           - "--max-cudagraph-capture-size"
           - "576"
       dep2_c16:
@@ -590,7 +590,7 @@ presets:
           - "--prefill-schedule-interval"
           - "64"
           - "--compilation-config"
-          - &dsv41_b200_cg4096 '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,640,768,896,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - &dsv41_b200_cg4096 '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,640,768,896,1024,1280,1536,1792,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - "--max-cudagraph-capture-size"
           - "4096"
       dep2_c32:
@@ -671,11 +671,11 @@ presets:
           - "--max-cudagraph-capture-size"
           - "8190"
     runbook: |
-      The host-KV points add Aphrodite's native CPU KV offloading, 32 GiB per DP rank (64 GiB per
+      The host-KV points add Sonar's native CPU KV offloading, 32 GiB per DP rank (64 GiB per
       server), and lower GPU memory to 0.955 to keep headroom for the indexer logits; with
       48 sequences per rank, about 32 of 128 sessions queue.
 
-      The lane fronts the server with Aphrodite Router 0.1.14 (`--policy consistent_hash`,
+      The lane fronts the server with Sonar Router 0.1.14 (`--policy consistent_hash`,
       `--intra-node-data-parallel-size` equal to the server's DP size, as on the router tab),
       plus `--request-timeout-secs 14400` so long agentic requests outlive the 1800 s default
       and `--disable-retries` so a failed request is not replayed.
@@ -702,9 +702,9 @@ presets:
       - "--additional-config"
       - '{"decode_backend":"latency_specialized"}'
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
       # FlashInfer autotuning lengthens the first startup.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
     # The lane verifies every DSpark block (no adaptive verification).
     json_args:
       "--speculative-config": { enable_adaptive_verification: false }
@@ -721,7 +721,7 @@ presets:
           - "--max-num-batched-tokens"
           - "4096"
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092]}'
           - "--max-cudagraph-capture-size"
           - "4092"
       c8:
@@ -736,7 +736,7 @@ presets:
           - "--prefill-schedule-interval"
           - "160"
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190]}'
           - "--max-cudagraph-capture-size"
           - "8190"
       c16:
@@ -750,7 +750,7 @@ presets:
           - "--prefill-schedule-interval"
           - "128"
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092,6144,8190],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048,2304,2560,2816,3072,3328,3584,3840,4096]}'
           - "--max-cudagraph-capture-size"
           - "8190"
     runbook: |
@@ -767,7 +767,7 @@ presets:
     # The lane served the 0909 launch checkpoint; 1017 shares its format and memory layout.
     variants: [fp8, default]
     workload: "Agentic (InferenceX AgentX)"
-    description: "DEP2 for concurrency 8 to 64 with FlashInfer sparse MLA, and with MegaAttention and lazy host-KV offload at 128 and 192, behind a consistent-hash Aphrodite Router."
+    description: "DEP2 for concurrency 8 to 64 with FlashInfer sparse MLA, and with MegaAttention and lazy host-KV offload at 128 and 192, behind a consistent-hash Sonar Router."
     source: { label: "InferenceX #4332", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4332", key: "dsv41flash-fp4-b300-vllm-agentic-dspark", revision: 649dd5a }
     image: "vllm/vllm-openai:cu134-nightly-x86_64-dev-20261019-mk@sha256:2b9fc4b18d0aaabe4d5cad020d9270106472ebe65f5d3bc02c50526b8d9fd280"
     select:
@@ -786,9 +786,9 @@ presets:
       - "--max-cudagraph-capture-size"
       - "8190"
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
       # FlashInfer autotuning lengthens the first startup.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
     # The lane verifies every DSpark block (no adaptive verification).
     json_args:
       "--speculative-config": { enable_adaptive_verification: false }
@@ -879,7 +879,7 @@ presets:
           - "--prefill-schedule-interval"
           - "32"
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048]}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046,3072,4092],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048]}'
           - "--max-cudagraph-capture-size"
           - "4092"
     runbook: |
@@ -887,7 +887,7 @@ presets:
       specialized decode). The host-KV points offload 50 GiB per DP rank through the
       Simple CPU offload connector.
 
-      The lane fronts the server with Aphrodite Router 0.1.14 (`--policy consistent_hash`,
+      The lane fronts the server with Sonar Router 0.1.14 (`--policy consistent_hash`,
       `--intra-node-data-parallel-size` equal to the server's DP size, as on the router tab),
       plus `--request-timeout-secs 14400` so long agentic requests outlive the 1800 s default
       and `--disable-retries` so a failed request is not replayed.
@@ -1038,7 +1038,7 @@ presets:
       - "0.95"
       - "--numa-bind"
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
       # KV moves over the NVLink fabric between trays.
       UCX_TLS: "cuda_copy,cuda_ipc,tcp"
       UCX_CUDA_IPC_ENABLE_MNNVL: "y"
@@ -1053,7 +1053,7 @@ presets:
           - "--long-prefill-token-threshold"
           - "8192"
           - "--compilation-config"
-          - '{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"max_cudagraph_capture_size":2046}'
+          - '{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"max_cudagraph_capture_size":2046}'
       decode:
         nodes: 4
         parallelism: dep
@@ -1119,7 +1119,7 @@ presets:
 hardware_notes:
   dgx_station_gb300:
     title: "Weights in Grace memory (UVA offload)"
-    body: "Single GB300 with both Engram tables and 60 GiB of routed experts in pinned Grace memory (UVA offload). Measured on a nightly image; Aphrodite 0.31.0 carries every flag this row uses. The first boot on a new flag set runs a 75-90 min FlashInfer autotune; keep /root/.cache/aphrodite on a persistent volume."
+    body: "Single GB300 with both Engram tables and 60 GiB of routed experts in pinned Grace memory (UVA offload). Measured on a nightly image; Sonar 0.31.0 carries every flag this row uses. The first boot on a new flag set runs a 75-90 min FlashInfer autotune; keep /root/.cache/sonar on a persistent volume."
 
 guide: |
   ## Overview
@@ -1213,7 +1213,7 @@ guide: |
   model's set.
 
   Note that the DeepSeek API maps its `low` / `high` / `max` tiers to 50 / 75 / 100,
-  while the open-source prompt encoder (and therefore Aphrodite) maps `low` / `high` /
+  while the open-source prompt encoder (and therefore Sonar) maps `low` / `high` /
   `xhigh` / `max` to 25 / 50 / 75 / 100. A request tuned at `high` on the API runs at
   effort 50 here; pass an integer if you need parity.
 
@@ -1245,7 +1245,7 @@ guide: |
   DSpark is the only speculative method for this checkpoint. V4.1 dropped the MTP module
   that V3 and V4 trained alongside the backbone. **Speculative decoding** enables a 5-token
   block. On NVIDIA it also turns on adaptive verification (see the feature description).
-  On AMD, Aphrodite currently refuses adaptive verification. The generated command sets
+  On AMD, Sonar currently refuses adaptive verification. The generated command sets
   `enable_adaptive_verification:false` and verifies the full block. Two checks in
   `maybe_create_adaptive_verification_manager` fail on ROCm: the indexer helper
   `supports_device_cpu_query_lens_mismatch()` is False, and
@@ -1268,7 +1268,7 @@ guide: |
   NVL4: one tray (4 GPUs) per role, TP4 in each pool, KV handed over through NIXL,
   fronted by `vllm-router --vllm-pd-disaggregation`. Both pools disable FlashInfer
   autotune plus JIT and CuTeDSL warmup via `--kernel-config`, skip the DeepGEMM warmup
-  (`APHRODITE_DEEP_GEMM_WARMUP=skip`), and cap `--max-num-seqs` at 32. On 8-GPU nodes the
+  (`SONAR_DEEP_GEMM_WARMUP=skip`), and cap `--max-num-seqs` at 32. On 8-GPU nodes the
   same layout becomes TP8 per role.
 
   With **Speculative decoding** on, DSpark runs in both pools so the transferred KV
@@ -1286,9 +1286,9 @@ guide: |
   run it twice:
 
   ```bash
-  CUDA_VISIBLE_DEVICES=0,1 APHRODITE_NIXL_SIDE_CHANNEL_PORT=5557 aphrodite serve ... --port 8001 \
+  CUDA_VISIBLE_DEVICES=0,1 SONAR_NIXL_SIDE_CHANNEL_PORT=5557 sonar serve ... --port 8001 \
     --data-parallel-size 2 --data-parallel-size-local 2
-  CUDA_VISIBLE_DEVICES=2,3 APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 aphrodite serve ... --port 8011 \
+  CUDA_VISIBLE_DEVICES=2,3 SONAR_NIXL_SIDE_CHANNEL_PORT=5559 sonar serve ... --port 8011 \
     --data-parallel-size 2 --data-parallel-size-local 2
   # vllm-router: list both ports, with --intra-node-data-parallel-size 1
   ```
@@ -1321,7 +1321,7 @@ guide: |
 
   ## Prerequisites
 
-  - Aphrodite 0.31.0+, from the pip wheel or the release image. The architecture shipped in
+  - Sonar 0.31.0+, from the pip wheel or the release image. The architecture shipped in
     0.30.0 ([vllm-project/vllm#56228](https://github.com/vllm-project/vllm/pull/56228));
     0.31.0 adds the KV-offload fix ([vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145))
     and the ROCm Engram host-memory gate ([vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491)).
@@ -1333,11 +1333,11 @@ guide: |
     on those two SKUs. MI300X and MI350X also run from the ROCm pip wheel.
   - The Rust OpenAI frontend is selected by default in the command builder. Switch
     to Python if you encounter unsupported features or compatibility issues.
-  - Expect a long first load: `APHRODITE_ENGINE_READY_TIMEOUT_S=3600` is set for that reason.
-  - On AMD, the generated command sets `APHRODITE_USE_BREAKABLE_CUDAGRAPH=1`. DeepSeek-V4.1-Flash does not support `torch.compile`, and the ROCm sparse SWA backend only supports uniform-batch CUDA graphs. Without breakable CUDA graphs, default `FULL_AND_PIECEWISE` dies at capture.
-  - On AMD, the generated command passes `--moe-backend aiter` rather than naming a kernel. Naming `aiter_triton_mxfp4_bf16` pins the Triton W4A16 `_moe_gemm_a16w4` kernel; the plain name lets Aphrodite select the Composable Kernel a8w4 experts, used in the MI355X benchmark below. It also sets `AITER_TRITON_LOG_LEVEL=ERROR` to drop AITER's per-call "Gluon unavailable" warning, which is constant on gfx950 and dominated the server log.
-  - On MI355X, **Tensor Parallel** inherits Aphrodite's scheduler limits. Tune `--max-num-seqs` for your traffic and memory budget if needed. The benchmark configuration below records an explicit limit for reproducibility.
-  - On AMD, ticking **Speculative decoding** also sets `enable_adaptive_verification:false`. Aphrodite currently refuses the true flag: `DeepseekV41IndexerBackend.supports_device_cpu_query_lens_mismatch()` is False, and `DeepseekV41ROCMAiterSparseSWABackend` reports `UNIFORM_BATCH` rather than `ALWAYS`. DSpark still drafts 5 tokens per round.
+  - Expect a long first load: `SONAR_ENGINE_READY_TIMEOUT_S=3600` is set for that reason.
+  - On AMD, the generated command sets `SONAR_USE_BREAKABLE_CUDAGRAPH=1`. DeepSeek-V4.1-Flash does not support `torch.compile`, and the ROCm sparse SWA backend only supports uniform-batch CUDA graphs. Without breakable CUDA graphs, default `FULL_AND_PIECEWISE` dies at capture.
+  - On AMD, the generated command passes `--moe-backend aiter` rather than naming a kernel. Naming `aiter_triton_mxfp4_bf16` pins the Triton W4A16 `_moe_gemm_a16w4` kernel; the plain name lets Sonar select the Composable Kernel a8w4 experts, used in the MI355X benchmark below. It also sets `AITER_TRITON_LOG_LEVEL=ERROR` to drop AITER's per-call "Gluon unavailable" warning, which is constant on gfx950 and dominated the server log.
+  - On MI355X, **Tensor Parallel** inherits Sonar's scheduler limits. Tune `--max-num-seqs` for your traffic and memory budget if needed. The benchmark configuration below records an explicit limit for reproducibility.
+  - On AMD, ticking **Speculative decoding** also sets `enable_adaptive_verification:false`. Sonar currently refuses the true flag: `DeepseekV41IndexerBackend.supports_device_cpu_query_lens_mismatch()` is False, and `DeepseekV41ROCMAiterSparseSWABackend` reports `UNIFORM_BATCH` rather than `ALWAYS`. DSpark still drafts 5 tokens per round.
 
   ## Verifying
 
@@ -1355,7 +1355,7 @@ guide: |
 
   ## Performance tuning
 
-  Start with Aphrodite's defaults and tune one parameter at a time for your workload:
+  Start with Sonar's defaults and tune one parameter at a time for your workload:
 
   - `--max-num-seqs`: raise the running-sequence limit if it causes queueing and
     memory permits; lower it if larger batches hurt latency or memory use.
@@ -1381,14 +1381,14 @@ guide: |
   The offload resolves on gfx950 only on builds carrying
   [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491),
   which widened two `is_cuda()` gates to `is_cuda_alike()`. Those builds also
-  default `cpu_offload` on through `APHRODITE_PLE_CPU_OFFLOAD`, so set it explicitly
+  default `cpu_offload` on through `SONAR_PLE_CPU_OFFLOAD`, so set it explicitly
   rather than inheriting the default.
 
   `--monokernel` selects the mono decode layer from
   [vllm-project/vllm#60397](https://github.com/vllm-project/vllm/pull/60397),
   which [vllm-project/vllm#61082](https://github.com/vllm-project/vllm/pull/61082)
   extended to all 40 backbone layers and moved from the
-  `APHRODITE_ROCM_MONO_DECODE` environment variable to this flag. Two persistent
+  `SONAR_ROCM_MONO_DECODE` environment variable to this flag. Two persistent
   launches cover a layer for decode steps of up to 48 rows, which with five
   DSpark drafts is concurrency 8; larger steps fall back to the regular path, so
   the gain is largest at low concurrency and fades as concurrency rises.
@@ -1428,7 +1428,7 @@ guide: |
   MI300X is gfx942 and needs the same two workarounds as MI325X: no FP4 MFMA, so
   the MXFP4 experts run through a Triton kernel and device memory is better spent
   on KV than on resident Engram tables; and piecewise graph capture segfaults
-  every worker, so this recipe sets `APHRODITE_USE_BREAKABLE_CUDAGRAPH=0` and captures
+  every worker, so this recipe sets `SONAR_USE_BREAKABLE_CUDAGRAPH=0` and captures
   only full decode graphs
   (`--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'`), with prefill
   eager.
@@ -1441,7 +1441,7 @@ guide: |
   The offload resolves on gfx942 only on builds carrying
   [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491),
   the same gate MI325X and MI355X need. Those builds also default `cpu_offload`
-  on through `APHRODITE_PLE_CPU_OFFLOAD`, so set it explicitly rather than inheriting
+  on through `SONAR_PLE_CPU_OFFLOAD`, so set it explicitly rather than inheriting
   the default.
 
   ## MI325X Tensor Parallel
@@ -1458,7 +1458,7 @@ guide: |
   FP4 MFMA, so the MXFP4 experts run through a Triton kernel and device memory is
   better spent on KV than on resident Engram tables. It also segfaults in every
   worker during piecewise graph capture, so this recipe sets
-  `APHRODITE_USE_BREAKABLE_CUDAGRAPH=0` and captures only full decode graphs
+  `SONAR_USE_BREAKABLE_CUDAGRAPH=0` and captures only full decode graphs
   (`--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'`); prefill runs
   eagerly.
 
@@ -1466,7 +1466,7 @@ guide: |
   [vllm-project/vllm#60731](https://github.com/vllm-project/vllm/pull/60731).
   They run at TP4 only, on decode steps of up to 42 rows (7 requests with
   five DSpark drafts). Larger steps, prefill, and mixed batches take the
-  regular path, and TP2 stays on Aphrodite's path. With their weight copies
+  regular path, and TP2 stays on Sonar's path. With their weight copies
   included, #60731 measured 170.11 GiB of weights a rank, up from 98.88 GiB.
   At `--gpu-memory-utilization 0.9` the KV pool still held 11.18 million
   tokens. Use a ROCm nightly from 2026-10-20 or later;
@@ -1476,7 +1476,7 @@ guide: |
   The offload resolves on gfx942 only on builds carrying
   [vllm-project/vllm#57491](https://github.com/vllm-project/vllm/pull/57491),
   the same gate MI355X needs. Those builds also default `cpu_offload` on through
-  `APHRODITE_PLE_CPU_OFFLOAD`, so set it explicitly rather than inheriting the
+  `SONAR_PLE_CPU_OFFLOAD`, so set it explicitly rather than inheriting the
   default.
 
   ## H200 Tensor Parallel
@@ -1529,7 +1529,7 @@ guide: |
     ([InferenceX #4332](https://github.com/SemiAnalysisAI/InferenceX/pull/4332)).
 
   The lanes served the 0909 launch checkpoint, **FP8 (0909)**. The DEP presets use two or
-  four of the node's GPUs, so run one server per GPU group, each behind its own Aphrodite Router.
+  four of the node's GPUs, so run one server per GPU group, each behind its own Sonar Router.
 
   ### Dynamo disaggregated serving on B300 and GB300
 
@@ -1538,11 +1538,11 @@ guide: |
   [InferenceX #4266](https://github.com/SemiAnalysisAI/InferenceX/pull/4266) (GB300) run
   N DEP2 prefill engines and one DEP decode engine, each with its own sidecar, behind one
   KV-routing frontend. Prefill pushes KV to decode with NIXL and keeps a host KV tier.
-  The `push_as_nixl` connector and `APHRODITE_MAX_ASYNC_KV_ADMITS_PER_STEP` come from the dev
+  The `push_as_nixl` connector and `SONAR_MAX_ASYNC_KV_ADMITS_PER_STEP` come from the dev
   images `vllm/vllm-openai:nightly-x86_64-dev-20261012-59e75f4` (B300) and
   `vllm/vllm-openai:cu134-nightly-aarch64-dev-20261019` (GB300).
 
-  | GPU | Clients | Prefill engines | Decode | Decode `--max-num-seqs` | `APHRODITE_MAX_ASYNC_KV_ADMITS_PER_STEP` |
+  | GPU | Clients | Prefill engines | Decode | Decode `--max-num-seqs` | `SONAR_MAX_ASYNC_KV_ADMITS_PER_STEP` |
   |---|---|---:|---|---|---|
   | B300 | 256, 768, 1280, 2048, 3584 | 2, 2, 3, 4, 5 | DEP8 | 18, 40, 72, 132, 168 | 4 |
   | GB300 | 3018, 7388, 10888 | 6, 12, 16 | DEP32 | 18, 50, 76 | 2, 4, 5 |
@@ -1551,9 +1551,9 @@ guide: |
   Both roles use TP1 with expert parallelism and these settings:
 
   ```bash
-  export APHRODITE_USE_V2_MODEL_RUNNER=1 APHRODITE_ALLREDUCE_USE_SYMM_MEM=0 APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS=1 NCCL_CUMEM_ENABLE=1
+  export SONAR_USE_V2_MODEL_RUNNER=1 SONAR_ALLREDUCE_USE_SYMM_MEM=0 SONAR_RANDOMIZE_DP_DUMMY_INPUTS=1 NCCL_CUMEM_ENABLE=1
   export UCX_MEMTYPE_CACHE=n UCX_MEMTYPE_REG_WHOLE=n UCX_RNDV_PIPELINE_ERROR_HANDLING=y
-  export APHRODITE_ENGINE_READY_TIMEOUT_S=7200 APHRODITE_RPC_TIMEOUT=600000
+  export SONAR_ENGINE_READY_TIMEOUT_S=7200 SONAR_RPC_TIMEOUT=600000
   --attention-config '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
   --kernel-config '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
   --speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","enable_adaptive_verification":false}'
@@ -1563,7 +1563,7 @@ guide: |
   | | B300 | GB300 |
   |---|---|---|
   | NIXL backend | `LIBFABRIC` over EFA | `UCX` over MNNVL |
-  | Env | `FI_PROVIDER=efa FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_FORK_SAFE=1 UCX_TLS=cuda_copy,cuda_ipc,srd,tcp NIXL_UCX_SGL_ENABLE=0` | `UCX_TLS=cuda_copy,cuda_ipc,tcp UCX_CUDA_IPC_ENABLE_MNNVL=y NIXL_UCX_SGL_ENABLE=1 NCCL_MNNVL_ENABLE=1 NCCL_NVLS_ENABLE=1 APHRODITE_RS_TOKEN_IDS_AS_BYTES=1` |
+  | Env | `FI_PROVIDER=efa FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_FORK_SAFE=1 UCX_TLS=cuda_copy,cuda_ipc,srd,tcp NIXL_UCX_SGL_ENABLE=0` | `UCX_TLS=cuda_copy,cuda_ipc,tcp UCX_CUDA_IPC_ENABLE_MNNVL=y NIXL_UCX_SGL_ENABLE=1 NCCL_MNNVL_ENABLE=1 NCCL_NVLS_ENABLE=1 SONAR_RS_TOKEN_IDS_AS_BYTES=1` |
   | Allocator | `--no-enable-cumem-allocator` (EFA cannot register VMM memory) | `--enable-cumem-allocator` |
   | DSpark | adds `"rejection_sample_method":"block"` | as above |
   | Engram | `{"cpu_offload":true,"embedding_across_dp":true,"use_thp":false}` | same; decode sets `"cpu_offload":false` |
@@ -1582,12 +1582,12 @@ guide: |
 
   ```json
   {"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[
-    {"kv_connector":"NixlConnector","kv_connector_module_path":"aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},
+    {"kv_connector":"NixlConnector","kv_connector_module_path":"sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_as_nixl","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},
     {"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}
   ```
 
   Prefill graphs:
-  `{"mode":"APHRODITE_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}`.
+  `{"mode":"SONAR_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}`.
 
   Decode uses the `NixlConnector` entry alone with `"kv_role":"kv_consumer"` and
   `--no-enable-prefix-caching`. It sets `--max-num-batched-tokens` to ten times
@@ -1611,10 +1611,10 @@ guide: |
 
   ## Dynamo sidecar serving
 
-  Dynamo can route requests to Aphrodite's native gRPC server through a colocated
+  Dynamo can route requests to Sonar's native gRPC server through a colocated
   sidecar. Choose the checkpoint, hardware and parallelism in the command
   builder above. For compatible runtime installation and complete launch
-  examples, see the [Dynamo Aphrodite sidecar guide](https://github.com/ai-dynamo/dynamo/blob/main/docs/fern/pages/developer-guide/knowledge-base/modular-components/backends/vllm/sidecar.md).
+  examples, see the [Dynamo Sonar sidecar guide](https://github.com/ai-dynamo/dynamo/blob/main/docs/fern/pages/developer-guide/knowledge-base/modular-components/backends/vllm/sidecar.md).
 
   The B300 deployment in [InferenceX #4231](https://github.com/SemiAnalysisAI/InferenceX/pull/4231)
   validated this integration with the original
@@ -1624,7 +1624,7 @@ guide: |
 
   ### Connect the engine and sidecar
 
-  Use the generated model and hardware arguments with `aphrodite-rs serve`.
+  Use the generated model and hardware arguments with `sonar-rs serve`.
   Add `--grpc-port 19000` and set `--reasoning-parser None`; omit the engine's
   `--tool-call-parser` and `--enable-auto-tool-choice` flags because the
   sidecar handles reasoning and tool parsing. For KV-aware routing, enable
@@ -1691,11 +1691,11 @@ guide: |
   | aggregate tok/s, prose | 90.5 | 124 | 168 | 302 | 378 | 416–423 |
 
   - **Autotune.** The first boot on a new flag set or image runs a 75–90
-    minute FlashInfer autotune. Mount `/root/.cache/aphrodite` on a persistent
+    minute FlashInfer autotune. Mount `/root/.cache/sonar` on a persistent
     volume; later boots start in about 7 minutes.
   - **Host memory.** With the server loaded, ~430 of the 494 GiB Grace pool
     is in use (pinned weights plus loader shared memory).
-    `APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY=1` frees ~66 GB at about 7%
+    `SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY=1` frees ~66 GB at about 7%
     lower single-stream decode.
 
   Launch scripts and full measurements:
@@ -1703,9 +1703,9 @@ guide: |
 
   ## KV cache offloading
 
-  Offloading requires Aphrodite 0.31.0+, the first release containing [vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145).
+  Offloading requires Sonar 0.31.0+, the first release containing [vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145).
   Validation used [deepseek-ai/DeepSeek-V4.1-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash) on 4×H200 (TP4),
-  Aphrodite commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
+  Sonar commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
   `--max-model-len 16384`, `--max-num-seqs 16` and `--max-num-batched-tokens 8192`.
   DeepSeek validation used `--gpu-memory-utilization 0.95`.
   Validation used `TieringOffloadingSpec`: 8 GiB total CPU tier, `blocks_per_chunk: 1`,

@@ -3,7 +3,7 @@
 
 //! Adapter that combines reasoning and tool parsers.
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use crate::output_grammar::{self, BuiltOutputGrammar, OutputGrammarContext, ToolStrictLevel};
 use crate::reasoning::ReasoningParser;
@@ -171,10 +171,8 @@ impl UnifiedParser for CombinedParser {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::{TestTokenizer, decode_chunks};
-    use aphrodite_tokenizer::{
-        DecodedText, DynTokenizer, TokenAnchor, TokenAttribution, Tokenizer,
-    };
+    use sonar_tokenizer::test_utils::{TestTokenizer, decode_chunks};
+    use sonar_tokenizer::{DecodedText, DynTokenizer, TokenAnchor, TokenAttribution, Tokenizer};
     use xgrammar_structural_tag::ToolChoice;
     use xgrammar_structural_tag::builders::ReasoningMode;
     use xgrammar_structural_tag::format::Format;
@@ -314,7 +312,7 @@ mod tests {
 
     impl ReasoningParser for PreserveReasoningParser {
         fn create(
-            _tokenizer: aphrodite_tokenizer::DynTokenizer,
+            _tokenizer: sonar_tokenizer::DynTokenizer,
         ) -> crate::reasoning::Result<Box<dyn ReasoningParser>>
         where
             Self: Sized + 'static,

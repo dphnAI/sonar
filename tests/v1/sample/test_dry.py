@@ -14,9 +14,7 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.v1.worker.gpu.sample.logits_processor.loader as loader
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
+import sonar.v1.worker.gpu.sample.logits_processor.loader as loader
 from examples.features.logits_processor import dry
 from examples.features.logits_processor.dry import (
     _MAX_CACHED_BREAKER_MASKS,
@@ -26,6 +24,8 @@ from examples.features.logits_processor.dry import (
     use_dry,
 )
 from examples.features.logits_processor.dry import max_exponent as _max_exponent
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
 
 DEVICE = torch.device("cpu")
 DRY_FQCN = "examples.features.logits_processor.dry:DryState"
@@ -306,8 +306,8 @@ def test_dry_core_rejects_j_budget_over_the_budget():
 # ---------------------------------------------------------------------------
 
 
-def _make_aphrodite_config(speculative_config=None, skip_tokenizer_init=True):
-    """Stub AphroditeConfig with only the fields DryState reads."""
+def _make_sonar_config(speculative_config=None, skip_tokenizer_init=True):
+    """Stub SonarConfig with only the fields DryState reads."""
     return SimpleNamespace(
         speculative_config=speculative_config,
         model_config=SimpleNamespace(skip_tokenizer_init=skip_tokenizer_init),
@@ -328,7 +328,7 @@ def _make_v2_state(
         device=device,
         all_token_ids=SimpleNamespace(gpu=all_tokens),
     )
-    state = DryState(_make_aphrodite_config(), req_states)
+    state = DryState(_make_sonar_config(), req_states)
     if tokenizer is not None:
         # Re-resolve the default set now that a tokenizer is installed.
         state._tokenizer = tokenizer
@@ -346,7 +346,7 @@ def _apply(state, logits, idx_mapping_np, seq_lens_np):
       seq_lens_np: [num_reqs] host-side context lengths.
 
     """
-    from aphrodite.v1.worker.gpu.sample.logits_processor import LogitsContext
+    from sonar.v1.worker.gpu.sample.logits_processor import LogitsContext
 
     n_reqs = idx_mapping_np.shape[0]
     assert logits.shape[0] == n_reqs
@@ -430,7 +430,7 @@ def test_spec_decode_is_refused_at_construction():
         device=DEVICE,
         all_token_ids=SimpleNamespace(gpu=torch.zeros(4, 8, dtype=torch.int32)),
     )
-    config = _make_aphrodite_config(speculative_config=SimpleNamespace())
+    config = _make_sonar_config(speculative_config=SimpleNamespace())
     with pytest.raises(ValueError, match="speculative decoding"):
         DryState(config, req_states)
 
@@ -440,7 +440,7 @@ def test_v2_draft_expanded_logits_raise():
 
     Only speculative decoding lays logits out that way, and construction refuses it.
     """
-    from aphrodite.v1.worker.gpu.sample.logits_processor import LogitsContext
+    from sonar.v1.worker.gpu.sample.logits_processor import LogitsContext
 
     state, _ = _make_v2_state()
     state.add_request(0, _params(dry_multiplier=0.8, dry_sequence_breakers=[]))
@@ -548,8 +548,8 @@ def test_v2_batch_sharded_sampling_matches_unsharded(monkeypatch):
     from dataclasses import replace
     from unittest import mock
 
-    from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-    from aphrodite.v1.worker.gpu.sample import batch_shard
+    from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+    from sonar.v1.worker.gpu.sample import batch_shard
 
     vocab = 16
     state, all_tokens = _make_v2_state(max_num_reqs=8, vocab=vocab, tokenizer=_StubTokenizer())
@@ -900,7 +900,7 @@ def test_loads_through_the_loader_by_fqcn():
         total_len=None,
     )
     procs = loader.build_custom_logits_processors(
-        _make_aphrodite_config(),
+        _make_sonar_config(),
         req_states,
         False,
         [DRY_FQCN],
@@ -916,7 +916,7 @@ def test_loader_import_does_not_initialize_cuda():
     """
     code = (
         "import torch\n"
-        "from aphrodite.utils.torch_utils import guard_cuda_initialization\n"
+        "from sonar.utils.torch_utils import guard_cuda_initialization\n"
         "with guard_cuda_initialization():\n"
         "    import examples.features.logits_processor.dry  # noqa: F401\n"
         "assert not torch.cuda.is_initialized()\n"
@@ -930,15 +930,15 @@ def test_admission_validator_rejects_bad_extra_args():
 
     ``build_custom_logits_processors_params_validator`` is what
     ``InputProcessor`` calls per request; it wraps a processor's ``ValueError``
-    as ``AphroditeValidationError``, which the entrypoints map to a client error.
+    as ``SonarValidationError``, which the entrypoints map to a client error.
     """
     loader._cached_load_v2_logitsprocs.cache_clear()
     validate = loader.build_custom_logits_processors_params_validator([DRY_FQCN])
     validate(SamplingParams())
     validate(_params(dry_multiplier=0.8))
-    with pytest.raises(AphroditeValidationError, match="dry_multiplier"):
+    with pytest.raises(SonarValidationError, match="dry_multiplier"):
         validate(_params(dry_multiplier=-1.0))
-    with pytest.raises(AphroditeValidationError, match="dry_multipliers"):
+    with pytest.raises(SonarValidationError, match="dry_multipliers"):
         validate(_params(dry_multiplier=0.8, dry_multipliers=0.8))
 
 
@@ -956,7 +956,7 @@ def test_dry_int_params_upper_bound(field):
 def test_dry_base_below_one_warns_that_it_disabled_dry():
     """`dry_base < 1.0` disables DRY, as in llama.cpp; validate_params warns.
 
-    Patches the module logger because Aphrodite's logger does not propagate to caplog.
+    Patches the module logger because Sonar's logger does not propagate to caplog.
     """
     from unittest.mock import patch
 

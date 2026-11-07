@@ -6,22 +6,22 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.config import SpeculativeConfig
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonMetadataBuilder,
 )
-from aphrodite.models.deepseek_v4.sparse_mla import DeepseekV4SparseMLABackend
-from aphrodite.models.deepseek_v41.sparse_mla import (
+from sonar.models.deepseek_v4.sparse_mla import DeepseekV4SparseMLABackend
+from sonar.models.deepseek_v41.sparse_mla import (
     DeepseekV4SparseMLABackend as DeepseekV41SparseMLABackend,
 )
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.mla import indexer as indexer_module
-from aphrodite.v1.attention.backends.mla.compressor_utils import (
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.mla import indexer as indexer_module
+from sonar.v1.attention.backends.mla.compressor_utils import (
     CompressedSlotMappingKernel,
     get_compressed_slot_mapping,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     BuildPrefillChunkMetadataKernel,
     DeepseekV4IndexerBackend,
     DeepSeekV32IndexerDecodeMetadata,
@@ -30,16 +30,16 @@ from aphrodite.v1.attention.backends.mla.indexer import (
     DeepseekV41IndexerBackend,
     get_max_prefill_buffer_size,
 )
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+from sonar.v1.attention.backends.mla.sparse_utils import (
     ConvertReqIndexToGlobalIndexKernel,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     MLAAttentionSpec,
     compute_layer_kv_cache_shape_bytes,
 )
-from aphrodite.v1.worker.block_table import get_block_table_width
-from aphrodite.v1.worker.utils import select_common_block_size
-from tests.v1.attention.utils import create_aphrodite_config
+from sonar.v1.worker.block_table import get_block_table_width
+from sonar.v1.worker.utils import select_common_block_size
+from tests.v1.attention.utils import create_sonar_config
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -55,21 +55,21 @@ def test_adaptive_indexer_uses_configured_max_decode_len():
         head_size=128,
         dtype=torch.bfloat16,
     )
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="hmellor/tiny-random-LlamaForCausalLM",
         max_model_len=1024,
     )
-    aphrodite_config.speculative_config = SpeculativeConfig(
+    sonar_config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=num_speculative_tokens,
         enable_adaptive_verification=True,
     )
-    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, 1024)
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(sonar_config, 1024)
     block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
     builder = DeepseekV32IndexerMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["dummy"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
         block_table_width=block_table_width,
     )
@@ -106,7 +106,7 @@ def test_adaptive_indexer_uses_configured_max_decode_len():
 @pytest.mark.parametrize("padding", [0, 17])
 def test_fused_indexer_decode_metadata(query_lens, padding):
     """Flatten device query boundaries and clear graph padding on every replay."""
-    from aphrodite.v1.attention.ops.metadata import _indexer_decode_metadata_kernel
+    from sonar.v1.attention.ops.metadata import _indexer_decode_metadata_kernel
 
     device = "cuda"
     lengths = torch.tensor(query_lens, device=device, dtype=torch.int32)
@@ -374,7 +374,7 @@ def test_indexer_warmup_normalizes_zero_compress_ratios():
 
 def test_indexer_warmup_includes_pcp_normalized_dcp_key(monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.mla.indexer.get_dcp_group",
+        "sonar.v1.attention.backends.mla.indexer.get_dcp_group",
         lambda: SimpleNamespace(rank_in_group=2),
     )
     config = SimpleNamespace(
@@ -582,13 +582,13 @@ def test_indexer_builder_deepseek_v4_compressed_slot_mapping_uses_num_states():
         dtype=torch.bfloat16,
         tokens_per_state=4,
     )
-    aphrodite_config = create_aphrodite_config(max_model_len=1024)
-    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, 1024)
+    sonar_config = create_sonar_config(max_model_len=1024)
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(sonar_config, 1024)
     block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
     builder = DeepseekV32IndexerMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["dummy"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
         block_table_width=block_table_width,
     )
@@ -663,18 +663,18 @@ def test_indexer_prefill_budget_matches_compressed_workspace(compress_ratio):
         dtype=torch.bfloat16,
         tokens_per_state=compress_ratio,
     )
-    aphrodite_config = create_aphrodite_config(max_model_len=max_model_len)
-    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, max_model_len)
+    sonar_config = create_sonar_config(max_model_len=max_model_len)
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(sonar_config, max_model_len)
     block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
     builder = DeepseekV32IndexerMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["dummy"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         block_table_width=block_table_width,
     )
 
-    workspace_rows = get_max_prefill_buffer_size(aphrodite_config) // compress_ratio
+    workspace_rows = get_max_prefill_buffer_size(sonar_config) // compress_ratio
     assert builder.max_prefill_buffer_size == workspace_rows
 
     # Overflows the workspace unless the chunker splits.
@@ -702,13 +702,13 @@ def test_indexer_expanded_block_table_sized_by_decode_tokens():
         dtype=torch.bfloat16,
         tokens_per_state=4,
     )
-    aphrodite_config = create_aphrodite_config(max_model_len=1024, max_num_seqs=8, max_num_batched_tokens=8192)
-    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, 1024)
+    sonar_config = create_sonar_config(max_model_len=1024, max_num_seqs=8, max_num_batched_tokens=8192)
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(sonar_config, 1024)
     block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
     builder = DeepseekV32IndexerMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["dummy"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         block_table_width=block_table_width,
     )

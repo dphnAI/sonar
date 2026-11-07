@@ -8,10 +8,10 @@ for speech-to-text transcription tasks.
 
 import pytest
 
-import aphrodite
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.assets.audio import AudioAsset
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test
 
@@ -27,12 +27,12 @@ WHISPER_PROMPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|>"
 @pytest.fixture(autouse=True)
 def use_spawn_for_whisper(monkeypatch):
     """Whisper has issues with forked workers, use spawn instead."""
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 def create_whisper_llm(enable_lora: bool = True, max_loras: int = 2, attn_backend: str | None = None):
     """Create a Whisper LLM instance with optional LoRA support."""
-    return aphrodite.LLM(
+    return sonar.LLM(
         model=WHISPER_MODEL,
         enable_lora=enable_lora,
         max_loras=max_loras if enable_lora else 1,
@@ -45,7 +45,7 @@ def create_whisper_llm(enable_lora: bool = True, max_loras: int = 2, attn_backen
 
 
 def run_whisper_inference(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str | None = None,
     lora_id: int = 1,
 ) -> list[str]:
@@ -61,7 +61,7 @@ def run_whisper_inference(
         }
     ]
 
-    sampling_params = aphrodite.SamplingParams(
+    sampling_params = sonar.SamplingParams(
         temperature=0,
         max_tokens=200,
     )

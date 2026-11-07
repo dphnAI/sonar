@@ -3,9 +3,9 @@
 from unittest.mock import MagicMock, patch
 
 import torch
-from aphrodite_test_utils.monitor import monitor
+from sonar_test_utils.monitor import monitor
 
-from aphrodite.utils.mem_utils import MemorySnapshot, memory_profiling
+from sonar.utils.mem_utils import MemorySnapshot, memory_profiling
 
 from ..utils import create_new_process_for_each_test
 
@@ -14,7 +14,7 @@ from ..utils import create_new_process_for_each_test
 def test_memory_profiling():
     # Fake out some model loading + inference memory usage to test profiling
     # Memory used by other processes will show up as cuda usage outside of torch
-    from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
+    from sonar.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
 
     lib = CudaRTLibrary()
     # 512 MiB allocation outside of this instance
@@ -90,8 +90,8 @@ def test_memory_snapshot_uses_psutil_on_integrated_gpu():
     mock_psutil_available = 100 * 1024**3
 
     with (
-        patch("aphrodite.utils.mem_utils.current_platform") as mock_platform,
-        patch("aphrodite.utils.mem_utils.psutil") as mock_psutil,
+        patch("sonar.utils.mem_utils.current_platform") as mock_platform,
+        patch("sonar.utils.mem_utils.psutil") as mock_psutil,
         patch("torch.accelerator") as mock_accelerator,
     ):
         mock_accelerator.get_memory_info.return_value = (
@@ -122,8 +122,8 @@ def test_memory_snapshot_uses_cuda_on_discrete_gpu():
     mock_cuda_total = 80 * 1024**3
 
     with (
-        patch("aphrodite.utils.mem_utils.current_platform") as mock_platform,
-        patch("aphrodite.utils.mem_utils.psutil") as mock_psutil,
+        patch("sonar.utils.mem_utils.current_platform") as mock_platform,
+        patch("sonar.utils.mem_utils.psutil") as mock_psutil,
         patch("torch.accelerator") as mock_accelerator,
     ):
         mock_accelerator.get_memory_info.return_value = (

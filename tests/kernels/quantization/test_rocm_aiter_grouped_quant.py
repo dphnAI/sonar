@@ -15,8 +15,8 @@ import pytest
 import torch
 
 # this import statement is needed to ensure the ops are registered
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.platforms import current_platform
 
 # Check if aiter package is installed
 aiter_available = importlib.util.find_spec("aiter") is not None
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_rocm_aiter_group_fp8_quant_fake_implementation():
     """Test that the fake implementation is correctly
-    defined for torch.ops.aphrodite.rocm_aiter_group_fp8_quant."""
+    defined for torch.ops.sonar.rocm_aiter_group_fp8_quant."""
     # Create test tensors
     M = 128
     N = 4096
@@ -40,7 +40,7 @@ def test_rocm_aiter_group_fp8_quant_fake_implementation():
     # Verify the op's fake implementation using torch.library.opcheck
     # This checks that the fake function returns tensors with correct shapes and dtypes
     torch.library.opcheck(
-        torch.ops.aphrodite.rocm_aiter_group_fp8_quant,
+        torch.ops.sonar.rocm_aiter_group_fp8_quant,
         (input_tensor, group_size),
         test_utils=("test_faketensor",),
     )

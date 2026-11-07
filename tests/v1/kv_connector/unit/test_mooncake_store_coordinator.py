@@ -6,15 +6,15 @@ from math import lcm
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
     ExternalCachedBlockPool,
     MooncakeStoreCoordinator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
     chunk_hashes_for_block_size,
 )
-from aphrodite.v1.core.kv_cache_utils import BlockHash
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_utils import BlockHash
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheGroupSpec,
     MambaSpec,

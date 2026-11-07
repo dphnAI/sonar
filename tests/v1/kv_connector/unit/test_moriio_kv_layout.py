@@ -12,8 +12,8 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     MambaSpec,
     MLAAttentionSpec,
@@ -30,12 +30,12 @@ if not (current_platform.is_rocm() and mori_available):
         allow_module_level=True,
     )
 
-moriio_common = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
-moriio_engine = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine")
-moriio_layout = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout")
+moriio_common = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
+moriio_engine = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine")
+moriio_layout = importlib.import_module("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout")
 msgpack = importlib.import_module("msgpack")
 ssm_conv_transfer_utils = importlib.import_module(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils"
+    "sonar.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils"
 )
 MambaConvSplitInfo = ssm_conv_transfer_utils.MambaConvSplitInfo
 
@@ -434,7 +434,7 @@ def test_hybrid_write_attention_uses_its_own_group_not_the_first_group():
 def test_hybrid_write_posts_both_regions_before_layer_completion():
     from unittest.mock import Mock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
         MoRIIOConnectorWorker,
     )
 

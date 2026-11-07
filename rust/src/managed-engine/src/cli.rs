@@ -13,8 +13,8 @@ use crate::{ManagedEngineConfig, allocate_handshake_port};
 /// Managed Python headless-engine CLI arguments.
 #[derive(Debug, Clone, Args, PartialEq, Eq)]
 pub struct ManagedEngineArgs {
-    /// Python executable used to launch the managed headless Aphrodite engine.
-    #[arg(long, env = "APHRODITE_RS_PYTHON", default_value = "python3")]
+    /// Python executable used to launch the managed headless Sonar engine.
+    #[arg(long, env = "SONAR_RS_PYTHON", default_value = "python3")]
     pub python: String,
     /// Host/IP used both for the managed-engine handshake endpoint and the
     /// frontend-advertised input/output ZMQ socket addresses.
@@ -47,11 +47,11 @@ pub struct ManagedEngineArgs {
     #[arg(long)]
     pub max_model_len: Option<String>,
 
-    /// Additional arguments forwarded to `python -m aphrodite.entrypoints.cli.main
+    /// Additional arguments forwarded to `python -m sonar.entrypoints.cli.main
     /// serve ...`.
     ///
     /// Arguments after an explicit `--` are forwarded verbatim. Before `--`,
-    /// `aphrodite-rs serve` automatically keeps recognized frontend options on
+    /// `sonar-rs serve` automatically keeps recognized frontend options on
     /// the Rust side and forwards everything else to Python.
     ///
     /// The explicit `--` passthrough is a last-resort escape hatch. Rust does

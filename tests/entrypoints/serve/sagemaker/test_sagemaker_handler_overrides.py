@@ -12,7 +12,7 @@ Tests real customer usage scenarios:
 - Priority: env vars > decorators > customer script files > framework
   defaults
 
-The handler-override scenarios exercise the real Aphrodite SageMaker router and
+The handler-override scenarios exercise the real Sonar SageMaker router and
 bootstrap path via an in-process FastAPI ``TestClient`` instead of launching a
 model server. These scenarios fully replace the ``/ping`` and ``/invocations``
 endpoints with customer handlers, so no inference engine is required to
@@ -42,7 +42,7 @@ def _build_sagemaker_test_client() -> TestClient:
     tests replace the endpoints with customer handlers, so no framework
     invocation handler (and therefore no engine) is exercised.
     """
-    from aphrodite.entrypoints.serve.sagemaker.api_router import (
+    from sonar.entrypoints.serve.sagemaker.api_router import (
         attach_router,
         sagemaker_standards_bootstrap,
     )

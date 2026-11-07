@@ -5,15 +5,15 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
-from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
-from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
-from aphrodite.model_executor.model_loader import get_model_loader, register_model_loader
-from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
+from sonar.config import ModelConfig
+from sonar.config.load import LoadConfig
+from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+from sonar.model_executor.layers.linear import UnquantizedLinearMethod
+from sonar.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
+from sonar.model_executor.model_loader import get_model_loader, register_model_loader
+from sonar.model_executor.model_loader.base_loader import BaseModelLoader
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.model_executor.models.utils import AutoWeightsLoader
 
 
 @register_model_loader("custom_load_format")

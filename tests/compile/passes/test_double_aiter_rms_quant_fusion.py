@@ -19,16 +19,16 @@ two independent fused ``rms_norm + group_fp8_quant`` ops:
 import pytest
 import torch
 
-import aphrodite.config
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.config
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
 from tests.compile.backend import TestBackend
 
@@ -47,9 +47,9 @@ class _NoViewDoubleQuantModel(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # avoid graph input being a direct arg to a matched pattern node
         x = torch.relu(x)
-        rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
-        q1, s1 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
-        q2, s2 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
+        rms = torch.ops.sonar_ir.rms_norm(x, self.weight, EPS)
+        q1, s1 = torch.ops.sonar.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
+        q2, s2 = torch.ops.sonar.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
         return q1, s1, q2, s2
 
 
@@ -66,10 +66,10 @@ class _ViewDoubleQuantModel(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         x = torch.relu(x)
-        rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
+        rms = torch.ops.sonar_ir.rms_norm(x, self.weight, EPS)
         view = rms.view(-1, rms.shape[-1])
-        q1, s1 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
-        q2, s2 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
+        q1, s1 = torch.ops.sonar.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
+        q2, s2 = torch.ops.sonar.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
         return q1, s1, q2, s2
 
 
@@ -94,10 +94,10 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
     """
     torch._dynamo.reset()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(dtype=torch.bfloat16),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rms_norm", "+quant_fp8"],
             pass_config=PassConfig(
                 fuse_norm_quant=True,
@@ -106,8 +106,8 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
 
@@ -115,14 +115,14 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
         torch.set_default_dtype(torch.bfloat16)
         torch.manual_seed(0)
 
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(sonar_config)
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
         ]
         backend = TestBackend(*passes)
         model = model_cls()

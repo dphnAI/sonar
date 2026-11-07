@@ -14,8 +14,8 @@ import requests
 from prometheus_client.parser import text_string_to_metric_families
 from transformers import AutoTokenizer
 
-from aphrodite import version
-from aphrodite.utils.network_utils import get_open_port
+from sonar import version
+from sonar.utils.network_utils import get_open_port
 from tests.conftest import LocalAssetServer
 from tests.utils import RemoteOpenAIServer
 
@@ -76,37 +76,37 @@ def _get_expected_values(num_requests: int, prompt_ids: list[int], max_tokens: i
 
     # {metric_family: [(suffix, expected_value)]}
     return {
-        "aphrodite:time_to_first_token_seconds": [("_count", num_requests)],
-        "aphrodite:inter_token_latency_seconds": [("_count", num_requests * (max_tokens - 1))],
-        "aphrodite:e2e_request_latency_seconds": [("_count", num_requests)],
-        "aphrodite:request_queue_time_seconds": [("_count", num_requests)],
-        "aphrodite:request_inference_time_seconds": [("_count", num_requests)],
-        "aphrodite:request_prefill_time_seconds": [("_count", num_requests)],
-        "aphrodite:request_decode_time_seconds": [("_count", num_requests)],
-        "aphrodite:request_num_preemptions": [("_count", num_requests)],
-        "aphrodite:request_prompt_tokens": [
+        "sonar:time_to_first_token_seconds": [("_count", num_requests)],
+        "sonar:inter_token_latency_seconds": [("_count", num_requests * (max_tokens - 1))],
+        "sonar:e2e_request_latency_seconds": [("_count", num_requests)],
+        "sonar:request_queue_time_seconds": [("_count", num_requests)],
+        "sonar:request_inference_time_seconds": [("_count", num_requests)],
+        "sonar:request_prefill_time_seconds": [("_count", num_requests)],
+        "sonar:request_decode_time_seconds": [("_count", num_requests)],
+        "sonar:request_num_preemptions": [("_count", num_requests)],
+        "sonar:request_prompt_tokens": [
             ("_sum", num_requests * num_prompt_tokens),
             ("_count", num_requests),
         ],
-        "aphrodite:request_generation_tokens": [
+        "sonar:request_generation_tokens": [
             ("_sum", num_requests * max_tokens),
             ("_count", num_requests),
         ],
-        "aphrodite:request_params_n": [("_count", num_requests)],
-        "aphrodite:request_params_max_tokens": [
+        "sonar:request_params_n": [("_count", num_requests)],
+        "sonar:request_params_max_tokens": [
             ("_sum", num_requests * max_tokens),
             ("_count", num_requests),
         ],
-        "aphrodite:iteration_tokens_total": [
+        "sonar:iteration_tokens_total": [
             (
                 "_sum",
                 num_requests * (num_prompt_tokens + max_tokens),
             ),
             ("_count", num_requests * max_tokens),
         ],
-        "aphrodite:prompt_tokens": [("_total", num_requests * num_prompt_tokens)],
-        "aphrodite:generation_tokens": [("_total", num_requests * max_tokens)],
-        "aphrodite:request_success": [("_total", num_requests)],
+        "sonar:prompt_tokens": [("_total", num_requests * num_prompt_tokens)],
+        "sonar:generation_tokens": [("_total", num_requests * max_tokens)],
+        "sonar:request_success": [("_total", num_requests)],
     }
 
 
@@ -176,60 +176,60 @@ async def test_metrics_counts(
 
 
 EXPECTED_METRICS_V1 = [
-    "aphrodite:num_requests_running",
-    "aphrodite:num_requests_waiting",
-    "aphrodite:num_requests_waiting_by_reason",
-    "aphrodite:kv_cache_usage_perc",
-    "aphrodite:prefix_cache_queries",
-    "aphrodite:prefix_cache_hits",
-    "aphrodite:num_preemptions_total",
-    "aphrodite:admission_rejections_total",
-    "aphrodite:prompt_tokens_total",
-    "aphrodite:generation_tokens_total",
-    "aphrodite:iteration_tokens_total",
-    "aphrodite:cache_config_info",
-    "aphrodite:request_success_total",
-    "aphrodite:request_prompt_tokens_sum",
-    "aphrodite:request_prompt_tokens_bucket",
-    "aphrodite:request_prompt_tokens_count",
-    "aphrodite:request_generation_tokens_sum",
-    "aphrodite:request_generation_tokens_bucket",
-    "aphrodite:request_generation_tokens_count",
-    "aphrodite:request_params_n_sum",
-    "aphrodite:request_params_n_bucket",
-    "aphrodite:request_params_n_count",
-    "aphrodite:request_params_max_tokens_sum",
-    "aphrodite:request_params_max_tokens_bucket",
-    "aphrodite:request_params_max_tokens_count",
-    "aphrodite:time_to_first_token_seconds_sum",
-    "aphrodite:time_to_first_token_seconds_bucket",
-    "aphrodite:time_to_first_token_seconds_count",
-    "aphrodite:inter_token_latency_seconds_sum",
-    "aphrodite:inter_token_latency_seconds_bucket",
-    "aphrodite:inter_token_latency_seconds_count",
-    "aphrodite:e2e_request_latency_seconds_sum",
-    "aphrodite:e2e_request_latency_seconds_bucket",
-    "aphrodite:e2e_request_latency_seconds_count",
-    "aphrodite:request_queue_time_seconds_sum",
-    "aphrodite:request_queue_time_seconds_bucket",
-    "aphrodite:request_queue_time_seconds_count",
-    "aphrodite:request_inference_time_seconds_sum",
-    "aphrodite:request_inference_time_seconds_bucket",
-    "aphrodite:request_inference_time_seconds_count",
-    "aphrodite:request_prefill_time_seconds_sum",
-    "aphrodite:request_prefill_time_seconds_bucket",
-    "aphrodite:request_prefill_time_seconds_count",
-    "aphrodite:request_decode_time_seconds_sum",
-    "aphrodite:request_decode_time_seconds_bucket",
-    "aphrodite:request_decode_time_seconds_count",
-    "aphrodite:request_num_preemptions_sum",
-    "aphrodite:request_num_preemptions_bucket",
-    "aphrodite:request_num_preemptions_count",
+    "sonar:num_requests_running",
+    "sonar:num_requests_waiting",
+    "sonar:num_requests_waiting_by_reason",
+    "sonar:kv_cache_usage_perc",
+    "sonar:prefix_cache_queries",
+    "sonar:prefix_cache_hits",
+    "sonar:num_preemptions_total",
+    "sonar:admission_rejections_total",
+    "sonar:prompt_tokens_total",
+    "sonar:generation_tokens_total",
+    "sonar:iteration_tokens_total",
+    "sonar:cache_config_info",
+    "sonar:request_success_total",
+    "sonar:request_prompt_tokens_sum",
+    "sonar:request_prompt_tokens_bucket",
+    "sonar:request_prompt_tokens_count",
+    "sonar:request_generation_tokens_sum",
+    "sonar:request_generation_tokens_bucket",
+    "sonar:request_generation_tokens_count",
+    "sonar:request_params_n_sum",
+    "sonar:request_params_n_bucket",
+    "sonar:request_params_n_count",
+    "sonar:request_params_max_tokens_sum",
+    "sonar:request_params_max_tokens_bucket",
+    "sonar:request_params_max_tokens_count",
+    "sonar:time_to_first_token_seconds_sum",
+    "sonar:time_to_first_token_seconds_bucket",
+    "sonar:time_to_first_token_seconds_count",
+    "sonar:inter_token_latency_seconds_sum",
+    "sonar:inter_token_latency_seconds_bucket",
+    "sonar:inter_token_latency_seconds_count",
+    "sonar:e2e_request_latency_seconds_sum",
+    "sonar:e2e_request_latency_seconds_bucket",
+    "sonar:e2e_request_latency_seconds_count",
+    "sonar:request_queue_time_seconds_sum",
+    "sonar:request_queue_time_seconds_bucket",
+    "sonar:request_queue_time_seconds_count",
+    "sonar:request_inference_time_seconds_sum",
+    "sonar:request_inference_time_seconds_bucket",
+    "sonar:request_inference_time_seconds_count",
+    "sonar:request_prefill_time_seconds_sum",
+    "sonar:request_prefill_time_seconds_bucket",
+    "sonar:request_prefill_time_seconds_count",
+    "sonar:request_decode_time_seconds_sum",
+    "sonar:request_decode_time_seconds_bucket",
+    "sonar:request_decode_time_seconds_count",
+    "sonar:request_num_preemptions_sum",
+    "sonar:request_num_preemptions_bucket",
+    "sonar:request_num_preemptions_count",
 ]
 
 EXPECTED_METRICS_MM = [
-    "aphrodite:mm_cache_queries",
-    "aphrodite:mm_cache_hits",
+    "sonar:mm_cache_queries",
+    "sonar:mm_cache_hits",
 ]
 
 HIDDEN_DEPRECATED_METRICS: list[str] = []
@@ -292,7 +292,7 @@ async def test_metrics_exist(
     cache_config_samples = [
         sample
         for family in text_string_to_metric_families(response.text)
-        if family.name == "aphrodite:cache_config_info"
+        if family.name == "sonar:cache_config_info"
         for sample in family.samples
     ]
     assert cache_config_samples
@@ -396,17 +396,17 @@ def _get_running_metrics_from_api(server: RemoteOpenAIServer):
     # Verify running and waiting requests counts and KV cache usage are zero
     running_requests, waiting_requests, kv_cache_usage = None, None, None
 
-    kv_cache_usage_metric = "aphrodite:kv_cache_usage_perc"
+    kv_cache_usage_metric = "sonar:kv_cache_usage_perc"
 
     for family in text_string_to_metric_families(response.text):
-        if family.name == "aphrodite:num_requests_running":
+        if family.name == "sonar:num_requests_running":
             for sample in family.samples:
-                if sample.name == "aphrodite:num_requests_running":
+                if sample.name == "sonar:num_requests_running":
                     running_requests = sample.value
                     break
-        elif family.name == "aphrodite:num_requests_waiting":
+        elif family.name == "sonar:num_requests_waiting":
             for sample in family.samples:
-                if sample.name == "aphrodite:num_requests_waiting":
+                if sample.name == "sonar:num_requests_waiting":
                     waiting_requests = sample.value
                     break
         elif family.name == kv_cache_usage_metric:
@@ -439,7 +439,7 @@ def test_metrics_exist_run_batch():
             [
                 sys.executable,
                 "-m",
-                "aphrodite.entrypoints.launchers.run_batch",
+                "sonar.entrypoints.launchers.run_batch",
                 "-i",
                 input_file.name,
                 "-o",

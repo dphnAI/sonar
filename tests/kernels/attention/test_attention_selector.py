@@ -8,31 +8,31 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     ParallelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.cpu import CpuPlatform
-from aphrodite.platforms.interface import DeviceCapability
+from sonar.config.cache import CacheDType
+from sonar.platforms import current_platform
+from sonar.platforms.cpu import CpuPlatform
+from sonar.platforms.interface import DeviceCapability
 
 if current_platform.is_cuda():
-    from aphrodite.platforms.cuda import CudaPlatform
+    from sonar.platforms.cuda import CudaPlatform
 else:
     CudaPlatform = None
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 else:
     RocmPlatform = None  # type: ignore[misc]  # Unavailable platform import.
 
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import (
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import (
     AttentionSelectorConfig,
     _cached_get_attn_backend,
     get_attn_backend,
@@ -108,7 +108,7 @@ def test_backend_selection(
     # Create AttentionConfig with the specified backend
     attention_config = AttentionConfig(backend=AttentionBackendEnum[name])
     cache_config = CacheConfig(block_size=block_size)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         attention_config=attention_config,
         cache_config=cache_config,
         parallel_config=ParallelConfig(
@@ -119,16 +119,16 @@ def test_backend_selection(
         ),
     )
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if device == "cpu":
-            with patch("aphrodite.platforms.current_platform", CpuPlatform()):
+            with patch("sonar.platforms.current_platform", CpuPlatform()):
                 backend = get_attn_backend(16, torch.float16, None)
             assert backend.get_name() == "CPU_ATTN"
 
         elif device == "hip":
             if RocmPlatform is None:
                 pytest.skip("RocmPlatform not available")
-            with patch("aphrodite.platforms.current_platform", RocmPlatform()):
+            with patch("sonar.platforms.current_platform", RocmPlatform()):
                 if use_mla:
                     # ROCm MLA backend logic:
                     # - TRITON_MLA: supported when block_size != 1
@@ -157,7 +157,7 @@ def test_backend_selection(
         elif device == "cuda":
             if CudaPlatform is None:
                 pytest.skip("CudaPlatform not available")
-            with patch("aphrodite.platforms.current_platform", CudaPlatform()):
+            with patch("sonar.platforms.current_platform", CudaPlatform()):
                 capability = torch.cuda.get_device_capability()
                 if use_mla:
                     # CUDA MLA backend logic:
@@ -191,7 +191,7 @@ def test_backend_selection(
                         if block_size != 64:
                             # FlashMLA only supports block_size == 64
                             pytest.skip("FlashMLA only supports block_size 64")
-                        from aphrodite.v1.attention.backends.mla.flashmla import (
+                        from sonar.v1.attention.backends.mla.flashmla import (
                             is_flashmla_dense_supported,
                         )
 
@@ -207,7 +207,7 @@ def test_backend_selection(
                         expected = name
                         assert backend.get_name() == expected
                     elif name == "FLASH_ATTN_MLA":
-                        from aphrodite.v1.attention.backends.fa_utils import (
+                        from sonar.v1.attention.backends.fa_utils import (
                             flash_attn_supports_mla,
                         )
 
@@ -250,7 +250,7 @@ def test_backend_selection(
         "FLASHINFER_MLA_SPARSE",
     ],
 )
-def test_supported_backend_preserves_dcp_eligibility(backend_name, default_aphrodite_config):
+def test_supported_backend_preserves_dcp_eligibility(backend_name, default_sonar_config):
     """DCP opt-ins preserve eligibility and unrelated configuration restrictions."""
     if backend_name.startswith("ROCM_") and not current_platform.is_rocm():
         pytest.skip("ROCm-specific backend")
@@ -277,18 +277,18 @@ def test_supported_backend_preserves_dcp_eligibility(backend_name, default_aphro
 def test_fp32_fallback(device: str):
     """Test attention backend selection with fp32."""
     # Use default config (no backend specified)
-    aphrodite_config = AphroditeConfig()
+    sonar_config = SonarConfig()
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if device == "cpu":
-            with patch("aphrodite.platforms.current_platform", CpuPlatform()):
+            with patch("sonar.platforms.current_platform", CpuPlatform()):
                 backend = get_attn_backend(16, torch.float32, None)
             assert backend.get_name() == "CPU_ATTN"
 
         elif device == "cuda":
             if CudaPlatform is None:
                 pytest.skip("CudaPlatform not available")
-            with patch("aphrodite.platforms.current_platform", CudaPlatform()):
+            with patch("sonar.platforms.current_platform", CudaPlatform()):
                 backend = get_attn_backend(16, torch.float32, None)
             assert backend.get_name() == "FLEX_ATTENTION"
 
@@ -300,7 +300,7 @@ def test_fp32_fallback(device: str):
             # Revisit if a real model with this head size is identified
             # and accuracy-tested.
             with (
-                patch("aphrodite.platforms.current_platform", RocmPlatform()),
+                patch("sonar.platforms.current_platform", RocmPlatform()),
                 pytest.raises(ValueError, match="No valid attention backend"),
             ):
                 get_attn_backend(16, torch.float32, None)
@@ -336,20 +336,20 @@ def test_auto_backend_selection_behavior():
     assert none_config.backend is None
 
     # Both configs should result in the same automatic backend selection
-    aphrodite_config_auto = AphroditeConfig(attention_config=auto_config)
-    aphrodite_config_none = AphroditeConfig(attention_config=none_config)
+    sonar_config_auto = SonarConfig(attention_config=auto_config)
+    sonar_config_none = SonarConfig(attention_config=none_config)
 
     with (
-        set_current_aphrodite_config(aphrodite_config_auto),
-        patch("aphrodite.platforms.current_platform", CpuPlatform()),
+        set_current_sonar_config(sonar_config_auto),
+        patch("sonar.platforms.current_platform", CpuPlatform()),
     ):
         backend_auto = get_attn_backend(16, torch.float16, None)
 
     _cached_get_attn_backend.cache_clear()
 
     with (
-        set_current_aphrodite_config(aphrodite_config_none),
-        patch("aphrodite.platforms.current_platform", CpuPlatform()),
+        set_current_sonar_config(sonar_config_none),
+        patch("sonar.platforms.current_platform", CpuPlatform()),
     ):
         backend_none = get_attn_backend(16, torch.float16, None)
 
@@ -382,13 +382,13 @@ def test_per_head_quant_scales_backend_selection(
         flash_attn_version=flash_attn_version,
     )
     cache_config = CacheConfig(block_size=64)
-    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
+    sonar_config = SonarConfig(attention_config=attention_config, cache_config=cache_config)
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.platforms.current_platform", CudaPlatform()),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.platforms.current_platform", CudaPlatform()),
     ):
         if backend_name == "FLASH_ATTN" and flash_attn_version == 3:
             if not torch.cuda.is_available():
@@ -426,10 +426,10 @@ def test_int4_per_token_head_head_size_selection(head_size: int):
     ``fast_hadamard_transform``), so a model such as Phi-3 (head_size=96) must
     keep selecting TRITON_ATTN instead of being rejected.
     """
-    aphrodite_config = AphroditeConfig(cache_config=CacheConfig(block_size=64))
+    sonar_config = SonarConfig(cache_config=CacheConfig(block_size=64))
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.platforms.current_platform", CudaPlatform()),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.platforms.current_platform", CudaPlatform()),
     ):
         backend = get_attn_backend(
             head_size=head_size,
@@ -469,14 +469,14 @@ def test_non_causal_backend_selection(backend_name: str, use_non_causal: bool, s
         use_non_causal=use_non_causal,
     )
     cache_config = CacheConfig(block_size=16)
-    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
+    sonar_config = SonarConfig(attention_config=attention_config, cache_config=cache_config)
 
     platform = CudaPlatform or RocmPlatform
     if platform is None:
         pytest.skip("CudaPlatform and RocmPlatform are not available")
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.platforms.current_platform", platform()),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.platforms.current_platform", platform()),
     ):
         if should_succeed:
             backend = get_attn_backend(
@@ -511,13 +511,13 @@ def test_non_causal_autoselect_backend():
         use_non_causal=True,
     )
     cache_config = CacheConfig(block_size=16)
-    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
+    sonar_config = SonarConfig(attention_config=attention_config, cache_config=cache_config)
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        patch("aphrodite.platforms.current_platform", CudaPlatform()),
+        set_current_sonar_config(sonar_config),
+        patch("sonar.platforms.current_platform", CudaPlatform()),
     ):
         backend = get_attn_backend(
             head_size=128,
@@ -542,7 +542,7 @@ def test_non_causal_autoselect_backend():
 def test_flash_attn_rejects_unhandled_kv_cache_dtypes(kv_cache_dtype: CacheDType):
     """FlashAttentionBackend must not claim support for kv_cache dtypes
     that it cannot handle."""
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
     assert not FlashAttentionBackend.supports_kv_cache_dtype(kv_cache_dtype)
 
@@ -551,13 +551,13 @@ def test_flash_attn_rejects_unhandled_kv_cache_dtypes(kv_cache_dtype: CacheDType
 def test_flash_attn_accepts_handled_fp8_variants(kv_cache_dtype: CacheDType, monkeypatch: pytest.MonkeyPatch):
     """FlashAttentionBackend must accept the two fp8 dtypes it can actually
     handle: 'fp8' (alias for fp8_e4m3fn) and 'fp8_e4m3'."""
-    import aphrodite.v1.attention.backends.fa_utils as fa_utils_mod
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+    import sonar.v1.attention.backends.fa_utils as fa_utils_mod
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
     # The fp8 decision is made in fa_utils, using its own current_platform
     # binding, so patch is_xpu there (not on flash_attn's) to stay robust to
     # import order across earlier tests that patch
-    # aphrodite.platforms.current_platform.
+    # sonar.platforms.current_platform.
     monkeypatch.setattr(fa_utils_mod.current_platform, "is_xpu", lambda: True)
     assert FlashAttentionBackend.supports_kv_cache_dtype(kv_cache_dtype)
 
@@ -566,21 +566,21 @@ blackwell_only = pytest.mark.skipif(not current_platform.is_cuda(), reason="FA4 
 
 
 @contextmanager
-def _blackwell(aphrodite_config=None):
+def _blackwell(sonar_config=None):
     platform = MagicMock()
     platform.is_xpu.return_value = False
     platform.is_rocm.return_value = False
     platform.get_device_capability.return_value = DeviceCapability(10, 0)
     with (
-        patch("aphrodite.v1.attention.backends.fa_utils.current_platform", platform),
+        patch("sonar.v1.attention.backends.fa_utils.current_platform", platform),
         patch(
-            "aphrodite.vllm_flash_attn.flash_attn_interface.is_fa_version_supported",
+            "sonar.vllm_flash_attn.flash_attn_interface.is_fa_version_supported",
             return_value=True,
         ),
-        patch("aphrodite.config.get_current_aphrodite_config_or_none", return_value=aphrodite_config),
+        patch("sonar.config.get_current_sonar_config_or_none", return_value=sonar_config),
         patch(
-            "aphrodite.v1.attention.backends.flash_attn.get_current_aphrodite_config_or_none",
-            return_value=aphrodite_config,
+            "sonar.v1.attention.backends.flash_attn.get_current_sonar_config_or_none",
+            return_value=sonar_config,
         ),
     ):
         yield
@@ -595,15 +595,15 @@ def _hd256_config(
     head_size=256,
     cache_dtype="auto",
 ):
-    aphrodite_config = MagicMock()
-    aphrodite_config.attention_config.flash_attn_version = None
-    aphrodite_config.model_config.is_mm_prefix_lm = is_mm_prefix_lm
-    aphrodite_config.model_config.rswa_window = rswa_window
-    aphrodite_config.model_config.hf_text_config.attn_logit_softcapping = softcap
-    aphrodite_config.model_config.get_head_size.return_value = head_size
-    aphrodite_config.cache_config.cache_dtype = cache_dtype
-    aphrodite_config.parallel_config.decode_context_parallel_size = dcp_size
-    return aphrodite_config
+    sonar_config = MagicMock()
+    sonar_config.attention_config.flash_attn_version = None
+    sonar_config.model_config.is_mm_prefix_lm = is_mm_prefix_lm
+    sonar_config.model_config.rswa_window = rswa_window
+    sonar_config.model_config.hf_text_config.attn_logit_softcapping = softcap
+    sonar_config.model_config.get_head_size.return_value = head_size
+    sonar_config.cache_config.cache_dtype = cache_dtype
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_size
+    return sonar_config
 
 
 @blackwell_only
@@ -630,7 +630,7 @@ def _hd256_config(
     ],
 )
 def test_fa4_hd256_fallback_matrix(kwargs, config_kwargs, expected):
-    from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
+    from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
 
     kwargs = {
         "head_size": 256,
@@ -654,9 +654,9 @@ def test_fa4_hd256_fallback_matrix(kwargs, config_kwargs, expected):
     ],
 )
 def test_fa4_hd256_block_size_advertisement(backend_name: str, config_kwargs: dict, expected: int):
-    from aphrodite.v1.attention.backend import MultipleOf
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
-    from aphrodite.v1.attention.backends.flash_attn_diffkv import (
+    from sonar.v1.attention.backend import MultipleOf
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
+    from sonar.v1.attention.backends.flash_attn_diffkv import (
         FlashAttentionDiffKVBackend,
     )
 
@@ -664,8 +664,8 @@ def test_fa4_hd256_block_size_advertisement(backend_name: str, config_kwargs: di
         "FLASH_ATTN": FlashAttentionBackend,
         "FLASH_ATTN_DIFFKV": FlashAttentionDiffKVBackend,
     }[backend_name]
-    aphrodite_config = _hd256_config(**config_kwargs)
-    with _blackwell(aphrodite_config):
+    sonar_config = _hd256_config(**config_kwargs)
+    with _blackwell(sonar_config):
         (size,) = backend.get_supported_kernel_block_sizes()
         preferred = backend.get_preferred_block_size(16)
     assert preferred == expected
@@ -677,7 +677,7 @@ def test_fa4_hd256_block_size_advertisement(backend_name: str, config_kwargs: di
 
 @blackwell_only
 def test_fa4_hd256_mm_prefix_deselects_flash_attn():
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
     with _blackwell(_hd256_config(is_mm_prefix_lm=True)):
         assert (
@@ -711,10 +711,10 @@ def test_fa4_hd256_mm_prefix_deselects_flash_attn():
     ],
 )
 def test_fa4_hd256_impl_selection(attn_type, sliding_window, expected):
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionImpl
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionImpl
 
     # Implementations are constructed before the platform updates the block size.
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         impl = FlashAttentionImpl(
             num_heads=8,
             head_size=256,
@@ -738,7 +738,7 @@ def blackwell_selection():
             return_value=DeviceCapability(10, 0),
         ),
         patch(
-            "aphrodite.v1.attention.backends.fa_utils.is_fa_version_supported",
+            "sonar.v1.attention.backends.fa_utils.is_fa_version_supported",
             return_value=True,
         ),
     ):
@@ -754,7 +754,7 @@ def hopper_selection():
             return_value=DeviceCapability(9, 0),
         ),
         patch(
-            "aphrodite.v1.attention.backends.fa_utils.is_fa_version_supported",
+            "sonar.v1.attention.backends.fa_utils.is_fa_version_supported",
             return_value=True,
         ),
     ):
@@ -766,14 +766,14 @@ def hopper_selection():
 @pytest.mark.parametrize("flash_attn_version", [None, 3, 4])
 def test_hopper_mm_prefix_selects_triton_flash_attn(use_mm_prefix, flash_attn_version, hopper_selection):
     """Hopper selects the composite when its causal route resolves FA3 or FA4."""
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
     config = EngineArgs(
         model="google/gemma-4-31B-it",
         dtype="bfloat16",
         attention_config=AttentionConfig(flash_attn_version=flash_attn_version),
     ).create_engine_config()
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         backend = get_attn_backend(256, torch.bfloat16, None, use_mm_prefix=use_mm_prefix)
     expected = "TRITON_FLASH_ATTN" if use_mm_prefix else "FLASH_ATTN"
     assert backend.get_name() == expected
@@ -786,10 +786,10 @@ def test_mm_prefix_selects_composite_without_changing_causal_default(
     use_mm_prefix, kv_cache_dtype, blackwell_selection
 ):
     """The image-mask requirement must reach CUDA's automatic backend priority."""
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
     config = EngineArgs(model="google/gemma-4-31B-it", dtype="bfloat16").create_engine_config()
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         backend = get_attn_backend(256, torch.bfloat16, kv_cache_dtype, use_mm_prefix=use_mm_prefix)
     expected = "TRITON_FLASHINFER" if use_mm_prefix else "FLASHINFER"
     assert backend.get_name() == expected
@@ -809,8 +809,8 @@ def test_mm_prefix_selects_composite_without_changing_causal_default(
 )
 def test_composite_rejects_features_not_shared_by_both_routes(feature_kwargs, reason):
     """Automatic selection must not admit features only one child can execute."""
-    from aphrodite.engine.arg_utils import EngineArgs
-    from aphrodite.v1.attention.backends.triton_flashinfer import TritonFlashInferBackend
+    from sonar.engine.arg_utils import EngineArgs
+    from sonar.v1.attention.backends.triton_flashinfer import TritonFlashInferBackend
 
     config = EngineArgs(model="google/gemma-4-31B-it", dtype="bfloat16").create_engine_config()
     args = dict(
@@ -827,7 +827,7 @@ def test_composite_rejects_features_not_shared_by_both_routes(feature_kwargs, re
         attn_type=AttentionType.DECODER,
     )
     args.update(feature_kwargs)
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         reasons = TritonFlashInferBackend.validate_configuration(**args)
     assert any(reason in message for message in reasons), reasons
 
@@ -835,14 +835,14 @@ def test_composite_rejects_features_not_shared_by_both_routes(feature_kwargs, re
 @blackwell_only
 def test_rswa_selection_does_not_reuse_causal_result(blackwell_selection):
     """An R-SWA requirement must invalidate a previously cached causal selection."""
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
     config = EngineArgs(
         model="google/gemma-4-31B-it",
         dtype="bfloat16",
         attention_config=AttentionConfig(backend=AttentionBackendEnum.TRITON_FLASHINFER),
     ).create_engine_config()
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         assert get_attn_backend(256, torch.bfloat16, None).get_name() == "TRITON_FLASHINFER"
         config.model_config.model_arch_config.rswa_window = 128
         with pytest.raises(ValueError, match="R-SWA"):

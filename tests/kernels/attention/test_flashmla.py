@@ -7,8 +7,8 @@ import random
 import pytest
 import torch
 
-from aphrodite.triton_utils import triton
-from aphrodite.v1.attention.ops.flashmla import (
+from sonar.triton_utils import triton
+from sonar.v1.attention.ops.flashmla import (
     flash_mla_with_kvcache,
     flash_mla_with_kvcache_fp8,
     get_mla_metadata,

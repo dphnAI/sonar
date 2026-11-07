@@ -21,7 +21,7 @@ model:
   min_vllm_version: "0.20.0"
   install:
     pip:
-      command: 'uv pip install "aphrodite-engine[audio]==0.28.0"'
+      command: 'uv pip install "sonar[audio]==0.28.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
       note: "Pinned to 0.28.0 with the audio extra (required for audio + use_audio_in_video)."
   architecture: moe
   parameter_count: "31B"
@@ -106,7 +106,7 @@ guide: |
 
   ## Prerequisites
 
-  - Aphrodite **0.28.0** (pinned: `pip install aphrodite-engine[audio]==0.28.0`,
+  - Sonar **0.28.0** (pinned: `uv pip install sonar[audio]==0.28.0 --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130`,
     or pull `vllm/vllm-openai:v0.28.0`)
   - Hardware: 1× B200 / H200 / H100 (single-GPU TP1 is the documented profile)
   - The `audio` extra is required for any audio input, including
@@ -126,7 +126,7 @@ guide: |
   General single-GPU invocation (B200 / H200 / H100):
 
   ```bash
-  aphrodite serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16 \
+  sonar serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16 \
     --served-model-name nemotron \
     --host 0.0.0.0 \
     --port 5000 \
@@ -143,7 +143,7 @@ guide: |
   Swap the model id for the FP8 or NVFP4 checkpoint and add `--kv-cache-dtype fp8`:
 
   ```bash
-  aphrodite serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4 \
+  sonar serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4 \
     --kv-cache-dtype fp8 \
     ...
   ```
@@ -182,7 +182,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8 \
     --trust-remote-code \
     --dataset-name random \

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.launchers import launcher
-from aphrodite.entrypoints.launchers.utils.ssl import SSLCertRefresher
+from sonar.entrypoints.launchers import launcher
+from sonar.entrypoints.launchers.utils.ssl import SSLCertRefresher
 
 
 class MockSSLContext(SSLContext):

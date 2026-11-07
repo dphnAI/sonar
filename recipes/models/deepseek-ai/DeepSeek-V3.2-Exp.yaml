@@ -77,8 +77,8 @@ hardware_overrides:
       - "--max-num-batched-tokens"
       - "32768"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MOE: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MOE: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -93,13 +93,13 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 8x H200/H20/B200 (CUDA) or 8x MI300X / MI325X / MI355X (ROCm)
-  - **Aphrodite**: Current stable release
+  - **Sonar**: Current stable release
   - **DeepGEMM** (CUDA only): Required for MQA logits computation (and optionally for MoE)
 
   ### CUDA
   ```bash
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install git+https://github.com/deepseek-ai/DeepGEMM.git@v2.1.1.post3 --no-build-isolation
   ```
 
@@ -110,12 +110,12 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Note: DeepGEMM is used both for MoE and for MQA logits computation. It is required for
-  MQA logits on CUDA. To disable the MoE path only, set `APHRODITE_USE_DEEP_GEMM=0`. Some users
-  report better performance with `APHRODITE_USE_DEEP_GEMM=0` (e.g. on H20), and this also skips
+  MQA logits on CUDA. To disable the MoE path only, set `SONAR_USE_DEEP_GEMM=0`. Some users
+  report better performance with `SONAR_USE_DEEP_GEMM=0` (e.g. on H20), and this also skips
   the long warmup.
 
   ## Launching DeepSeek-V3.2-Exp
@@ -124,12 +124,12 @@ guide: |
 
   Using the recommended EP/DP mode:
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-V3.2-Exp -dp 8 --enable-expert-parallel
+  sonar serve deepseek-ai/DeepSeek-V3.2-Exp -dp 8 --enable-expert-parallel
   ```
 
   Using tensor parallel:
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-V3.2-Exp -tp 8
+  sonar serve deepseek-ai/DeepSeek-V3.2-Exp -tp 8
   ```
 
   ### 8xB200 (CUDA)
@@ -140,10 +140,10 @@ guide: |
 
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
 
-  aphrodite serve deepseek-ai/DeepSeek-V3.2-Exp \
+  sonar serve deepseek-ai/DeepSeek-V3.2-Exp \
     --tensor-parallel-size 8 \
     --max-num-batched-tokens 32768 \
     --trust-remote-code \

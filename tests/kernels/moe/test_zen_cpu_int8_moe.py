@@ -5,26 +5,26 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear.zentorch_utils import (
+from sonar.model_executor.kernels.linear.zentorch_utils import (
     _ZENTORCH_MOE_ACTIVATIONS,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     int8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import ZenCPUExpertsInt8
-from aphrodite.model_executor.layers.fused_moe.oracle.int8 import (
+from sonar.model_executor.layers.fused_moe.experts.cpu_moe import ZenCPUExpertsInt8
+from sonar.model_executor.layers.fused_moe.oracle.int8 import (
     Int8MoeBackend,
     backend_to_kernel_cls,
 )
-from aphrodite.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.test_cpu_fused_moe import (
     _make_moe_config,
     quantize_per_channel,
@@ -149,7 +149,7 @@ def test_zen_int8_support_predicates(mock_zentorch_fused_moe, monkeypatch):
 @pytest.mark.parametrize("act", ZENTORCH_ACT)
 @pytest.mark.parametrize("use_bias", [False, True])
 def test_zen_int8_dispatch_contract(
-    default_aphrodite_config,
+    default_sonar_config,
     mock_zentorch_fused_moe,
     act: MoEActivation,
     use_bias: bool,

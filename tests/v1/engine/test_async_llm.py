@@ -10,27 +10,27 @@ from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
-import aphrodite.v1.engine.async_llm as async_llm_module
-from aphrodite import PoolingParams, SamplingParams
-from aphrodite.assets.image import ImageAsset
-from aphrodite.config import AphroditeConfig, LoggingConfig, ProfilerConfig
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+import sonar.v1.engine.async_llm as async_llm_module
+from sonar import PoolingParams, SamplingParams
+from sonar.assets.image import ImageAsset
+from sonar.config import LoggingConfig, ProfilerConfig, SonarConfig
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.exceptions import ProfilerAlreadyActiveError, RetryableRequestError
-from aphrodite.inputs import PromptType
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.profiler.wrapper import WorkerProfiler
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.loggers import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.exceptions import ProfilerAlreadyActiveError, RetryableRequestError
+from sonar.inputs import PromptType
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.profiler.wrapper import WorkerProfiler
+from sonar.sampling_params import RequestOutputKind
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.loggers import (
     AggregatedLoggingStatLogger,
     LoggingStatLogger,
     PerEngineStatLoggerAdapter,
@@ -99,23 +99,23 @@ def _mock_async_llm_dependencies(monkeypatch: pytest.MonkeyPatch):
     return engine_core
 
 
-def _mock_aphrodite_config() -> MagicMock:
-    aphrodite_config = MagicMock()
-    aphrodite_config.logging_config = LoggingConfig()
-    aphrodite_config.observability_config.otlp_traces_endpoint = None
-    aphrodite_config.scheduler_config.stream_interval = 1
-    return aphrodite_config
+def _mock_sonar_config() -> MagicMock:
+    sonar_config = MagicMock()
+    sonar_config.logging_config = LoggingConfig()
+    sonar_config.observability_config.otlp_traces_endpoint = None
+    sonar_config.scheduler_config.stream_interval = 1
+    return sonar_config
 
 
 @pytest.mark.parametrize("method", ["generate", "encode"])
 def test_retryable_request_error_reaches_caller(monkeypatch: pytest.MonkeyPatch, method: str):
     """A retryable engine rejection (e.g. while paused) reaches the caller as
     is, not wrapped as an engine failure."""
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config.should_profile_frontend = False
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config.should_profile_frontend = False
     engine_core = _mock_async_llm_dependencies(monkeypatch)
     engine_core.abort_requests_async = AsyncMock()
-    engine = AsyncLLM(aphrodite_config, MagicMock(), log_stats=False)
+    engine = AsyncLLM(sonar_config, MagicMock(), log_stats=False)
     collector = MagicMock(request_id="r")
     collector.get_nowait.return_value = None
     collector.get = AsyncMock(side_effect=RetryableRequestError("paused"))
@@ -131,13 +131,13 @@ def test_retryable_request_error_reaches_caller(monkeypatch: pytest.MonkeyPatch,
 
 
 def test_cuda_profiler_requests_reach_engine_core(monkeypatch: pytest.MonkeyPatch):
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config.profiler = "cuda"
-    aphrodite_config.profiler_config.ignore_frontend = False
-    aphrodite_config.profiler_config.should_profile_frontend = False
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config.profiler = "cuda"
+    sonar_config.profiler_config.ignore_frontend = False
+    sonar_config.profiler_config.should_profile_frontend = False
     engine_core = _mock_async_llm_dependencies(monkeypatch)
 
-    engine = AsyncLLM(aphrodite_config, MagicMock(), log_stats=False)
+    engine = AsyncLLM(sonar_config, MagicMock(), log_stats=False)
 
     async def profile():
         await engine.start_profile()
@@ -152,16 +152,16 @@ def test_cuda_profiler_requests_reach_engine_core(monkeypatch: pytest.MonkeyPatc
 def test_cuda_only_torch_profiler_skips_frontend_cpu_trace(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config.profiler = "torch"
-    aphrodite_config.profiler_config.ignore_frontend = False
-    aphrodite_config.profiler_config.torch_profiler_activities = ["CUDA"]
-    aphrodite_config.profiler_config.should_profile_frontend = False
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config.profiler = "torch"
+    sonar_config.profiler_config.ignore_frontend = False
+    sonar_config.profiler_config.torch_profiler_activities = ["CUDA"]
+    sonar_config.profiler_config.should_profile_frontend = False
     _mock_async_llm_dependencies(monkeypatch)
     profiler = MagicMock()
     monkeypatch.setattr(async_llm_module, "create_frontend_profiler", profiler)
 
-    engine = AsyncLLM(aphrodite_config, MagicMock(), log_stats=False)
+    engine = AsyncLLM(sonar_config, MagicMock(), log_stats=False)
 
     assert engine.profiler is None
     profiler.assert_not_called()
@@ -170,11 +170,11 @@ def test_cuda_only_torch_profiler_skips_frontend_cpu_trace(
 def test_profile_forwards_overrides_rejects_duplicate_and_allows_restart(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config.should_profile_frontend = False
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config.should_profile_frontend = False
     engine_core = _mock_async_llm_dependencies(monkeypatch)
 
-    engine = AsyncLLM(aphrodite_config, MagicMock(), log_stats=False)
+    engine = AsyncLLM(sonar_config, MagicMock(), log_stats=False)
 
     async def profile():
         for kwargs in (
@@ -216,7 +216,7 @@ def test_profile_forwards_overrides_rejects_duplicate_and_allows_restart(
 
 
 def test_stop_profile_waits_for_inflight_start(monkeypatch: pytest.MonkeyPatch):
-    aphrodite_config = _mock_aphrodite_config()
+    sonar_config = _mock_sonar_config()
     engine_core = _mock_async_llm_dependencies(monkeypatch)
     events: list[str] = []
     frontend_profiler = MagicMock()
@@ -224,7 +224,7 @@ def test_stop_profile_waits_for_inflight_start(monkeypatch: pytest.MonkeyPatch):
     frontend_profiler.stop.side_effect = lambda: events.append("frontend_stop")
 
     engine = AsyncLLM(
-        aphrodite_config,
+        sonar_config,
         MagicMock(),
         log_stats=False,
         profiler=frontend_profiler,
@@ -264,11 +264,11 @@ def test_interrupted_engine_profile_start_skips_frontend_profiler(monkeypatch: p
     """The frontend trace starts only after the engine start succeeds. A
     cancelled start may still reach the engine, so it keeps the session active
     until /stop_profile."""
-    aphrodite_config = _mock_aphrodite_config()
+    sonar_config = _mock_sonar_config()
     engine_core = _mock_async_llm_dependencies(monkeypatch)
     frontend_profiler = MagicMock()
     engine = AsyncLLM(
-        aphrodite_config,
+        sonar_config,
         MagicMock(),
         log_stats=False,
         profiler=frontend_profiler,
@@ -325,11 +325,11 @@ def test_stop_after_cancelled_frontend_start_stops_frontend_profiler(
 ):
     """Cancelling start_profile while the frontend profiler is starting keeps
     the session active, and the next stop_profile still stops the backend."""
-    aphrodite_config = _mock_aphrodite_config()
+    sonar_config = _mock_sonar_config()
     engine_core = _mock_async_llm_dependencies(monkeypatch)
     frontend_profiler = _BlockingStartProfiler()
     engine = AsyncLLM(
-        aphrodite_config,
+        sonar_config,
         MagicMock(),
         log_stats=False,
         profiler=frontend_profiler,
@@ -365,8 +365,8 @@ def test_stop_after_cancelled_frontend_start_stops_frontend_profiler(
 
 
 def test_multi_client_profile_uses_idempotent_engine_requests(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config = ProfilerConfig(
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config = ProfilerConfig(
         profiler="torch",
         torch_profiler_dir=str(tmp_path),
         torch_profiler_activities=["CPU"],
@@ -376,7 +376,7 @@ def test_multi_client_profile_uses_idempotent_engine_requests(monkeypatch: pytes
     monkeypatch.setattr(async_llm_module, "create_frontend_profiler", profiler)
     engines = [
         AsyncLLM(
-            aphrodite_config,
+            sonar_config,
             MagicMock(),
             log_stats=False,
             client_count=2,
@@ -407,8 +407,8 @@ def test_multi_client_profile_uses_idempotent_engine_requests(monkeypatch: pytes
 
 
 def test_frontend_profiler_ignores_worker_iteration_bounds(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    aphrodite_config = _mock_aphrodite_config()
-    aphrodite_config.profiler_config = ProfilerConfig(
+    sonar_config = _mock_sonar_config()
+    sonar_config.profiler_config = ProfilerConfig(
         profiler="torch",
         torch_profiler_dir=str(tmp_path),
         torch_profiler_activities=["CPU", "CUDA"],
@@ -419,9 +419,9 @@ def test_frontend_profiler_ignores_worker_iteration_bounds(monkeypatch: pytest.M
     )
     _mock_async_llm_dependencies(monkeypatch)
     profiler = MagicMock()
-    monkeypatch.setattr("aphrodite.profiler.wrapper.TorchProfilerWrapper", profiler)
+    monkeypatch.setattr("sonar.profiler.wrapper.TorchProfilerWrapper", profiler)
 
-    engine = AsyncLLM(aphrodite_config, MagicMock(), log_stats=False)
+    engine = AsyncLLM(sonar_config, MagicMock(), log_stats=False)
 
     frontend_config = profiler.call_args.args[0]
     assert frontend_config.delay_iterations == 0
@@ -717,14 +717,14 @@ async def test_mid_stream_cancellation(engine_args: AsyncEngineArgs, prompt: Pro
 
 
 class MockLoggingStatLogger(LoggingStatLogger):
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0):
-        super().__init__(aphrodite_config, engine_index)
+    def __init__(self, sonar_config: SonarConfig, engine_index: int = 0):
+        super().__init__(sonar_config, engine_index)
         self.log = MagicMock()
 
 
 class MockAggregatedStatLogger(AggregatedLoggingStatLogger):
-    def __init__(self, aphrodite_config: AphroditeConfig, engine_indexes: list[int]):
-        super().__init__(aphrodite_config, engine_indexes)
+    def __init__(self, sonar_config: SonarConfig, engine_indexes: list[int]):
+        super().__init__(sonar_config, engine_indexes)
         self.log = MagicMock()
 
 
@@ -831,7 +831,7 @@ async def test_header_dp_rank_argument():
         )
 
         # Create render serving instance (required by OpenAIServingChat)
-        from aphrodite.renderers.online_renderer import OnlineRenderer
+        from sonar.renderers.online_renderer import OnlineRenderer
 
         online_renderer = OnlineRenderer(
             model_config=engine.model_config,
@@ -883,7 +883,7 @@ async def test_check_health():
     """
     from unittest.mock import patch
 
-    from aphrodite.v1.engine.exceptions import EngineDeadError
+    from sonar.v1.engine.exceptions import EngineDeadError
 
     with ExitStack() as after:
         with set_default_torch_num_threads(1):

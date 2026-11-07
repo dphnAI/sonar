@@ -9,16 +9,16 @@ any change to a default bucket boundary must show up as a failing test here.
 import prometheus_client
 import pytest
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.config.observability import ObservabilityConfig
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.v1.metrics.buckets import (
+from sonar.config import ModelConfig, SonarConfig
+from sonar.config.observability import ObservabilityConfig
+from sonar.config.watermarking import WatermarkConfig
+from sonar.v1.metrics.buckets import (
     BUCKET_FAMILY_KEYS,
     build_1_2_5_buckets,
     histogram_buckets,
 )
-from aphrodite.v1.metrics.loggers import PrometheusStatLogger
-from aphrodite.v1.metrics.prometheus import unregister_aphrodite_metrics
+from sonar.v1.metrics.loggers import PrometheusStatLogger
+from sonar.v1.metrics.prometheus import unregister_sonar_metrics
 
 pytestmark = pytest.mark.cpu_test
 
@@ -134,25 +134,25 @@ DEFAULT_BUCKET_SNAPSHOTS: dict[str, list[float]] = {
 }
 
 METRIC_FAMILIES: dict[str, str] = {
-    "aphrodite:e2e_request_latency_seconds": "request_latency",
-    "aphrodite:request_queue_time_seconds": "request_latency",
-    "aphrodite:request_inference_time_seconds": "request_latency",
-    "aphrodite:request_prefill_time_seconds": "request_latency",
-    "aphrodite:request_decode_time_seconds": "request_latency",
-    "aphrodite:time_to_first_token_seconds": "time_to_first_token",
-    "aphrodite:inter_token_latency_seconds": "inter_token_latency",
-    "aphrodite:request_time_per_output_token_seconds": "inter_token_latency",
-    "aphrodite:iteration_tokens_total": "iteration_tokens",
-    "aphrodite:request_params_n": "request_params_n",
-    "aphrodite:request_num_preemptions": "request_num_preemptions",
-    "aphrodite:request_prompt_tokens": "request_tokens",
-    "aphrodite:request_generation_tokens": "request_tokens",
-    "aphrodite:request_max_num_generation_tokens": "request_tokens",
-    "aphrodite:request_params_max_tokens": "request_tokens",
-    "aphrodite:request_prefill_kv_computed_tokens": "request_tokens",
-    "aphrodite:kv_block_lifetime_seconds": "kv_cache_residency",
-    "aphrodite:kv_block_idle_before_evict_seconds": "kv_cache_residency",
-    "aphrodite:kv_block_reuse_gap_seconds": "kv_cache_residency",
+    "sonar:e2e_request_latency_seconds": "request_latency",
+    "sonar:request_queue_time_seconds": "request_latency",
+    "sonar:request_inference_time_seconds": "request_latency",
+    "sonar:request_prefill_time_seconds": "request_latency",
+    "sonar:request_decode_time_seconds": "request_latency",
+    "sonar:time_to_first_token_seconds": "time_to_first_token",
+    "sonar:inter_token_latency_seconds": "inter_token_latency",
+    "sonar:request_time_per_output_token_seconds": "inter_token_latency",
+    "sonar:iteration_tokens_total": "iteration_tokens",
+    "sonar:request_params_n": "request_params_n",
+    "sonar:request_num_preemptions": "request_num_preemptions",
+    "sonar:request_prompt_tokens": "request_tokens",
+    "sonar:request_generation_tokens": "request_tokens",
+    "sonar:request_max_num_generation_tokens": "request_tokens",
+    "sonar:request_params_max_tokens": "request_tokens",
+    "sonar:request_prefill_kv_computed_tokens": "request_tokens",
+    "sonar:kv_block_lifetime_seconds": "kv_cache_residency",
+    "sonar:kv_block_idle_before_evict_seconds": "kv_cache_residency",
+    "sonar:kv_block_reuse_gap_seconds": "kv_cache_residency",
 }
 
 TEST_MODEL = "distilbert/distilgpt2"
@@ -228,10 +228,10 @@ def test_bucket_family_keys():
 
 
 def collect_histogram_buckets() -> dict[str, list[float]]:
-    """Read back each aphrodite:* histogram's finite bucket bounds by metric name."""
+    """Read back each sonar:* histogram's finite bucket bounds by metric name."""
     found: dict[str, list[float]] = {}
     for metric in prometheus_client.REGISTRY.collect():
-        if metric.name.startswith("aphrodite:") and metric.type == "histogram":
+        if metric.name.startswith("sonar:") and metric.type == "histogram":
             found[metric.name] = sorted(
                 {
                     float(sample.labels["le"])
@@ -244,8 +244,8 @@ def collect_histogram_buckets() -> dict[str, list[float]]:
 
 def build_logger_config(
     observability_config: ObservabilityConfig,
-) -> AphroditeConfig:
-    return AphroditeConfig(
+) -> SonarConfig:
+    return SonarConfig(
         model_config=ModelConfig(model=TEST_MODEL),
         observability_config=observability_config,
     )
@@ -271,7 +271,7 @@ def test_prometheus_logger_default_buckets():
                 expected = DEFAULT_BUCKET_SNAPSHOTS[family]
             assert found[metric_name] == [float(b) for b in expected], metric_name
     finally:
-        unregister_aphrodite_metrics()
+        unregister_sonar_metrics()
 
 
 def test_histogram_buckets_override_precedence():
@@ -315,7 +315,7 @@ def test_prometheus_logger_applies_overrides():
         for metric_name, family in METRIC_FAMILIES.items():
             assert found[metric_name] == overridden[family], metric_name
     finally:
-        unregister_aphrodite_metrics()
+        unregister_sonar_metrics()
 
 
 @pytest.mark.parametrize("with_config", [True, False])
@@ -326,6 +326,6 @@ def test_watermark_requests_counter_registration(with_config: bool):
     try:
         PrometheusStatLogger(config)
         names = {m.name for m in prometheus_client.REGISTRY.collect()}
-        assert ("aphrodite:watermark_requests" in names) == with_config
+        assert ("sonar:watermark_requests" in names) == with_config
     finally:
-        unregister_aphrodite_metrics()
+        unregister_sonar_metrics()

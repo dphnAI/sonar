@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""End-to-end test for the ``aphrodite bench mm-processor`` CLI.
+"""End-to-end test for the ``sonar bench mm-processor`` CLI.
 
 Most other bench subcommands have a subprocess smoke test in this directory.
 This file covers mm-processor, including the per-stage stats its JSON output
@@ -21,7 +21,7 @@ NUM_PROMPTS = 3
 def test_bench_mm_processor(tmp_path):
     output_json = tmp_path / "mm_processor.json"
     command = [
-        "aphrodite",
+        "sonar",
         "bench",
         "mm-processor",
         "--model",

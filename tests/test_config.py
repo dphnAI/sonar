@@ -20,11 +20,10 @@ import torch
 from huggingface_hub import ResolvedRevision
 from pydantic import ValidationError
 
-import aphrodite.config.aphrodite as aphrodite_config_module
-import aphrodite.envs as envs
-from aphrodite.compilation.backends import AphroditeBackend
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.config.sonar as sonar_config_module
+import sonar.envs as envs
+from sonar.compilation.backends import SonarBackend
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
@@ -39,27 +38,28 @@ from aphrodite.config import (
     ParallelConfig,
     PoolerConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
     WatermarkConfig,
     update_config,
 )
-from aphrodite.config.aphrodite import OPTIMIZATION_LEVEL_TO_CONFIG, OptimizationLevel
-from aphrodite.config.compilation import CompilationMode, CUDAGraphMode, PassConfig
-from aphrodite.config.kernel import IrOpPriorityConfig
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.config.speculative import _validate_qwen3_omni_dspark
-from aphrodite.config.utils import get_field
-from aphrodite.platforms import CpuArchEnum, Platform, PlatformEnum, current_platform
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.transformers_utils.config import (
+from sonar.config.compilation import CompilationMode, CUDAGraphMode, PassConfig
+from sonar.config.kernel import IrOpPriorityConfig
+from sonar.config.load import LoadConfig
+from sonar.config.mamba import MambaBackendEnum
+from sonar.config.sonar import OPTIMIZATION_LEVEL_TO_CONFIG, OptimizationLevel
+from sonar.config.speculative import _validate_qwen3_omni_dspark
+from sonar.config.utils import get_field
+from sonar.platforms import current_platform
+from sonar.sampling_params import BeamSearchParams
+from sonar.transformers_utils.config import (
     _patch_hf_transformers_nested_rope_validation,
     get_pooling_config,
     try_get_dense_modules,
 )
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.worker.gpu.spec_decode.dflash2.config import DFlash2SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
 from tests.v1.spec_decode.utils import fake_speculative_config
 
 DEVICE_TYPE = current_platform.device_type
@@ -127,7 +127,7 @@ def test_rocm_mm_prefix_lm_disables_chunked_mm_input(
     is_multimodal_model: bool,
     expected: bool,
 ) -> None:
-    from aphrodite.platforms.rocm import RocmPlatform
+    from sonar.platforms.rocm import RocmPlatform
 
     config = SimpleNamespace(
         compilation_config=SimpleNamespace(cudagraph_mode=CUDAGraphMode.NONE),
@@ -151,8 +151,8 @@ def test_rocm_mm_prefix_lm_disables_chunked_mm_input(
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific test")
 @pytest.mark.parametrize("backend", ["mori", "naive"])
 def test_rocm_resolves_the_mori_all2all_backend(monkeypatch, backend: str) -> None:
-    import aphrodite.config.parallel as parallel
-    from aphrodite.platforms.rocm import RocmPlatform
+    import sonar.config.parallel as parallel
+    from sonar.platforms.rocm import RocmPlatform
 
     calls = []
     monkeypatch.setattr(parallel, "resolve_mori_all2all", lambda *args, **kwargs: calls.append(args))
@@ -258,10 +258,10 @@ def _sampling_replay_config(
 )
 def test_sampling_replay_config(config, message):
     if message is None:
-        AphroditeConfig._verify_sampling_replay_config(config)
+        SonarConfig._verify_sampling_replay_config(config)
     else:
         with pytest.raises(ValueError, match=message):
-            AphroditeConfig._verify_sampling_replay_config(config)
+            SonarConfig._verify_sampling_replay_config(config)
 
 
 def test_kda_recoverssm_derivation_is_revalidated():
@@ -286,27 +286,27 @@ def test_kda_recoverssm_derivation_is_revalidated():
         use_v2_model_runner=True,
     )
 
-    AphroditeConfig.validate_mamba_cached_kernel(config)
+    SonarConfig.validate_mamba_cached_kernel(config)
     assert config.cache_config.use_replayssm
     assert config.cache_config.use_kda_recoverssm
 
     config.cache_config.mamba_cache_mode = "align"
-    AphroditeConfig.validate_mamba_cached_kernel(config)
+    SonarConfig.validate_mamba_cached_kernel(config)
     config.use_v2_model_runner = False
-    with pytest.raises(ValueError, match="APHRODITE_USE_V2_MODEL_RUNNER=1"):
-        AphroditeConfig.validate_mamba_cached_kernel(config)
+    with pytest.raises(ValueError, match="SONAR_USE_V2_MODEL_RUNNER=1"):
+        SonarConfig.validate_mamba_cached_kernel(config)
     config.use_v2_model_runner = True
     config.cache_config.mamba_cache_mode = "none"
 
     config.model_config.architecture = "NemotronHForCausalLM"
     config.mamba_config.backend = MambaBackendEnum.FLASHINFER
-    AphroditeConfig.validate_mamba_cached_kernel(config)
+    SonarConfig.validate_mamba_cached_kernel(config)
     assert not config.cache_config.use_kda_recoverssm
 
     config.model_config.architecture = "KimiLinearForCausalLM"
     config.parallel_config.pipeline_parallel_size = 2
     with pytest.raises(ValueError, match="pipeline_parallel_size=1"):
-        AphroditeConfig.validate_mamba_cached_kernel(config)
+        SonarConfig.validate_mamba_cached_kernel(config)
 
 
 @pytest.mark.parametrize("supported", [True, False])
@@ -363,7 +363,7 @@ def test_mamba_cache_mode_all_is_rejected():
     ],
 )
 def test_mismatched_float_kv_cache_is_rejected(cache_dtype, model_dtype, should_raise):
-    config = AphroditeConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
+    config = SonarConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
     config.model_config = SimpleNamespace(dtype=model_dtype)
 
     if should_raise:
@@ -389,9 +389,9 @@ def test_nvfp4_ds_mla_rejects_decode_context_parallelism(dcp_size):
     )
     if dcp_size > 1:
         with pytest.raises(ValueError, match="decode context parallelism"):
-            AphroditeConfig(**kwargs)
+            SonarConfig(**kwargs)
     else:
-        AphroditeConfig(**kwargs)
+        SonarConfig(**kwargs)
 
 
 def test_per_request_spec_decode_metrics_requires_spec_decode():
@@ -400,7 +400,7 @@ def test_per_request_spec_decode_metrics_requires_spec_decode():
     # produce no metrics.
     for level in ("summary", "detailed"):
         with pytest.raises(ValueError, match="speculative"):
-            AphroditeConfig(observability_config=ObservabilityConfig(per_request_spec_decode_metrics=level))
+            SonarConfig(observability_config=ObservabilityConfig(per_request_spec_decode_metrics=level))
 
 
 @pytest.mark.parametrize(
@@ -429,7 +429,7 @@ def test_per_request_spec_decode_metrics_requires_spec_decode():
     ],
 )
 def test_pd_dcp_interleave_size_is_adjusted_to_block_size(caplog, disable_log_dedup, kv_transfer_config):
-    config = AphroditeConfig(
+    config = SonarConfig(
         cache_config=CacheConfig(block_size=16),
         device_config=DeviceConfig(device="cpu"),
         parallel_config=ParallelConfig(
@@ -450,7 +450,7 @@ def test_pd_dcp_interleave_size_is_adjusted_to_block_size(caplog, disable_log_de
 
 
 def test_kv_offloading_does_not_adjust_dcp_interleave_size():
-    config = AphroditeConfig(
+    config = SonarConfig(
         cache_config=CacheConfig(block_size=16),
         device_config=DeviceConfig(device="cpu"),
         parallel_config=ParallelConfig(
@@ -472,7 +472,7 @@ def test_kv_offloading_does_not_adjust_dcp_interleave_size():
 
 
 def test_empty_kv_cache_groups_preserve_dcp_interleave_size():
-    config = AphroditeConfig(
+    config = SonarConfig(
         device_config=DeviceConfig(device="cpu"),
         parallel_config=ParallelConfig(
             tensor_parallel_size=2,
@@ -505,16 +505,16 @@ def test_kv_offloading_does_not_skip_dcp_interleave_validation():
     )
 
     with pytest.raises(AssertionError, match="divisible by"):
-        AphroditeConfig.validate_block_size(config)
+        SonarConfig.validate_block_size(config)
 
 
 def test_nixl_dcp_check_skipped_for_submodel_config():
     # with_hf_config() builds a submodule view of the config (e.g. a
     # multimodal model's text stack) whose architecture list is empty.
-    # Re-running AphroditeConfig validation on it is unsafe: the NIXL DCP check
+    # Re-running SonarConfig validation on it is unsafe: the NIXL DCP check
     # reads use_mla, which resolves the architecture registry.
     model_config = ModelConfig("Qwen/Qwen2-VL-2B-Instruct", max_model_len=2048)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         device_config=DeviceConfig(device="cpu"),
         kv_transfer_config=KVTransferConfig(
@@ -522,7 +522,7 @@ def test_nixl_dcp_check_skipped_for_submodel_config():
             kv_role="kv_both",
         ),
     )
-    submodel_config = aphrodite_config.with_hf_config(model_config.hf_text_config)
+    submodel_config = sonar_config.with_hf_config(model_config.hf_text_config)
     assert submodel_config.model_config.is_submodel_config
     assert submodel_config.model_config.architectures == []
     assert submodel_config.model_config.use_mla is False
@@ -533,7 +533,7 @@ def test_nixl_dcp_check_rejects_non_mla_model_with_dcp(monkeypatch):
     # pass and the MLA-only assert is what actually fires.
     monkeypatch.setattr(ModelConfig, "get_total_num_kv_heads", lambda self: 1)
     with pytest.raises(ValidationError, match="only supported for MLA models"):
-        AphroditeConfig(
+        SonarConfig(
             model_config=ModelConfig("Qwen/Qwen3-0.6B", max_model_len=2048),
             device_config=DeviceConfig(device="cpu"),
             parallel_config=ParallelConfig(
@@ -549,14 +549,14 @@ def test_nixl_dcp_check_rejects_non_mla_model_with_dcp(monkeypatch):
 
 
 def test_compile_config_repr_succeeds():
-    # setup: AphroditeBackend mutates the config object
-    config = AphroditeConfig()
-    backend = AphroditeBackend(config)
+    # setup: SonarBackend mutates the config object
+    config = SonarConfig()
+    backend = SonarBackend(config)
     backend.configure_post_pass()
 
     # test that repr(config) succeeds
     val = repr(config)
-    assert "AphroditeConfig" in val
+    assert "SonarConfig" in val
     assert "inductor_passes" in val
 
 
@@ -570,26 +570,11 @@ def test_compile_config_repr_succeeds():
 )
 def test_v2_model_runner_env_tri_state(monkeypatch, env_value, expected):
     if env_value is None:
-        monkeypatch.delenv("APHRODITE_USE_V2_MODEL_RUNNER", raising=False)
+        monkeypatch.delenv("SONAR_USE_V2_MODEL_RUNNER", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", env_value)
+        monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", env_value)
 
-    assert envs.APHRODITE_USE_V2_MODEL_RUNNER is expected
-
-
-@pytest.mark.parametrize("platform_enum", list(PlatformEnum))
-@pytest.mark.parametrize("has_triton", [False, True])
-def test_model_runner_default_preserves_backend_fallback(monkeypatch, platform_enum, has_triton):
-    platform = Platform()
-    platform._enum = platform_enum
-    monkeypatch.delenv("APHRODITE_USE_V2_MODEL_RUNNER", raising=False)
-    monkeypatch.setattr(aphrodite_config_module, "current_platform", platform)
-    monkeypatch.setattr(aphrodite_config_module, "HAS_TRITON", has_triton)
-
-    config = AphroditeConfig()
-    # non-x86 CPUs support MRv2 without Triton
-    supports_v2_without_triton = platform.is_cpu() and platform.get_cpu_architecture() != CpuArchEnum.X86
-    assert config.use_v2_model_runner == (has_triton or platform.is_unspecified() or supports_v2_without_triton)
+    assert envs.SONAR_USE_V2_MODEL_RUNNER is expected
 
 
 def test_v2_frontend_config_can_be_created_without_triton():
@@ -600,18 +585,18 @@ def test_v2_frontend_config_can_be_created_without_triton():
             "-c",
             textwrap.dedent("""
                 import os
-                import aphrodite.platforms as platforms
-                from aphrodite.platforms.interface import UnspecifiedPlatform
+                import sonar.platforms as platforms
+                from sonar.platforms.interface import UnspecifiedPlatform
 
                 platforms._current_platform = UnspecifiedPlatform()
                 platforms._current_platform.device_type = "cpu"
-                import aphrodite.triton_utils
+                import sonar.triton_utils
 
-                os.environ.pop("APHRODITE_USE_V2_MODEL_RUNNER", None)
-                aphrodite.triton_utils.HAS_TRITON = False
-                from aphrodite.config import AphroditeConfig
+                os.environ.pop("SONAR_USE_V2_MODEL_RUNNER", None)
+                sonar.triton_utils.HAS_TRITON = False
+                from sonar.config import SonarConfig
 
-                config = AphroditeConfig()
+                config = SonarConfig()
                 assert config.use_v2_model_runner
             """),
         ],
@@ -640,22 +625,22 @@ def test_v1_model_runner_rejects_v2_only_config(overrides, feature):
     )
     config._dflash_needs_multi_kv_group = lambda: False
     config._is_dflash_candidate_draft = lambda: False
-    assert AphroditeConfig._get_v1_model_runner_unsupported_features(config) == []
+    assert SonarConfig._get_v1_model_runner_unsupported_features(config) == []
 
     for name, value in overrides.items():
         setattr(config, name, value)
-    assert AphroditeConfig._get_v1_model_runner_unsupported_features(config) == [feature]
+    assert SonarConfig._get_v1_model_runner_unsupported_features(config) == [feature]
 
 
 def test_hisparse_rejects_decode_context_parallelism(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     monkeypatch.setattr(current_platform, "device_count", lambda: 2)
     with pytest.raises(ValueError, match="decode context parallelism"):
-        AphroditeConfig(
+        SonarConfig(
             attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
             parallel_config=ParallelConfig(
                 tensor_parallel_size=2,
@@ -668,11 +653,11 @@ def test_hisparse_rejects_pipeline_parallelism(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     monkeypatch.setattr(current_platform, "device_count", lambda: 2)
     with pytest.raises(ValueError, match="pipeline parallelism"):
-        AphroditeConfig(
+        SonarConfig(
             attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
             parallel_config=ParallelConfig(pipeline_parallel_size=2),
         )
@@ -682,12 +667,12 @@ def test_hisparse_rejects_full_cudagraph_mode(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     monkeypatch.setattr(current_platform, "support_static_graph_mode", lambda: True)
-    monkeypatch.setattr("aphrodite.config.aphrodite.HAS_TRITON", True)
+    monkeypatch.setattr("sonar.config.sonar.HAS_TRITON", True)
     with pytest.raises(ValueError, match="does not support cudagraph_mode=FULL"):
-        AphroditeConfig(
+        SonarConfig(
             attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
             compilation_config=CompilationConfig(cudagraph_mode=CUDAGraphMode.FULL),
         )
@@ -697,11 +682,11 @@ def test_hisparse_rejects_disabled_hybrid_kv_cache_manager(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
-    monkeypatch.setattr("aphrodite.config.aphrodite.HAS_TRITON", True)
+    monkeypatch.setattr("sonar.config.sonar.HAS_TRITON", True)
     with pytest.raises(ValueError, match="requires the hybrid KV cache manager"):
-        AphroditeConfig(
+        SonarConfig(
             attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
             scheduler_config=SchedulerConfig(
                 max_model_len=2048,
@@ -715,10 +700,10 @@ def test_hisparse_rejects_disabled_full_isl_reservation(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
     with pytest.raises(ValueError, match="requires --scheduler-reserve-full-isl"):
-        AphroditeConfig(
+        SonarConfig(
             attention_config=AttentionConfig(hisparse_config=HiSparseConfig()),
             scheduler_config=SchedulerConfig(
                 max_model_len=2048,
@@ -731,7 +716,7 @@ def test_hisparse_rejects_disabled_full_isl_reservation(monkeypatch):
 def test_hisparse_rejects_unsupported_platform(monkeypatch):
     monkeypatch.setattr(current_platform, "get_hisparse_backend_cls", lambda: None)
     with pytest.raises(ValueError, match="platform does not support HiSparse"):
-        AphroditeConfig(attention_config=AttentionConfig(hisparse_config=HiSparseConfig()))
+        SonarConfig(attention_config=AttentionConfig(hisparse_config=HiSparseConfig()))
 
 
 @pytest.mark.parametrize(
@@ -781,10 +766,10 @@ def test_hisparse_connector_implies_attention_config(monkeypatch, kv_transfer_co
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
-    monkeypatch.setattr("aphrodite.config.aphrodite.HAS_TRITON", True)
-    config = AphroditeConfig(
+    monkeypatch.setattr("sonar.config.sonar.HAS_TRITON", True)
+    config = SonarConfig(
         kv_transfer_config=kv_transfer_config,
         # Skip the HMA auto-detect block: it imports the connector class,
         # which pulls the platform's compiled attention extensions.
@@ -801,10 +786,10 @@ def test_hisparse_connector_preserves_explicit_attention_config(monkeypatch):
     monkeypatch.setattr(
         current_platform,
         "get_hisparse_backend_cls",
-        lambda: "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend",
+        lambda: "sonar.v1.hisparse.backend.CUDAHiSparseBackend",
     )
-    monkeypatch.setattr("aphrodite.config.aphrodite.HAS_TRITON", True)
-    config = AphroditeConfig(
+    monkeypatch.setattr("sonar.config.sonar.HAS_TRITON", True)
+    config = SonarConfig(
         attention_config=AttentionConfig(hisparse_config=HiSparseConfig(device_buffer_size=512)),
         kv_transfer_config=KVTransferConfig(
             kv_connector="HiSparseConnector",
@@ -823,7 +808,7 @@ def test_hisparse_connector_preserves_explicit_attention_config(monkeypatch):
 def test_hisparse_connector_with_unsupported_platform_rejected(monkeypatch):
     monkeypatch.setattr(current_platform, "get_hisparse_backend_cls", lambda: None)
     with pytest.raises(ValueError, match="platform does not support HiSparse"):
-        AphroditeConfig(
+        SonarConfig(
             kv_transfer_config=KVTransferConfig(
                 kv_connector="HiSparseConnector",
                 kv_role="kv_both",
@@ -834,18 +819,18 @@ def test_hisparse_connector_with_unsupported_platform_rejected(monkeypatch):
 
 def test_no_hisparse_connector_keeps_attention_config_unset(monkeypatch):
     monkeypatch.setattr(current_platform, "is_cuda", lambda: True)
-    config = AphroditeConfig(kv_transfer_config=KVTransferConfig(kv_connector="OffloadingConnector", kv_role="kv_both"))
+    config = SonarConfig(kv_transfer_config=KVTransferConfig(kv_connector="OffloadingConnector", kv_role="kv_both"))
     assert config.attention_config.hisparse_config is None
 
 
 def test_rocm_keeps_compiled_deepseek_defaults(monkeypatch):
     """ROCm keeps the DSA models (DeepSeek V3.2/V4, GLM-5.2) on their compiled
     paths and off breakable cudagraphs by default."""
-    from aphrodite.config.aphrodite import (
+    from sonar.config.sonar import (
         ROCM_DEFAULT_MRV1_ARCHITECTURES,
         default_breakable_cudagraph_architectures,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     monkeypatch.setattr(current_platform, "is_rocm", lambda: True)
     # The lookup is lru_cached against a fixed platform.
@@ -879,17 +864,17 @@ def test_rocm_keeps_compiled_deepseek_defaults(monkeypatch):
 )
 def test_rocm_kimi_runner_fallback_and_explicit_override(monkeypatch, architecture, is_rocm, override, expected):
     monkeypatch.setattr(current_platform, "is_rocm", lambda: is_rocm)
-    monkeypatch.setattr(aphrodite_config_module, "HAS_TRITON", True)
+    monkeypatch.setattr(sonar_config_module, "HAS_TRITON", True)
     if override is None:
-        monkeypatch.delenv("APHRODITE_USE_V2_MODEL_RUNNER", raising=False)
+        monkeypatch.delenv("SONAR_USE_V2_MODEL_RUNNER", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", override)
+        monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", override)
     config = SimpleNamespace(
         attention_config=AttentionConfig(),
         model_config=SimpleNamespace(architectures=[architecture]),
         _get_v2_model_runner_unsupported_features=lambda: [],
     )
-    assert AphroditeConfig.use_v2_model_runner.fget(config) is expected
+    assert SonarConfig.use_v2_model_runner.fget(config) is expected
 
 
 @pytest.mark.parametrize(
@@ -902,15 +887,15 @@ def test_rocm_kimi_runner_fallback_and_explicit_override(monkeypatch, architectu
 )
 @pytest.mark.parametrize("with_mtp", [False, True], ids=["no-mtp", "mtp"])
 def test_dsa_models_default_to_mrv2_and_breakable_cudagraph(monkeypatch, model, architecture, with_mtp):
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         is_breakable_cudagraph_enabled,
     )
-    from aphrodite.config.aphrodite import default_breakable_cudagraph_architectures
-    from aphrodite.platforms import current_platform
+    from sonar.config.sonar import default_breakable_cudagraph_architectures
+    from sonar.platforms import current_platform
 
-    monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", raising=False)
-    monkeypatch.delenv("APHRODITE_USE_V2_MODEL_RUNNER", raising=False)
-    monkeypatch.setattr(aphrodite_config_module, "HAS_TRITON", True)
+    monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH", raising=False)
+    monkeypatch.delenv("SONAR_USE_V2_MODEL_RUNNER", raising=False)
+    monkeypatch.setattr(sonar_config_module, "HAS_TRITON", True)
     monkeypatch.setattr(current_platform, "is_rocm", lambda: False)
     default_breakable_cudagraph_architectures.cache_clear()
 
@@ -932,16 +917,16 @@ def test_dsa_models_default_to_mrv2_and_breakable_cudagraph(monkeypatch, model, 
     )
     config._dflash_needs_multi_kv_group = lambda: False
     config._get_v2_model_runner_unsupported_features = lambda: []
-    config._uses_breakable_cudagraph_by_default = lambda: (AphroditeConfig._uses_breakable_cudagraph_by_default(config))
+    config._uses_breakable_cudagraph_by_default = lambda: (SonarConfig._uses_breakable_cudagraph_by_default(config))
 
     try:
-        assert AphroditeConfig.use_v2_model_runner.fget(config)
-        assert AphroditeConfig._maybe_enable_breakable_cudagraph(config)
+        assert SonarConfig.use_v2_model_runner.fget(config)
+        assert SonarConfig._maybe_enable_breakable_cudagraph(config)
         assert is_breakable_cudagraph_enabled()
         assert config.compilation_config.mode == CompilationMode.NONE
         assert config.compilation_config.cudagraph_mode.has_piecewise_cudagraphs()
     finally:
-        os.environ.pop("APHRODITE_USE_BREAKABLE_CUDAGRAPH", None)
+        os.environ.pop("SONAR_USE_BREAKABLE_CUDAGRAPH", None)
         default_breakable_cudagraph_architectures.cache_clear()
 
 
@@ -963,24 +948,24 @@ def test_dsa_models_default_to_mrv2_and_breakable_cudagraph(monkeypatch, model, 
     ],
 )
 def test_breakable_cudagraph_platform_default(monkeypatch, architecture, is_rocm, expected):
-    from aphrodite.config.aphrodite import default_breakable_cudagraph_architectures
-    from aphrodite.platforms import current_platform
+    from sonar.config.sonar import default_breakable_cudagraph_architectures
+    from sonar.platforms import current_platform
 
-    monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", raising=False)
+    monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH", raising=False)
     monkeypatch.setattr(current_platform, "is_rocm", lambda: is_rocm)
     default_breakable_cudagraph_architectures.cache_clear()
     config = SimpleNamespace(
         model_config=SimpleNamespace(architectures=[architecture]),
         compilation_config=CompilationConfig(),
     )
-    config._uses_breakable_cudagraph_by_default = lambda: (AphroditeConfig._uses_breakable_cudagraph_by_default(config))
+    config._uses_breakable_cudagraph_by_default = lambda: (SonarConfig._uses_breakable_cudagraph_by_default(config))
 
     try:
-        assert AphroditeConfig._maybe_enable_breakable_cudagraph(config) is expected
+        assert SonarConfig._maybe_enable_breakable_cudagraph(config) is expected
         if expected:
             assert config.compilation_config.mode == CompilationMode.NONE
     finally:
-        os.environ.pop("APHRODITE_USE_BREAKABLE_CUDAGRAPH", None)
+        os.environ.pop("SONAR_USE_BREAKABLE_CUDAGRAPH", None)
         default_breakable_cudagraph_architectures.cache_clear()
 
 
@@ -1000,13 +985,13 @@ def test_breakable_cudagraph_platform_default(monkeypatch, architecture, is_rocm
     ],
 )
 def test_batch_invariant_breakable_cudagraph(monkeypatch, case, hidden, heads, intermediate, tp, expected):
-    from aphrodite.config.aphrodite import default_breakable_cudagraph_architectures
-    from aphrodite.model_executor.determinism import batch_invariant_configs as bi_configs
+    from sonar.config.sonar import default_breakable_cudagraph_architectures
+    from sonar.model_executor.determinism import batch_invariant_configs as bi_configs
 
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "0" if case == "bi-off" else "1")
-    monkeypatch.delenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", raising=False)
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "0" if case == "bi-off" else "1")
+    monkeypatch.delenv("SONAR_USE_BREAKABLE_CUDAGRAPH", raising=False)
     if case == "opt-out":
-        monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "0")
+        monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "0")
     monkeypatch.setattr(current_platform, "is_cuda", lambda: True)
     monkeypatch.setattr(current_platform, "is_rocm", lambda: False)
     table = None if case == "no-table" else {(12288, 2048): None, (6144, 4096): None}
@@ -1018,7 +1003,7 @@ def test_batch_invariant_breakable_cudagraph(monkeypatch, case, hidden, heads, i
         {"test": table} if table else {},
     )
     default_breakable_cudagraph_architectures.cache_clear()
-    config = object.__new__(AphroditeConfig)
+    config = object.__new__(SonarConfig)
     config.model_config = SimpleNamespace(
         architectures=["Qwen3ForCausalLM"],
         enforce_eager=case == "eager",
@@ -1037,7 +1022,7 @@ def test_batch_invariant_breakable_cudagraph(monkeypatch, case, hidden, heads, i
         if expected:
             assert config.compilation_config.mode == CompilationMode.NONE
     finally:
-        os.environ.pop("APHRODITE_USE_BREAKABLE_CUDAGRAPH", None)
+        os.environ.pop("SONAR_USE_BREAKABLE_CUDAGRAPH", None)
         default_breakable_cudagraph_architectures.cache_clear()
 
 
@@ -1065,7 +1050,7 @@ def test_dsa_models_select_matching_mtp(model_type, expected_architecture):
 
 @pytest.mark.parametrize("method", ["extract_hidden_states", "ngram", "ngram_gpu"])
 def test_v2_model_runner_supports_speculative_method(method):
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.speculative_config = cast(
         SpeculativeConfig,
         fake_speculative_config(
@@ -1085,7 +1070,7 @@ def test_v2_model_runner_heterogeneous_vocab_draft_falls_back_to_v1(
     """The V2 draft-model speculator exchanges token ids with the target
     without a vocab mapping, so a heterogeneous-vocab (TLI) draft must stay on
     V1, where VocabMapping translates them."""
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.speculative_config = cast(
         SpeculativeConfig,
         fake_speculative_config(
@@ -1101,7 +1086,7 @@ def test_v2_model_runner_heterogeneous_vocab_draft_falls_back_to_v1(
 
 
 def test_v2_model_runner_supports_custom_logits_processors():
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.model_config = cast(ModelConfig, SimpleNamespace(logits_processors=["a.b:C"]))
 
     assert config._get_v2_model_runner_unsupported_features() == []
@@ -1123,11 +1108,11 @@ def test_dflash_candidate_draft_forces_v2_model_runner(architecture):
             )
         )
 
-    assert AphroditeConfig._is_dflash_candidate_draft(config("dflash", [architecture]))
-    assert not AphroditeConfig._is_dflash_candidate_draft(config("dflash", ["DFlashDraftModel"]))
-    assert not AphroditeConfig._is_dflash_candidate_draft(config("eagle", [architecture]))
-    assert not AphroditeConfig._is_dflash_candidate_draft(SimpleNamespace(speculative_config=None))
-    assert not AphroditeConfig._is_dflash_candidate_draft(
+    assert SonarConfig._is_dflash_candidate_draft(config("dflash", [architecture]))
+    assert not SonarConfig._is_dflash_candidate_draft(config("dflash", ["DFlashDraftModel"]))
+    assert not SonarConfig._is_dflash_candidate_draft(config("eagle", [architecture]))
+    assert not SonarConfig._is_dflash_candidate_draft(SimpleNamespace(speculative_config=None))
+    assert not SonarConfig._is_dflash_candidate_draft(
         SimpleNamespace(speculative_config=SimpleNamespace(method="dflash", draft_model_config=None))
     )
 
@@ -1176,7 +1161,7 @@ def test_resolve_cudagraph_mode_uses_loaded_piecewise_provider(
     mode, piecewise_capture_available, attention_support, expected
 ):
     compilation_config = CompilationConfig(
-        mode=CompilationMode.APHRODITE_COMPILE,
+        mode=CompilationMode.SONAR_COMPILE,
         cudagraph_mode=CUDAGraphMode[mode],
         use_inductor_graph_partition=True,
     )
@@ -1204,10 +1189,10 @@ def test_resolve_cudagraph_mode_uses_loaded_piecewise_provider(
 )
 def test_late_piecewise_restrictions_without_compilation(monkeypatch, engine_kwargs):
     """Late compatibility overrides must not restore unavailable piecewise graphs."""
-    from aphrodite.engine.arg_utils import EngineArgs
+    from sonar.engine.arg_utils import EngineArgs
 
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "0")
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     config = EngineArgs(
         model="facebook/opt-125m",
         compilation_config=CompilationConfig(mode=CompilationMode.NONE),
@@ -1271,9 +1256,9 @@ def test_adaptive_verification_requires_full_cudagraphs(graph_mode, should_raise
 
     if should_raise:
         with pytest.raises(ValueError, match="requires full CUDA graphs"):
-            AphroditeConfig._validate_adaptive_verification(config)
+            SonarConfig._validate_adaptive_verification(config)
     else:
-        AphroditeConfig._validate_adaptive_verification(config)
+        SonarConfig._validate_adaptive_verification(config)
 
 
 @pytest.mark.parametrize(
@@ -1507,12 +1492,12 @@ def test_adaptive_verification_requires_full_cudagraphs(graph_mode, should_raise
     ],
 )
 def test_models_default_to_v2_model_runner(model_config, expected, monkeypatch):
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     # The expectations below are the platform-independent defaults; ROCm's
     # DeepSeek carve-out is covered by test_rocm_keeps_compiled_deepseek_defaults.
-    monkeypatch.delenv("APHRODITE_USE_V2_MODEL_RUNNER", raising=False)
-    monkeypatch.setattr(aphrodite_config_module, "HAS_TRITON", True)
+    monkeypatch.delenv("SONAR_USE_V2_MODEL_RUNNER", raising=False)
+    monkeypatch.setattr(sonar_config_module, "HAS_TRITON", True)
     monkeypatch.setattr(current_platform, "is_rocm", lambda: False)
     config = SimpleNamespace(
         model_config=model_config,
@@ -1520,7 +1505,7 @@ def test_models_default_to_v2_model_runner(model_config, expected, monkeypatch):
     )
     config._get_v2_model_runner_unsupported_features = lambda: []
 
-    assert AphroditeConfig.use_v2_model_runner.fget(config) is expected
+    assert SonarConfig.use_v2_model_runner.fget(config) is expected
 
 
 def test_v1_model_runner_rejects_v2_only_features():
@@ -1538,11 +1523,11 @@ def test_v1_model_runner_rejects_v2_only_features():
     config._dflash_needs_multi_kv_group = lambda: False
     config._is_dflash_candidate_draft = lambda: False
     config._get_v1_model_runner_unsupported_features = lambda: (
-        AphroditeConfig._get_v1_model_runner_unsupported_features(config)
+        SonarConfig._get_v1_model_runner_unsupported_features(config)
     )
 
     with pytest.raises(ValueError, match="prefill context parallel"):
-        AphroditeConfig._validate_v1_model_runner(config)
+        SonarConfig._validate_v1_model_runner(config)
 
 
 def test_batch_sharded_sampling_rejects_return_sampling_mask():
@@ -1556,7 +1541,7 @@ def test_batch_sharded_sampling_rejects_return_sampling_mask():
     )
 
     with pytest.raises(ValueError, match="sampling masks"):
-        AphroditeConfig._validate_batch_sharded_sampling(config)
+        SonarConfig._validate_batch_sharded_sampling(config)
 
 
 @pytest.mark.skip_global_cleanup
@@ -1564,7 +1549,7 @@ def test_with_hf_config_populates_missing_architectures_from_causal_lm_mapping(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        aphrodite_config_module,
+        sonar_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -1577,7 +1562,7 @@ def test_with_hf_config_populates_missing_architectures_from_causal_lm_mapping(
     )
     hf_config = SimpleNamespace(model_type="mistral", architectures=None)
 
-    updated = AphroditeConfig.with_hf_config(cfg, hf_config)
+    updated = SonarConfig.with_hf_config(cfg, hf_config)
 
     assert updated.model_config.hf_config.architectures == ["MistralForCausalLM"]
     assert hf_config.architectures is None
@@ -1586,7 +1571,7 @@ def test_with_hf_config_populates_missing_architectures_from_causal_lm_mapping(
 @pytest.mark.skip_global_cleanup
 def test_with_hf_config_preserves_explicit_architectures_override(monkeypatch):
     monkeypatch.setattr(
-        aphrodite_config_module,
+        sonar_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -1599,7 +1584,7 @@ def test_with_hf_config_preserves_explicit_architectures_override(monkeypatch):
     )
     hf_config = SimpleNamespace(model_type="mistral", architectures=None)
 
-    updated = AphroditeConfig.with_hf_config(
+    updated = SonarConfig.with_hf_config(
         cfg,
         hf_config,
         architectures=["Ministral3ForCausalLM"],
@@ -1613,7 +1598,7 @@ def test_with_hf_config_leaves_unknown_model_type_without_architectures(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        aphrodite_config_module,
+        sonar_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -1629,7 +1614,7 @@ def test_with_hf_config_leaves_unknown_model_type_without_architectures(
         architectures=None,
     )
 
-    updated = AphroditeConfig.with_hf_config(cfg, hf_config)
+    updated = SonarConfig.with_hf_config(cfg, hf_config)
 
     assert updated.model_config.hf_config.architectures is None
 
@@ -1674,7 +1659,7 @@ def test_maybe_untie_word_embeddings(tmp_path, checkpoint_tensors, tied):
 
 
 def test_async_scheduling_with_pipeline_parallelism_is_allowed():
-    cfg = AphroditeConfig(
+    cfg = SonarConfig(
         scheduler_config=SchedulerConfig(
             max_model_len=8192,
             is_encoder_decoder=False,
@@ -1692,9 +1677,9 @@ def test_async_scheduling_with_pipeline_parallelism_is_allowed():
 def test_v1_model_runner_drops_async_scheduling_with_pipeline_parallelism(monkeypatch):
     """PP>1 must stay buildable whenever the V1 model runner is selected, such
     as the external_launcher fallback; async scheduling is dropped instead."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
 
-    cfg = AphroditeConfig(
+    cfg = SonarConfig(
         scheduler_config=SchedulerConfig(
             max_model_len=8192,
             is_encoder_decoder=False,
@@ -1725,10 +1710,10 @@ def test_v1_model_runner_rejects_pipeline_parallelism_with_async_scheduling():
     config._dflash_needs_multi_kv_group = lambda: False
     config._is_dflash_candidate_draft = lambda: False
 
-    assert AphroditeConfig._get_v1_model_runner_unsupported_features(config) == []
+    assert SonarConfig._get_v1_model_runner_unsupported_features(config) == []
 
     config.scheduler_config.async_scheduling = True
-    unsupported = AphroditeConfig._get_v1_model_runner_unsupported_features(config)
+    unsupported = SonarConfig._get_v1_model_runner_unsupported_features(config)
     assert "pipeline parallelism with async scheduling" in unsupported
 
 
@@ -1741,14 +1726,14 @@ def test_all2all_backend_has_portable_default():
 
 
 def test_dp_group_uses_configured_timeout_without_current_config(monkeypatch):
-    monkeypatch.setattr(aphrodite_config_module, "_current_aphrodite_config", None)
+    monkeypatch.setattr(sonar_config_module, "_current_sonar_config", None)
     config = ParallelConfig(cpu_distributed_timeout_seconds=30)
     with (
         patch(
-            "aphrodite.distributed.utils.rendezvous",
+            "sonar.distributed.utils.rendezvous",
             return_value=iter([(torch.distributed.HashStore(), 0, 1)]),
         ),
-        patch("aphrodite.distributed.utils.init_gloo_process_group") as init_group,
+        patch("sonar.distributed.utils.init_gloo_process_group") as init_group,
     ):
         config.stateless_init_dp_group()
     assert init_group.call_args.kwargs["timeout"] == timedelta(seconds=30)
@@ -1831,7 +1816,7 @@ def test_engram_dp_shared_memory_config_validation(monkeypatch, dp_size, load_fo
     """Reject invalid shared configs before distributed init; allow threaded loads."""
     monkeypatch.setattr(current_platform, "is_cuda_alike", lambda: True)
     config = cast(
-        AphroditeConfig,
+        SonarConfig,
         SimpleNamespace(
             model_config=SimpleNamespace(
                 architecture="DeepseekV41ForCausalLM",
@@ -1848,9 +1833,9 @@ def test_engram_dp_shared_memory_config_validation(monkeypatch, dp_size, load_fo
     )
     if error:
         with pytest.raises(ValueError, match=error):
-            AphroditeConfig._resolve_and_verify_engram_config(config)
+            SonarConfig._resolve_and_verify_engram_config(config)
     else:
-        AphroditeConfig._resolve_and_verify_engram_config(config)
+        SonarConfig._resolve_and_verify_engram_config(config)
 
 
 @pytest.mark.parametrize(
@@ -1895,7 +1880,7 @@ def test_engram_model_support(monkeypatch, architecture, ple_layers, platform, s
             config.verify_model_config(model)
 
     resolved = cast(
-        AphroditeConfig,
+        SonarConfig,
         SimpleNamespace(
             model_config=model,
             speculative_config=None,
@@ -1904,7 +1889,7 @@ def test_engram_model_support(monkeypatch, architecture, ple_layers, platform, s
             engram_config=None,
         ),
     )
-    AphroditeConfig._resolve_and_verify_engram_config(resolved)
+    SonarConfig._resolve_and_verify_engram_config(resolved)
     assert (resolved.engram_config is not None) == supported
     if supported:
         assert resolved.engram_config.cpu_offload is True
@@ -1915,7 +1900,7 @@ def test_engram_cpu_offload_default():
 
 
 def test_engram_config_defaults_to_none():
-    config = AphroditeConfig()
+    config = SonarConfig()
     assert config.engram_config is None
     assert config.compute_hash()
 
@@ -1925,7 +1910,7 @@ def test_engram_config_defaults_to_none():
 def test_deepseek_engram_rejects_microbatching(explicit, enable_dbo, ubatch_size):
     """Reject overlapping Engram staging even without an explicit EngramConfig."""
     config = cast(
-        AphroditeConfig,
+        SonarConfig,
         SimpleNamespace(
             model_config=SimpleNamespace(
                 architecture="DeepseekV41ForCausalLM",
@@ -1937,7 +1922,7 @@ def test_deepseek_engram_rejects_microbatching(explicit, enable_dbo, ubatch_size
         ),
     )
     with pytest.raises(ValueError, match="Engram does not support DBO or microbatching"):
-        AphroditeConfig._resolve_and_verify_engram_config(config)
+        SonarConfig._resolve_and_verify_engram_config(config)
 
 
 @pytest.mark.parametrize("threshold,expected", [(7, 8), (8, 8), (16, 16)])
@@ -1949,10 +1934,10 @@ def test_dbo_thresholds_cover_a_request_per_microbatch(threshold, expected):
         dbo_prefill_token_threshold=threshold,
     )
     config = cast(
-        AphroditeConfig,
+        SonarConfig,
         SimpleNamespace(uniform_decode_query_len=4, parallel_config=parallel_config),
     )
-    AphroditeConfig._raise_dbo_thresholds_for_spec_decode(config)
+    SonarConfig._raise_dbo_thresholds_for_spec_decode(config)
     assert parallel_config.dbo_decode_token_threshold == expected
     assert parallel_config.dbo_prefill_token_threshold == expected
 
@@ -1960,7 +1945,7 @@ def test_dbo_thresholds_cover_a_request_per_microbatch(threshold, expected):
 def test_engram_explicit_config_requires_supported_model():
     """Explicit all-false settings still opt into model validation."""
     with pytest.raises(ValueError, match="requires a model with supported Engram"):
-        AphroditeConfig(engram_config=EngramConfig(cpu_offload=False))
+        SonarConfig(engram_config=EngramConfig(cpu_offload=False))
 
 
 @pytest.mark.parametrize("target_has_ple", [False, True])
@@ -1974,7 +1959,7 @@ def test_engram_draft_config_validates_target(monkeypatch, target_has_ple, expli
     )
     draft = SimpleNamespace(architecture="Qwen4ExpMTP")
     config = cast(
-        AphroditeConfig,
+        SonarConfig,
         SimpleNamespace(
             model_config=draft,
             speculative_config=SimpleNamespace(draft_model_config=draft, target_model_config=target),
@@ -1985,9 +1970,9 @@ def test_engram_draft_config_validates_target(monkeypatch, target_has_ple, expli
     )
     if explicit and not target_has_ple:
         with pytest.raises(ValueError, match="requires a model with supported Engram"):
-            AphroditeConfig._resolve_and_verify_engram_config(config)
+            SonarConfig._resolve_and_verify_engram_config(config)
     else:
-        AphroditeConfig._resolve_and_verify_engram_config(config)
+        SonarConfig._resolve_and_verify_engram_config(config)
         assert (config.engram_config is not None) == target_has_ple
         if target_has_ple:
             assert config.engram_config.cpu_offload is True
@@ -2110,7 +2095,7 @@ def test_draft_model_enables_async_scheduling_by_default():
         target_model_config=model_config,
         target_parallel_config=parallel_config,
     )
-    cfg = AphroditeConfig(
+    cfg = SonarConfig(
         model_config=model_config,
         scheduler_config=SchedulerConfig(
             max_model_len=2048,
@@ -2172,7 +2157,7 @@ def test_dflash_allows_async_scheduling(tmp_path: Path):
         target_model_config=model_config,
         target_parallel_config=parallel_config,
     )
-    cfg = AphroditeConfig(
+    cfg = SonarConfig(
         model_config=model_config,
         scheduler_config=SchedulerConfig(
             max_model_len=2048,
@@ -2689,10 +2674,10 @@ def test_nested_hf_overrides():
 
 def test_model_class_overrides_registers_target():
     """`model_class_overrides` redirects an architecture to a custom class."""
-    from aphrodite.model_executor.models import ModelRegistry
+    from sonar.model_executor.models import ModelRegistry
 
     arch = "_TestModelClassOverrideArch"
-    target = "aphrodite.model_executor.models.llama:LlamaForCausalLM"
+    target = "sonar.model_executor.models.llama:LlamaForCausalLM"
     assert arch not in ModelRegistry.models
 
     model_config = ModelConfig(
@@ -2703,7 +2688,7 @@ def test_model_class_overrides_registers_target():
         # Accessing `.registry` is the chokepoint that applies the overrides;
         # it has already run during construction.
         registered = model_config.registry.models[arch]
-        assert registered.module_name == "aphrodite.model_executor.models.llama"
+        assert registered.module_name == "sonar.model_executor.models.llama"
         assert registered.class_name == "LlamaForCausalLM"
         # Idempotent: a second access does not re-register or error out.
         assert model_config.registry.models[arch] is registered
@@ -2742,9 +2727,9 @@ def test_uses_mrope(model_id, uses_mrope):
 def test_generation_config_loading():
     model_id = "Qwen/Qwen2.5-1.5B-Instruct"
 
-    # When set generation_config to "aphrodite", the default generation config
+    # When set generation_config to "sonar", the default generation config
     # will not be loaded.
-    model_config = ModelConfig(model_id, generation_config="aphrodite")
+    model_config = ModelConfig(model_id, generation_config="sonar")
     assert model_config.get_diff_sampling_param() == {}
 
     # When set generation_config to "auto", the default generation config
@@ -2774,11 +2759,11 @@ def test_generation_config_loading():
 
     assert model_config.get_diff_sampling_param() == override_result
 
-    # When generation_config is set to "aphrodite" and override_generation_config
+    # When generation_config is set to "sonar" and override_generation_config
     # is set, the override_generation_config should be used directly.
     model_config = ModelConfig(
         model_id,
-        generation_config="aphrodite",
+        generation_config="sonar",
         override_generation_config=override_generation_config,
     )
 
@@ -2794,7 +2779,7 @@ def test_generation_config_loading():
 )
 def test_load_config_pt_load_map_location(pt_load_map_location):
     load_config = LoadConfig(pt_load_map_location=pt_load_map_location)
-    config = AphroditeConfig(load_config=load_config)
+    config = SonarConfig(load_config=load_config)
 
     assert config.load_config.pt_load_map_location == pt_load_map_location
 
@@ -2834,8 +2819,8 @@ def test_get_and_verify_max_len_with_nope_layers(max_model_len, rope_parameters,
     """NoPE layers do not prevent deriving or scaling the context length."""
     from transformers import PreTrainedConfig
 
-    from aphrodite.config.model import _get_and_verify_max_len
-    from aphrodite.transformers_utils.model_arch_config_convertor import (
+    from sonar.config.model import _get_and_verify_max_len
+    from sonar.transformers_utils.model_arch_config_convertor import (
         ModelArchConfigConvertorBase,
     )
 
@@ -2883,8 +2868,8 @@ def test_get_and_verify_max_len_yarn_is_already_scaled(rope_type, factor, expect
     """
     from transformers import PreTrainedConfig
 
-    from aphrodite.config.model import _get_and_verify_max_len
-    from aphrodite.transformers_utils.model_arch_config_convertor import (
+    from sonar.config.model import _get_and_verify_max_len
+    from sonar.transformers_utils.model_arch_config_convertor import (
         ModelArchConfigConvertorBase,
     )
 
@@ -2924,7 +2909,7 @@ class MockConfig:
         "s3://example-bucket-2/model/",
     ],
 )
-@patch("aphrodite.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
+@patch("sonar.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
 def test_s3_url_model_tokenizer_paths(mock_pull_files, s3_url):
     """Test that S3 URLs create deterministic local directories for model and
     tokenizer."""
@@ -2968,7 +2953,7 @@ def test_s3_url_model_tokenizer_paths(mock_pull_files, s3_url):
     )
 
 
-@patch("aphrodite.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
+@patch("sonar.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
 def test_s3_url_different_models_create_different_directories(mock_pull_files):
     """Test that different S3 URLs create different local directories."""
     # Mock pull_files to avoid actually downloading files during tests
@@ -3002,7 +2987,7 @@ def test_s3_url_different_models_create_different_directories(mock_pull_files):
     assert os.path.exists(config2.tokenizer) and os.path.isdir(config2.tokenizer)
 
 
-@patch("aphrodite.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
+@patch("sonar.transformers_utils.runai_utils.ObjectStorageModel.pull_files")
 def test_s3_url_different_model_and_tokenizer(mock_pull_files):
     """Test that when model and tokenizer are different cloud URIs,
     pull_files receives the correct URI for each."""
@@ -3132,13 +3117,13 @@ def test_is_chunked_prefill_supported(
     expected_attn_type: str,
     expected_result: bool,
     reason: str,
-    caplog_aphrodite,
+    caplog_sonar,
 ):
     model_config = ModelConfig(model_id, trust_remote_code=True)
     assert model_config.attn_type == expected_attn_type
-    with caplog_aphrodite.at_level(level=logging.DEBUG, logger="aphrodite"):
+    with caplog_sonar.at_level(level=logging.DEBUG, logger="sonar"):
         assert model_config.is_chunked_prefill_supported == expected_result
-    assert reason in caplog_aphrodite.text
+    assert reason in caplog_sonar.text
 
 
 @pytest.mark.parametrize(
@@ -3251,13 +3236,13 @@ def test_is_prefix_caching_supported(
     expected_attn_type: str,
     expected_result: bool,
     reason: str,
-    caplog_aphrodite,
+    caplog_sonar,
 ):
     model_config = ModelConfig(model_id, trust_remote_code=True)
     assert model_config.attn_type == expected_attn_type
-    with caplog_aphrodite.at_level(level=logging.DEBUG, logger="aphrodite"):
+    with caplog_sonar.at_level(level=logging.DEBUG, logger="sonar"):
         assert model_config.is_prefix_caching_supported == expected_result
-    assert reason in caplog_aphrodite.text
+    assert reason in caplog_sonar.text
 
 
 @pytest.mark.parametrize(
@@ -3273,15 +3258,15 @@ def test_is_prefix_caching_supported(
 )
 def test_is_custom_op_enabled(backend: str, custom_ops: list[str], expected: bool):
     """Test that is_custom_op_enabled works correctly."""
-    config = AphroditeConfig(compilation_config=CompilationConfig(backend=backend, custom_ops=custom_ops))
+    config = SonarConfig(compilation_config=CompilationConfig(backend=backend, custom_ops=custom_ops))
     assert config.compilation_config.is_custom_op_enabled("fused_layernorm") is expected
 
 
-def test_aphrodite_config_defaults_are_none():
+def test_sonar_config_defaults_are_none():
     """Verify that optimization-level defaults are None when not set by user."""
     # Test all optimization levels to ensure defaults work correctly
     for opt_level in OptimizationLevel:
-        config = object.__new__(AphroditeConfig)
+        config = object.__new__(SonarConfig)
         config.compilation_config = CompilationConfig()
         config.optimization_level = opt_level
         config.model_config = None
@@ -3317,7 +3302,7 @@ def test_validate_mamba_align_subblock_prefill():
         kv_transfer_config=None,
     )
 
-    AphroditeConfig.validate_block_size(config)
+    SonarConfig.validate_block_size(config)
 
 
 @pytest.mark.parametrize(
@@ -3363,18 +3348,18 @@ def test_validate_mamba_align_subblock_prefill():
         ("RedHatAI/DeepSeek-V2.5-1210-FP8", CompilationConfig(), OptimizationLevel.O3),
     ],
 )
-def test_aphrodite_config_defaults(model_id, compilation_config, optimization_level):
+def test_sonar_config_defaults(model_id, compilation_config, optimization_level):
     """Test that optimization-level defaults are correctly applied."""
     model_config = None
     if model_id is not None:
         model_config = ModelConfig(model_id)
-        aphrodite_config = AphroditeConfig(
+        sonar_config = SonarConfig(
             model_config=model_config,
             compilation_config=compilation_config,
             optimization_level=optimization_level,
         )
     else:
-        aphrodite_config = AphroditeConfig(
+        sonar_config = SonarConfig(
             compilation_config=compilation_config,
             optimization_level=optimization_level,
         )
@@ -3384,8 +3369,8 @@ def test_aphrodite_config_defaults(model_id, compilation_config, optimization_le
     # Verify pass_config defaults (nested under compilation_config)
     pass_config_dict = default_config["compilation_config"]["pass_config"]
     for pass_k, pass_v in pass_config_dict.items():
-        actual = getattr(aphrodite_config.compilation_config.pass_config, pass_k)
-        expected = pass_v(aphrodite_config) if callable(pass_v) else pass_v
+        actual = getattr(sonar_config.compilation_config.pass_config, pass_k)
+        expected = pass_v(sonar_config) if callable(pass_v) else pass_v
         assert actual == expected, f"pass_config.{pass_k}: expected {expected}, got {actual}"
 
     # Verify other compilation_config defaults
@@ -3393,8 +3378,8 @@ def test_aphrodite_config_defaults(model_id, compilation_config, optimization_le
     for k, v in compilation_config_dict.items():
         if k == "pass_config":
             continue
-        actual = getattr(aphrodite_config.compilation_config, k)
-        expected = v(aphrodite_config) if callable(v) else v
+        actual = getattr(sonar_config.compilation_config, k)
+        expected = v(sonar_config) if callable(v) else v
         # On platforms without static graph support, __post_init__ forces
         # cudagraph_mode to NONE; expect that instead of the level default.
         if k == "cudagraph_mode" and not current_platform.support_static_graph_mode():
@@ -3402,13 +3387,13 @@ def test_aphrodite_config_defaults(model_id, compilation_config, optimization_le
         assert actual == expected, f"compilation_config.{k}: expected {expected}, got {actual}"
 
 
-def test_aphrodite_config_callable_defaults():
+def test_sonar_config_callable_defaults():
     """Test that callable defaults work in the config system.
 
-    Verifies that lambdas in default configs can inspect AphroditeConfig properties
+    Verifies that lambdas in default configs can inspect SonarConfig properties
     (e.g., is_quantized, is_model_moe) to conditionally set optimization flags.
     """
-    config_no_model = AphroditeConfig(optimization_level=OptimizationLevel.O2)
+    config_no_model = SonarConfig(optimization_level=OptimizationLevel.O2)
 
     # Callable that checks if model exists
     has_model = lambda cfg: cfg.model_config is not None
@@ -3416,14 +3401,14 @@ def test_aphrodite_config_callable_defaults():
 
     # Test with quantized model
     quantized_model = ModelConfig("RedHatAI/Llama-3.2-1B-FP8")
-    config_quantized = AphroditeConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
+    config_quantized = SonarConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
     enable_if_quantized = lambda cfg: (cfg.model_config is not None and cfg.model_config.is_quantized)
     assert enable_if_quantized(config_quantized) is True
     assert enable_if_quantized(config_no_model) is False
 
     # Test with MoE model
     moe_model = ModelConfig("deepseek-ai/DeepSeek-V2-Lite")
-    config_moe = AphroditeConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
+    config_moe = SonarConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
     enable_if_sequential = lambda cfg: (cfg.model_config is not None and not cfg.model_config.is_moe)
     assert enable_if_sequential(config_moe) is False
     assert enable_if_sequential(config_quantized) is True
@@ -3433,7 +3418,7 @@ def test_aphrodite_config_callable_defaults():
     not current_platform.support_static_graph_mode(),
     reason="Explicit overrides may be force-overwritten without static graph support.",
 )
-def test_aphrodite_config_explicit_overrides():
+def test_sonar_config_explicit_overrides():
     """Test that explicit property overrides work correctly with callable defaults.
 
     When users explicitly set configuration properties, those values
@@ -3445,18 +3430,18 @@ def test_aphrodite_config_explicit_overrides():
     regular_model = ModelConfig("Qwen/Qwen1.5-7B")
 
     # Explicit compilation mode override on O0 (where default is NONE)
-    compilation_config = CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE)
-    config = AphroditeConfig(
+    compilation_config = CompilationConfig(mode=CompilationMode.SONAR_COMPILE)
+    config = SonarConfig(
         optimization_level=OptimizationLevel.O0,
         compilation_config=compilation_config,
     )
-    assert config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config.compilation_config.mode == CompilationMode.SONAR_COMPILE
     assert config.compilation_config.cudagraph_mode == CUDAGraphMode.NONE
 
     # Explicit pass config flags to override defaults
     pass_config = PassConfig(eliminate_noops=True, fuse_attn_quant=True)
     compilation_config = CompilationConfig(pass_config=pass_config)
-    config = AphroditeConfig(
+    config = SonarConfig(
         optimization_level=OptimizationLevel.O0,
         compilation_config=compilation_config,
     )
@@ -3466,7 +3451,7 @@ def test_aphrodite_config_explicit_overrides():
     # Explicit cudagraph mode override on quantized model at O2
     pass_config = PassConfig(enable_qk_norm_rope_fusion=True)
     compilation_config = CompilationConfig(cudagraph_mode=CUDAGraphMode.NONE, pass_config=pass_config)
-    config = AphroditeConfig(
+    config = SonarConfig(
         model_config=quantized_model,
         optimization_level=OptimizationLevel.O2,
         compilation_config=compilation_config,
@@ -3476,31 +3461,31 @@ def test_aphrodite_config_explicit_overrides():
         current_platform.is_cuda_alike() or current_platform.is_xpu()
     )
     # Mode should still use default for O2
-    assert config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config.compilation_config.mode == CompilationMode.SONAR_COMPILE
 
     # Different optimization levels with same model
-    config_o0 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O0)
-    config_o2 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
+    config_o0 = SonarConfig(model_config=regular_model, optimization_level=OptimizationLevel.O0)
+    config_o2 = SonarConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
     assert config_o0.compilation_config.mode == CompilationMode.NONE
-    assert config_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config_o2.compilation_config.mode == CompilationMode.SONAR_COMPILE
     assert config_o0.compilation_config.cudagraph_mode == CUDAGraphMode.NONE
     assert config_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
 
     # Same optimization level across different model types
-    config_moe_o2 = AphroditeConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
-    config_regular_o2 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
-    config_quantized_o2 = AphroditeConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
+    config_moe_o2 = SonarConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
+    config_regular_o2 = SonarConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
+    config_quantized_o2 = SonarConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
     # All should have same base compilation settings at O2
-    assert config_moe_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
-    assert config_regular_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
-    assert config_quantized_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config_moe_o2.compilation_config.mode == CompilationMode.SONAR_COMPILE
+    assert config_regular_o2.compilation_config.mode == CompilationMode.SONAR_COMPILE
+    assert config_quantized_o2.compilation_config.mode == CompilationMode.SONAR_COMPILE
     assert config_moe_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
     assert config_regular_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
 
     # Override one field but not others
     pass_config = PassConfig(eliminate_noops=False)
     compilation_config = CompilationConfig(pass_config=pass_config)
-    config = AphroditeConfig(
+    config = SonarConfig(
         model_config=regular_model,
         optimization_level=OptimizationLevel.O2,
         compilation_config=compilation_config,
@@ -3508,7 +3493,7 @@ def test_aphrodite_config_explicit_overrides():
     # Explicit override should be respected
     assert config.compilation_config.pass_config.eliminate_noops is False
     # Other fields should still use defaults
-    assert config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
+    assert config.compilation_config.mode == CompilationMode.SONAR_COMPILE
     assert config.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
 
 
@@ -3516,11 +3501,11 @@ def test_fusion_pass_op_priority():
     """This test checks that custom op enablement & IR op priority
     correctly control default fusions"""
     # Default config, O2, rms_norm+quant fusion disabled
-    cfg1 = AphroditeConfig()
+    cfg1 = SonarConfig()
     assert not cfg1.compilation_config.pass_config.fuse_norm_quant
 
     # rms_norm manually enabled, O1, rms_norm+quant fusion enabled
-    cfg2 = AphroditeConfig(
+    cfg2 = SonarConfig(
         optimization_level=OptimizationLevel.O1,
         compilation_config=CompilationConfig(
             custom_ops=["+rms_norm"],
@@ -3529,13 +3514,13 @@ def test_fusion_pass_op_priority():
     assert cfg2.compilation_config.pass_config.fuse_norm_quant
 
     # using custom kernel for RMSNorm via IR:
-    # Note that Aphrodite IR only supports the non-residual rms_norm for now;
+    # Note that Sonar IR only supports the non-residual rms_norm for now;
     # soon this will be resolved.
-    cfg3 = AphroditeConfig(kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=["aphrodite_c"])))
+    cfg3 = SonarConfig(kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=["sonar_c"])))
     assert cfg3.compilation_config.pass_config.fuse_norm_quant
 
     # block-fp8 model should enable quant_fp8 automatically
-    cfg4 = AphroditeConfig(model_config=ModelConfig("Qwen/Qwen3-4B-FP8"))
+    cfg4 = SonarConfig(model_config=ModelConfig("Qwen/Qwen3-4B-FP8"))
     assert "+quant_fp8" in cfg4.compilation_config.custom_ops
     assert cfg4.compilation_config.pass_config.fuse_norm_quant
 
@@ -3553,7 +3538,7 @@ def test_scheduler_config_init():
 
 def test_eplb_num_redundant_experts_default():
     """Test that num_redundant_experts defaults to None and can be set."""
-    from aphrodite.config.parallel import EPLBConfig, ParallelConfig
+    from sonar.config.parallel import EPLBConfig, ParallelConfig
 
     # Test default is None
     eplb_config = EPLBConfig()
@@ -3610,15 +3595,15 @@ def test_eplb_num_redundant_experts_auto_computation(num_experts, tp_size, pcp_s
     The computation ensures (num_logical_experts + num_redundant_experts)
     is divisible by ep_size (= tp_size * pcp_size * dp_size).
     """
-    from aphrodite.config.parallel import ParallelConfig
+    from sonar.config.parallel import ParallelConfig
 
     with (
         patch(
-            "aphrodite.config.parallel.current_platform.is_cuda_alike",
+            "sonar.config.parallel.current_platform.is_cuda_alike",
             return_value=True,
         ),
         patch(
-            "aphrodite.config.parallel.current_platform.device_count",
+            "sonar.config.parallel.current_platform.device_count",
             return_value=tp_size * pcp_size * dp_size,
         ),
     ):
@@ -3652,15 +3637,15 @@ def test_eplb_num_redundant_experts_auto_computation(num_experts, tp_size, pcp_s
 
 def test_eplb_num_redundant_experts_explicit_value_preserved():
     """Test that explicitly set num_redundant_experts is not overwritten."""
-    from aphrodite.config.parallel import EPLBConfig, ParallelConfig
+    from sonar.config.parallel import EPLBConfig, ParallelConfig
 
     with (
         patch(
-            "aphrodite.config.parallel.current_platform.is_cuda_alike",
+            "sonar.config.parallel.current_platform.is_cuda_alike",
             return_value=True,
         ),
         patch(
-            "aphrodite.config.parallel.current_platform.device_count",
+            "sonar.config.parallel.current_platform.device_count",
             return_value=8,
         ),
     ):
@@ -3716,16 +3701,16 @@ def test_needs_dp_coordination(
     expected_needs_coordinator,
 ):
     """Test that DP coordinator and wave coordination are configured correctly."""
-    from aphrodite.config import ParallelConfig
+    from sonar.config import ParallelConfig
 
     model_config = ModelConfig(model_id)
     parallel_config = ParallelConfig(
         data_parallel_size=data_parallel_size,
         data_parallel_external_lb=external_lb,
     )
-    aphrodite_config = AphroditeConfig(model_config=model_config, parallel_config=parallel_config)
+    sonar_config = SonarConfig(model_config=model_config, parallel_config=parallel_config)
 
-    assert aphrodite_config.needs_dp_coordinator == expected_needs_coordinator
+    assert sonar_config.needs_dp_coordinator == expected_needs_coordinator
 
 
 def test_fault_tolerance_requires_single_api_server():
@@ -3828,16 +3813,16 @@ def test_draft_sample_method_gumbel_is_rejected():
         )
 
 
-def _watermarked_aphrodite_config() -> AphroditeConfig:
-    config = object.__new__(AphroditeConfig)
+def _watermarked_sonar_config() -> SonarConfig:
+    config = object.__new__(SonarConfig)
     config.watermark_config = WatermarkConfig(key=42)
     config.attention_config = AttentionConfig()
     config.speculative_config = None
     return config
 
 
-def test_target_only_gumbel_allows_speculative_decoding(caplog_aphrodite, disable_log_dedup):
-    config = _watermarked_aphrodite_config()
+def test_target_only_gumbel_allows_speculative_decoding(caplog_sonar, disable_log_dedup):
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(key=42, allow_target_only_watermarking=True)
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3846,14 +3831,14 @@ def test_target_only_gumbel_allows_speculative_decoding(caplog_aphrodite, disabl
         parallel_drafting=False,
     )
 
-    with caplog_aphrodite.at_level(logging.WARNING):
+    with caplog_sonar.at_level(logging.WARNING):
         config._check_supports_watermarking()
 
-    assert "Target-only watermarking leaves accepted draft tokens" in caplog_aphrodite.text
+    assert "Target-only watermarking leaves accepted draft tokens" in caplog_sonar.text
 
 
-def test_speculative_watermarking_without_context_dedup_does_not_warn(caplog_aphrodite, disable_log_dedup):
-    config = _watermarked_aphrodite_config()
+def test_speculative_watermarking_without_context_dedup_does_not_warn(caplog_sonar, disable_log_dedup):
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42, deduplicate_contexts="none")
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3862,15 +3847,15 @@ def test_speculative_watermarking_without_context_dedup_does_not_warn(caplog_aph
         parallel_drafting=False,
     )
 
-    caplog_aphrodite.clear()
-    with caplog_aphrodite.at_level(logging.WARNING):
+    caplog_sonar.clear()
+    with caplog_sonar.at_level(logging.WARNING):
         config._check_supports_watermarking()
 
-    assert "dedup" not in caplog_aphrodite.text.lower()
+    assert "dedup" not in caplog_sonar.text.lower()
 
 
-def test_speculative_context_dedup_logs_no_unsupported_warning(caplog_aphrodite, disable_log_dedup):
-    config = _watermarked_aphrodite_config()
+def test_speculative_context_dedup_logs_no_unsupported_warning(caplog_sonar, disable_log_dedup):
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42, deduplicate_contexts="single_turn")
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3879,15 +3864,15 @@ def test_speculative_context_dedup_logs_no_unsupported_warning(caplog_aphrodite,
         parallel_drafting=False,
     )
 
-    caplog_aphrodite.clear()
-    with caplog_aphrodite.at_level(logging.WARNING):
+    caplog_sonar.clear()
+    with caplog_sonar.at_level(logging.WARNING):
         config._check_supports_watermarking()
 
-    assert "dedup" not in caplog_aphrodite.text.lower()
+    assert "dedup" not in caplog_sonar.text.lower()
 
 
 def test_gumbel_rejects_speculative_decoding_without_target_only():
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="gumbel", key=42, allow_target_only_watermarking=False)
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3900,8 +3885,8 @@ def test_gumbel_rejects_speculative_decoding_without_target_only():
         config._check_supports_watermarking()
 
 
-def test_dual_key_gumbel_warns_that_configured_alpha_is_unused(caplog_aphrodite, disable_log_dedup):
-    config = _watermarked_aphrodite_config()
+def test_dual_key_gumbel_warns_that_configured_alpha_is_unused(caplog_sonar, disable_log_dedup):
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42, alpha=0.25)
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3910,10 +3895,10 @@ def test_dual_key_gumbel_warns_that_configured_alpha_is_unused(caplog_aphrodite,
         parallel_drafting=False,
     )
 
-    with caplog_aphrodite.at_level(logging.WARNING):
+    with caplog_sonar.at_level(logging.WARNING):
         config._check_supports_watermarking()
 
-    assert "The configured alpha=0.25 is not used" in caplog_aphrodite.text
+    assert "The configured alpha=0.25 is not used" in caplog_sonar.text
 
 
 @pytest.mark.parametrize(
@@ -3921,8 +3906,8 @@ def test_dual_key_gumbel_warns_that_configured_alpha_is_unused(caplog_aphrodite,
     [(0.1, True), (0.25, False)],
     ids=["default-alpha", "no-specdec"],
 )
-def test_dual_key_gumbel_alpha_warning_is_not_emitted(caplog_aphrodite, disable_log_dedup, alpha, speculative):
-    config = _watermarked_aphrodite_config()
+def test_dual_key_gumbel_alpha_warning_is_not_emitted(caplog_sonar, disable_log_dedup, alpha, speculative):
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42, alpha=alpha)
     if speculative:
         config.speculative_config = fake_speculative_config(
@@ -3932,14 +3917,14 @@ def test_dual_key_gumbel_alpha_warning_is_not_emitted(caplog_aphrodite, disable_
             parallel_drafting=False,
         )
 
-    with caplog_aphrodite.at_level(logging.WARNING):
+    with caplog_sonar.at_level(logging.WARNING):
         config._check_supports_watermarking()
 
-    assert "is not used" not in caplog_aphrodite.text
+    assert "is not used" not in caplog_sonar.text
 
 
 def test_dual_key_gumbel_requires_probabilistic_drafting():
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42)
     config.speculative_config = fake_speculative_config(
         method="mtp",
@@ -3963,7 +3948,7 @@ def test_dual_key_gumbel_requires_probabilistic_drafting():
     ],
 )
 def test_dual_key_gumbel_supports_probabilistic_speculative_decoding(method, parallel_drafting):
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42)
     config.speculative_config = fake_speculative_config(
         method=method,
@@ -3983,7 +3968,7 @@ _DFLASH_CANDIDATE_SPECULATOR_CONFIGS = {
 
 @pytest.mark.parametrize("architecture", ["DFlash2DraftModel", "LiLiCorrDraftModel"])
 def test_dual_key_gumbel_rejects_dflash_candidate_drafts(architecture):
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42)
     config.speculative_config = fake_speculative_config(
         _DFLASH_CANDIDATE_SPECULATOR_CONFIGS[architecture],
@@ -3999,7 +3984,7 @@ def test_dual_key_gumbel_rejects_dflash_candidate_drafts(architecture):
 
 
 def test_dual_key_gumbel_rejects_unsupported_speculative_method():
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42)
     config.speculative_config = fake_speculative_config(
         method="ngram",
@@ -4021,7 +4006,7 @@ def test_dual_key_gumbel_rejects_unsupported_speculative_method():
     ],
 )
 def test_dual_key_gumbel_rejects_incompatible_speculative_modes(overrides, match):
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.watermark_config = WatermarkConfig(algorithm="dual_key_gumbel", key=42)
     values = {
         "method": "mtp",
@@ -4036,21 +4021,21 @@ def test_dual_key_gumbel_rejects_incompatible_speculative_modes(overrides, match
         config._check_supports_watermarking()
 
 
-def test_gumbel_watermark_disables_beam_search_watermarking(caplog_aphrodite):
-    enabled = _watermarked_aphrodite_config()._check_supports_watermarking(BeamSearchParams(beam_width=2, max_tokens=1))
+def test_gumbel_watermark_disables_beam_search_watermarking(caplog_sonar):
+    enabled = _watermarked_sonar_config()._check_supports_watermarking(BeamSearchParams(beam_width=2, max_tokens=1))
 
     assert not enabled
-    assert "beam search requests will run without watermarking" in caplog_aphrodite.text
+    assert "beam search requests will run without watermarking" in caplog_sonar.text
 
 
 def test_gumbel_watermark_allows_unwatermarked_beam_search():
-    _watermarked_aphrodite_config()._check_supports_watermarking(
+    _watermarked_sonar_config()._check_supports_watermarking(
         BeamSearchParams(beam_width=2, max_tokens=1, watermarking=False)
     )
 
 
 def test_unwatermarked_beam_does_not_bypass_engine_incompatibilities():
-    config = _watermarked_aphrodite_config()
+    config = _watermarked_sonar_config()
     config.speculative_config = SpeculativeConfig(
         method="ngram",
         num_speculative_tokens=1,
@@ -4062,7 +4047,7 @@ def test_unwatermarked_beam_does_not_bypass_engine_incompatibilities():
 
 def test_gumbel_watermark_rejects_custom_sampler():
     with pytest.raises(ValueError, match="custom samplers are not supported"):
-        _watermarked_aphrodite_config()._check_supports_watermarking(custom_sampler=True)
+        _watermarked_sonar_config()._check_supports_watermarking(custom_sampler=True)
 
 
 def test_watermark_key_must_fit_in_64_bits():
@@ -4087,7 +4072,7 @@ def test_watermark_key_is_excluded_from_serialization():
     assert "key" not in serialized
 
 
-@patch("aphrodite.config.ModelConfig")
+@patch("sonar.config.ModelConfig")
 def test_mtp_draft_uses_model_weights_not_local_cache(mock_model_config_cls):
     """Regression test: MTP + runai_streamer should use model_weights (original
     S3 URL) for the draft model, not model (local cache dir set by
@@ -4095,7 +4080,7 @@ def test_mtp_draft_uses_model_weights_not_local_cache(mock_model_config_cls):
     from unittest.mock import MagicMock
 
     s3_url = "s3://my-bucket/Qwen3-35B-A3B-FP8"
-    local_cache = "/root/.cache/aphrodite/assets/model_streamer/abcd1234"
+    local_cache = "/root/.cache/sonar/assets/model_streamer/abcd1234"
 
     mock_draft = MagicMock()
     mock_draft.model = local_cache
@@ -4248,12 +4233,12 @@ def test_qwen3_omni_dspark_allows_smaller_input_vocabulary():
 
 def test_ir_op_priority_default():
     """Test that IR op priority defaults are set correctly."""
-    from aphrodite.config.kernel import IrOpPriorityConfig
+    from sonar.config.kernel import IrOpPriorityConfig
 
     # Assert default is applied to ops
-    priority_config = IrOpPriorityConfig.with_default(["aphrodite_c", "native"])
-    assert priority_config.rms_norm == ["aphrodite_c", "native"]
-    assert priority_config.fused_add_rms_norm == ["aphrodite_c", "native"]
+    priority_config = IrOpPriorityConfig.with_default(["sonar_c", "native"])
+    assert priority_config.rms_norm == ["sonar_c", "native"]
+    assert priority_config.fused_add_rms_norm == ["sonar_c", "native"]
 
     # Assert single ops override the default
     priority_config = IrOpPriorityConfig.with_default(["native"], rms_norm=["oink", "native"])
@@ -4261,11 +4246,11 @@ def test_ir_op_priority_default():
     assert priority_config.fused_add_rms_norm == ["native"]
 
 
-@pytest.mark.parametrize("mode", [CompilationMode.NONE, CompilationMode.APHRODITE_COMPILE])
+@pytest.mark.parametrize("mode", [CompilationMode.NONE, CompilationMode.SONAR_COMPILE])
 @pytest.mark.parametrize("backend", ["inductor", "eager"])
 def test_ir_op_platform_defaults_support_sparse_gelu(mode, backend):
     """Worker initialization must not select an unregistered sparse GELU provider."""
-    from aphrodite import ir
+    from sonar import ir
 
     config = SimpleNamespace(compilation_config=CompilationConfig(mode=mode, backend=backend))
     priority = current_platform.get_default_ir_op_priority(config)
@@ -4277,48 +4262,48 @@ def test_ir_op_platform_defaults_support_sparse_gelu(mode, backend):
 
 def test_ir_op_priority_str():
     """Test that passing a comma-delimited string works."""
-    from aphrodite.config.kernel import IrOpPriorityConfig
+    from sonar.config.kernel import IrOpPriorityConfig
 
-    priority_config = IrOpPriorityConfig(rms_norm="aphrodite_c")
-    assert priority_config.rms_norm == ["aphrodite_c"]
+    priority_config = IrOpPriorityConfig(rms_norm="sonar_c")
+    assert priority_config.rms_norm == ["sonar_c"]
 
-    priority_config = IrOpPriorityConfig(rms_norm="aphrodite_c,native")
-    assert priority_config.rms_norm == ["aphrodite_c", "native"]
+    priority_config = IrOpPriorityConfig(rms_norm="sonar_c,native")
+    assert priority_config.rms_norm == ["sonar_c", "native"]
 
-    priority_config = IrOpPriorityConfig(rms_norm=" native, aphrodite_c ")
-    assert priority_config.rms_norm == ["native", "aphrodite_c"]
+    priority_config = IrOpPriorityConfig(rms_norm=" native, sonar_c ")
+    assert priority_config.rms_norm == ["native", "sonar_c"]
 
     with pytest.raises(pydantic.ValidationError):
         # must be list of only strings
-        priority_config = IrOpPriorityConfig(rms_norm=["aphrodite_c", 4, "native"])
+        priority_config = IrOpPriorityConfig(rms_norm=["sonar_c", 4, "native"])
 
 
 def test_ir_op_priority_ctx():
     """Test that the priority-setting context sets priority correctly."""
-    from aphrodite import ir
-    from aphrodite.config.kernel import IrOpPriorityConfig
+    from sonar import ir
+    from sonar.config.kernel import IrOpPriorityConfig
 
-    priority = IrOpPriorityConfig.with_default(["native"], rms_norm=["aphrodite_c"])
-    priority2 = IrOpPriorityConfig.with_default(["native"], fused_add_rms_norm=["aphrodite_c"])
+    priority = IrOpPriorityConfig.with_default(["native"], rms_norm=["sonar_c"])
+    priority2 = IrOpPriorityConfig.with_default(["native"], fused_add_rms_norm=["sonar_c"])
     with priority.set_priority():
-        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["sonar_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
         with priority2.set_priority():
             assert ir.ops.rms_norm.get_priority() == ["native"]
-            assert ir.ops.fused_add_rms_norm.get_priority() == ["aphrodite_c", "native"]
+            assert ir.ops.fused_add_rms_norm.get_priority() == ["sonar_c", "native"]
 
         # context restored
-        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["sonar_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
 
         with pytest.raises(ValueError), priority2.set_priority():
             assert ir.ops.rms_norm.get_priority() == ["native"]
-            assert ir.ops.fused_add_rms_norm.get_priority() == ["aphrodite_c", "native"]
+            assert ir.ops.fused_add_rms_norm.get_priority() == ["sonar_c", "native"]
 
             raise ValueError
 
         # context restored even after exception
-        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["sonar_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
 
 
@@ -4337,7 +4322,7 @@ def test_load_config_rejects_non_string_load_format(bad_load_format):
 REVISION = "c1899de289a04d12100db370d81485cdf75e47ca"
 
 
-@patch("aphrodite.config.model.resolve_revision", return_value=ResolvedRevision(REVISION))
+@patch("sonar.config.model.resolve_revision", return_value=ResolvedRevision(REVISION))
 def test_revision_resolved_for_model(mock_resolve):
     model = "Qwen/Qwen3-0.6B"
     config = ModelConfig(model)
@@ -4360,7 +4345,7 @@ def test_revision_resolved_for_model(mock_resolve):
 )
 def test_hc_sp_model_support(enabled, supported, cuda_alike, tp_size, pp_size, error):
     """Validate active HC SP configurations and ignore the flag with TP=1."""
-    from aphrodite.model_executor.models.registry import ModelRegistry
+    from sonar.model_executor.models.registry import ModelRegistry
 
     model = SimpleNamespace(
         architectures=["HCModel"],
@@ -4377,7 +4362,7 @@ def test_hc_sp_model_support(enabled, supported, cuda_alike, tp_size, pp_size, e
     )
     with (
         patch(
-            "aphrodite.config.model.current_platform.is_cuda_alike",
+            "sonar.config.model.current_platform.is_cuda_alike",
             return_value=cuda_alike,
         ),
         patch.object(ModelRegistry, "is_hc_sp_supported_model", return_value=supported),

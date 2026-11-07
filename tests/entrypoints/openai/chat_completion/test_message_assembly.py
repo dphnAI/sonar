@@ -5,11 +5,11 @@ from typing import Any
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.entrypoints.openai.chat_completion.message_assembly import (
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.entrypoints.openai.chat_completion.message_assembly import (
     assemble_chat_message_fields,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 
 TOOLS = [
     {

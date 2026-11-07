@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 import torch
 
-import aphrodite._custom_ops as ops
+import sonar._custom_ops as ops
 
 
 def to_fp8(tensor: torch.Tensor) -> torch.Tensor:

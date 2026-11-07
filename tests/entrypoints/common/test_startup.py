@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from argparse import Namespace
 
-from aphrodite.entrypoints.common import startup
-from aphrodite.entrypoints.common.startup import redact_sensitive_args
+from sonar.entrypoints.common import startup
+from sonar.entrypoints.common.startup import redact_sensitive_args
 
 
 class TestRedactSensitiveArgs:
@@ -44,7 +44,7 @@ class TestRedactSensitiveArgs:
             "tool_call_parser": "qwen3_coder",
         }
         monkeypatch.setattr(startup, "get_non_default_args", lambda args: non_default)
-        with caplog.at_level("INFO", logger="aphrodite.entrypoints.common.startup"):
+        with caplog.at_level("INFO", logger="sonar.entrypoints.common.startup"):
             startup.log_non_default_args(args=Namespace())
         message = caplog.text
         assert self.API_KEY not in message
@@ -61,7 +61,7 @@ class TestRedactSensitiveArgs:
             "tool_call_parser": "qwen3_coder",
         }
         monkeypatch.setattr(startup, "get_non_default_args", lambda args: non_default)
-        with caplog.at_level("INFO", logger="aphrodite.entrypoints.common.startup"):
+        with caplog.at_level("INFO", logger="sonar.entrypoints.common.startup"):
             startup.log_non_default_args(args=Namespace())
         message = caplog.text
         assert hf_token not in message

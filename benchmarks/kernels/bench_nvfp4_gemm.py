@@ -8,10 +8,10 @@ import os
 import torch
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.triton_utils import triton
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.triton_utils import triton
 
 if not current_platform.has_device_capability(100):
     raise RuntimeError("NVFP4 requires compute capability of 10.0 (Blackwell)")

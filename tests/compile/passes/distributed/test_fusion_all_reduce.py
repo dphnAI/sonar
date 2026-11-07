@@ -6,46 +6,46 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
-from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
-from aphrodite.compilation.passes.fusion.allreduce_rms_fusion import (
+import sonar.envs as envs
+from sonar._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
+from sonar._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
+from sonar.compilation.passes.fusion.allreduce_rms_fusion import (
     AllReduceFusionPass,
     RocmAiterAllReduceFusionPass,
     _fused_ar_workspace_hidden_dim,
     _select_flashinfer_allreduce_use_oneshot,
 )
-from aphrodite.compilation.passes.fx_utils import find_op_nodes
-from aphrodite.compilation.passes.utility.fix_functionalization import (
+from sonar.compilation.passes.fx_utils import find_op_nodes
+from sonar.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     DeviceConfig,
     ModelConfig,
     PassConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import tensor_model_parallel_all_reduce
-from aphrodite.distributed.device_communicators.aiter_custom_all_reduce import (
+from sonar.distributed import tensor_model_parallel_all_reduce
+from sonar.distributed.device_communicators.aiter_custom_all_reduce import (
     AiterCustomAllreduce,
 )
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
+from sonar.utils.torch_utils import set_random_seed
 from tests.compile.backend import TestBackend
 from tests.utils import TestFP8Layer, has_module_attribute, multi_gpu_test
 
@@ -164,12 +164,12 @@ class TestAllReduceRMSNormModel(torch.nn.Module):
         return y4
 
     def ops_in_model_before(self):
-        return [torch.ops.aphrodite.all_reduce.default]
+        return [torch.ops.sonar.all_reduce.default]
 
     def ops_in_model_after(self):
         if self.use_aiter:
             return [rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()]
-        return [torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default]
+        return [torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default]
 
 
 class TestAllReduceGemmaRMSNormModel(torch.nn.Module):
@@ -211,12 +211,12 @@ class TestAllReduceGemmaRMSNormModel(torch.nn.Module):
         return y4
 
     def ops_in_model_before(self):
-        return [torch.ops.aphrodite.all_reduce.default]
+        return [torch.ops.sonar.all_reduce.default]
 
     def ops_in_model_after(self):
         if self.use_aiter:
             return [rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()]
-        return [torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default]
+        return [torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default]
 
 
 class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
@@ -260,11 +260,11 @@ class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
         return y4
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default]
+        return [torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default]
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite.all_reduce.default,
+            torch.ops.sonar.all_reduce.default,
             torch.ops._C.static_scaled_fp8_quant.default
             if self.fp8_linear_layers[0].is_quant_fp8_enabled()
             else torch.ops.aten.reciprocal.default,
@@ -285,7 +285,7 @@ class TestAllReduceGemmaRMSNormStaticQuantFP8Model(TestAllReduceRMSNormStaticQua
             norm.weight.requires_grad_(False)
 
     def ops_in_model_before(self):
-        return [torch.ops.aphrodite.all_reduce.default]
+        return [torch.ops.sonar.all_reduce.default]
 
 
 class TestAiterAllReduceRMSNormGroupQuantFP8Model(torch.nn.Module):
@@ -332,7 +332,7 @@ class TestAiterAllReduceRMSNormGroupQuantFP8Model(torch.nn.Module):
         self.indexer_w = [torch.rand(self.indexer_out_dim, hidden_size, dtype=dtype) for _ in range(2)]
 
     def _group_quant(self, rms: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, self.quant_group_size)
+        return torch.ops.sonar.rocm_aiter_group_fp8_quant.default(rms, self.quant_group_size)
 
     def _dequantize_to_bf16(self, q: torch.Tensor, s: torch.Tensor) -> torch.Tensor:
         # Broadcast the per-group scale across each group of `quant_group_size`
@@ -357,21 +357,21 @@ class TestAiterAllReduceRMSNormGroupQuantFP8Model(torch.nn.Module):
         rms2, resid2 = self.norm[2](x2, z.clone())
         q2, s2 = self._group_quant(rms2)
         # Second consumer of ``rms2``: forces the with-indexer pattern.
-        idx2 = torch.ops.aphrodite.rocm_unquantized_gemm(rms2, self.indexer_w[0], None)
+        idx2 = torch.ops.sonar.rocm_unquantized_gemm(rms2, self.indexer_w[0], None)
         y2 = self._dequantize_to_bf16(q2, s2)
 
         x3 = tensor_model_parallel_all_reduce(torch.mm(z, self.w[2]))
         rms3, resid3 = self.norm[3](x3, z.clone())
         q3, s3 = self._group_quant(rms3)
         # Second consumer of ``rms3``: forces the with-indexer pattern.
-        idx3 = torch.ops.aphrodite.rocm_unquantized_gemm(rms3, self.indexer_w[1], None)
+        idx3 = torch.ops.sonar.rocm_unquantized_gemm(rms3, self.indexer_w[1], None)
         y3 = self._dequantize_to_bf16(q3, s3)
         return y0, y1, y2, y3, resid1, resid2, resid3, idx2, idx3
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite.all_reduce.default,
-            torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default,
+            torch.ops.sonar.all_reduce.default,
+            torch.ops.sonar.rocm_aiter_group_fp8_quant.default,
         ]
 
     def ops_in_model_after(self):
@@ -445,11 +445,11 @@ class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
         return y4
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default]
+        return [torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default]
 
     def ops_in_model_before(self):
         return [
-            torch.ops.aphrodite.all_reduce.default,
+            torch.ops.sonar.all_reduce.default,
             torch.ops._C.scaled_fp4_quant.out,
         ]
 
@@ -512,7 +512,7 @@ class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @pytest.mark.parametrize("enable_rms_norm_custom_op", [True, False])
 @pytest.mark.parametrize("flashinfer_allreduce_backend", ["trtllm", "mnnvl"])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda"], reason="Only test on CUDA")
 @pytest.mark.skipif(
     current_platform.is_rocm() and not IS_AITER_FOUND,
     reason="aiter is not found",
@@ -540,7 +540,7 @@ def test_all_reduce_fusion_pass_replace(
 ):
     if use_aiter:
         with monkeypatch.context() as m:
-            m.setenv("APHRODITE_ROCM_USE_AITER", str(use_aiter))
+            m.setenv("SONAR_ROCM_USE_AITER", str(use_aiter))
             rocm_aiter_ops.refresh_env_variables()
 
     num_processes = 2
@@ -602,9 +602,9 @@ def all_reduce_fusion_pass_on_test_model(
             "WORLD_SIZE": str(world_size),
             "MASTER_ADDR": "localhost",
             "MASTER_PORT": str(master_port),
-            "APHRODITE_FLASHINFER_ALLREDUCE_BACKEND": flashinfer_allreduce_backend,
-            "APHRODITE_ROCM_USE_AITER": str(int(use_aiter)),
-            "APHRODITE_ROCM_USE_AITER_CUSTOM_AR": str(int(use_aiter)),
+            "SONAR_FLASHINFER_ALLREDUCE_BACKEND": flashinfer_allreduce_backend,
+            "SONAR_ROCM_USE_AITER": str(int(use_aiter)),
+            "SONAR_ROCM_USE_AITER_CUSTOM_AR": str(int(use_aiter)),
         }
     )
     if use_aiter:
@@ -618,25 +618,25 @@ def all_reduce_fusion_pass_on_test_model(
     if enable_quant_fp8_custom_op:
         custom_ops.append("+quant_fp8")
 
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops)
+    sonar_config = SonarConfig(
+        compilation_config=CompilationConfig(mode=CompilationMode.SONAR_COMPILE, custom_ops=custom_ops)
     )
-    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
-    aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
-    aphrodite_config.parallel_config.rank = local_rank  # Setup rank for debug path
+    sonar_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
+    sonar_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
+    sonar_config.parallel_config.rank = local_rank  # Setup rank for debug path
 
     # this is a fake model name to construct the model config
-    # in the aphrodite_config, it's not really used.
+    # in the sonar_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    aphrodite_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
+    with set_current_sonar_config(sonar_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
         all_reduce_fusion_pass = (
-            RocmAiterAllReduceFusionPass(aphrodite_config) if use_aiter else AllReduceFusionPass(aphrodite_config)
+            RocmAiterAllReduceFusionPass(sonar_config) if use_aiter else AllReduceFusionPass(sonar_config)
         )
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        func_pass = FixFunctionalizationPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        func_pass = FixFunctionalizationPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         backend = TestBackend(noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass)
 
@@ -669,7 +669,7 @@ def all_reduce_fusion_pass_on_test_model(
             )
             and not use_aiter
         ):
-            fused_op = torch.ops.aphrodite.flashinfer_trtllm_fused_allreduce_norm.default
+            fused_op = torch.ops.sonar.flashinfer_trtllm_fused_allreduce_norm.default
             fused_nodes = list(find_op_nodes(fused_op, backend.graph_post_pass))
             assert fused_nodes
             assert all(n.kwargs.get("weight_bias") == 1.0 for n in fused_nodes)
@@ -706,7 +706,7 @@ def test_rocm_aiter_all_reduce_rmsnorm_group_quant_fp8_fusion_pass_replace(
     """Sibling of ``test_all_reduce_fusion_pass_replace`` for the new
     ROCm AITER AR+RMS+per-group-FP8-quant fusion patterns.
 
-    Validates the three new ``AphroditePatternReplacement`` patterns added to
+    Validates the three new ``SonarPatternReplacement`` patterns added to
     ``RocmAiterAllReduceFusionPass``:
 
     * ``AiterAllreduceFusedRMSNormGroupQuantFP8Pattern`` (no-residual)
@@ -722,7 +722,7 @@ def test_rocm_aiter_all_reduce_rmsnorm_group_quant_fp8_fusion_pass_replace(
     order behind the quant-fused ones.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        m.setenv("SONAR_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
     if not AiterCustomAllreduce.build_supports_per_group_quant():
@@ -780,8 +780,8 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
             "WORLD_SIZE": str(world_size),
             "MASTER_ADDR": "localhost",
             "MASTER_PORT": str(master_port),
-            "APHRODITE_ROCM_USE_AITER": "1",
-            "APHRODITE_ROCM_USE_AITER_CUSTOM_AR": "1",
+            "SONAR_ROCM_USE_AITER": "1",
+            "SONAR_ROCM_USE_AITER_CUSTOM_AR": "1",
         }
     )
     rocm_aiter_ops.refresh_env_variables()
@@ -795,21 +795,21 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
     # trace finds the same form the test model uses.
     custom_ops.append("+quant_fp8")
 
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops)
+    sonar_config = SonarConfig(
+        compilation_config=CompilationConfig(mode=CompilationMode.SONAR_COMPILE, custom_ops=custom_ops)
     )
-    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
-    aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
-    aphrodite_config.parallel_config.rank = local_rank
+    sonar_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
+    sonar_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
+    sonar_config.parallel_config.rank = local_rank
 
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    aphrodite_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
+    with set_current_sonar_config(sonar_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
-        all_reduce_fusion_pass = RocmAiterAllReduceFusionPass(aphrodite_config)
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        func_pass = FixFunctionalizationPass(aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        all_reduce_fusion_pass = RocmAiterAllReduceFusionPass(sonar_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        func_pass = FixFunctionalizationPass(sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         backend = TestBackend(noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass)
 

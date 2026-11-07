@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The draft model must honour ``moe_backend`` from --speculative-config.
 
-The draft is loaded with the target's AphroditeConfig, so without an explicit
+The draft is loaded with the target's SonarConfig, so without an explicit
 override it inherits the target's --moe-backend. An MTP head on a quantized
 target is typically unquantized, and quantized-only backends reject it, so the
 server fails to start rather than falling back.
@@ -14,8 +14,8 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.config import LoadConfig, SpeculativeConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.config import LoadConfig, SpeculativeConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
 
 
 @dataclass
@@ -40,15 +40,15 @@ class _SpeculativeConfig:
 
 
 @dataclass
-class _AphroditeConfig:
+class _SonarConfig:
     kernel_config: _KernelConfig
     cache_config: _CacheConfig
     speculative_config: _SpeculativeConfig
     load_config: LoadConfig = field(default_factory=LoadConfig)
 
 
-def _config(target_moe: str, draft_moe: str | None) -> _AphroditeConfig:
-    return _AphroditeConfig(
+def _config(target_moe: str, draft_moe: str | None) -> _SonarConfig:
+    return _SonarConfig(
         kernel_config=_KernelConfig(moe_backend=target_moe),
         cache_config=_CacheConfig(),
         speculative_config=_SpeculativeConfig(moe_backend=draft_moe),
@@ -58,24 +58,24 @@ def _config(target_moe: str, draft_moe: str | None) -> _AphroditeConfig:
 class _Captured(Exception):
     """Stops load_eagle_model once we hold the config it would have used."""
 
-    def __init__(self, aphrodite_config):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config):
+        self.sonar_config = sonar_config
 
 
 def _capture_draft_config(cfg):
-    def _fake_get_model(*, aphrodite_config, model_config):
-        raise _Captured(aphrodite_config)
+    def _fake_get_model(*, sonar_config, model_config):
+        raise _Captured(sonar_config)
 
     with (
-        patch("aphrodite.v1.worker.gpu.spec_decode.eagle.utils.get_model", _fake_get_model),
+        patch("sonar.v1.worker.gpu.spec_decode.eagle.utils.get_model", _fake_get_model),
         patch(
-            "aphrodite.v1.worker.gpu.spec_decode.utils.get_pp_group",
+            "sonar.v1.worker.gpu.spec_decode.utils.get_pp_group",
             return_value=SimpleNamespace(world_size=1),
         ),
         pytest.raises(_Captured) as exc,
     ):
         load_eagle_model(object(), cfg)
-    return exc.value.aphrodite_config
+    return exc.value.sonar_config
 
 
 def test_draft_moe_backend_overrides_the_target():

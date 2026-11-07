@@ -9,12 +9,12 @@ import pytest
 import pytest_asyncio
 import torch.cuda
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.model_executor.model_loader.tensorizer import (
+from sonar.engine.arg_utils import EngineArgs
+from sonar.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
-    tensorize_aphrodite_model,
+    tensorize_sonar_model,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "unsloth/llama-3.2-1b-Instruct"
@@ -46,7 +46,7 @@ def tensorize_model(model_uri):
     tensorizer_config = TensorizerConfig(tensorizer_uri=model_uri)
     args = EngineArgs(model=MODEL_NAME)
 
-    tensorize_aphrodite_model(args, tensorizer_config)
+    tensorize_sonar_model(args, tensorizer_config)
 
     # Manually invoke a _cleanup() here, as the cleanup()
     # fixture won't be guaranteed to be called after this

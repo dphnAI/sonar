@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.v1.structured_output.backend_outlines import validate_regex_is_buildable
+from sonar.exceptions import SonarValidationError
+from sonar.v1.structured_output.backend_outlines import validate_regex_is_buildable
 
 pytestmark = pytest.mark.cpu_test
 
@@ -50,7 +50,7 @@ class TestValidateRegexIsBuildable:
             ],
         )
         def test_unsupported_regex(self, regex):
-            with pytest.raises(AphroditeValidationError):
+            with pytest.raises(SonarValidationError):
                 validate_regex_is_buildable(regex)
 
         @pytest.mark.parametrize(

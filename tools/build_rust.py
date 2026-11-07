@@ -14,10 +14,10 @@ from setuptools_rust import Binding, RustExtension
 from setuptools_scm import get_version
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-APHRODITE_RS_BUILD_VERSION = "APHRODITE_RS_BUILD_VERSION"
+SONAR_RS_BUILD_VERSION = "SONAR_RS_BUILD_VERSION"
 
-# Select Aphrodite release tags, excluding crate tags such as "proto-v0.3.0".
-APHRODITE_GIT_DESCRIBE_COMMAND = [
+# Select Sonar release tags, excluding crate tags such as "proto-v0.3.0".
+SONAR_GIT_DESCRIBE_COMMAND = [
     "git",
     "describe",
     "--dirty",
@@ -30,33 +30,33 @@ APHRODITE_GIT_DESCRIBE_COMMAND = [
 
 
 def prepare_build_environment() -> str | None:
-    """Set the device-independent Aphrodite source version for Rust artifacts."""
-    version = os.getenv(APHRODITE_RS_BUILD_VERSION) or None
+    """Set the device-independent Sonar source version for Rust artifacts."""
+    version = os.getenv(SONAR_RS_BUILD_VERSION) or None
     if version is None:
         try:
             version = get_version(
                 root=ROOT_DIR,
-                git_describe_command=APHRODITE_GIT_DESCRIBE_COMMAND,
+                git_describe_command=SONAR_GIT_DESCRIBE_COMMAND,
             )
         except LookupError:
             return None
 
-    os.environ[APHRODITE_RS_BUILD_VERSION] = version
+    os.environ[SONAR_RS_BUILD_VERSION] = version
     return version
 
 
 def rust_extensions(*, optional: bool = False) -> list[RustExtension]:
     return [
         RustExtension(
-            target="aphrodite.aphrodite-rs",
+            target="sonar.sonar-rs",
             path="rust/src/cmd/Cargo.toml",
-            args=["--bin", "aphrodite-rs"],
+            args=["--bin", "sonar-rs"],
             features=["native-tls-vendored"],
             binding=Binding.Exec,
             optional=optional,
         ),
         RustExtension(
-            target="aphrodite._rust_tool_parser",
+            target="sonar._rust_tool_parser",
             path="rust/src/parser/python/Cargo.toml",
             features=["pyo3/abi3-py38"],
             binding=Binding.PyO3,
@@ -73,7 +73,7 @@ def rust_py_extension_module_names() -> list[str]:
             continue
 
         for target_name in extension.target.values():
-            if target_name.startswith("aphrodite._rust_"):
+            if target_name.startswith("sonar._rust_"):
                 module_names.append(target_name.rsplit(".", 1)[-1])
 
     return module_names
@@ -81,13 +81,13 @@ def rust_py_extension_module_names() -> list[str]:
 
 def build_binary(build_rust_args: list[str]) -> None:
     os.chdir(ROOT_DIR)
-    (ROOT_DIR / "aphrodite").mkdir(exist_ok=True)
+    (ROOT_DIR / "sonar").mkdir(exist_ok=True)
     setup(
-        name="aphrodite-rust-frontend-build",
+        name="sonar-rust-frontend-build",
         # Docker's cached Rust stage has pyproject.toml but no Git metadata.
         # Give this build-only distribution a version so setuptools-scm does
         # not try to infer one again during setup().
-        version=os.getenv(APHRODITE_RS_BUILD_VERSION) or "0.0.0",
+        version=os.getenv(SONAR_RS_BUILD_VERSION) or "0.0.0",
         packages=[],
         rust_extensions=rust_extensions(optional=False),
         script_args=["build_rust", "--quiet", "--inplace", *build_rust_args],

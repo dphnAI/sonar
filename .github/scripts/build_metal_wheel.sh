@@ -14,8 +14,8 @@ if [[ ! -x "$METAL_BUILD_PYTHON" ]]; then
   exit 1
 fi
 
-APHRODITE_TARGET_DEVICE=metal \
-APHRODITE_REQUIRE_RUST_FRONTEND=1 \
+SONAR_TARGET_DEVICE=metal \
+SONAR_REQUIRE_RUST_FRONTEND=1 \
 MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}" \
   "$METAL_BUILD_PYTHON" setup.py bdist_wheel \
     --dist-dir "$output_dir" \
@@ -28,5 +28,5 @@ rm -rf .wheel-test
 uv venv --python 3.13 .wheel-test
 uv pip install --python .wheel-test/bin/python "$wheel"
 .wheel-test/bin/python -c \
-  "import aphrodite; from aphrodite.metal.metal import get_ops; get_ops()"
-test -x .wheel-test/lib/python3.13/site-packages/aphrodite/aphrodite-rs
+  "import sonar; from sonar.metal.metal import get_ops; get_ops()"
+test -x .wheel-test/lib/python3.13/site-packages/sonar/sonar-rs

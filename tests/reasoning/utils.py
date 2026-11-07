@@ -5,10 +5,10 @@ from typing import cast
 
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.reasoning import ReasoningParser
-from aphrodite.utils.mistral import is_mistral_tokenizer
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.reasoning import ReasoningParser
+from sonar.utils.mistral import is_mistral_tokenizer
 
 
 class StreamingReasoningReconstructor:

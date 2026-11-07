@@ -3,7 +3,7 @@
 """Unit tests for the NCCL M2N weight transfer backend.
 
 These cover how a transfer is *described* — layout encoding, whole-plan
-validation, and the Aphrodite-owned source contract. The transfer itself needs the
+validation, and the Sonar-owned source contract. The transfer itself needs the
 M2N runtime and multiple GPUs, so it is exercised separately.
 """
 
@@ -18,8 +18,8 @@ import pytest
 import ray
 import torch
 
-from aphrodite.config.weight_transfer import WeightTransferConfig
-from aphrodite.distributed.weight_transfer import (
+from sonar.config.weight_transfer import WeightTransferConfig
+from sonar.distributed.weight_transfer import (
     ModuleSource,
     ParamMeta,
     Replicate,
@@ -28,7 +28,7 @@ from aphrodite.distributed.weight_transfer import (
     WeightTransferEngineFactory,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.m2n_common import (
+from sonar.distributed.weight_transfer.m2n_common import (
     M2N_WIRE_SCHEMA_VERSION,
     REPLICATE,
     REPLICATED,
@@ -47,29 +47,29 @@ from aphrodite.distributed.weight_transfer.m2n_common import (
     resolve_layout,
     source_plan_digest,
 )
-from aphrodite.distributed.weight_transfer.m2n_engine import (
+from sonar.distributed.weight_transfer.m2n_engine import (
     M2NWeightTransferEngine,
     M2NWeightTransferInitInfo,
     M2NWeightTransferUpdateInfo,
 )
-from aphrodite.distributed.weight_transfer.m2n_layout import (
+from sonar.distributed.weight_transfer.m2n_layout import (
     M2NDestination,
     resolve_parameter_destinations,
 )
-from aphrodite.distributed.weight_transfer.m2n_trainer import (
+from sonar.distributed.weight_transfer.m2n_trainer import (
     M2NTrainerInitInfo,
     M2NTrainerWeightTransferEngine,
 )
-from aphrodite.distributed.weight_transfer.nccl_common import (
+from sonar.distributed.weight_transfer.nccl_common import (
     stateless_init_metadata_group,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 
 
 @pytest.mark.parametrize(
@@ -422,7 +422,7 @@ class TestWireTypes:
 
         nccl.Communicator.init.side_effect = init
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_common.unpinned_nccl_env",
+            "sonar.distributed.weight_transfer.m2n_common.unpinned_nccl_env",
             unpinned,
         )
 
@@ -463,33 +463,33 @@ class TestWireTypes:
         metadata_group.all_gather_obj.side_effect = lambda envelope: [envelope] * 3
         init_metadata = Mock(return_value=metadata_group)
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.worker_init_metadata_group",
+            "sonar.distributed.weight_transfer.m2n_engine.worker_init_metadata_group",
             init_metadata,
         )
-        monkeypatch.setattr("aphrodite.distributed.weight_transfer.m2n_engine.import_m2n", Mock())
+        monkeypatch.setattr("sonar.distributed.weight_transfer.m2n_engine.import_m2n", Mock())
         handle = Mock()
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.prepare_m2n_local_runtime",
+            "sonar.distributed.weight_transfer.m2n_engine.prepare_m2n_local_runtime",
             Mock(return_value=(Mock(), 0, handle)),
         )
         communicator = Mock()
         make_communicator = Mock(return_value=communicator)
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.create_m2n_communicator",
+            "sonar.distributed.weight_transfer.m2n_engine.create_m2n_communicator",
             make_communicator,
         )
         publish = Mock(return_value=[])
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.publish_destination_placements",
+            "sonar.distributed.weight_transfer.m2n_engine.publish_destination_placements",
             publish,
         )
-        aphrodite_config = SimpleNamespace(
+        sonar_config = SimpleNamespace(
             parallel_config=Mock(pipeline_parallel_size=1),
             model_config=SimpleNamespace(quantization=None),
         )
         engine = M2NWeightTransferEngine(
             WeightTransferConfig(backend="nccl_m2n"),
-            aphrodite_config,
+            sonar_config,
             torch.device("cuda:0"),
             torch.nn.Module(),
         )
@@ -569,7 +569,7 @@ class TestWireTypes:
 
     def _init_32_to_4_plan(self, monkeypatch, destination):
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
+            "sonar.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
             lambda *args, **kwargs: [destination],
         )
 
@@ -612,7 +612,7 @@ class TestWireTypes:
     def test_invalid_destination_placement_rejected_at_init(self, monkeypatch):
         destination = M2NDestination("w", (REPLICATE, 2), torch.empty(8, 8))
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
+            "sonar.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
             lambda *args, **kwargs: [destination],
         )
         engine = object.__new__(M2NWeightTransferEngine)
@@ -638,7 +638,7 @@ class TestWireTypes:
             M2NDestination("invalid", (REPLICATE, 1), torch.empty(32, 2)),
         ]
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
+            "sonar.distributed.weight_transfer.m2n_engine.resolve_parameter_destinations",
             lambda *args, **kwargs: destinations,
         )
         engine = object.__new__(M2NWeightTransferEngine)
@@ -791,7 +791,7 @@ class TestWireTypes:
 def test_metadata_group_receives_reserved_socket(monkeypatch):
     reservation = Mock()
     create = Mock(return_value=Mock())
-    monkeypatch.setattr("aphrodite.distributed.utils.StatelessProcessGroup.create", create)
+    monkeypatch.setattr("sonar.distributed.utils.StatelessProcessGroup.create", create)
 
     stateless_init_metadata_group(
         "127.0.0.1",
@@ -830,23 +830,23 @@ class TestTrainerSourceContract:
         metadata_group = Mock(rank=0, world_size=2)
         metadata_group.all_gather_obj.side_effect = lambda envelope: [envelope] * 2
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_trainer.stateless_init_metadata_group",
+            "sonar.distributed.weight_transfer.m2n_trainer.stateless_init_metadata_group",
             Mock(return_value=metadata_group),
         )
-        monkeypatch.setattr("aphrodite.distributed.weight_transfer.m2n_trainer.import_m2n", Mock())
+        monkeypatch.setattr("sonar.distributed.weight_transfer.m2n_trainer.import_m2n", Mock())
         handle = Mock()
         nccl = Mock()
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_trainer.prepare_m2n_local_runtime",
+            "sonar.distributed.weight_transfer.m2n_trainer.prepare_m2n_local_runtime",
             Mock(return_value=(nccl, 0, handle)),
         )
         communicator = Mock()
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_trainer.create_m2n_communicator",
+            "sonar.distributed.weight_transfer.m2n_trainer.create_m2n_communicator",
             Mock(return_value=communicator),
         )
         monkeypatch.setattr(
-            "aphrodite.distributed.weight_transfer.m2n_trainer.publish_destination_placements",
+            "sonar.distributed.weight_transfer.m2n_trainer.publish_destination_placements",
             Mock(return_value=[]),
         )
         source = _StaticSource([], [])
@@ -1055,8 +1055,8 @@ def _m2n_trainer_send(
 
     from functools import cached_property
 
-    from aphrodite.distributed.weight_transfer import WeightTransferTrainerFactory
-    from aphrodite.distributed.weight_transfer.m2n_trainer import M2NTrainerInitInfo
+    from sonar.distributed.weight_transfer import WeightTransferTrainerFactory
+    from sonar.distributed.weight_transfer.m2n_trainer import M2NTrainerInitInfo
 
     class NoopClient:
         def init_weight_transfer_engine(self, init_info):
@@ -1152,9 +1152,9 @@ def _m2n_worker_receive(
 
     device = _assigned_device()
 
-    from aphrodite.config.parallel import ParallelConfig
-    from aphrodite.config.weight_transfer import WeightTransferConfig
-    from aphrodite.distributed.weight_transfer.m2n_engine import (
+    from sonar.config.parallel import ParallelConfig
+    from sonar.config.weight_transfer import WeightTransferConfig
+    from sonar.distributed.weight_transfer.m2n_engine import (
         M2NWeightTransferEngine,
         M2NWeightTransferInitInfo,
         M2NWeightTransferUpdateInfo,
@@ -1196,13 +1196,13 @@ def _m2n_worker_receive(
     parallel_config.data_parallel_index = 0
     parallel_config.tensor_parallel_size = num_workers
     parallel_config.pipeline_parallel_size = 1
-    aphrodite_config = MagicMock()
-    aphrodite_config.parallel_config = parallel_config
-    aphrodite_config.model_config = MagicMock()
-    aphrodite_config.model_config.quantization = None
+    sonar_config = MagicMock()
+    sonar_config.parallel_config = parallel_config
+    sonar_config.model_config = MagicMock()
+    sonar_config.model_config.quantization = None
 
     recorder = Recorder()
-    engine = M2NWeightTransferEngine(WeightTransferConfig(backend="nccl_m2n"), aphrodite_config, device, recorder)
+    engine = M2NWeightTransferEngine(WeightTransferConfig(backend="nccl_m2n"), sonar_config, device, recorder)
     if mixed_layout:
         params = [
             M2NWireParam("row_sharded", "float32", (4, 4), (1, 2), (REPLICATE, 0)),
@@ -1444,7 +1444,7 @@ class TestDestinationResolution:
         class GPT2Model(_Model):
             pass
 
-        GPT2Model.__module__ = "aphrodite.model_executor.models.gpt2"
+        GPT2Model.__module__ = "sonar.model_executor.models.gpt2"
         model = torch.nn.Module()
         model.transforming = GPT2Model()
         [destination] = resolve_parameter_destinations(
@@ -1590,11 +1590,11 @@ class TestDestinationResolution:
         )
         assert not any(d.direct for d in destinations)
 
-    def test_plan_reports_byte_coverage(self, caplog_aphrodite):
+    def test_plan_reports_byte_coverage(self, caplog_sonar):
         """A small direct parameter must not hide a large fallback tensor."""
-        with caplog_aphrodite.at_level(
+        with caplog_sonar.at_level(
             logging.INFO,
-            logger="aphrodite.distributed.weight_transfer.m2n_layout",
+            logger="sonar.distributed.weight_transfer.m2n_layout",
         ):
             _resolve(
                 ["norm", "missing_fused_weight"],
@@ -1605,5 +1605,5 @@ class TestDestinationResolution:
         assert (
             "1/2 parameters resharded directly into the model, 1 via "
             "full-tensor fallback; direct byte coverage: 64/2097216 bytes "
-            "(0.0%)" in caplog_aphrodite.text
+            "(0.0%)" in caplog_sonar.text
         )

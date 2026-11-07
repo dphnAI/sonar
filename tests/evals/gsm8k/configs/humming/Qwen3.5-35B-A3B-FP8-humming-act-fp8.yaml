@@ -9,4 +9,4 @@ server_args: >-
   --moe-backend humming
   --linear-backend humming
 env:
-  APHRODITE_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'
+  SONAR_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'

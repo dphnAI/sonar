@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateLogProb
-from aphrodite.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
-from aphrodite.logprobs import Logprob
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import GenerateLogProb
+from sonar.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
+from sonar.logprobs import Logprob
 
 
 def test_top_logprobs_alternatives_have_own_token_ids():

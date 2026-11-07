@@ -50,7 +50,7 @@ model:
   # tokenizer_config.json. Serving the full window needs --max-model-len.
   context_length: 1048576
   # No --trust-remote-code: all six Muse Spark configs are registered in-tree
-  # (aphrodite/transformers_utils/config.py).
+  # (sonar/transformers_utils/config.py).
   base_args: []
   base_env: {}
 
@@ -87,7 +87,7 @@ features:
               - '{"method":"dspark","model":"Inferact/Muse-Spark-Open-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false,"attention_backend":"ROCM_AITER_FA"}'
             env:
               AITER_UNIFIED_ATTN_SHORT_QUERY_3D: "1"
-              APHRODITE_KV_CACHE_LAYOUT: "LBHNC"
+              SONAR_KV_CACHE_LAYOUT: "LBHNC"
 
 opt_in_features:
   - spec_decoding
@@ -154,7 +154,7 @@ compatible_strategies:
   - multi_node_dep
   - pd_cluster
 
-# The Aphrodite launch blog serves NVFP4 as TP8 + --enable-expert-parallel (TEP);
+# The Sonar launch blog serves NVFP4 as TP8 + --enable-expert-parallel (TEP);
 # TEP is also the MXFP4 throughput path on AMD (see the guide).
 default_strategy: single_node_tep
 
@@ -178,9 +178,9 @@ hardware_overrides:
       - "--no-enable-prefix-caching"
       - "--enable-chunked-prefill"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_MUSE_MOE_REDUCE_DTYPE: "bf16"
-      APHRODITE_USE_BREAKABLE_CUDAGRAPH: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_MUSE_MOE_REDUCE_DTYPE: "bf16"
+      SONAR_USE_BREAKABLE_CUDAGRAPH: "1"
 strategy_overrides: {}
 
 guide: |
@@ -230,7 +230,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite**: Use Docker image for now until the code is in Aphrodite main repo.
+  - **Sonar**: Use Docker image for now until the code is in Sonar main repo.
   - **Hardware**: the checkpoints hold ~1.64 TB of weights in BF16 and
     ~509 GB in Quark MXFP4, before KV cache. NVFP4 (~533 GB) is the primary
     NVIDIA Blackwell path and fits one 8-GPU node. On AMD, all three AMD
@@ -287,9 +287,9 @@ guide: |
   NVIDIA Blackwell, NVFP4, TP8 + expert parallel, with DSpark:
 
   ```bash
-  export APHRODITE_USE_RUST_FRONTEND=1
+  export SONAR_USE_RUST_FRONTEND=1
 
-  aphrodite serve meta-models/Muse-Spark-Open-816B-A42B-NVFP4 \
+  sonar serve meta-models/Muse-Spark-Open-816B-A42B-NVFP4 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --max-model-len 1048576 \
@@ -304,7 +304,7 @@ guide: |
   Commands use the Rust frontend by default on NVIDIA and AMD ROCm.
 
   To use the Python frontend, select Python in the command builder or replace
-  `APHRODITE_USE_RUST_FRONTEND=1` with `APHRODITE_USE_RUST_FRONTEND=0` in the generated
+  `SONAR_USE_RUST_FRONTEND=1` with `SONAR_USE_RUST_FRONTEND=0` in the generated
   command.
 
   ## Reasoning effort
@@ -389,7 +389,7 @@ guide: |
   target to Triton attention and use the adaptive config:
 
   ```bash
-  export APHRODITE_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN=8192
+  export SONAR_ADAPTIVE_VERIFICATION_PROFILE_CONTEXT_LEN=8192
 
   --attention-backend TRITON_ATTN \
   --speculative-config '{"method":"dspark","model":"Inferact/Muse-Spark-Open-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"standard","enable_adaptive_verification":true,"attention_backend":"TRITON_ATTN"}'

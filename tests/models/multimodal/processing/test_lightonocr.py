@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ...utils import build_model_context
 
@@ -13,7 +13,7 @@ _LIGHTON_MODEL_ID = "lightonai/LightOnOCR-1B-1025"
 _MODEL_CONFIG_KWARGS = {"config_format": "hf"}
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("tensor_input", [False, True])
 @pytest.mark.parametrize("prompt_as_tokens", [False, True])
 def test_lightonocr_image_embeddings_preserve_lengths_and_values(tensor_input: bool, prompt_as_tokens: bool):

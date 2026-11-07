@@ -7,7 +7,7 @@ import openai  # use the official client for correctness check
 import pytest
 import pytest_asyncio
 
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.transformers_utils.repo_utils import hf_api
 from tests.conftest import AudioTestAssets
 from tests.utils import RemoteOpenAIServer
 

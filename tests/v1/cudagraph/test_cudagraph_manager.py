@@ -9,28 +9,28 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CUDAGraphMode,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.distributed.device_communicators import pynccl_allocator
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu import cudagraph_utils as gpu_cudagraph_utils
-from aphrodite.v1.worker.gpu import dp_utils
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.dp_utils import dispatch_cg_and_sync_dp
-from aphrodite.v1.worker.gpu.input_batch import InputBuffers
-from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar import (
+from sonar.distributed.device_communicators import pynccl_allocator
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker.gpu import cudagraph_utils as gpu_cudagraph_utils
+from sonar.v1.worker.gpu import dp_utils
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.dp_utils import dispatch_cg_and_sync_dp
+from sonar.v1.worker.gpu.input_batch import InputBuffers
+from sonar.v1.worker.gpu.pcp_manager import PCPManager
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar import (
     cudagraph_utils as spec_cudagraph_utils,
 )
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar import (
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar import (
     speculator as spec_module,
 )
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.cudagraph_utils import (
     SpeculatorCudaGraphManager,
 )
 
@@ -44,7 +44,7 @@ def _reset_graph_pool_id():
     pynccl_allocator._graph_pool_id = None
 
 
-def _create_aphrodite_config() -> MagicMock:
+def _create_sonar_config() -> MagicMock:
     compilation_config = CompilationConfig(
         cudagraph_mode=CUDAGraphMode.FULL,
         cudagraph_capture_sizes=[4],
@@ -52,16 +52,16 @@ def _create_aphrodite_config() -> MagicMock:
     compilation_config.max_cudagraph_capture_size = 4
     compilation_config.post_init_cudagraph_sizes()
 
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.compilation_config = compilation_config
-    aphrodite_config.scheduler_config = SchedulerConfig.default_factory(
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.compilation_config = compilation_config
+    sonar_config.scheduler_config = SchedulerConfig.default_factory(
         max_num_seqs=4,
     )
-    aphrodite_config.parallel_config = ParallelConfig()
-    aphrodite_config.speculative_config = None
-    aphrodite_config.num_speculative_tokens = 0
-    aphrodite_config.use_cumem_cudagraph_pool = False
-    return aphrodite_config
+    sonar_config.parallel_config = ParallelConfig()
+    sonar_config.speculative_config = None
+    sonar_config.num_speculative_tokens = 0
+    sonar_config.use_cumem_cudagraph_pool = False
+    return sonar_config
 
 
 @pytest.mark.parametrize(
@@ -98,7 +98,7 @@ def test_full_capture_sets_graph_pool_id_before_cuda_graph(monkeypatch):
     )
 
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=_create_aphrodite_config(),
+        sonar_config=_create_sonar_config(),
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL,
         decode_query_len=1,
@@ -278,7 +278,7 @@ def test_speculator_capture_preserves_decode_query_bounds(
     manager = SpeculatorCudaGraphManager.__new__(SpeculatorCudaGraphManager)
     manager.max_num_reqs = num_reqs
     manager.decode_query_len = uniform_token_count or max_query_len or num_tokens
-    manager.aphrodite_config = SimpleNamespace(
+    manager.sonar_config = SimpleNamespace(
         parallel_config=SimpleNamespace(data_parallel_size=1),
         num_speculative_tokens=3,
     )
@@ -305,7 +305,7 @@ def test_speculator_capture_preserves_decode_query_bounds(
 _DECODE_QUERY_LEN = 3
 
 
-def _create_decode_aphrodite_config(
+def _create_decode_sonar_config(
     capture_sizes: list[int],
     num_speculative_tokens: int = 0,
     dynamic_spec_schedule: list[tuple[int, int, int]] | None = None,
@@ -319,20 +319,20 @@ def _create_decode_aphrodite_config(
     compilation_config.max_cudagraph_capture_size = capture_sizes[-1]
     compilation_config.post_init_cudagraph_sizes()
 
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.compilation_config = compilation_config
-    aphrodite_config.scheduler_config = SchedulerConfig.default_factory(max_num_seqs=max_num_seqs)
-    aphrodite_config.parallel_config = ParallelConfig()
-    aphrodite_config.cache_config = SimpleNamespace(use_kda_recoverssm=use_kda_recoverssm)
-    aphrodite_config.num_speculative_tokens = num_speculative_tokens
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.compilation_config = compilation_config
+    sonar_config.scheduler_config = SchedulerConfig.default_factory(max_num_seqs=max_num_seqs)
+    sonar_config.parallel_config = ParallelConfig()
+    sonar_config.cache_config = SimpleNamespace(use_kda_recoverssm=use_kda_recoverssm)
+    sonar_config.num_speculative_tokens = num_speculative_tokens
     if dynamic_spec_schedule is None:
-        aphrodite_config.speculative_config = None
+        sonar_config.speculative_config = None
     else:
         speculative_config = MagicMock()
         speculative_config.uses_dynamic_speculative_decoding.return_value = True
         speculative_config.num_speculative_tokens_per_batch_size = dynamic_spec_schedule
-        aphrodite_config.speculative_config = speculative_config
-    return aphrodite_config
+        sonar_config.speculative_config = speculative_config
+    return sonar_config
 
 
 def _make_spec_decode_manager(
@@ -356,7 +356,7 @@ def _make_spec_decode_manager(
         lambda: object(),
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=_create_decode_aphrodite_config(
+        sonar_config=_create_decode_sonar_config(
             capture_sizes or [1, 2, 4, 8, 16, 24],
             num_speculative_tokens=num_speculative_tokens,
             dynamic_spec_schedule=dynamic_spec_schedule,
@@ -503,7 +503,7 @@ def test_draft_prefill_matches_shared_target_metadata_shape(
     )
     hidden_states = torch.zeros(target_desc.num_tokens, 1)
     speculator = SimpleNamespace(
-        aphrodite_config=target.aphrodite_config,
+        sonar_config=target.sonar_config,
         device=torch.device("cpu"),
         num_speculative_steps=3,
         enable_adaptive_verification=adaptive,
@@ -676,7 +676,7 @@ def test_speculator_replays_graph_for_runtime_width(monkeypatch, specialize):
 
     monkeypatch.setattr(gpu_cudagraph_utils.CudaGraphManager, "capture", capture)
     manager = spec_cudagraph_utils.SpeculatorCudaGraphManager(
-        _create_decode_aphrodite_config(
+        _create_decode_sonar_config(
             capture_sizes=[4],
             num_speculative_tokens=4,
             dynamic_spec_schedule=[(1, 2, 4), (3, 4, 2), (5, 6, 1), (7, 8, 0)],

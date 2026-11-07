@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from aphrodite.utils.gc_utils import (
+from sonar.utils.gc_utils import (
     GCDebugConfig,
     _compute_detailed_type,
     _compute_top_gc_collected_objects,

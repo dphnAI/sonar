@@ -5,7 +5,7 @@ Copied from https://github.com/turboderp/exllamav2
 #ifndef _qdq_util_cuh
 #define _qdq_util_cuh
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq {
 
 union half2_uint32 {
@@ -43,5 +43,5 @@ __forceinline__ __device__ int exb(const uint32_t q1, const uint32_t q0,
 }
 
 }  // namespace gptq
-}  // namespace aphrodite
+}  // namespace sonar
 #endif

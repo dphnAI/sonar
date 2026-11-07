@@ -20,29 +20,29 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CUDAGraphMode,
     ModelConfig,
     ParallelConfig,
+    SonarConfig,
 )
-from aphrodite.forward_context import create_forward_context
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.forward_context import create_forward_context
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsCapturer,
 )
-from aphrodite.v1.attention.backends.utils import get_dcp_local_seq_lens
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker import gpu_ubatch_wrapper as legacy_gpu_ubatch_wrapper
-from aphrodite.v1.worker.gpu import cp_utils as gpu_cp_utils
-from aphrodite.v1.worker.gpu import cudagraph_utils, dp_utils
-from aphrodite.v1.worker.gpu.cudagraph_utils import (
+from sonar.v1.attention.backends.utils import get_dcp_local_seq_lens
+from sonar.v1.kv_cache_interface import KVCacheConfig
+from sonar.v1.worker import gpu_ubatch_wrapper as legacy_gpu_ubatch_wrapper
+from sonar.v1.worker.gpu import cp_utils as gpu_cp_utils
+from sonar.v1.worker.gpu import cudagraph_utils, dp_utils
+from sonar.v1.worker.gpu.cudagraph_utils import (
     BatchExecutionDescriptor,
     CudaGraphManager,
 )
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
-from aphrodite.v1.worker.gpu.ubatch_utils import (
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.ubatch_utils import (
     UBatchRunner,
     UBatchState,
     _slice_input_batch,
@@ -50,12 +50,12 @@ from aphrodite.v1.worker.gpu.ubatch_utils import (
     merge_ubatch_outputs,
     slice_model_inputs,
 )
-from aphrodite.v1.worker.ubatch_utils import (
+from sonar.v1.worker.ubatch_utils import (
     UBatchSlice,
     maybe_create_ubatch_slices,
     split_attn_metadata,
 )
-from aphrodite.v1.worker.ubatching import (
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_id,
     dbo_register_recv_hook,
     dbo_yield,
@@ -441,7 +441,7 @@ def test_legacy_ubatch_contexts_slice_padding_mask(cudagraph_runtime_mode: CUDAG
     )
 
     wrapper = object.__new__(legacy_gpu_ubatch_wrapper.UBatchWrapper)
-    wrapper.aphrodite_config = SimpleNamespace(parallel_config=SimpleNamespace(data_parallel_size=2))
+    wrapper.sonar_config = SimpleNamespace(parallel_config=SimpleNamespace(data_parallel_size=2))
     wrapper.comm_stream = object()
     wrapper.ready_barrier = object()
     wrapper.cudagraphs = {}
@@ -451,7 +451,7 @@ def test_legacy_ubatch_contexts_slice_padding_mask(cudagraph_runtime_mode: CUDAG
     def make_contexts(*, forward_contexts, **kwargs):
         return [SimpleNamespace(id=i, forward_context=context) for i, context in enumerate(forward_contexts)]
 
-    def create_context(attn_metadata, aphrodite_config, **kwargs):
+    def create_context(attn_metadata, sonar_config, **kwargs):
         return SimpleNamespace(attn_metadata=attn_metadata, **kwargs)
 
     model_inputs = {
@@ -493,8 +493,8 @@ def test_legacy_ubatch_contexts_slice_padding_mask(cudagraph_runtime_mode: CUDAG
     torch.testing.assert_close(contexts[1].is_padding, is_padding[3:])
 
 
-def _make_dbo_config() -> AphroditeConfig:
-    return AphroditeConfig(
+def _make_dbo_config() -> SonarConfig:
+    return SonarConfig(
         model_config=ModelConfig(model="facebook/opt-125m", dtype="float16", seed=0),
         parallel_config=ParallelConfig(enable_dbo=True, all2all_backend="deepep_low_latency"),
     )
@@ -512,17 +512,17 @@ def _make_model_inputs(num_tokens: int, device: torch.device) -> dict[str, Any]:
 @pytest.fixture(autouse=True)
 def _no_comm_sm_reservation(monkeypatch):
     """CI runs on MIG slices with fewer SMs than the default comm reservation."""
-    monkeypatch.setenv("APHRODITE_DBO_COMM_SMS", "0")
+    monkeypatch.setenv("SONAR_DBO_COMM_SMS", "0")
 
 
-def _make_execution_runner(aphrodite_config: AphroditeConfig) -> UBatchRunner:
+def _make_execution_runner(sonar_config: SonarConfig) -> UBatchRunner:
     """A runner for the execution tests below, which never call `prepare()`.
 
     The attention-side dependencies are only read while building per-microbatch
     metadata, so they are left out here.
     """
     return UBatchRunner(
-        aphrodite_config,
+        sonar_config,
         torch.device("cuda:0"),
         model_state=cast(ModelState, None),
         attn_groups=[],
@@ -531,10 +531,10 @@ def _make_execution_runner(aphrodite_config: AphroditeConfig) -> UBatchRunner:
     )
 
 
-def _make_ubatch_state(aphrodite_config: AphroditeConfig, ubatch_slices: list[UBatchSlice]) -> UBatchState:
+def _make_ubatch_state(sonar_config: SonarConfig, ubatch_slices: list[UBatchSlice]) -> UBatchState:
     return UBatchState(
         slices=ubatch_slices,
-        forward_contexts=[create_forward_context(None, aphrodite_config) for _ in ubatch_slices],
+        forward_contexts=[create_forward_context(None, sonar_config) for _ in ubatch_slices],
     )
 
 
@@ -552,8 +552,8 @@ def test_thresholds_below_the_microbatch_count_are_rejected():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="DBO needs a GPU")
 def test_runner_allocates_one_buffer_pair_per_microbatch():
     """All microbatches are live at once, so none may share rebase buffers."""
-    aphrodite_config = _make_dbo_config()
-    runner = _make_execution_runner(aphrodite_config)
+    sonar_config = _make_dbo_config()
+    runner = _make_execution_runner(sonar_config)
 
     for buffers in (runner.ubatch_query_start_loc, runner.ubatch_seq_lens):
         assert len(buffers) == runner.num_ubatches
@@ -595,13 +595,13 @@ def _make_capturer(num_tokens: int, device: torch.device) -> RoutedExpertsCaptur
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="DBO needs a GPU")
 def test_ubatch_runner_overlaps_and_matches_single_batch():
     """Microbatches interleave at the yield point and produce the same output."""
-    aphrodite_config = _make_dbo_config()
+    sonar_config = _make_dbo_config()
     device = torch.device("cuda:0")
-    runner = _make_execution_runner(aphrodite_config)
+    runner = _make_execution_runner(sonar_config)
 
     model_inputs = _make_model_inputs(16, device)
     ubatch_state = _make_ubatch_state(
-        aphrodite_config,
+        sonar_config,
         [
             UBatchSlice(slice(0, 4), slice(0, 8)),
             UBatchSlice(slice(4, 8), slice(8, 16)),
@@ -646,9 +646,9 @@ def test_ubatch_runner_names_the_microbatch_that_failed(failed_ubatch):
     microbatch, and the V1 runner has the same gap. Fixing that means changing
     `ubatching.py`, which is out of scope for the V2 runner.
     """
-    aphrodite_config = _make_dbo_config()
+    sonar_config = _make_dbo_config()
     device = torch.device("cuda:0")
-    runner = _make_execution_runner(aphrodite_config)
+    runner = _make_execution_runner(sonar_config)
     failed_threads: list[threading.Thread] = []
 
     class _FailingModel(torch.nn.Module):
@@ -665,7 +665,7 @@ def test_ubatch_runner_names_the_microbatch_that_failed(failed_ubatch):
 
     model_inputs = _make_model_inputs(8, device)
     ubatch_state = _make_ubatch_state(
-        aphrodite_config,
+        sonar_config,
         [
             UBatchSlice(slice(0, 2), slice(0, 4)),
             UBatchSlice(slice(2, 4), slice(4, 8)),
@@ -821,12 +821,12 @@ def test_slicing_drops_stale_dcp_metadata_when_dcp_is_off():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="DBO needs a GPU")
 def test_capturable_run_replays_as_a_cudagraph():
     """Microbatched graph replay reads updated persistent input buffers."""
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(model="facebook/opt-125m", dtype="float16", seed=0),
         parallel_config=ParallelConfig(enable_dbo=True, all2all_backend="deepep_low_latency"),
     )
     device = torch.device("cuda:0")
-    runner = _make_execution_runner(aphrodite_config)
+    runner = _make_execution_runner(sonar_config)
 
     num_tokens = 16
     input_ids = torch.arange(num_tokens, device=device)
@@ -838,7 +838,7 @@ def test_capturable_run_replays_as_a_cudagraph():
         "intermediate_tensors": None,
     }
     ubatch_state = _make_ubatch_state(
-        aphrodite_config,
+        sonar_config,
         [
             UBatchSlice(slice(0, 4), slice(0, 8)),
             UBatchSlice(slice(4, 8), slice(8, 16)),
@@ -888,7 +888,7 @@ def test_captured_split_survives_a_replay_with_enough_requests():
 
 
 def _make_cudagraph_manager(capture_sizes: list[int]) -> CudaGraphManager:
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(model="facebook/opt-125m", dtype="float16", seed=0),
         parallel_config=ParallelConfig(
             enable_dbo=True,
@@ -907,7 +907,7 @@ def _make_cudagraph_manager(capture_sizes: list[int]) -> CudaGraphManager:
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     ):
         manager = CudaGraphManager(
-            aphrodite_config,
+            sonar_config,
             torch.device("cuda:0"),
             CUDAGraphMode.FULL,
             decode_query_len=1,

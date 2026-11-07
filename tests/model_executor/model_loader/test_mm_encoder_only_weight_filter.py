@@ -8,11 +8,11 @@ import tempfile
 
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     filter_mm_encoder_only_safetensors_files,
     resolve_mm_encoder_only_lm_prefixes,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
+from sonar.model_executor.models.utils import WeightsMapper
 
 
 def _write_index(folder: str, weight_map: dict[str, str]) -> None:
@@ -117,7 +117,7 @@ def test_no_index_returns_unchanged():
 
 
 def test_resolve_returns_module_prefixes_without_hf_hardcode():
-    """No global Qwen HF nest list — just Aphrodite module prefixes."""
+    """No global Qwen HF nest list — just Sonar module prefixes."""
     prefixes = resolve_mm_encoder_only_lm_prefixes(["language_model"])
     assert prefixes == ("language_model.",)
     # With Qwen mapper, still module prefixes (keys classified via mapper).

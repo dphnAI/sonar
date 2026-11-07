@@ -6,20 +6,20 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization.online.lm_head import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.quantization.online.lm_head import (
     quantized_lm_head_copy,
     refresh_quantized_lm_heads,
 )
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.model_loader.reload import (
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.model_loader.reload import (
     finalize_layerwise_reload,
     initialize_layerwise_reload,
     record_metadata_for_reloading,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu_worker import Worker
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu_worker import Worker
 
 # Not a multiple of the vocab padding, so the head has padded rows.
 VOCAB, HIDDEN = 4000, 512
@@ -33,7 +33,7 @@ def _target_head(monkeypatch, seed: int = 0) -> ParallelLMHead:
     # Online methods read the model dtype from the current config.
     model_config = SimpleNamespace(dtype=torch.bfloat16)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.online.fp8.get_current_aphrodite_config",
+        "sonar.model_executor.layers.quantization.online.fp8.get_current_sonar_config",
         lambda: SimpleNamespace(model_config=model_config),
     )
     head = ParallelLMHead(VOCAB, HIDDEN, disable_tp=True)
@@ -52,7 +52,7 @@ def _tensors(module: torch.nn.Module) -> dict[str, torch.Tensor]:
     [("fp8", 0.05, 0.9), pytest.param("nvfp4", 0.15, 0.75, marks=requires_nvfp4)],
 )
 def test_tracks_bf16_head_through_logits_processor(
-    default_aphrodite_config, dist_init, monkeypatch, quantization, max_rel_err, min_top1
+    default_sonar_config, dist_init, monkeypatch, quantization, max_rel_err, min_top1
 ):
     head = _target_head(monkeypatch)
     target_weight = head.weight.detach().clone()
@@ -76,7 +76,7 @@ def test_tracks_bf16_head_through_logits_processor(
 
 @requires_cuda
 @pytest.mark.parametrize("quantization", ["fp8", NVFP4])
-def test_refresh_follows_target_update(default_aphrodite_config, dist_init, monkeypatch, quantization):
+def test_refresh_follows_target_update(default_sonar_config, dist_init, monkeypatch, quantization):
     """After the target's weights change, the copy is re-derived in place: it
     equals a fresh quantization of the new target, keeps its storage, and
     frees the temporary copy without waiting for the cycle collector."""
@@ -103,9 +103,9 @@ def test_refresh_follows_target_update(default_aphrodite_config, dist_init, monk
     assert torch.equal(head.weight, new_weight)
 
 
-def _draft_update_worker(aphrodite_config, drafter: torch.nn.Module, **engine) -> Worker:
+def _draft_update_worker(sonar_config, drafter: torch.nn.Module, **engine) -> Worker:
     worker = object.__new__(Worker)
-    worker.aphrodite_config = aphrodite_config
+    worker.sonar_config = sonar_config
     worker.weight_transfer_engine = SimpleNamespace(
         supports_draft_weight_update=True,
         reset_weight_update_target=lambda: None,
@@ -118,14 +118,14 @@ def _draft_update_worker(aphrodite_config, drafter: torch.nn.Module, **engine) -
 
 
 @requires_cuda
-def test_draft_weight_update_refreshes_copy(default_aphrodite_config, dist_init, monkeypatch):
+def test_draft_weight_update_refreshes_copy(default_sonar_config, dist_init, monkeypatch):
     """A draft weight update can write a target weight the drafter shares, such
     as an embedding tied to the lm_head; the copy must follow it."""
     head = _target_head(monkeypatch)
     drafter = torch.nn.Module()
     drafter.lm_head = quantized_lm_head_copy(head, "fp8")
     worker = _draft_update_worker(
-        default_aphrodite_config,
+        default_sonar_config,
         drafter,
         start_weight_update=lambda: None,
         finish_weight_update=lambda: None,
@@ -142,7 +142,7 @@ def test_draft_weight_update_refreshes_copy(default_aphrodite_config, dist_init,
 
 @requires_cuda
 @pytest.mark.parametrize("quantization", ["fp8", NVFP4])
-def test_draft_weight_update_loads_lm_head(default_aphrodite_config, dist_init, monkeypatch, quantization):
+def test_draft_weight_update_loads_lm_head(default_sonar_config, dist_init, monkeypatch, quantization):
     """A draft update carrying lm_head.weight loads the shared target head, as
     without quantization, and the copy is re-derived from it in place."""
     head = _target_head(monkeypatch)
@@ -158,7 +158,7 @@ def test_draft_weight_update_loads_lm_head(default_aphrodite_config, dist_init, 
         getattr(param, "weight_loader", default_weight_loader)(param, new_weight)
 
     worker = _draft_update_worker(
-        default_aphrodite_config,
+        default_sonar_config,
         drafter,
         start_weight_update=lambda: initialize_layerwise_reload(drafter),
         update_weights=load,
@@ -181,7 +181,7 @@ def test_draft_weight_update_loads_lm_head(default_aphrodite_config, dist_init, 
 
 @requires_cuda
 @requires_nvfp4
-def test_layerwise_reload_of_drafter_keeps_copy(default_aphrodite_config, dist_init, monkeypatch):
+def test_layerwise_reload_of_drafter_keeps_copy(default_sonar_config, dist_init, monkeypatch):
     """A drafter weight update reloads the drafter layerwise; the derived copy
     must come back unchanged, not be re-quantized."""
     head = _target_head(monkeypatch)

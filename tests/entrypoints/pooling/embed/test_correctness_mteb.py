@@ -12,7 +12,7 @@ from tests.models.language.pooling_mteb_test.mteb_embed_utils import (
 )
 from tests.utils import RemoteOpenAIServer
 
-os.environ["APHRODITE_LOGGING_LEVEL"] = "WARNING"
+os.environ["SONAR_LOGGING_LEVEL"] = "WARNING"
 
 MODEL_NAME = "intfloat/e5-small"
 MAIN_SCORE = 0.7422994752439667
@@ -29,13 +29,13 @@ def server():
 def test_mteb_embed(server):
     client = server.get_client()
     encoder = OpenAIClientMtebEncoder(MODEL_NAME, client)
-    aphrodite_main_score = run_mteb_embed_task(encoder, MTEB_EMBED_TASKS)
+    sonar_main_score = run_mteb_embed_task(encoder, MTEB_EMBED_TASKS)
     st_main_score = MAIN_SCORE
 
-    print("APHRODITE main score: ", aphrodite_main_score)
+    print("SONAR main score: ", sonar_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - aphrodite_main_score)
+    print("Difference: ", st_main_score - sonar_main_score)
 
-    # We are not concerned that the aphrodite mteb results are better
+    # We are not concerned that the sonar mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - aphrodite_main_score < MTEB_EMBED_TOL
+    assert st_main_score - sonar_main_score < MTEB_EMBED_TOL

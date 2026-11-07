@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Aphrodite Engine ccache status checker
+# Sonar Engine ccache status checker
 
 # Change to project root directory
 cd "$(dirname "$0")/.."

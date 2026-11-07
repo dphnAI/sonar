@@ -7,17 +7,17 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.v1.spec_decode.fly import compute_fly_entropy
-from aphrodite.v1.watermarking import GumbelWatermarker
-from aphrodite.v1.watermarking.spec_decode import watermarked_rejection_sample
-from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
-from aphrodite.v1.worker.gpu.sample.watermark import philox_gumbel_sample
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler import (
+from sonar.v1.spec_decode.fly import compute_fly_entropy
+from sonar.v1.watermarking import GumbelWatermarker
+from sonar.v1.watermarking.spec_decode import watermarked_rejection_sample
+from sonar.v1.worker.gpu.sample.gumbel import gumbel_sample
+from sonar.v1.worker.gpu.sample.watermark import philox_gumbel_sample
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler import (
     RejectionSampler,
     gather_draft_sampled,
 )
-from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
+from sonar.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     rejection_sample,
 )
 
@@ -776,7 +776,7 @@ def test_synthetic_rejection_sample(
     is P(all draft steps 0..i accepted) = product(conditional_rates[0:i+1]).
     This is approximately mean(num accepted >= i + 1) over many trials.
     """
-    from aphrodite.v1.spec_decode.utils import unconditional_to_conditional_rates
+    from sonar.v1.spec_decode.utils import unconditional_to_conditional_rates
 
     torch.manual_seed(42)
     device = "cuda"

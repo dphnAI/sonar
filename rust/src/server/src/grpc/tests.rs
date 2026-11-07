@@ -12,41 +12,39 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use aphrodite_chat::multimodal::{MmLimitPerPrompt, MmLimitSpec, MmModality};
-use aphrodite_chat::{
-    ChatBackend, ChatLlm, ChatRenderer, ChatRequest, ChatTextBackend, DefaultChatOutputProcessor,
-    DynChatOutputProcessor, DynChatRenderer, NewChatOutputProcessorOptions, RenderedPrompt,
-};
-use aphrodite_engine_core_client::mock_engine::{
-    DEFAULT_MOCK_BLOCK_SIZE, DEFAULT_MOCK_MAX_MODEL_LEN, DEFAULT_MOCK_NUM_GPU_BLOCKS,
-    MockEngineConfig, connect_to_bootstrapped_frontend, default_ready_response,
-};
-use aphrodite_engine_core_client::protocol::decode_value;
-use aphrodite_engine_core_client::protocol::dtype::TensorDtype;
-use aphrodite_engine_core_client::protocol::handshake::{EngineCoreReadyResponse, KvEventsConfig};
-use aphrodite_engine_core_client::protocol::multimodal::{
-    MmBatchedField, MmField, MmFieldElem, MmKwargValue,
-};
-use aphrodite_engine_core_client::protocol::output::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
-    UtilityCallOutput,
-};
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::tensor::WireTensor;
-use aphrodite_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
-use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task_with_ready};
-use aphrodite_engine_core_client::{
-    EngineCoreClient, EngineCoreClientConfig, EngineId, TransportMode,
-};
-use aphrodite_llm::Llm;
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_text::{Prompt, TextBackend};
-use aphrodite_tokenizer::test_utils::{PanickingTokenizer, TestTokenizer};
 use futures::StreamExt as _;
 use hyper_util::rt::TokioIo;
 use openssl::ssl::{SslConnector, SslFiletype, SslMethod};
 use rmpv::Value;
 use serial_test::serial;
+use sonar_chat::multimodal::{MmLimitPerPrompt, MmLimitSpec, MmModality};
+use sonar_chat::{
+    ChatBackend, ChatLlm, ChatRenderer, ChatRequest, ChatTextBackend, DefaultChatOutputProcessor,
+    DynChatOutputProcessor, DynChatRenderer, NewChatOutputProcessorOptions, RenderedPrompt,
+};
+use sonar_engine_core_client::mock_engine::{
+    DEFAULT_MOCK_BLOCK_SIZE, DEFAULT_MOCK_MAX_MODEL_LEN, DEFAULT_MOCK_NUM_GPU_BLOCKS,
+    MockEngineConfig, connect_to_bootstrapped_frontend, default_ready_response,
+};
+use sonar_engine_core_client::protocol::decode_value;
+use sonar_engine_core_client::protocol::dtype::TensorDtype;
+use sonar_engine_core_client::protocol::handshake::{EngineCoreReadyResponse, KvEventsConfig};
+use sonar_engine_core_client::protocol::multimodal::{
+    MmBatchedField, MmField, MmFieldElem, MmKwargValue,
+};
+use sonar_engine_core_client::protocol::output::{
+    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs,
+    UtilityCallOutput,
+};
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::tensor::WireTensor;
+use sonar_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
+use sonar_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task_with_ready};
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId, TransportMode};
+use sonar_llm::Llm;
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_text::{Prompt, TextBackend};
+use sonar_tokenizer::test_utils::{PanickingTokenizer, TestTokenizer};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpStream;
 use tokio_openssl::SslStream;
@@ -251,7 +249,7 @@ impl ChatBackend for FakeTextBackend {
         &self,
         request: &mut ChatRequest,
         options: NewChatOutputProcessorOptions<'_>,
-    ) -> aphrodite_chat::Result<DynChatOutputProcessor> {
+    ) -> sonar_chat::Result<DynChatOutputProcessor> {
         Ok(Box::new(DefaultChatOutputProcessor::new(
             request,
             self.model_id(),
@@ -264,7 +262,7 @@ impl ChatBackend for FakeTextBackend {
 }
 
 impl ChatRenderer for FakeTextBackend {
-    fn render(&self, _request: &ChatRequest) -> aphrodite_chat::Result<RenderedPrompt> {
+    fn render(&self, _request: &ChatRequest) -> sonar_chat::Result<RenderedPrompt> {
         Ok(RenderedPrompt {
             prompt: Prompt::Text(String::new()),
             media_order: None,
@@ -274,7 +272,7 @@ impl ChatRenderer for FakeTextBackend {
 }
 
 struct FakeMultimodalBackend {
-    model_info: aphrodite_chat::multimodal::MultimodalModelInfo,
+    model_info: sonar_chat::multimodal::MultimodalModelInfo,
 }
 
 impl TextBackend for FakeMultimodalBackend {
@@ -292,7 +290,7 @@ impl ChatBackend for FakeMultimodalBackend {
         Arc::new(FakeTextBackend::default())
     }
 
-    fn multimodal_model_info(&self) -> Option<&aphrodite_chat::multimodal::MultimodalModelInfo> {
+    fn multimodal_model_info(&self) -> Option<&sonar_chat::multimodal::MultimodalModelInfo> {
         Some(&self.model_info)
     }
 
@@ -300,7 +298,7 @@ impl ChatBackend for FakeMultimodalBackend {
         &self,
         request: &mut ChatRequest,
         options: NewChatOutputProcessorOptions<'_>,
-    ) -> aphrodite_chat::Result<DynChatOutputProcessor> {
+    ) -> sonar_chat::Result<DynChatOutputProcessor> {
         Ok(Box::new(DefaultChatOutputProcessor::new(
             request,
             self.model_id(),
@@ -323,7 +321,7 @@ fn multimodal_backend_with_limits(
     limit_mm_per_prompt: MmLimitPerPrompt,
 ) -> Arc<dyn ChatTextBackend> {
     let config_path = std::env::temp_dir().join(format!(
-        "aphrodite-grpc-qwen-config-{}.json",
+        "sonar-grpc-qwen-config-{}.json",
         uuid::Uuid::new_v4()
     ));
     fs::write(
@@ -331,10 +329,10 @@ fn multimodal_backend_with_limits(
         r#"{"model_type":"qwen2_vl","image_token_id":151655}"#,
     )
     .expect("write qwen test config");
-    let model_info = aphrodite_chat::multimodal::MultimodalModelInfo::from_paths(
+    let model_info = sonar_chat::multimodal::MultimodalModelInfo::from_paths(
         "qwen2-vl-test".to_string(),
         Some("qwen2_vl".to_string()),
-        aphrodite_chat::multimodal::MultimodalConfigFiles {
+        sonar_chat::multimodal::MultimodalConfigFiles {
             config: Some(&config_path),
             ..Default::default()
         },
@@ -2195,9 +2193,9 @@ async fn control_reports_server_and_model_info() {
         .await
         .expect("get server info")
         .into_inner();
-    assert_eq!(server.engine_version, "test-aphrodite-version");
+    assert_eq!(server.engine_version, "test-sonar-version");
     assert_eq!(server.effective_attention_block_size, Some(64));
-    assert_eq!(server.api_version, "aphrodite");
+    assert_eq!(server.api_version, "sonar");
     assert_eq!(server.proto_version, pb::VERSION);
     assert_eq!(server.instance_id, "test-instance");
     assert_eq!(server.max_model_len, DEFAULT_MOCK_MAX_MODEL_LEN as u32);
@@ -2283,7 +2281,7 @@ async fn control_lora_lifecycle_selects_adapter_for_generation() {
     let mut inference_client = InferenceClient::new(channel);
 
     let denied_source_path =
-        std::env::temp_dir().join(format!("aphrodite-grpc-lora-denied-{}", std::process::id()));
+        std::env::temp_dir().join(format!("sonar-grpc-lora-denied-{}", std::process::id()));
     let denied = control_client
         .load_lora(pb::LoadLoraRequest {
             lora_name: "denied-adapter".to_string(),
@@ -2610,7 +2608,7 @@ async fn grpc_health_transitions_to_not_serving_when_engine_becomes_unhealthy() 
     let mut health_client = HealthClient::new(channel);
 
     let mut health_streams = Vec::new();
-    for service in ["aphrodite.Inference", "aphrodite.Control", ""] {
+    for service in ["sonar.Inference", "sonar.Control", ""] {
         let service_label = if service.is_empty() {
             "overall"
         } else {
@@ -2722,7 +2720,7 @@ async fn grpc_shutdown_requires_managed_engine() {
 
     let health = HealthClient::new(channel)
         .check(HealthCheckRequest {
-            service: "aphrodite.Inference".to_string(),
+            service: "sonar.Inference".to_string(),
         })
         .await
         .expect("server remains healthy after rejected shutdown")
@@ -2755,21 +2753,21 @@ async fn grpc_shutdown_closes_health_watch_and_server() {
     let mut health_client = HealthClient::new(channel);
     let mut stream = health_client
         .watch(HealthCheckRequest {
-            service: "aphrodite.Inference".to_string(),
+            service: "sonar.Inference".to_string(),
         })
         .await
-        .expect("start health watch for aphrodite.Inference")
+        .expect("start health watch for sonar.Inference")
         .into_inner();
 
     let initial = stream
         .message()
         .await
-        .expect("read initial health status for aphrodite.Inference")
+        .expect("read initial health status for sonar.Inference")
         .expect("health watch ended before its initial status");
     assert_eq!(
         initial.status,
         HealthServingStatus::Serving as i32,
-        "unexpected initial health status for aphrodite.Inference"
+        "unexpected initial health status for sonar.Inference"
     );
 
     control_client
@@ -2783,22 +2781,22 @@ async fn grpc_shutdown_closes_health_watch_and_server() {
 
     let update = tokio::time::timeout(Duration::from_secs(2), stream.message())
         .await
-        .expect("timed out waiting for shutdown health update for aphrodite.Inference")
-        .expect("failed to read shutdown health update for aphrodite.Inference")
+        .expect("timed out waiting for shutdown health update for sonar.Inference")
+        .expect("failed to read shutdown health update for sonar.Inference")
         .expect("health watch ended before its shutdown update");
     assert_eq!(
         update.status,
         HealthServingStatus::NotServing as i32,
-        "unexpected shutdown health status for aphrodite.Inference"
+        "unexpected shutdown health status for sonar.Inference"
     );
 
     let stream_end = tokio::time::timeout(Duration::from_secs(2), stream.message())
         .await
-        .expect("timed out waiting for aphrodite.Inference health watch to close")
-        .expect("failed while closing aphrodite.Inference health watch");
+        .expect("timed out waiting for sonar.Inference health watch to close")
+        .expect("failed while closing sonar.Inference health watch");
     assert!(
         stream_end.is_none(),
-        "aphrodite.Inference health watch remained open"
+        "sonar.Inference health watch remained open"
     );
 
     tokio::time::timeout(Duration::from_secs(2), server_task)

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.renderers.chat_utils import AsyncMultiModalItemTracker
+from sonar.renderers.chat_utils import AsyncMultiModalItemTracker
 
 
 @pytest.mark.asyncio

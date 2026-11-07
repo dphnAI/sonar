@@ -3,7 +3,7 @@
 
 //! Step3-VL vision preprocessor.
 //!
-//! Port of Aphrodite's `transformers_utils/processors/step3_vl.py` (also the
+//! Port of Sonar's `transformers_utils/processors/step3_vl.py` (also the
 //! frontend Step5-VL reuses): a 728x728 global view plus a
 //! sliding-window grid of 504x504 patches, both CLIP-normalized, with a
 //! per-patch `<patch_newline>` mask marking row ends in reading order.
@@ -145,7 +145,7 @@ struct PatchedImage {
     newline_mask: Vec<u32>,
 }
 
-/// Step3-VL per-image transform (also the Step5-VL frontend in Aphrodite).
+/// Step3-VL per-image transform (also the Step5-VL frontend in Sonar).
 #[derive(Debug, Clone)]
 pub struct Step3VLProcessor {
     image_size: u32,

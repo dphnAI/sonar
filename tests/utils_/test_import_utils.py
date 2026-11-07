@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.utils.import_utils import PlaceholderModule, _has_module, import_plugin
+from sonar.utils.import_utils import PlaceholderModule, _has_module, import_plugin
 
 
 def _raises_module_not_found():
@@ -72,11 +72,11 @@ class TestHasModule:
 
         with (
             patch(
-                "aphrodite.utils.import_utils.importlib.util.find_spec",
+                "sonar.utils.import_utils.importlib.util.find_spec",
                 return_value=fake_spec,
             ),
             patch(
-                "aphrodite.utils.import_utils.importlib.import_module",
+                "sonar.utils.import_utils.importlib.import_module",
                 side_effect=ImportError("libcudart.so.12: cannot open shared object file"),
             ),
         ):
@@ -87,7 +87,7 @@ class TestHasModule:
         fails to import. This should be treated as the module being unavailable.
         """
         with patch(
-            "aphrodite.utils.import_utils.importlib.util.find_spec",
+            "sonar.utils.import_utils.importlib.util.find_spec",
             side_effect=ModuleNotFoundError("No module named 'fake_parent'"),
         ):
             assert _has_module("fake_parent.child") is False
@@ -96,7 +96,7 @@ class TestHasModule:
         """Verify the @cache decorator prevents repeated imports."""
         _has_module("json")  # prime the cache
 
-        with patch("aphrodite.utils.import_utils.importlib.util.find_spec") as mock_spec:
+        with patch("sonar.utils.import_utils.importlib.util.find_spec") as mock_spec:
             result = _has_module("json")  # should hit cache
             mock_spec.assert_not_called()
             assert result is True
@@ -123,11 +123,11 @@ class TestImportPlugin:
     def test_returns_none_when_both_attempts_fail(self):
         with (
             patch(
-                "aphrodite.utils.import_utils.import_from_path",
+                "sonar.utils.import_utils.import_from_path",
                 side_effect=FileNotFoundError("no such file"),
             ),
             patch(
-                "aphrodite.utils.import_utils.importlib.import_module",
+                "sonar.utils.import_utils.importlib.import_module",
                 side_effect=ModuleNotFoundError("no such module"),
             ),
         ):

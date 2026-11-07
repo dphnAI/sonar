@@ -21,10 +21,10 @@ import pytest
 import torch
 from compressed_tensors.transform.utils.hadamard import deterministic_hadamard_matrix
 
-from aphrodite._custom_ops import fusedQuantizeMx, matmul_mxf4_bf16_tn
-from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar._custom_ops import fusedQuantizeMx, matmul_mxf4_bf16_tn
+from sonar.model_executor.layers.quantization.qutlass_utils import to_blocked
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for these tests.", allow_module_level=True)

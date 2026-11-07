@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use aphrodite_text::backend::hf::{
+use sonar_text::backend::hf::{
     HfTextBackend, ModelFileSources, ModelSource, ResolvedModelFiles, load_model_config,
     load_tokenizer_config,
 };
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_text::{DynTextBackend, TextBackend as _};
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_text::{DynTextBackend, TextBackend as _};
 use thiserror_ext::AsReport as _;
 use tracing::{info, warn};
 
@@ -238,9 +238,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use aphrodite_text::Prompt;
-    use aphrodite_text::tokenizer::DynTokenizer;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_text::Prompt;
+    use sonar_text::tokenizer::DynTokenizer;
+    use sonar_tokenizer::test_utils::TestTokenizer;
     use tempfile::tempdir;
     use thiserror_ext::AsReport as _;
 
@@ -266,7 +266,7 @@ mod tests {
     fn resolved_files(
         config_json: &str,
         tokenizer_config_json: &str,
-    ) -> aphrodite_text::backend::hf::ResolvedModelFiles {
+    ) -> sonar_text::backend::hf::ResolvedModelFiles {
         let dir = tempdir().unwrap();
         let root = dir.keep();
         let config_path = root.join("config.json");
@@ -275,7 +275,7 @@ mod tests {
         write_json(&tokenizer_config_path, tokenizer_config_json);
 
         write_json(&root.join("tokenizer.json"), "{}");
-        futures::executor::block_on(aphrodite_text::backend::hf::ResolvedModelFiles::new(
+        futures::executor::block_on(sonar_text::backend::hf::ResolvedModelFiles::new(
             root.to_str().unwrap(),
             None,
         ))

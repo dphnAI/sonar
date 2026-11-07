@@ -12,15 +12,15 @@ import pytest
 from pydantic import ValidationError
 from xgrammar.testing import _is_grammar_accept_string
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     JsonSchemaResponseFormat,
     ResponseFormat,
     StructuralTagResponseFormat,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.cohere_command import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.parser.cohere_command import (
     CohereCommandParser,
     CohereNormalizedTool,
     _has_effective_tools,
@@ -29,7 +29,7 @@ from aphrodite.parser.cohere_command import (
     collect_tool_schema,
     convert_schema_to_structural_tags,
 )
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar.sampling_params import StructuredOutputsParams
 
 from .utils import MockCohereTokenizer, make_parser
 
@@ -329,7 +329,7 @@ class TestAdjustRequestFoldFromStructuredOutputs:
     def test_deeply_nested_json_string_rejected(self, parser) -> None:
         """json.loads raises RecursionError on a string nested this deeply."""
         schema = '{"type": "array", "items": ' * 20_000 + "{}" + "}" * 20_000
-        with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+        with pytest.raises(SonarValidationError, match="nested too deeply"):
             parser.adjust_request(
                 _make_chat_request(structured_outputs={"json": schema}),
             )
@@ -437,7 +437,7 @@ class TestCollectToolSchemaDefs:
         """Tool schemas are compiled here, before request validation, and end up
         inside an EBNF grammar that the nesting check cannot see later."""
         parameters = json.loads('{"type": "array", "items": ' * 200 + "{}" + "}" * 200)
-        with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+        with pytest.raises(SonarValidationError, match="nested too deeply"):
             collect_tool_schema([CohereNormalizedTool(name="deep", parameters=parameters)])
 
     def test_input_parameters_not_mutated(self) -> None:

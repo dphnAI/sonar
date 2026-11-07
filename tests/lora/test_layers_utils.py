@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.lora.layers.utils import _get_lora_device
+from sonar.lora.layers.utils import _get_lora_device
 
 pytestmark = pytest.mark.skip_global_cleanup
 

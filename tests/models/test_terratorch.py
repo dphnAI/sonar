@@ -6,7 +6,7 @@ import importlib.util
 import pytest
 import torch
 
-from tests.conftest import AphroditeRunner
+from tests.conftest import SonarRunner
 from tests.utils import create_new_process_for_each_test
 
 pytestmark = pytest.mark.skipif(
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
     ],
 )
 def test_inference(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: str,
 ) -> None:
     pixel_values = torch.full((6, 512, 512), 1.0, dtype=torch.float16)
@@ -39,7 +39,7 @@ def test_inference(
         },
     )
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype="half",
@@ -50,6 +50,6 @@ def test_inference(
         # test going OOM during the warmup run
         max_num_seqs=32,
         default_torch_num_threads=1,
-    ) as aphrodite_model:
-        aphrodite_output = aphrodite_model.llm.encode(prompt, pooling_task="plugin")
-        assert torch.equal(torch.isnan(aphrodite_output[0].outputs.data).any(), torch.tensor(False))
+    ) as sonar_model:
+        sonar_output = sonar_model.llm.encode(prompt, pooling_task="plugin")
+        assert torch.equal(torch.isnan(sonar_output[0].outputs.data).any(), torch.tensor(False))

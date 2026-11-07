@@ -19,8 +19,8 @@ import pytest
 import requests
 from prometheus_client.parser import text_string_to_metric_families
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.models.utils import check_logprobs_close
 from tests.utils import RemoteOpenAIServer, multi_gpu_marks
 
@@ -196,7 +196,7 @@ def _block_size(url: str) -> int:
     response.raise_for_status()
     for family in text_string_to_metric_families(response.text):
         for sample in family.samples:
-            if sample.name == "aphrodite:cache_config_info":
+            if sample.name == "sonar:cache_config_info":
                 return lcm(
                     *(
                         int(value)
@@ -204,7 +204,7 @@ def _block_size(url: str) -> int:
                         if (value := sample.labels.get(key, "None")) != "None"
                     )
                 )
-    raise AssertionError("missing aphrodite:cache_config_info metric")
+    raise AssertionError("missing sonar:cache_config_info metric")
 
 
 def _complete(url: str, prompt: list[int], salt: str, **extra) -> dict:
@@ -299,13 +299,13 @@ def _serve(deployment: Deployment, mode: Mode) -> Iterator[list[RemoteOpenAIServ
             env = {}
             if deployment.offload:
                 # Enables /reset_prefix_cache.
-                env["APHRODITE_SERVER_DEV_MODE"] = "1"
+                env["SONAR_SERVER_DEV_MODE"] = "1"
             if deployment.prefill is not None:
                 gpus = range(next_gpu, next_gpu + instance.num_gpus)
                 next_gpu += instance.num_gpus
                 env["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpus))
-                env["APHRODITE_SSM_CONV_STATE_LAYOUT"] = "DS"
-                env["APHRODITE_NIXL_SIDE_CHANNEL_PORT"] = str(get_open_port())
+                env["SONAR_SSM_CONV_STATE_LAYOUT"] = "DS"
+                env["SONAR_NIXL_SIDE_CHANNEL_PORT"] = str(get_open_port())
             servers.append(
                 RemoteOpenAIServer(
                     MODEL,

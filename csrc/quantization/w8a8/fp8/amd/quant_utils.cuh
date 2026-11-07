@@ -8,7 +8,7 @@
 #include "core/vec_dtypes/vec_dtypes.h"
 #include <torch/headeronly/core/ScalarType.h>
 
-namespace aphrodite {
+namespace sonar {
 #ifdef USE_ROCM
 
 namespace fp8 {
@@ -22,7 +22,7 @@ __device__ __forceinline__ fp8_type cvt_c10(float const r) {
 
 // __hip_fp8_e4m3 only exists starting in ROCm 6.3. The macro
 // HIP_FP8_TYPE_OCP comes from the hip_fp8.h header and also makes
-// its first appearance in ROCm 6.3. Since APHRODITE_DISPATCH_FP8_TYPES
+// its first appearance in ROCm 6.3. Since SONAR_DISPATCH_FP8_TYPES
 // on ROCm instantiates both OCP and FNUZ kernels, we need to replace
 // the new HW cvt with something reasonable that doesn't rely on the
 // ROCm 6.3 feature. This allows compiling on ROCm 6.2 or newer.
@@ -400,27 +400,26 @@ __inline__ __device__ Tout scaled_convert(const Tin& x, const float scale) {
   // function with template<typename scalar_t, typename cache_t,
   // Fp8KVCacheDataType kv_dt>.
   #define DISPATCH_BY_KV_CACHE_DTYPE(SRC_DTYPE, KV_DTYPE, FN)                  \
-    aphrodite::Fp8KVCacheDataType KV_CACHE_DTYPE =                             \
-        aphrodite::get_fp8_kv_cache_data_type(KV_DTYPE);                       \
-    if (KV_CACHE_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {              \
+    sonar::Fp8KVCacheDataType KV_CACHE_DTYPE =                                 \
+        sonar::get_fp8_kv_cache_data_type(KV_DTYPE);                           \
+    if (KV_CACHE_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {                  \
       if (SRC_DTYPE == torch::headeronly::ScalarType::Float) {                 \
-        FN(float, float, aphrodite::Fp8KVCacheDataType::kAuto);                \
+        FN(float, float, sonar::Fp8KVCacheDataType::kAuto);                    \
       } else if (SRC_DTYPE == torch::headeronly::ScalarType::Half) {           \
-        FN(uint16_t, uint16_t, aphrodite::Fp8KVCacheDataType::kAuto);          \
+        FN(uint16_t, uint16_t, sonar::Fp8KVCacheDataType::kAuto);              \
       } else if (SRC_DTYPE == torch::headeronly::ScalarType::BFloat16) {       \
-        FN(__nv_bfloat16, __nv_bfloat16,                                       \
-           aphrodite::Fp8KVCacheDataType::kAuto);                              \
+        FN(__nv_bfloat16, __nv_bfloat16, sonar::Fp8KVCacheDataType::kAuto);    \
       } else {                                                                 \
         STD_TORCH_CHECK(false,                                                 \
                         "Unsupported input type of kv cache: ", SRC_DTYPE);    \
       }                                                                        \
-    } else if (KV_CACHE_DTYPE == aphrodite::Fp8KVCacheDataType::kFp8E4M3) {    \
+    } else if (KV_CACHE_DTYPE == sonar::Fp8KVCacheDataType::kFp8E4M3) {        \
       if (SRC_DTYPE == torch::headeronly::ScalarType::Float) {                 \
-        FN(float, uint8_t, aphrodite::Fp8KVCacheDataType::kFp8E4M3);           \
+        FN(float, uint8_t, sonar::Fp8KVCacheDataType::kFp8E4M3);               \
       } else if (SRC_DTYPE == torch::headeronly::ScalarType::Half) {           \
-        FN(uint16_t, uint8_t, aphrodite::Fp8KVCacheDataType::kFp8E4M3);        \
+        FN(uint16_t, uint8_t, sonar::Fp8KVCacheDataType::kFp8E4M3);            \
       } else if (SRC_DTYPE == torch::headeronly::ScalarType::BFloat16) {       \
-        FN(__nv_bfloat16, uint8_t, aphrodite::Fp8KVCacheDataType::kFp8E4M3);   \
+        FN(__nv_bfloat16, uint8_t, sonar::Fp8KVCacheDataType::kFp8E4M3);       \
       } else {                                                                 \
         STD_TORCH_CHECK(false,                                                 \
                         "Unsupported input type of kv cache: ", SRC_DTYPE);    \
@@ -431,4 +430,4 @@ __inline__ __device__ Tout scaled_convert(const Tin& x, const float scale) {
 
 }  // namespace fp8
 #endif  // USE_ROCM
-}  // namespace aphrodite
+}  // namespace sonar

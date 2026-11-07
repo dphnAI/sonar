@@ -28,10 +28,10 @@ from typing import Any
 import numpy as np
 import torch
 
-from aphrodite.model_executor.layers.mamba import mamba_utils as layer_mamba_utils
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker import mamba_utils as worker_mamba_utils
-from aphrodite.v1.worker.mamba_utils import (
+from sonar.model_executor.layers.mamba import mamba_utils as layer_mamba_utils
+from sonar.platforms import current_platform
+from sonar.v1.worker import mamba_utils as worker_mamba_utils
+from sonar.v1.worker.mamba_utils import (
     _TEMPORAL_TILES,
     postprocess_mamba_fused_kernel,
     precopy_mamba_align_fused_kernel,

@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda_alike():
     pytest.skip("NVIDIA dispatch tests require CUDA", allow_module_level=True)
 
-from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
+from sonar.model_executor.kernels.mhc.tilelang_kernels import (
     HcHeadFusedTileLangKernel,
     HcPrenormGemmTileLangKernel,
     MhcFusedTileLangKernel,
@@ -20,7 +20,7 @@ from aphrodite.model_executor.kernels.mhc.tilelang_kernels import (
     mhc_fused_post_pre_split_config,
     require_fused_post_pre_config,
 )
-from aphrodite.model_executor.warmup import jit_warmup_tilelang_helper
+from sonar.model_executor.warmup import jit_warmup_tilelang_helper
 
 
 @pytest.mark.parametrize(

@@ -5,8 +5,8 @@
 """Example online usage of the Jina Reranker v3 score and rerank APIs with a task
 instruction.
 
-Run `aphrodite serve jinaai/jina-reranker-v3 --runner pooling` to start up the
-server in Aphrodite.
+Run `sonar serve jinaai/jina-reranker-v3 --runner pooling` to start up the
+server in Sonar.
 """
 
 import argparse

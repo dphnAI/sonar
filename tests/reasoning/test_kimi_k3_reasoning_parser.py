@@ -6,15 +6,15 @@ from typing import cast
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.kimi_k3 import KimiK3Parser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
-from aphrodite.tokenizers import TokenizerLike
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.kimi_k3 import KimiK3Parser
+from sonar.parser.parser_manager import ParserManager
+from sonar.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
+from sonar.tokenizers import TokenizerLike
 
 pytestmark = pytest.mark.skip_global_cleanup
 

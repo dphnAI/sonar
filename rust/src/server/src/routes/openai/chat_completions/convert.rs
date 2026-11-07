@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_chat::{
+use itertools::Itertools as _;
+use sonar_chat::{
     AssistantContentBlock, AssistantToolCall, ChatContent, ChatContentPart,
-    ChatMessage as AphroditeChatMessage, ChatOptions, ChatRequest, ChatTool, ChatToolChoice,
+    ChatMessage as SonarChatMessage, ChatOptions, ChatRequest, ChatTool, ChatToolChoice,
     GenerationPromptMode, ResolvedToolContext, SamplingParams,
 };
-use itertools::Itertools as _;
 
 use super::types::ChatCompletionRequest;
 use super::validate;
@@ -32,7 +32,7 @@ pub(crate) struct PreparedRequest {
     pub response_model: String,
     /// Public response rendering options for route-layer helpers.
     pub options: ResponseOptions,
-    /// Lowered chat request for `aphrodite-chat`.
+    /// Lowered chat request for `sonar-chat`.
     pub chat_request: ChatRequest,
 }
 
@@ -118,7 +118,7 @@ pub(crate) fn prepare_chat_request(
     let requested_logprobs = request.logprobs;
     let is_named_tool_choice = matches!(&request.tool_choice, Some(ToolChoice::Function { .. }));
 
-    // Auto-enable prompt logprobs for non-streaming echo, matching Python Aphrodite's
+    // Auto-enable prompt logprobs for non-streaming echo, matching Python Sonar's
     // behavior.
     let top_logprobs = request.top_logprobs.unwrap_or(0);
     let prompt_logprobs = request
@@ -140,7 +140,7 @@ pub(crate) fn prepare_chat_request(
     let session_id = resolve_session_id(
         &ctx,
         request.session_id.as_deref(),
-        request.aphrodite_xargs.as_ref(),
+        request.sonar_xargs.as_ref(),
     );
 
     let tool_context = ResolvedToolContext::new(
@@ -155,7 +155,7 @@ pub(crate) fn prepare_chat_request(
         request_id: request_id.clone(),
         messages,
         sampling_params: SamplingParams {
-            aphrodite_sampling: request.aphrodite_sampling,
+            sonar_sampling: request.sonar_sampling,
             temperature: request.temperature,
             watermarking: request.watermarking,
             top_p: request.top_p,
@@ -183,11 +183,8 @@ pub(crate) fn prepare_chat_request(
             structured_outputs,
             skip_reading_prefix_cache: None,
             routed_experts_prompt_start: None,
-            aphrodite_xargs: merge_kv_transfer_params(
-                merge_ec_transfer_params(
-                    request.aphrodite_xargs,
-                    request.ec_transfer_params.as_ref(),
-                ),
+            sonar_xargs: merge_kv_transfer_params(
+                merge_ec_transfer_params(request.sonar_xargs, request.ec_transfer_params.as_ref()),
                 request.kv_transfer_params.as_ref(),
             ),
             stream_interval: request.stream_interval,
@@ -200,7 +197,7 @@ pub(crate) fn prepare_chat_request(
             template_kwargs,
         },
         tool_context,
-        decode_options: aphrodite_text::output::TextDecodeOptions {
+        decode_options: sonar_text::output::TextDecodeOptions {
             skip_special_tokens: request.skip_special_tokens,
             include_stop_str_in_output: request.include_stop_str_in_output,
             stop_strings: request.stop.map(|stop| stop.into_vec()),
@@ -241,7 +238,7 @@ pub(crate) fn prepare_chat_request(
 pub(crate) fn normalize_generation_prompt_mode(
     add_generation_prompt: Option<bool>,
     continue_final_message: bool,
-    messages: &[AphroditeChatMessage],
+    messages: &[SonarChatMessage],
 ) -> Result<GenerationPromptMode, ApiError> {
     if add_generation_prompt == Some(true) && continue_final_message {
         bail_invalid_request!(
@@ -249,10 +246,10 @@ pub(crate) fn normalize_generation_prompt_mode(
         );
     }
 
-    let last_role = messages.last().map(AphroditeChatMessage::role);
+    let last_role = messages.last().map(SonarChatMessage::role);
     match (add_generation_prompt, continue_final_message, last_role) {
         (Some(true), true, _) => unreachable!("rejected above"),
-        (_, true, Some(aphrodite_chat::ChatRole::Assistant)) => {
+        (_, true, Some(sonar_chat::ChatRole::Assistant)) => {
             Ok(GenerationPromptMode::ContinueFinalAssistant)
         }
         (_, true, _) => {
@@ -284,15 +281,13 @@ fn extract_last_assistant_content(messages: &[ChatMessage]) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// Lower one OpenAI chat message into the `aphrodite-chat` message shape.
-pub(crate) fn convert_message(message: ChatMessage) -> Result<AphroditeChatMessage, ApiError> {
+/// Lower one OpenAI chat message into the `sonar-chat` message shape.
+pub(crate) fn convert_message(message: ChatMessage) -> Result<SonarChatMessage, ApiError> {
     match message {
         ChatMessage::System { content, .. } => {
-            Ok(AphroditeChatMessage::system(convert_content(content)?))
+            Ok(SonarChatMessage::system(convert_content(content)?))
         }
-        ChatMessage::User { content, .. } => {
-            Ok(AphroditeChatMessage::user(convert_content(content)?))
-        }
+        ChatMessage::User { content, .. } => Ok(SonarChatMessage::user(convert_content(content)?)),
         ChatMessage::Assistant {
             content,
             tool_calls,
@@ -317,12 +312,12 @@ pub(crate) fn convert_message(message: ChatMessage) -> Result<AphroditeChatMessa
                 );
             }
 
-            Ok(AphroditeChatMessage::assistant_blocks(blocks))
+            Ok(SonarChatMessage::assistant_blocks(blocks))
         }
         ChatMessage::Tool {
             content,
             tool_call_id,
-        } => Ok(AphroditeChatMessage::tool_response(
+        } => Ok(SonarChatMessage::tool_response(
             convert_content(content)?,
             tool_call_id,
         )),
@@ -333,19 +328,18 @@ pub(crate) fn convert_message(message: ChatMessage) -> Result<AphroditeChatMessa
             content,
             tools,
             name: _,
-        } => Ok(AphroditeChatMessage::developer(
+        } => Ok(SonarChatMessage::developer(
             convert_content(content)?,
             convert_message_tools(tools)?,
         )),
-        ChatMessage::Custom { role, content } => Ok(AphroditeChatMessage::custom(
-            role,
-            convert_content(content)?,
-        )),
+        ChatMessage::Custom { role, content } => {
+            Ok(SonarChatMessage::custom(role, convert_content(content)?))
+        }
     }
 }
 
 /// Convert the given OpenAI message content value into the internal format in
-/// `aphrodite-chat`.
+/// `sonar-chat`.
 fn convert_content(content: MessageContent) -> Result<ChatContent, ApiError> {
     match content {
         MessageContent::Text(text) => Ok(ChatContent::Text(text)),
@@ -378,7 +372,7 @@ fn convert_content(content: MessageContent) -> Result<ChatContent, ApiError> {
 }
 
 /// Convert the given OpenAI assistant message content into the internal format
-/// in `aphrodite-chat`.
+/// in `sonar-chat`.
 fn convert_assistant_text_blocks(
     content: MessageContent,
 ) -> Result<Vec<AssistantContentBlock>, ApiError> {
@@ -471,20 +465,19 @@ mod tests {
     use std::num::NonZeroU32;
     use std::sync::Arc;
 
-    use aphrodite_chat::{
-        AssistantContentBlock, AssistantToolCall, ChatContentPart,
-        ChatMessage as AphroditeChatMessage, ChatRenderer, ChatTool as AphroditeChatTool,
-        ChatToolChoice, GenerationPromptMode, KimiK3ChatRenderer,
-        SamplingParams as AphroditeSamplingParams,
-    };
-    use aphrodite_text::{
-        Prompt, PromptTruncation, PromptTruncationLimit, TruncationSide, output::TextDecodeOptions,
-    };
-    use aphrodite_tokenizer::{Tokenizer, test_utils::TestTokenizer};
     use axum::http::{HeaderMap, StatusCode};
     use expect_test::expect;
     use llm_multimodal::ImageDetail;
     use serde_json::json;
+    use sonar_chat::{
+        AssistantContentBlock, AssistantToolCall, ChatContentPart, ChatMessage as SonarChatMessage,
+        ChatRenderer, ChatTool as SonarChatTool, ChatToolChoice, GenerationPromptMode,
+        KimiK3ChatRenderer, SamplingParams as SonarSamplingParams,
+    };
+    use sonar_text::{
+        Prompt, PromptTruncation, PromptTruncationLimit, TruncationSide, output::TextDecodeOptions,
+    };
+    use sonar_tokenizer::{Tokenizer, test_utils::TestTokenizer};
     use thiserror_ext::AsReport as _;
     use validator::Validate;
 
@@ -779,7 +772,7 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.tools(),
-            &[AphroditeChatTool {
+            &[SonarChatTool {
                 name: "lookup".to_string(),
                 description: None,
                 parameters: serde_json::Value::Null,
@@ -947,11 +940,11 @@ mod tests {
         assert!(prepared.request_id.starts_with("chatcmpl-"));
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::assistant_text("hello")]
+            vec![SonarChatMessage::assistant_text("hello")]
         );
         assert_eq!(
             prepared.chat_request.sampling_params,
-            AphroditeSamplingParams::default()
+            SonarSamplingParams::default()
         );
         assert_eq!(
             prepared.chat_request.chat_options.generation_prompt_mode,
@@ -1027,11 +1020,11 @@ mod tests {
         assert!(prepared.request_id.starts_with("chatcmpl-"));
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::user("hello")]
+            vec![SonarChatMessage::user("hello")]
         );
         assert_eq!(
             prepared.chat_request.sampling_params,
-            AphroditeSamplingParams::default()
+            SonarSamplingParams::default()
         );
         assert_eq!(
             prepared.chat_request.chat_options.generation_prompt_mode,
@@ -1070,11 +1063,11 @@ mod tests {
 
     #[test]
     fn prepare_chat_request_preserves_flattened_sonar_samplers() {
-        use aphrodite_engine_core_client::protocol::sampling::AphroditeSamplingParams;
+        use sonar_engine_core_client::protocol::sampling::SonarSamplingParams;
 
         for expected in [
-            AphroditeSamplingParams::default(),
-            AphroditeSamplingParams {
+            SonarSamplingParams::default(),
+            SonarSamplingParams {
                 no_repeat_ngram_size: 3,
                 dynatemp_min: 0.2,
                 dynatemp_max: 1.4,
@@ -1115,7 +1108,7 @@ mod tests {
             )
             .expect("prepare Sonar samplers");
             assert_eq!(
-                prepared.chat_request.sampling_params.aphrodite_sampling,
+                prepared.chat_request.sampling_params.sonar_sampling,
                 expected
             );
         }
@@ -1139,14 +1132,14 @@ mod tests {
             ResolvedRequestContext::default(),
         )
         .expect("request is valid");
-        let expected = AphroditeSamplingParams {
+        let expected = SonarSamplingParams {
             seed: Some(42),
             min_p: Some(0.2),
             frequency_penalty: Some(0.3),
             presence_penalty: Some(0.4),
             repetition_penalty: Some(1.1),
             stream_interval: NonZeroU32::new(4),
-            ..AphroditeSamplingParams::default()
+            ..SonarSamplingParams::default()
         };
         assert_eq!(prepared.chat_request.sampling_params, expected);
     }
@@ -1170,7 +1163,7 @@ mod tests {
 
         // The convert layer forwards the raw value verbatim (including the `-1`
         // "unlimited" sentinel); normalization/validation happens during
-        // lowering (see `aphrodite_text::lower`).
+        // lowering (see `sonar_text::lower`).
         assert_eq!(prepare(Some(64)), Some(64));
         assert_eq!(prepare(Some(-1)), Some(-1));
         assert_eq!(prepare(None), None);
@@ -1209,9 +1202,9 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::developer(
+            vec![SonarChatMessage::developer(
                 "hello",
-                Some(vec![AphroditeChatTool {
+                Some(vec![SonarChatTool {
                     name: "get_weather".to_string(),
                     description: Some("Get weather".to_string()),
                     parameters: json!({
@@ -1245,8 +1238,8 @@ mod tests {
         assert_eq!(
             prepared.chat_request.messages,
             vec![
-                AphroditeChatMessage::custom("root", "Custom identity."),
-                AphroditeChatMessage::user("hello"),
+                SonarChatMessage::custom("root", "Custom identity."),
+                SonarChatMessage::user("hello"),
             ]
         );
     }
@@ -1295,7 +1288,7 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::user(vec![
+            vec![SonarChatMessage::user(vec![
                 ChatContentPart::text("describe "),
                 ChatContentPart::ImageUrl {
                     image_url: "https://example.com/image.png".to_string(),
@@ -1333,7 +1326,7 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::developer(
+            vec![SonarChatMessage::developer(
                 vec![ChatContentPart::image_url("https://example.com/image.png")],
                 None,
             )]
@@ -1364,12 +1357,10 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::user(vec![
-                ChatContentPart::VideoUrl {
-                    video_url: "https://example.com/video.mp4".to_string(),
-                    uuid: Some("video-uuid".to_string()),
-                }
-            ])]
+            vec![SonarChatMessage::user(vec![ChatContentPart::VideoUrl {
+                video_url: "https://example.com/video.mp4".to_string(),
+                uuid: Some("video-uuid".to_string()),
+            }])]
         );
     }
 
@@ -1407,7 +1398,7 @@ mod tests {
 
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::user(vec![
+            vec![SonarChatMessage::user(vec![
                 ChatContentPart::InputAudio {
                     data: "dGVzdA==".to_string(),
                     format: Some("wav".to_string()),
@@ -1480,7 +1471,7 @@ mod tests {
         .expect("request is valid");
         assert_eq!(
             prepared.chat_request.messages,
-            vec![AphroditeChatMessage::assistant_blocks(vec![
+            vec![SonarChatMessage::assistant_blocks(vec![
                 AssistantContentBlock::Reasoning {
                     text: "inner".to_string(),
                 },
@@ -1517,7 +1508,7 @@ mod tests {
             .expect("request is valid");
             assert_eq!(
                 prepared.chat_request.messages,
-                vec![AphroditeChatMessage::assistant_blocks(vec![
+                vec![SonarChatMessage::assistant_blocks(vec![
                     AssistantContentBlock::Reasoning {
                         text: reasoning.to_string(),
                     },
@@ -1578,19 +1569,19 @@ mod tests {
         assert_eq!(
             prepared.chat_request.messages,
             vec![
-                AphroditeChatMessage::assistant_blocks(vec![AssistantContentBlock::ToolCall(
+                SonarChatMessage::assistant_blocks(vec![AssistantContentBlock::ToolCall(
                     AssistantToolCall {
                         id: "call_1".to_string(),
                         name: "get_weather".to_string(),
                         arguments: r#"{"city":"Paris"}"#.to_string(),
                     },
                 )]),
-                AphroditeChatMessage::tool_response("Sunny", "call_1"),
+                SonarChatMessage::tool_response("Sunny", "call_1"),
             ]
         );
         assert_eq!(
             prepared.chat_request.initial_tools(),
-            vec![AphroditeChatTool {
+            vec![SonarChatTool {
                 name: "get_weather".to_string(),
                 description: Some("Get weather".to_string()),
                 parameters: json!({
@@ -1625,7 +1616,7 @@ mod tests {
                 ResolvedRequestContext::default(),
             )
             .expect("request is valid");
-            let [AphroditeChatMessage::Assistant { content }] =
+            let [SonarChatMessage::Assistant { content }] =
                 prepared.chat_request.messages.as_slice()
             else {
                 panic!("expected one assistant message");
@@ -1824,7 +1815,7 @@ mod tests {
     #[test]
     fn prepare_chat_request_header_priority_overrides_body() {
         let mut headers = HeaderMap::new();
-        headers.insert("X-Aphrodite-Priority", "-5".parse().unwrap());
+        headers.insert("X-Sonar-Priority", "-5".parse().unwrap());
         let request = ChatCompletionRequest {
             priority: Some(10),
             ..base_request()

@@ -4,13 +4,13 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use aphrodite_engine_core_client::protocol::output::EngineCoreFinishReason;
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
-use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::test_utils::IpcNamespace;
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 use futures::StreamExt as _;
+use sonar_engine_core_client::protocol::output::EngineCoreFinishReason;
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+use sonar_engine_core_client::protocol::stats::PrefillStats;
+use sonar_engine_core_client::test_utils::IpcNamespace;
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
@@ -99,7 +99,7 @@ async fn mock_engine_connects_over_ipc() {
     assert_eq!(client.engine_count(), 1);
     assert_eq!(client.engine_identities()[0], &[0, 0]);
     assert_eq!(client.max_model_len(), 1024 * 1024);
-    assert_eq!(client.aphrodite_version(), "test-aphrodite-version");
+    assert_eq!(client.sonar_version(), "test-sonar-version");
     shutdown_mock(client, shutdown, task).await;
 }
 

@@ -32,33 +32,33 @@ from unittest.mock import MagicMock, patch
 import msgspec
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.utils import TransferTopology
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.utils import TransferTopology
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
     NixlBaseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     PUSH_REG_NOTIF_PREFIX,
     NixlAgentMetadata,
     NixlConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
     NixlPushConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
     NixlKVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     ReadSpec,
     TPMapping,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
     get_base_request_id,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec
-from aphrodite.v1.outputs import KVConnectorOutput
+from sonar.v1.kv_cache_interface import FullAttentionSpec
+from sonar.v1.outputs import KVConnectorOutput
 
 from .utils import (
     create_request,
@@ -84,7 +84,7 @@ def _make_request(
     finished: bool = True,
 ) -> MagicMock:
     """Build a minimal Request mock used by request_finished."""
-    from aphrodite.v1.request import RequestStatus
+    from sonar.v1.request import RequestStatus
 
     req = MagicMock()
     req.request_id = request_id
@@ -164,7 +164,7 @@ class TestPushScheduler:
 
         assert request.request_id in sched._push_pending_registrations
         reg = sched._push_pending_registrations[request.request_id]
-        # ``request_id`` is D's own Aphrodite request id; plus our own (D) coords.
+        # ``request_id`` is D's own Sonar request id; plus our own (D) coords.
         assert reg["request_id"] == request.request_id
         assert reg["decode_engine_id"] == sched.engine_id
         assert reg["decode_host"] == sched.side_channel_host
@@ -293,7 +293,7 @@ class TestPushScheduler:
         # what this test is verifying, so silence it in the test report.
         caplog.set_level(
             logging.CRITICAL,
-            logger=("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler"),
+            logger=("sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler"),
         )
         sched = make_nixl_push_scheduler()
         _stub_sw_clipping(sched)
@@ -332,7 +332,7 @@ class _StubWriterWorker(NixlPushConnectorWorker):
         w = object.__new__(cls)
 
         # Push-specific state managed by NixlPushConnectorWorker.
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
             ReqId,
             TransferHandle,
         )
@@ -569,7 +569,7 @@ class TestPushWriterMatching:
         # output rather than letting it look like a failure.
         caplog.set_level(
             logging.CRITICAL,
-            logger=("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
+            logger=("sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
         )
         w = _StubWriterWorker.fresh()
         # Missing request_id -> should drop without raising.
@@ -1200,7 +1200,7 @@ class TestPushWriterNegative:
         dropped without raising."""
         caplog.set_level(
             logging.CRITICAL,
-            logger=("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
+            logger=("sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
         )
         w = _StubWriterWorker.fresh()
         bad = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode([1, 2, 3])
@@ -1212,7 +1212,7 @@ class TestPushWriterNegative:
         """request_id must be a str; integers, None, etc. must drop."""
         caplog.set_level(
             logging.CRITICAL,
-            logger=("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
+            logger=("sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
         )
         w = _StubWriterWorker.fresh()
         for bogus_rid in (123, None, 4.5, b"bytes-not-str"):
@@ -1303,7 +1303,7 @@ class TestPushWriterNegative:
         about should be logged but not crash."""
         caplog.set_level(
             logging.CRITICAL,
-            logger=("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
+            logger=("sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_worker"),
         )
         w = _StubWriterWorker.fresh()
         # Forward a completion notif for an unknown request_id.
@@ -1458,7 +1458,7 @@ class TestPushWriterMlaReplication:
     def _mla_worker_writing_to(d_ranks):
         from types import SimpleNamespace
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
             TPMapping,
         )
 
@@ -1490,7 +1490,7 @@ class TestPushWriterMlaReplication:
         return w, engine_id
 
     def test_mla_hetero_tp_writes_every_d_rank(self):
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
             RemoteMeta,
             ReqMeta,
         )
@@ -1528,11 +1528,11 @@ class TestPushWriterMlaReplication:
     def test_csa_linear_writes_every_group_to_each_target(self):
         from types import SimpleNamespace
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
             RemoteMeta,
             ReqMeta,
         )
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
             TPMapping,
         )
 
@@ -1615,7 +1615,7 @@ class TestPushPrefixCaching:
     def _worker_driving_xfer(engine_id: str = "decode-engine"):
         from types import SimpleNamespace
 
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
             TPMapping,
         )
 

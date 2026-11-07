@@ -90,14 +90,14 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x GPU with >=16 GB VRAM (A100, L40S, H100, etc.)
-  - Aphrodite >= 0.7.0 (the `multimodal` variant serves `Phi-4-multimodal-instruct`, which needs Aphrodite >= 0.8.0)
+  - Sonar >= 0.7.0 (the `multimodal` variant serves `Phi-4-multimodal-instruct`, which needs Sonar >= 0.8.0)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch commands
@@ -105,7 +105,7 @@ guide: |
   Phi-4-mini-instruct on a single GPU:
 
   ```bash
-  aphrodite serve microsoft/Phi-4-mini-instruct \
+  sonar serve microsoft/Phi-4-mini-instruct \
     --host 0.0.0.0 \
     --max-model-len 4000
   ```
@@ -113,7 +113,7 @@ guide: |
   Phi-4-multimodal-instruct (requires --trust-remote-code for LoRA modules):
 
   ```bash
-  aphrodite serve microsoft/Phi-4-multimodal-instruct \
+  sonar serve microsoft/Phi-4-multimodal-instruct \
     --host 0.0.0.0 \
     --max-model-len 4000 \
     --trust-remote-code
@@ -159,7 +159,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model microsoft/Phi-4-mini-instruct \
     --dataset-name random \
     --random-input-len 2000 \

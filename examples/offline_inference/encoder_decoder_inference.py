@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Prompting encoder-decoder models, specifically the BART model."""
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import ExplicitEncoderDecoderPrompt, TextPrompt, TokensPrompt, zip_enc_dec_prompts
+from sonar import LLM, SamplingParams
+from sonar.inputs import ExplicitEncoderDecoderPrompt, TextPrompt, TokensPrompt, zip_enc_dec_prompts
 
 dtype = "float"
 

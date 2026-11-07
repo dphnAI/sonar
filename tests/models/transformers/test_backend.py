@@ -21,22 +21,22 @@ from transformers import (
     PreTrainedConfig,
 )
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     ModelConfig,
     ParallelConfig,
+    SonarConfig,
     SpeculativeConfig,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor import model_loader
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal
-from aphrodite.model_executor.models.transformers.base import Base
-from aphrodite.model_executor.models.transformers.fusers import AttentionFuser
-from aphrodite.model_executor.models.transformers.fusers.attention import APHRODITE_ATTN_IMPL
-from aphrodite.model_executor.models.transformers.multimodal import MultiModalMixin
-from aphrodite.model_executor.models.utils import StageMissingLayer
+from sonar.model_executor import model_loader
+from sonar.model_executor.models.interfaces import SupportsMultiModal
+from sonar.model_executor.models.transformers.base import Base
+from sonar.model_executor.models.transformers.fusers import AttentionFuser
+from sonar.model_executor.models.transformers.fusers.attention import SONAR_ATTN_IMPL
+from sonar.model_executor.models.transformers.multimodal import MultiModalMixin
+from sonar.model_executor.models.utils import StageMissingLayer
 
-from ...conftest import AphroditeRunner, HfRunner
+from ...conftest import HfRunner, SonarRunner
 from ...utils import multi_gpu_test, prep_prompts
 from ..registry import HF_EXAMPLE_MODELS
 from ..utils import check_embeddings_close, check_logprobs_close
@@ -45,7 +45,7 @@ from ..utils import check_embeddings_close, check_logprobs_close
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 def get_model(arch: str) -> str:
@@ -59,7 +59,7 @@ def count_modules(model, cls: type) -> int:
 
 
 def get_num_fused(model) -> tuple[int, int]:
-    from aphrodite.model_executor.layers.linear import (
+    from sonar.model_executor.layers.linear import (
         MergedColumnParallelLinear,
         QKVParallelLinear,
     )
@@ -70,8 +70,8 @@ def get_num_fused(model) -> tuple[int, int]:
 
 
 def check_implementation(
-    runner_ref: type[HfRunner | AphroditeRunner],
-    runner_test: type[AphroditeRunner],
+    runner_ref: type[HfRunner | SonarRunner],
+    runner_test: type[SonarRunner],
     example_prompts: list[str],
     model: str,
     kwargs_ref: dict[str, Any] | None = None,
@@ -100,7 +100,7 @@ def check_implementation(
             assert num_qkv == expected_qkv * num_layers
 
         tp_size = kwargs_test.get("tensor_parallel_size", 1)
-        from aphrodite.model_executor.layers.attention import Attention
+        from sonar.model_executor.layers.attention import Attention
 
         counts = model_test.apply_model(partial(count_modules, cls=Attention))
         assert counts == [num_layers] * tp_size
@@ -108,7 +108,7 @@ def check_implementation(
         outputs_test = model_test.generate_greedy_logprobs(*args)
 
     with runner_ref(model, **kwargs_ref) as model_ref:
-        if isinstance(model_ref, AphroditeRunner):
+        if isinstance(model_ref, SonarRunner):
             outputs_ref = model_ref.generate_greedy_logprobs(*args)
         else:
             outputs_ref = model_ref.generate_greedy_logprobs_limit(*args)
@@ -131,7 +131,7 @@ def check_implementation(
 )  # trust_remote_code=True by default
 def test_models(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts: list[str],
     model: str,
     model_impl: str,
@@ -139,7 +139,7 @@ def test_models(
 ) -> None:
     check_implementation(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         example_prompts,
         model,
         num_fused=num_fused,
@@ -147,13 +147,13 @@ def test_models(
     )
 
 
-def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
+def test_hybrid_attention(sonar_runner: type[SonarRunner]) -> None:
     prompts, _, _ = prep_prompts(4, (800, 801))
     kwargs_ref = {"max_model_len": 8192, "enforce_eager": True}
     kwargs_test = {"model_impl": "transformers", **kwargs_ref}
     check_implementation(
-        aphrodite_runner,
-        aphrodite_runner,
+        sonar_runner,
+        sonar_runner,
         prompts,
         model="hmellor/tiny-random-Gemma2ForCausalLM",
         kwargs_ref=kwargs_ref,
@@ -161,17 +161,17 @@ def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
     )
 
 
-def test_whole_graph_compile(aphrodite_runner: type[AphroditeRunner], example_prompts: list[str]) -> None:
+def test_whole_graph_compile(sonar_runner: type[SonarRunner], example_prompts: list[str]) -> None:
     """Compiling attention and the KV-cache op into one Inductor graph must
-    match eager, so aphrodite:: ops have to receive eager strides."""
+    match eager, so sonar:: ops have to receive eager strides."""
     kwargs_ref = {"model_impl": "transformers", "max_model_len": 2048}
     kwargs_test = {
         **kwargs_ref,
         "compilation_config": {"mode": 2, "backend": "inductor"},
     }
     check_implementation(
-        aphrodite_runner,
-        aphrodite_runner,
+        sonar_runner,
+        sonar_runner,
         example_prompts,
         model="Qwen/Qwen3-0.6B",
         kwargs_ref={**kwargs_ref, "enforce_eager": True},
@@ -188,19 +188,19 @@ def get_sinks(model) -> dict[int, torch.Tensor]:
     return sinks
 
 
-def test_sinks(hf_runner: type[HfRunner], aphrodite_runner: type[AphroditeRunner]) -> None:
+def test_sinks(hf_runner: type[HfRunner], sonar_runner: type[SonarRunner]) -> None:
     """Learnable attention sinks must reach the attention layers.
 
     Only the attention impl can apply them, so if they are not passed to
     `Attention` they are dropped and every softmax is subtly wrong.
     """
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.has_device_capability(90):
         pytest.skip("Attention sinks need FlashAttention 3 or TRTLLM attention")
 
     model = "tiny-random/gpt-oss-bf16"
-    with aphrodite_runner(model, model_impl="transformers", max_model_len=1024, enforce_eager=True) as model_test:
+    with sonar_runner(model, model_impl="transformers", max_model_len=1024, enforce_eager=True) as model_test:
         assert model_test.llm.llm_engine.model_config.using_transformers_backend()
         sinks = model_test.apply_model(get_sinks)[0]
 
@@ -213,22 +213,22 @@ def test_sinks(hf_runner: type[HfRunner], aphrodite_runner: type[AphroditeRunner
         torch.testing.assert_close(sink, expected[i].cpu())
 
 
-def test_mla(aphrodite_runner: type[AphroditeRunner], example_prompts: list[str]) -> None:
+def test_mla(sonar_runner: type[SonarRunner], example_prompts: list[str]) -> None:
     model = "hmellor/tiny-random-DeepseekV2ForCausalLM"
     args = (example_prompts, 32, 5)
     kwargs: dict[str, Any] = {"max_model_len": 2048, "enforce_eager": True}
 
-    with aphrodite_runner(model, model_impl="transformers", trust_remote_code=False, **kwargs) as model_test:
+    with sonar_runner(model, model_impl="transformers", trust_remote_code=False, **kwargs) as model_test:
         model_config = model_test.llm.llm_engine.model_config
         assert model_config.using_transformers_backend()
         num_layers = model_config.hf_config.get_text_config().num_hidden_layers
-        from aphrodite.model_executor.layers.attention import MLAAttention
+        from sonar.model_executor.layers.attention import MLAAttention
 
         counts = model_test.apply_model(partial(count_modules, cls=MLAAttention))
         assert counts == [num_layers]
         outputs_test = model_test.generate_greedy_logprobs(*args)
 
-    with aphrodite_runner(model, model_impl="auto") as model_ref:
+    with sonar_runner(model, model_impl="auto") as model_ref:
         outputs_ref = model_ref.generate_greedy_logprobs(*args)
 
     check_logprobs_close(
@@ -242,13 +242,13 @@ def test_mla(aphrodite_runner: type[AphroditeRunner], example_prompts: list[str]
 @multi_gpu_test(num_gpus=2)
 def test_distributed(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts,
 ):
     kwargs = {"model_impl": "transformers", "tensor_parallel_size": 2}
     check_implementation(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         example_prompts,
         "meta-llama/Llama-3.2-1B-Instruct",
         kwargs_test=kwargs,
@@ -265,41 +265,41 @@ def test_distributed(
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_quantization(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts: list[str],
     model: str,
     quantization_kwargs: dict[str, Any],
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         model_impl="auto",
         enforce_eager=True,
         **quantization_kwargs,
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+    ) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(
             example_prompts, max_tokens=max_tokens, num_logprobs=num_logprobs
         )
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         model_impl="transformers",
         enforce_eager=True,
         **quantization_kwargs,
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as sonar_model:
+        model_config = sonar_model.llm.llm_engine.model_config
         assert model_config.using_transformers_backend()
 
-        transformers_outputs = aphrodite_model.generate_greedy_logprobs(
+        transformers_outputs = sonar_model.generate_greedy_logprobs(
             example_prompts, max_tokens=max_tokens, num_logprobs=num_logprobs
         )
 
     check_logprobs_close(
         outputs_0_lst=transformers_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="transformers",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -312,8 +312,8 @@ def test_quantization(
         "meta-llama/Llama-3.2-1B-Instruct",
     ],
 )
-def test_embed_loading(aphrodite_runner, model):
-    with aphrodite_runner(
+def test_embed_loading(sonar_runner, model):
+    with sonar_runner(
         model,
         max_model_len=1024,
         enforce_eager=True,
@@ -328,16 +328,16 @@ def test_embed_loading(aphrodite_runner, model):
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
 def test_pooling(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     arch,
     monkeypatch,
     use_v2_model_runner,
 ):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
     model = get_model(arch)
 
-    aphrodite_kwargs = dict(max_model_len=None, model_impl="transformers")
+    sonar_kwargs = dict(max_model_len=None, model_impl="transformers")
 
     hf_kwargs = dict()
     if arch == "TransformersEmbeddingModel":
@@ -351,29 +351,29 @@ def test_pooling(
     # "Write a short story about a robot that dreams for the first time.\n"
     # sentence_transformers will strip the input texts, see:
     # https://github.com/UKPLab/sentence-transformers/blob/v3.1.1/sentence_transformers/models/Transformer.py#L159
-    # This makes the input_ids different between hf_model and aphrodite_model.
+    # This makes the input_ids different between hf_model and sonar_model.
     # So we need to strip the input texts to avoid test failing.
     example_prompts = [str(s).strip() for s in example_prompts]
 
     with (
-        aphrodite_runner(model, **aphrodite_kwargs) as aphrodite_model,
+        sonar_runner(model, **sonar_kwargs) as sonar_model,
         hf_runner(model, **hf_kwargs) as hf_model,
     ):
-        model_config = aphrodite_model.llm.llm_engine.model_config
+        model_config = sonar_model.llm.llm_engine.model_config
         assert model_config.using_transformers_backend()
 
         if arch == "TransformersEmbeddingModel":
-            aphrodite_outputs = aphrodite_model.embed(example_prompts)
+            sonar_outputs = sonar_model.embed(example_prompts)
             hf_outputs = hf_model.encode(example_prompts)
         elif arch == "TransformersForSequenceClassification":
-            aphrodite_outputs = aphrodite_model.classify(example_prompts)
+            sonar_outputs = sonar_model.classify(example_prompts)
             hf_outputs = hf_model.classify(example_prompts)
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 
@@ -410,20 +410,20 @@ class ComposedWordEmbedding(nn.Module):
 
 @pytest.fixture
 def tp_init():
-    """Single rank tensor parallel state, so Aphrodite layers can be constructed."""
-    from aphrodite.distributed import (
+    """Single rank tensor parallel state, so Sonar layers can be constructed."""
+    from sonar.distributed import (
         cleanup_dist_env_and_memory,
         init_distributed_environment,
         initialize_model_parallel,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
-    from ...utils import ensure_current_aphrodite_config
+    from ...utils import ensure_current_sonar_config
 
     fd, temp_file = tempfile.mkstemp()
     os.close(fd)
     try:
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             init_distributed_environment(
                 world_size=1,
                 rank=0,
@@ -441,8 +441,8 @@ def tp_init():
 
 @pytest.fixture
 def vpe(tp_init):
-    """`VocabParallelEmbedding`, imported late so collection does not import Aphrodite."""
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+    """`VocabParallelEmbedding`, imported late so collection does not import Sonar."""
+    from sonar.model_executor.layers.vocab_parallel_embedding import (
         VocabParallelEmbedding,
     )
 
@@ -451,7 +451,7 @@ def vpe(tp_init):
 
 def replace(embedding):
     """Replace `embedding` and fill the new weights with recognisable values."""
-    from aphrodite.model_executor.models.transformers.utils import replace_embedding_class
+    from sonar.model_executor.models.transformers.utils import replace_embedding_class
 
     new_embedding = replace_embedding_class(embedding)
     for _, param in new_embedding.named_parameters():
@@ -494,7 +494,7 @@ def test_replace_inherited_embedding(vpe):
 
 def test_replace_is_idempotent(tp_init):
     """A tied table is reached twice by the recursion, and must not be rebased twice."""
-    from aphrodite.model_executor.models.transformers.utils import replace_embedding_class
+    from sonar.model_executor.models.transformers.utils import replace_embedding_class
 
     new_embedding = replace(ScaledWordEmbedding(VOCAB_SIZE, HIDDEN_SIZE, embed_scale=2))
     again = replace_embedding_class(new_embedding)
@@ -528,7 +528,7 @@ class FakeVocabModel(nn.Module):
 
 def replace_vocab_embeddings(model, **config_kwargs):
     """Replace `model`'s vocab tables as `recursive_replace` would, and return them."""
-    from aphrodite.model_executor.models.transformers.utils import attrsetter
+    from sonar.model_executor.models.transformers.utils import attrsetter
 
     stub = nn.Module()
     stub.model = model
@@ -567,7 +567,7 @@ def test_composed_input_embeddings_are_replaced(vpe):
     `CausalMixin` ties `lm_head` to whichever `VocabParallelEmbedding` it finds under
     `get_input_embeddings()`, reading a `.weight` the wrapper does not have.
     """
-    from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+    from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 
     model = FakeVocabModel(composed=True)
     wrapper = model.embed_tokens
@@ -582,7 +582,7 @@ def test_composed_input_embeddings_are_replaced(vpe):
 
 def test_missing_input_embeddings_are_skipped(tp_init):
     """Pipeline ranks without the embeddings have a `PPMissingLayer` in their place."""
-    from aphrodite.model_executor.models.utils import PPMissingLayer
+    from sonar.model_executor.models.utils import PPMissingLayer
 
     model = FakeVocabModel()
     model.embed_tokens = PPMissingLayer()
@@ -615,8 +615,8 @@ def build_marked_model(image_limit: int, video_limit: int = 0, skip_tokenizer_in
     stub.config = AutoConfig.from_pretrained(MULTIMODAL_MODEL)
     stub.model_config = model_config
 
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    with stub._mark_model_components(aphrodite_config), torch.device("meta"):
+    sonar_config = SonarConfig(model_config=model_config)
+    with stub._mark_model_components(sonar_config), torch.device("meta"):
         stub.model = AutoModel.from_config(**stub._from_config_kwargs)
     return stub.model
 
@@ -678,7 +678,7 @@ def test_attention_dispatch_is_matched(model_type: str):
     """Exactly the decoder layers' attention modules match an `AttentionFuser`.
 
     That match is what `recursive_replace` records, and so what
-    `_create_attention_instances` attaches Aphrodite's attention layer to.
+    `_create_attention_instances` attaches Sonar's attention layer to.
     """
     model = build_model(model_type)
     matched = {name for name, module in model.named_modules() if AttentionFuser.match(None, module) is not None}
@@ -692,7 +692,7 @@ def test_attention_layer_index_is_the_modules_own():
     `2i` and `2i + 1`, so `num_hidden_layers` is twice the length of the stack
     and the enclosing layer's position is not the index the KV cache is keyed by.
     A vision tower is excluded separately, by `validate`: only the text config is
-    patched to dispatch to Aphrodite, so a tower's attention is left to Transformers.
+    patched to dispatch to Sonar, so a tower's attention is left to Transformers.
     """
     model = build_model("longcat_flash", num_layers=2)
     text_config = model.config.get_text_config()
@@ -706,10 +706,10 @@ def test_attention_layer_index_is_the_modules_own():
         fusers.append(fuser)
     assert [f.layer_index(a) for f, a in zip(fusers, attentions)] == [0, 1, 2, 3]
 
-    # Not dispatching to Aphrodite yet, as a vision tower never would be. The Aphrodite
+    # Not dispatching to Sonar yet, as a vision tower never would be. The Sonar
     # config is not consulted, only the one the module was built with.
     assert not any(f.validate(a, None) for f, a in zip(fusers, attentions))
-    text_config._attn_implementation = APHRODITE_ATTN_IMPL
+    text_config._attn_implementation = SONAR_ATTN_IMPL
     assert all(f.validate(a, None) for f, a in zip(fusers, attentions))
 
 
@@ -860,9 +860,9 @@ def test_mtp_draft_loads_mtp_weights(model_type, tmp_path, tp_init, monkeypatch)
     )
     draft = speculative_config.draft_model_config
     assert draft.architecture == "TransformersMoEForMTP"
-    aphrodite_config = AphroditeConfig(model_config=target, speculative_config=speculative_config)
-    with set_current_aphrodite_config(aphrodite_config):
-        model = model_loader.get_model(aphrodite_config=aphrodite_config, model_config=draft)
+    sonar_config = SonarConfig(model_config=target, speculative_config=speculative_config)
+    with set_current_sonar_config(sonar_config):
+        model = model_loader.get_model(sonar_config=sonar_config, model_config=draft)
 
     assert len(model.model.layers) == num_mtp_layers
     for k, layer in enumerate(model.model.layers):

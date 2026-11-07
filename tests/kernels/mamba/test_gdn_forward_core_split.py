@@ -36,7 +36,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
     pytest.skip(
@@ -44,28 +44,28 @@ if not (current_platform.is_cuda() and current_platform.is_device_capability_fam
         allow_module_level=True,
     )
 
-from aphrodite.config import set_current_aphrodite_config  # noqa: E402
-from aphrodite.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn  # noqa: E402
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # noqa: E402
+from sonar.config import set_current_sonar_config  # noqa: E402
+from sonar.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn  # noqa: E402
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # noqa: E402
     ChunkGatedDeltaRule,
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (  # noqa: E402
+from sonar.model_executor.layers.mamba.mamba_utils import (  # noqa: E402
     MambaStateShapeCalculator,
 )
-from aphrodite.third_party.flash_linear_attention.ops.index import (  # noqa: E402
+from sonar.third_party.flash_linear_attention.ops.index import (  # noqa: E402
     prepare_chunk_indices,
     prepare_chunk_offsets,
 )
-from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE  # noqa: E402
-from aphrodite.v1.attention.backends.gdn_attn import (  # noqa: E402
+from sonar.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE  # noqa: E402
+from sonar.v1.attention.backends.gdn_attn import (  # noqa: E402
     GDNAttentionMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec  # noqa: E402
+from sonar.v1.kv_cache_interface import MambaSpec  # noqa: E402
 from tests.v1.attention.utils import (  # noqa: E402
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 # Small GDN dims; head_k_dim/head_v_dim=128 keeps the chunk/update kernels happy.
@@ -81,14 +81,14 @@ BLOCK_SIZE = 16
 PREFIX = "model.layers.0.linear_attn"
 
 
-def _make_aphrodite_config():
+def _make_sonar_config():
     # A small, ungated GDN model whose config is cached locally; only the config
     # (scheduler/cache/compilation/hf) is used here, never the weights. Inject
     # linear_key_head_dim=128 and request the CuteDSL prefill backend -- the
     # supported GDN chunk kernel on Blackwell (the Triton/FLA chunk kernel is
     # unsupported on SM10x). CuteDSL consumes chunk_indices/chunk_offsets, so
     # this also exercises the prefill-only chunk-metadata wiring.
-    cfg = create_aphrodite_config(
+    cfg = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
         hf_config_override={"linear_key_head_dim": K},
@@ -97,7 +97,7 @@ def _make_aphrodite_config():
     return cfg
 
 
-def _build_layer(aphrodite_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias):
+def _build_layer(sonar_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias):
     """A minimal object that runs the real ``_forward_core`` bound to it."""
     layer = types.SimpleNamespace()
     layer.prefix = PREFIX
@@ -114,7 +114,7 @@ def _build_layer(aphrodite_config, conv_state, ssm_state, A_log, dt_bias, conv_w
     layer.dt_bias = dt_bias
     layer.conv1d = types.SimpleNamespace(weight=conv_weight, bias=conv_bias)
     layer.kv_cache = (conv_state, ssm_state)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer.chunk_gated_delta_rule = ChunkGatedDeltaRule()
     layer.gdn_prefill_backend = layer.chunk_gated_delta_rule.gdn_prefill_backend
     for name in (
@@ -153,7 +153,7 @@ def test_forward_core_split_matches_unified(
 ) -> None:
     torch.manual_seed(0)
     device = torch.device("cuda")
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
 
     # Decode-first batch: D 1-token decodes (with context), then the prefills.
     decode_seq_lens = [64] * num_decodes
@@ -167,11 +167,11 @@ def test_forward_core_split_matches_unified(
         # asserts isinstance(kv_cache_spec, MambaSpec). MambaSpec is correct here.
         kv_cache_spec=MambaSpec(block_size=BLOCK_SIZE, shapes=((16, 64),), dtypes=(torch.float16,)),
         layer_names=[PREFIX],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
     )
     common = create_common_attn_metadata(batch, BLOCK_SIZE, device, arange_block_indices=True)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         meta_split = builder.build(common_prefix_len=0, common_attn_metadata=common)
 
     assert meta_split.spec_sequence_masks is None
@@ -187,7 +187,7 @@ def test_forward_core_split_matches_unified(
     cu_full = meta_split.non_spec_query_start_loc
     assert cu_full is not None
     if builder.gdn_prefill_backend == "cutedsl":
-        from aphrodite.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
+        from sonar.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (
             prepare_metadata_cutedsl,
         )
 
@@ -232,7 +232,7 @@ def test_forward_core_split_matches_unified(
     conv_state_split = conv_state0.clone()
     ssm_state_split = ssm_state0.clone()
     layer_split = _build_layer(
-        aphrodite_config,
+        sonar_config,
         conv_state_split,
         ssm_state_split,
         A_log,
@@ -246,7 +246,7 @@ def test_forward_core_split_matches_unified(
     conv_state_unified = conv_state0.clone()
     ssm_state_unified = ssm_state0.clone()
     layer_unified = _build_layer(
-        aphrodite_config,
+        sonar_config,
         conv_state_unified,
         ssm_state_unified,
         A_log,

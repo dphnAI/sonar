@@ -5,20 +5,20 @@
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.platforms import current_platform
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.platforms import current_platform
 
 
 def _require_deep_gemm() -> None:
-    from aphrodite.utils.deep_gemm import has_deep_gemm
+    from sonar.utils.deep_gemm import has_deep_gemm
 
     if not has_deep_gemm():
         pytest.skip("kpool indexer requires DeepGEMM")
 
 
 def _build(indexer_cls, backend: str):
-    cfg = AphroditeConfig(kernel_config={"sparse_indexer_topk_backend": backend})
-    with set_current_aphrodite_config(cfg):
+    cfg = SonarConfig(kernel_config={"sparse_indexer_topk_backend": backend})
+    with set_current_sonar_config(cfg):
         return indexer_cls(
             k_cache=None,
             quant_block_size=128,
@@ -38,7 +38,7 @@ def test_kpool_indexer_dispatches_through_shared_topk_backend(backend: str) -> N
     and hand it to the shared SparseIndexerTopk dispatcher, rather than
     hard-coding its own cooperative/persistent/per_row choice."""
     _require_deep_gemm()
-    from aphrodite.models.glm5next.nvidia.sparse_indexer import SparseAttnIndexerKpool
+    from sonar.models.glm5next.nvidia.sparse_indexer import SparseAttnIndexerKpool
 
     assert _build(SparseAttnIndexerKpool, backend).topk_backend == backend
 
@@ -50,7 +50,7 @@ def test_kpool_indexer_dispatches_through_shared_topk_backend_rocm(
 ) -> None:
     """The AMD kpool indexer must go through the same dispatcher, so the
     AITER decode top-k is reachable from kernel_config."""
-    from aphrodite.models.glm5next.amd.sparse_indexer import SparseAttnIndexerKpool
+    from sonar.models.glm5next.amd.sparse_indexer import SparseAttnIndexerKpool
 
     assert _build(SparseAttnIndexerKpool, backend).topk_backend == backend
 
@@ -75,8 +75,8 @@ def test_kpool_decode_topk_backend_never_auto_selects_aiter_under_full_cudagraph
     use the context length to pick AITER and must stay on the in-tree kernel.
     Explicit backends keep working, and outside FULL the long-context heuristic
     still narrows to AITER."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.models.glm5next.amd import sparse_indexer
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.models.glm5next.amd import sparse_indexer
 
     monkeypatch.setattr(rocm_aiter_ops, "is_indexer_top_k_enabled", lambda: True, raising=False)
     monkeypatch.setattr(

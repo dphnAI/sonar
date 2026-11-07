@@ -16,16 +16,16 @@ import lm_eval
 import pytest
 import torch
 
-from aphrodite.config.model import RunnerOption
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from sonar.config.model import RunnerOption
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer, create_new_process_for_each_test
 
 from ..models.registry import HF_EXAMPLE_MODELS
 
 logger = init_logger("test_context_parallel")
 
-APHRODITE_MULTI_NODE = os.getenv("APHRODITE_MULTI_NODE", "0") == "1"
+SONAR_MULTI_NODE = os.getenv("SONAR_MULTI_NODE", "0") == "1"
 
 CP_TEST_MODELS = [
     # TODO support other models
@@ -42,9 +42,7 @@ FILTER = "exact_match,strict-match"
 NUM_CONCURRENT = 128
 # tp accuracy with 2% buffer
 MIN_ACCURACY = {
-    # .buildkite/lm-eval-harness/configs/DeepSeek-V2-Lite-Chat.yaml
     "deepseek-ai/DeepSeek-V2-Lite-Chat": 0.64,
-    # .buildkite/lm-eval-harness/configs/Qwen2.5-1.5B-Instruct.yaml
     "Qwen/Qwen2.5-1.5B-Instruct": 0.52,
     "Qwen/Qwen3.5-0.8B": 0.33,
 }
@@ -190,9 +188,9 @@ def _test_cp_gsm8k(
 
     if num_gpus_available < tp_size * pp_size:
         pytest.skip(f"Need at least {tp_size} x {pp_size} GPUs")
-    if APHRODITE_MULTI_NODE and distributed_backend == "mp":
+    if SONAR_MULTI_NODE and distributed_backend == "mp":
         pytest.skip("Skipping multi-node pipeline parallel test for multiprocessing distributed backend")
-    if multi_node_only and not APHRODITE_MULTI_NODE:
+    if multi_node_only and not SONAR_MULTI_NODE:
         pytest.skip("Not in multi-node setting")
 
     server_args = [

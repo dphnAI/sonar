@@ -7,10 +7,10 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.v1.worker.gpu.kv_connector as kv_connector_module
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorTransferResults
-from aphrodite.v1.worker.gpu.kv_connector import ActiveKVConnector
+import sonar.v1.worker.gpu.kv_connector as kv_connector_module
+from sonar.config import KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorTransferResults
+from sonar.v1.worker.gpu.kv_connector import ActiveKVConnector
 
 
 def _make_connector(

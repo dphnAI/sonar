@@ -76,8 +76,8 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MOE: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MOE: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -92,13 +92,13 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 8x H200/H20 (CUDA) or 8x MI300X / MI325X / MI355X (ROCm)
-  - **Aphrodite**: Current stable release
+  - **Sonar**: Current stable release
 
   ### CUDA
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### ROCm (MI300X, MI325X, MI355X)
@@ -106,7 +106,7 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launching DeepSeek-V3.1
@@ -114,7 +114,7 @@ guide: |
   ### 8xH200 / 8xH20 (CUDA)
 
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-V3.1 \
+  sonar serve deepseek-ai/DeepSeek-V3.1 \
     --enable-expert-parallel \
     --tensor-parallel-size 8 \
     --served-model-name ds31
@@ -124,23 +124,23 @@ guide: |
 
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
 
-  aphrodite serve deepseek-ai/DeepSeek-V3.1 \
+  sonar serve deepseek-ai/DeepSeek-V3.1 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel
   ```
 
   ### Function calling
 
-  Aphrodite supports user-defined tool calling for DeepSeek-V3.1. Add these flags when launching
+  Sonar supports user-defined tool calling for DeepSeek-V3.1. Add these flags when launching
   the server. The example chat template ships in the official container and can also be
-  downloaded from the Aphrodite repo:
+  downloaded from the Sonar repo:
   [`tool_chat_template_deepseekv31.jinja`](https://github.com/vllm-project/vllm/blob/main/examples/tool_chat_template_deepseekv31.jinja).
 
   ```bash
-  aphrodite serve ... \
+  sonar serve ... \
     --enable-auto-tool-choice \
     --tool-call-parser deepseek_v31 \
     --chat-template examples/tool_chat_template_deepseekv31.jinja
@@ -193,4 +193,4 @@ guide: |
   ## References
 
   - [DeepSeek-V3.1 on Hugging Face](https://huggingface.co/deepseek-ai/DeepSeek-V3.1)
-  - [Aphrodite tool chat template for DeepSeek-V3.1](https://github.com/vllm-project/vllm/blob/main/examples/tool_chat_template_deepseekv31.jinja)
+  - [Sonar tool chat template for DeepSeek-V3.1](https://github.com/vllm-project/vllm/blob/main/examples/tool_chat_template_deepseekv31.jinja)

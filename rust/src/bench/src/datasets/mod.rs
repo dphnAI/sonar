@@ -195,7 +195,7 @@ pub(crate) mod test_support {
     /// Write a JSONL fixture to the temp dir. `name` must be unique across the
     /// whole test suite — all fixtures share one directory.
     pub(crate) fn write_temp_jsonl(name: &str, content: &str) -> String {
-        let path = std::env::temp_dir().join(format!("aphrodite-bench-{name}.jsonl"));
+        let path = std::env::temp_dir().join(format!("sonar-bench-{name}.jsonl"));
         std::fs::write(&path, content).unwrap();
         path.to_string_lossy().into_owned()
     }

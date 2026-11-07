@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.platforms import current_platform
+import sonar._custom_ops as ops
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda() or not torch.cuda.is_available(),

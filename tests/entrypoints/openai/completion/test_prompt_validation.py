@@ -11,8 +11,8 @@ import pytest
 import regex as re
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.renderers.embed_utils import safe_load_prompt_embeds
+from sonar.config import ModelConfig
+from sonar.renderers.embed_utils import safe_load_prompt_embeds
 from tests.utils import RemoteOpenAIServer
 
 

@@ -3,7 +3,7 @@
 """EAGLE3 Acceptance Length Regression Tests.
 
 These tests verify that acceptance lengths for EAGLE3 speculative decoding
-do not regress across Aphrodite commits. Each test runs inference on the MT-Bench
+do not regress across Sonar commits. Each test runs inference on the MT-Bench
 dataset and asserts that the mean acceptance length is within tolerance of
 the expected baseline.
 """
@@ -14,14 +14,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.benchmarks.datasets import get_samples
-from aphrodite.inputs import TokensPrompt
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import AttentionSelectorConfig
-from aphrodite.v1.metrics.reader import Counter, Vector
-from tests.conftest import AphroditeRunner
+from sonar import SamplingParams
+from sonar.benchmarks.datasets import get_samples
+from sonar.inputs import TokensPrompt
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import AttentionSelectorConfig
+from sonar.v1.metrics.reader import Counter, Vector
+from tests.conftest import SonarRunner
 from tests.utils import large_gpu_mark
 
 
@@ -175,13 +175,13 @@ def extract_acceptance_metrics(metrics, num_spec_tokens: int) -> dict:
     acceptance_counts = [0] * num_spec_tokens
 
     for metric in metrics:
-        if metric.name == "aphrodite:spec_decode_num_drafts":
+        if metric.name == "sonar:spec_decode_num_drafts":
             assert isinstance(metric, Counter)
             num_drafts += metric.value
-        elif metric.name == "aphrodite:spec_decode_num_accepted_tokens":
+        elif metric.name == "sonar:spec_decode_num_accepted_tokens":
             assert isinstance(metric, Counter)
             num_accepted_tokens += metric.value
-        elif metric.name == "aphrodite:spec_decode_num_accepted_tokens_per_pos":
+        elif metric.name == "sonar:spec_decode_num_accepted_tokens_per_pos":
             assert isinstance(metric, Vector)
             for pos in range(min(len(metric.values), num_spec_tokens)):
                 acceptance_counts[pos] += metric.values[pos]
@@ -230,9 +230,9 @@ def test_eagle3_acceptance_length(
         attention_config = {"backend": attention_backend}
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
-        with AphroditeRunner(
+        with SonarRunner(
             model_name=model_config.verifier,
             speculative_config={
                 "method": "eagle3",
@@ -247,20 +247,20 @@ def test_eagle3_acceptance_length(
             # Qwen/Qwen3-30B-A3B-FP8 with TP=4 needs EP
             # https://github.com/vllm-project/vllm/issues/25292
             enable_expert_parallel=(tp_size == 4 and "Qwen3-VL" in model_config.verifier),
-        ) as aphrodite_runner:
-            tokenizer = aphrodite_runner.llm.get_tokenizer()
+        ) as sonar_runner:
+            tokenizer = sonar_runner.llm.get_tokenizer()
             prompt_ids = get_mt_bench_prompts(tokenizer, DEFAULT_NUM_PROMPTS)
 
             sampling_params = SamplingParams(
                 temperature=0,
                 max_tokens=DEFAULT_OUTPUT_LEN,
             )
-            aphrodite_runner.llm.generate(
+            sonar_runner.llm.generate(
                 [TokensPrompt(prompt_token_ids=ids) for ids in prompt_ids],
                 sampling_params=sampling_params,
             )
 
-            metrics = aphrodite_runner.llm.get_metrics()
+            metrics = sonar_runner.llm.get_metrics()
             results = extract_acceptance_metrics(metrics, num_spec_tokens)
 
             actual_acceptance_length = results["acceptance_length"]

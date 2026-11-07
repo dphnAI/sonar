@@ -11,9 +11,9 @@ import pytest_asyncio
 import requests
 from fastapi import Request
 
-from aphrodite import envs
-from aphrodite.v1.engine.exceptions import EngineDeadError
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar import envs
+from sonar.v1.engine.exceptions import EngineDeadError
+from sonar.version import __version__ as SONAR_VERSION
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -85,9 +85,9 @@ async def test_show_version(server: RemoteOpenAIServer):
     response.raise_for_status()
 
     payload = response.json()
-    assert payload["version"] == APHRODITE_VERSION
-    if envs.APHRODITE_USE_RUST_FRONTEND:
-        assert payload["rust_frontend_version"] == APHRODITE_VERSION
+    assert payload["version"] == SONAR_VERSION
+    if envs.SONAR_USE_RUST_FRONTEND:
+        assert payload["rust_frontend_version"] == SONAR_VERSION
 
 
 @pytest.mark.asyncio
@@ -206,7 +206,7 @@ async def test_server_load(server: RemoteOpenAIServer):
 @pytest.mark.asyncio
 async def test_health_check_engine_dead_error():
     # Import the health function directly to test it in isolation
-    from aphrodite.entrypoints.serve.instrumentator.health import health
+    from sonar.entrypoints.serve.instrumentator.health import health
 
     # Create a mock request that simulates what FastAPI would provide
     mock_request = Mock(spec=Request)

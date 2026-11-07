@@ -15,16 +15,16 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.router.router_factory import (
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.router.router_factory import (
     create_fused_moe_router,
 )
-from aphrodite.model_executor.layers.fused_moe.router.routing_simulator_router import (
+from sonar.model_executor.layers.fused_moe.router.routing_simulator_router import (
     DistributionBasedRouting,
     RoutingSimulator,
     RoutingSimulatorRouter,
@@ -82,10 +82,10 @@ def test_basic_functionality(
 def test_routing_strategy_integration(monkeypatch, device):
     """Test that the routing strategy environment variable works with
     FusedMoEFactory."""
-    pytest.importorskip("aphrodite.model_executor.layers.fused_moe.layer")
+    pytest.importorskip("sonar.model_executor.layers.fused_moe.layer")
 
-    import aphrodite.envs as envs
-    from aphrodite.model_executor.layers.fused_moe.layer import FusedMoEFactory
+    import sonar.envs as envs
+    from sonar.model_executor.layers.fused_moe.layer import FusedMoEFactory
 
     # Test parameters
     num_tokens = 32
@@ -100,8 +100,8 @@ def test_routing_strategy_integration(monkeypatch, device):
     # Test different routing strategies
     strategies = RoutingSimulator.get_available_strategies()
 
-    aphrodite_config = AphroditeConfig()
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = SonarConfig()
+    with set_current_sonar_config(sonar_config):
         temp_file = tempfile.mkstemp()[1]
         init_distributed_environment(
             world_size=1,
@@ -116,7 +116,7 @@ def test_routing_strategy_integration(monkeypatch, device):
 
         for strategy in strategies:
             # Set environment variable
-            env_name = "APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY"
+            env_name = "SONAR_MOE_ROUTING_SIMULATION_STRATEGY"
             monkeypatch.setenv(env_name, strategy)
 
             # Temporarily override the envs lookup so the router factory
@@ -160,16 +160,16 @@ def test_routing_strategy_integration(monkeypatch, device):
 
 
 def test_simulated_bias_is_nonpersistent_buffer(monkeypatch, dist_init):
-    import aphrodite.envs as envs
-    from aphrodite.model_executor.layers.fused_moe.layer import FusedMoEFactory
+    import sonar.envs as envs
+    from sonar.model_executor.layers.fused_moe.layer import FusedMoEFactory
 
     monkeypatch.setitem(
         envs.environment_variables,
-        "APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY",
+        "SONAR_MOE_ROUTING_SIMULATION_STRATEGY",
         lambda: "uniform_random",
     )
     bias = torch.nn.Parameter(torch.ones(4))
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         moe = FusedMoEFactory(
             num_experts=4,
             top_k=2,
@@ -253,13 +253,13 @@ def test_instance_compatibility():
 )
 def test_simulation_preserves_model_routing_method(monkeypatch, groups, has_bias, expected_method):
     """Biased and non-renormalized models keep their kernel routing semantics."""
-    import aphrodite.envs as envs
-    from aphrodite.platforms import current_platform
+    import sonar.envs as envs
+    from sonar.platforms import current_platform
 
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setitem(
         envs.environment_variables,
-        "APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY",
+        "SONAR_MOE_ROUTING_SIMULATION_STRATEGY",
         lambda: "uniform_random",
     )
     bias = torch.ones(32) if has_bias else None
@@ -279,12 +279,12 @@ def test_simulation_preserves_model_routing_method(monkeypatch, groups, has_bias
 
 def test_runner_prepares_monolithic_logits(monkeypatch, device):
     """The shared runner must replace planted logits before calling any backend."""
-    import aphrodite.envs as envs
-    from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
+    import sonar.envs as envs
+    from sonar.model_executor.layers.fused_moe.runner.moe_runner import MoERunner
 
     monkeypatch.setitem(
         envs.environment_variables,
-        "APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY",
+        "SONAR_MOE_ROUTING_SIMULATION_STRATEGY",
         lambda: "uniform_random",
     )
     router = RoutingSimulatorRouter(2, 32, RoutingMethodType.RenormalizeNaive)

@@ -147,7 +147,7 @@ pub(crate) async fn fetch_spec_decode_metrics(
 /// whole line so label values cannot be mistaken for metric names, and only
 /// reads `_total` counter samples — skipping e.g. `_created` timestamp series,
 /// which would otherwise be summed into the counts (mirrors the Python fix
-/// in aphrodite#41916).
+/// in sonar#41916).
 pub(crate) fn parse_spec_decode_metrics(text: &str) -> Option<SpecDecodeMetrics> {
     let mut num_drafts: u64 = 0;
     let mut num_draft_tokens: u64 = 0;
@@ -165,7 +165,7 @@ pub(crate) fn parse_spec_decode_metrics(text: &str) -> Option<SpecDecodeMetrics>
             None => continue,
         };
         let metric_name = first_token.split('{').next().unwrap_or(first_token);
-        if !metric_name.starts_with("aphrodite:spec_decode") || !metric_name.ends_with("_total") {
+        if !metric_name.starts_with("sonar:spec_decode") || !metric_name.ends_with("_total") {
             continue;
         }
         found_spec_decode = true;
@@ -958,7 +958,7 @@ pub async fn run_benchmark(config: &BenchConfig) -> Result<serde_json::Value> {
         let extra_body = shared_extra_body.clone();
 
         // Per-request LoRA override: the adapter name replaces both `model` and
-        // `model_name` in the outgoing payload (Aphrodite routes by name). Tokenizer,
+        // `model_name` in the outgoing payload (Sonar routes by name). Tokenizer,
         // /v1/models, /tokenize, etc. continue using the base model unchanged.
         let lora_name = lora_assignments.as_ref().map(|v| v[i].clone());
 
@@ -1365,7 +1365,7 @@ pub(crate) async fn stop_profiler_immediate(
     }
 }
 
-/// Send a request to the Aphrodite profiler endpoint (start_profile / stop_profile).
+/// Send a request to the Sonar profiler endpoint (start_profile / stop_profile).
 /// Returns Ok(true) if the server responded with 200.
 pub(crate) async fn send_profile_request(
     client: &reqwest::Client,
@@ -1390,7 +1390,7 @@ pub(crate) async fn send_profile_request(
     Ok(resp.status().is_success())
 }
 
-/// Fetch total `aphrodite:num_requests_running` across engines from `/metrics`.
+/// Fetch total `sonar:num_requests_running` across engines from `/metrics`.
 pub(crate) async fn fetch_num_requests_running(
     client: &reqwest::Client,
     base_url: &str,
@@ -1406,7 +1406,7 @@ pub(crate) async fn fetch_num_requests_running(
 fn parse_num_requests_running(text: &str) -> Option<usize> {
     let mut total: Option<usize> = None;
     for line in text.lines() {
-        let Some(rest) = line.trim().strip_prefix("aphrodite:num_requests_running") else {
+        let Some(rest) = line.trim().strip_prefix("sonar:num_requests_running") else {
             continue;
         };
         let sample = if rest.trim_start().starts_with('{') {
@@ -1854,7 +1854,7 @@ fn tokenizer_verify_cache_key(base_url: &str, model_id: &str) -> String {
 fn verify_cache_dir() -> std::path::PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("aphrodite-bench")
+        .join("sonar-bench")
         .join("verified_tokenizers")
 }
 
@@ -1942,9 +1942,7 @@ mod tests {
     fn test_parse_num_requests_running_sums_dp_engines() {
         let metrics: String = (0..8)
             .map(|engine| {
-                format!(
-                    "aphrodite:num_requests_running{{model_name=\"m\",engine=\"{engine}\"}} 16.0\n"
-                )
+                format!("sonar:num_requests_running{{model_name=\"m\",engine=\"{engine}\"}} 16.0\n")
             })
             .collect();
 
@@ -1954,10 +1952,10 @@ mod tests {
     #[test]
     fn test_parse_num_requests_running_matches_exact_metric_name() {
         let metrics = "\
-aphrodite:num_requests_running_total{engine=\"0\"} 1024
-aphrodite:num_requests_running{engine=\"0\"} 16
-aphrodite:num_requests_waiting{model_name=\"aphrodite:num_requests_running\"} 256
-aphrodite:num_requests_running{engine=\"1\"} 16
+sonar:num_requests_running_total{engine=\"0\"} 1024
+sonar:num_requests_running{engine=\"0\"} 16
+sonar:num_requests_waiting{model_name=\"sonar:num_requests_running\"} 256
+sonar:num_requests_running{engine=\"1\"} 16
 ";
 
         assert_eq!(parse_num_requests_running(metrics), Some(32));
@@ -1965,7 +1963,7 @@ aphrodite:num_requests_running{engine=\"1\"} 16
 
     #[test]
     fn test_parse_num_requests_running_distinguishes_zero_and_missing() {
-        for (metrics, expected) in [("aphrodite:num_requests_running 0\n", Some(0)), ("", None)] {
+        for (metrics, expected) in [("sonar:num_requests_running 0\n", Some(0)), ("", None)] {
             assert_eq!(parse_num_requests_running(metrics), expected);
         }
     }
@@ -1973,7 +1971,7 @@ aphrodite:num_requests_running{engine=\"1\"} 16
     #[test]
     fn test_parse_num_requests_running_reads_sample_before_timestamp() {
         let metrics =
-            "aphrodite:num_requests_running {model_name=\"model with spaces\"}\t4.2e1 123456\n";
+            "sonar:num_requests_running {model_name=\"model with spaces\"}\t4.2e1 123456\n";
 
         assert_eq!(parse_num_requests_running(metrics), Some(42));
     }
@@ -1995,14 +1993,14 @@ aphrodite:num_requests_running{engine=\"1\"} 16
     #[test]
     fn test_parse_spec_decode_metrics_sums_counters_across_engines() {
         let text = "\
-# TYPE aphrodite:spec_decode_num_drafts_total counter
-aphrodite:spec_decode_num_drafts_total{model_name=\"m\",engine=\"0\"} 100.0
-aphrodite:spec_decode_num_drafts_total{model_name=\"m\",engine=\"1\"} 50.0
-aphrodite:spec_decode_num_draft_tokens_total{model_name=\"m\",engine=\"0\"} 700.0
-aphrodite:spec_decode_num_accepted_tokens_total{model_name=\"m\",engine=\"0\"} 300.0
-aphrodite:spec_decode_num_accepted_tokens_per_pos_total{position=\"0\",engine=\"0\"} 80.0
-aphrodite:spec_decode_num_accepted_tokens_per_pos_total{position=\"1\",engine=\"0\"} 40.0
-aphrodite:num_requests_running{model_name=\"m\"} 0
+# TYPE sonar:spec_decode_num_drafts_total counter
+sonar:spec_decode_num_drafts_total{model_name=\"m\",engine=\"0\"} 100.0
+sonar:spec_decode_num_drafts_total{model_name=\"m\",engine=\"1\"} 50.0
+sonar:spec_decode_num_draft_tokens_total{model_name=\"m\",engine=\"0\"} 700.0
+sonar:spec_decode_num_accepted_tokens_total{model_name=\"m\",engine=\"0\"} 300.0
+sonar:spec_decode_num_accepted_tokens_per_pos_total{position=\"0\",engine=\"0\"} 80.0
+sonar:spec_decode_num_accepted_tokens_per_pos_total{position=\"1\",engine=\"0\"} 40.0
+sonar:num_requests_running{model_name=\"m\"} 0
 ";
         let m = parse_spec_decode_metrics(text).unwrap();
         assert_eq!(m.num_drafts, 150);
@@ -2015,13 +2013,13 @@ aphrodite:num_requests_running{model_name=\"m\"} 0
     fn test_parse_spec_decode_metrics_skips_created_series_and_label_values() {
         // `_created` timestamps must not be summed into counters, and metric
         // matching must key off the metric name, not substrings inside label
-        // values (aphrodite#41916).
+        // values (sonar#41916).
         let text = "\
-aphrodite:spec_decode_num_drafts_total{model_name=\"m\"} 100.0
-aphrodite:spec_decode_num_drafts_created{model_name=\"m\"} 1.7863e+09
-aphrodite:spec_decode_num_draft_tokens_total{model_name=\"m\"} 700.0
-aphrodite:spec_decode_num_draft_tokens_created{model_name=\"m\"} 1.7863e+09
-aphrodite:spec_decode_num_accepted_tokens_total{model_name=\"num_drafts\"} 300.0
+sonar:spec_decode_num_drafts_total{model_name=\"m\"} 100.0
+sonar:spec_decode_num_drafts_created{model_name=\"m\"} 1.7863e+09
+sonar:spec_decode_num_draft_tokens_total{model_name=\"m\"} 700.0
+sonar:spec_decode_num_draft_tokens_created{model_name=\"m\"} 1.7863e+09
+sonar:spec_decode_num_accepted_tokens_total{model_name=\"num_drafts\"} 300.0
 ";
         let m = parse_spec_decode_metrics(text).unwrap();
         assert_eq!(m.num_drafts, 100);
@@ -2032,8 +2030,8 @@ aphrodite:spec_decode_num_accepted_tokens_total{model_name=\"num_drafts\"} 300.0
     #[test]
     fn test_parse_spec_decode_metrics_none_without_spec_metrics() {
         let text = "\
-aphrodite:num_requests_running{model_name=\"m\"} 0
-aphrodite:prefix_cache_queries_total{model_name=\"m\"} 0
+sonar:num_requests_running{model_name=\"m\"} 0
+sonar:prefix_cache_queries_total{model_name=\"m\"} 0
 ";
         assert!(parse_spec_decode_metrics(text).is_none());
     }

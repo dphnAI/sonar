@@ -16,8 +16,8 @@ The correct guard is ``patches.numel() == 0``.
 import pytest
 import torch
 
-from aphrodite.model_executor.models.deepseek_ocr import DeepseekOCRForCausalLM
-from aphrodite.model_executor.models.deepseek_ocr2 import DeepseekOCR2ForCausalLM
+from sonar.model_executor.models.deepseek_ocr import DeepseekOCRForCausalLM
+from sonar.model_executor.models.deepseek_ocr2 import DeepseekOCR2ForCausalLM
 
 
 class TestDeepseekOCREncodeLocalFeaturesGuard:

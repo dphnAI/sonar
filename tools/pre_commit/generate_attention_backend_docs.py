@@ -28,21 +28,21 @@ from typing import Any
 REPO_ROOT = Path(__file__).parent.parent.parent
 
 RELEVANT_PATTERNS = [
-    "aphrodite/v1/attention/backends/*.py",
-    "aphrodite/v1/attention/backends/**/*.py",
-    "aphrodite/v1/attention/backends/fa_utils.py",
-    "aphrodite/model_executor/layers/attention/mla_attention.py",
-    "aphrodite/platforms/cuda.py",
+    "sonar/v1/attention/backends/*.py",
+    "sonar/v1/attention/backends/**/*.py",
+    "sonar/v1/attention/backends/fa_utils.py",
+    "sonar/model_executor/layers/attention/mla_attention.py",
+    "sonar/platforms/cuda.py",
     "tools/pre_commit/generate_attention_backend_docs.py",
     "docs/design/attention_backends.md",
 ]
 
-BACKENDS_DIR = REPO_ROOT / "aphrodite" / "v1" / "attention" / "backends"
+BACKENDS_DIR = REPO_ROOT / "sonar" / "v1" / "attention" / "backends"
 REGISTRY_FILE = BACKENDS_DIR / "registry.py"
-CUDA_PLATFORM_FILE = REPO_ROOT / "aphrodite" / "platforms" / "cuda.py"
+CUDA_PLATFORM_FILE = REPO_ROOT / "sonar" / "platforms" / "cuda.py"
 FA_UTILS_FILE = BACKENDS_DIR / "fa_utils.py"
-FLASHINFER_UTILS_FILE = REPO_ROOT / "aphrodite" / "utils" / "flashinfer.py"
-MLA_ATTENTION_FILE = REPO_ROOT / "aphrodite" / "model_executor" / "layers" / "attention" / "mla_attention.py"
+FLASHINFER_UTILS_FILE = REPO_ROOT / "sonar" / "utils" / "flashinfer.py"
+MLA_ATTENTION_FILE = REPO_ROOT / "sonar" / "model_executor" / "layers" / "attention" / "mla_attention.py"
 MLA_PREFILL_REGISTRY_FILE = BACKENDS_DIR / "mla" / "prefill" / "registry.py"
 
 # Backends to skip during doc generation
@@ -195,7 +195,7 @@ def _get_parent_class_name(class_node: ast.ClassDef) -> str | None:
 def _resolve_import_to_file(tree: ast.AST, class_name: str, source_file: Path | None = None) -> Path | None:
     """Try to resolve a class name to its source file via imports in the AST.
 
-    Handles both absolute imports (from aphrodite.foo import Bar) and relative
+    Handles both absolute imports (from sonar.foo import Bar) and relative
     imports (from .foo import Bar) when source_file is provided.
     """
     for node in ast.walk(tree):
@@ -575,7 +575,7 @@ def _parse_fa4_supported_caps() -> str | None:
 
     Looks for `cc not in [9, 10, 11]` pattern in _is_fa4_supported().
     """
-    fa_interface_file = REPO_ROOT / "aphrodite" / "vllm_flash_attn" / "flash_attn_interface.py"
+    fa_interface_file = REPO_ROOT / "sonar" / "vllm_flash_attn" / "flash_attn_interface.py"
     if not fa_interface_file.exists():
         return None
 
@@ -1408,19 +1408,19 @@ There are two ways to specify the backend from the command line:
 **Option 1: Using `--attention-backend` (simple)**
 
 ```bash
-aphrodite serve <model> --attention-backend FLASH_ATTN
+sonar serve <model> --attention-backend FLASH_ATTN
 ```
 
 **Option 2: Using `--attention-config.backend` / `-ac.backend` (structured config)**
 
 ```bash
 # Dot notation
-aphrodite serve <model> --attention-config.backend FLASH_ATTN
-aphrodite serve <model> -ac.backend FLASH_ATTN
+sonar serve <model> --attention-config.backend FLASH_ATTN
+sonar serve <model> -ac.backend FLASH_ATTN
 
 # JSON format
-aphrodite serve <model> --attention-config '{"backend": "FLASH_ATTN"}'
-aphrodite serve <model> -ac '{"backend": "FLASH_ATTN"}'
+sonar serve <model> --attention-config '{"backend": "FLASH_ATTN"}'
+sonar serve <model> -ac '{"backend": "FLASH_ATTN"}'
 ```
 
 > **Note:** `--attention-backend` and `--attention-config.backend` are mutually
@@ -1431,9 +1431,9 @@ aphrodite serve <model> -ac '{"backend": "FLASH_ATTN"}'
 Use `AttentionConfig` with the `LLM` class:
 
 ```python
-from aphrodite import LLM
-from aphrodite.config import AttentionConfig
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar import LLM
+from sonar.config import AttentionConfig
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 # Method 1: Using AttentionConfig with enum
 llm = LLM(
@@ -1471,7 +1471,7 @@ Reason: ['compute capability not supported']
 
 When no backend is specified (the default):
 
-1. Aphrodite iterates through backends in **priority order** (see tables below)
+1. Sonar iterates through backends in **priority order** (see tables below)
 2. Each backend is validated against your configuration
 3. The **first compatible backend** is selected
 4. If no backend is compatible, an error is raised listing all backends and
@@ -1505,7 +1505,7 @@ def generate_priority_section(priorities: dict[str, list[str]]) -> str:
     lines = [
         "## Backend Priority (CUDA)",
         "",
-        "When no backend is explicitly selected, Aphrodite chooses the first",
+        "When no backend is explicitly selected, Sonar chooses the first",
         "compatible backend from these priority-ordered lists.",
         "",
         "Priority is **1 = highest** (tried first).",

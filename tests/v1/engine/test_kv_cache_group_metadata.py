@@ -7,24 +7,24 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ParallelConfig,
+    SonarConfig,
 )
-from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-from aphrodite.v1.engine.core import EngineCore
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_manager import KVCacheManager
+from sonar.v1.engine.core import EngineCore
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     MLAAttentionSpec,
 )
-from aphrodite.v1.worker.worker_base import WorkerBase
+from sonar.v1.worker.worker_base import WorkerBase
 
 pytestmark = pytest.mark.cpu_test
 
@@ -35,7 +35,7 @@ DCP_WORLD_SIZE = 8
 @pytest.mark.parametrize("interleave,expected", [(None, 16), (8, 8)])
 def test_global_layout_finalizes_worker_interleave_before_profiling(interleave, expected):
     """Workers with different local blocks must use the global interleave."""
-    config = AphroditeConfig(
+    config = SonarConfig(
         cache_config=CacheConfig(block_size=64),
         device_config=DeviceConfig(device="cpu"),
         parallel_config=ParallelConfig(
@@ -53,8 +53,8 @@ def test_global_layout_finalizes_worker_interleave_before_profiling(interleave, 
     specs = []
     for i, block_size in enumerate((16, 64)):
         worker = object.__new__(WorkerBase)
-        worker.aphrodite_config = deepcopy(config)
-        worker.aphrodite_config.cache_config.kv_cache_layout = None
+        worker.sonar_config = deepcopy(config)
+        worker.sonar_config.cache_config.kv_cache_layout = None
         workers.append(worker)
         specs.append(
             {
@@ -66,7 +66,7 @@ def test_global_layout_finalizes_worker_interleave_before_profiling(interleave, 
                 )
             }
         )
-    parallel_configs = [config.parallel_config] + [worker.aphrodite_config.parallel_config for worker in workers]
+    parallel_configs = [config.parallel_config] + [worker.sonar_config.parallel_config for worker in workers]
 
     class ProfilingStarted(Exception):
         pass
@@ -86,7 +86,7 @@ def test_global_layout_finalizes_worker_interleave_before_profiling(interleave, 
 
         def determine_available_memory(self):
             assert all(parallel.cp_kv_cache_interleave_size == expected for parallel in parallel_configs)
-            assert all(worker.aphrodite_config.cache_config.kv_cache_layout == "BLHNC" for worker in workers)
+            assert all(worker.sonar_config.cache_config.kv_cache_layout == "BLHNC" for worker in workers)
             raise ProfilingStarted
 
     engine = object.__new__(EngineCore)

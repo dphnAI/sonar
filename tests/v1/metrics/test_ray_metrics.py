@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 import pytest
 import ray
 
-from aphrodite.config.model import ModelDType
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
-from aphrodite.v1.metrics.ray_wrappers import (
+from sonar.config.model import ModelDType
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
+from sonar.v1.metrics.ray_wrappers import (
     RayCounterWrapper,
     RayGaugeWrapper,
     RayHistogramWrapper,
@@ -98,8 +98,8 @@ def test_sanitized_opentelemetry_name():
     assert RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_invalid) == expected
 
     # Test mixed valid and invalid characters
-    complex_name = "aphrodite:engine_stats/time.latency_ms-99p"
-    expected = "aphrodite_engine_stats_time_latency_ms_99p"
+    complex_name = "sonar:engine_stats/time.latency_ms-99p"
+    expected = "sonar_engine_stats_time_latency_ms_99p"
     assert RayPrometheusMetric._get_sanitized_opentelemetry_name(complex_name) == expected
 
     # Test empty string
@@ -121,7 +121,7 @@ def test_ray_counter_labels_returns_independent_children():
     """RayCounterWrapper.labels() must return distinct labeled children that
     each carry their own tag set."""
     base = RayCounterWrapper(
-        name="aphrodite_test_finish_reason",
+        name="sonar_test_finish_reason",
         documentation="",
         labelnames=["reason"],
     )
@@ -141,7 +141,7 @@ def test_ray_counter_inc_forwards_per_child_tags():
     """.inc() on a labeled counter must forward that child's tags to the
     underlying Ray metric (not rely on a shared set_default_tags)."""
     wrapper = RayCounterWrapper(
-        name="aphrodite_test_counter_tag_forward",
+        name="sonar_test_counter_tag_forward",
         documentation="",
         labelnames=["reason"],
     )
@@ -162,7 +162,7 @@ def test_ray_counter_inc_forwards_per_child_tags():
 
 def test_ray_gauge_labels_returns_independent_children_and_forwards_tags():
     wrapper = RayGaugeWrapper(
-        name="aphrodite_test_gauge_tag_forward",
+        name="sonar_test_gauge_tag_forward",
         documentation="",
         labelnames=["kind"],
     )
@@ -182,7 +182,7 @@ def test_ray_gauge_labels_returns_independent_children_and_forwards_tags():
 
 def test_ray_histogram_labels_returns_independent_children_and_forwards_tags():
     wrapper = RayHistogramWrapper(
-        name="aphrodite_test_histogram_tag_forward",
+        name="sonar_test_histogram_tag_forward",
         documentation="",
         labelnames=["bucket"],
         buckets=[1.0, 2.0, 5.0],
@@ -206,7 +206,7 @@ def test_ray_counter_labels_accepts_non_string_label_values():
     covers the coercion path for any caller that passes a non-string label
     value positionally."""
     wrapper = RayCounterWrapper(
-        name="aphrodite_test_nonstr_label",
+        name="sonar_test_nonstr_label",
         documentation="",
         labelnames=["engine", "reason"],
     )
@@ -217,7 +217,7 @@ def test_ray_counter_labels_accepts_non_string_label_values():
 
 def test_ray_counter_labels_arity_validation():
     wrapper = RayCounterWrapper(
-        name="aphrodite_test_arity",
+        name="sonar_test_arity",
         documentation="",
         labelnames=["a", "b"],
     )
@@ -229,7 +229,7 @@ def test_unlabeled_inc_carries_replica_id():
     """Recording on an unlabeled metric must still pass ReplicaId — it's a
     declared tag_key and Ray rejects updates that omit any declared key."""
     wrapper = RayCounterWrapper(
-        name="aphrodite_test_unlabeled_replica_id",
+        name="sonar_test_unlabeled_replica_id",
         documentation="",
         labelnames=None,
     )
@@ -242,7 +242,7 @@ def test_double_labels_raises():
     """labels() on an already-labeled child should raise, mirroring the
     prometheus_client contract."""
     wrapper = RayCounterWrapper(
-        name="aphrodite_test_double_labels",
+        name="sonar_test_double_labels",
         documentation="",
         labelnames=["reason"],
     )

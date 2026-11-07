@@ -104,12 +104,12 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 8x H200 or 8x H20 GPUs
-  - **Aphrodite**: Current stable release
+  - **Sonar**: Current stable release
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### AMD ROCm
@@ -120,15 +120,15 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
-  ## Launching Kimi-K2-Thinking with Aphrodite
+  ## Launching Kimi-K2-Thinking with Sonar
 
   ### Low-Latency Scenarios (TP8)
 
   ```bash
-  aphrodite serve moonshotai/Kimi-K2-Thinking \
+  sonar serve moonshotai/Kimi-K2-Thinking \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
     --tool-call-parser kimi_k2 \
@@ -143,7 +143,7 @@ guide: |
 
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  aphrodite serve moonshotai/Kimi-K2-Thinking \
+  sonar serve moonshotai/Kimi-K2-Thinking \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
     --tool-call-parser kimi_k2 \
@@ -153,12 +153,12 @@ guide: |
 
   ### High-Throughput Scenarios (TP8+DCP8)
 
-  Aphrodite supports [Decode Context Parallel](https://docs.vllm.ai/en/latest/serving/context_parallel_deployment.html#decode-context-parallel),
+  Sonar supports [Decode Context Parallel](https://docs.vllm.ai/en/latest/serving/context_parallel_deployment.html#decode-context-parallel),
   which provides significant benefits in high-throughput scenarios. Enable DCP by adding
   `--decode-context-parallel-size 8`:
 
   ```bash
-  aphrodite serve moonshotai/Kimi-K2-Thinking \
+  sonar serve moonshotai/Kimi-K2-Thinking \
     --tensor-parallel-size 8 \
     --decode-context-parallel-size 8 \
     --enable-auto-tool-choice \
@@ -179,7 +179,7 @@ guide: |
   We used the following script to benchmark `moonshotai/Kimi-K2-Thinking` on 8xH200:
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model moonshotai/Kimi-K2-Thinking \
     --dataset-name random \
     --random-input 8000 \
@@ -209,4 +209,4 @@ guide: |
   ## References
 
   - [Kimi-K2-Thinking on Hugging Face](https://huggingface.co/moonshotai/Kimi-K2-Thinking)
-  - [Aphrodite Decode Context Parallel docs](https://docs.vllm.ai/en/latest/serving/context_parallel_deployment.html#decode-context-parallel)
+  - [Sonar Decode Context Parallel docs](https://docs.vllm.ai/en/latest/serving/context_parallel_deployment.html#decode-context-parallel)

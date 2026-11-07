@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("requires ROCm", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx942  # noqa: E402
+from sonar.platforms.rocm import on_gfx942  # noqa: E402
 
 if not on_gfx942():
     pytest.skip("requires gfx942", allow_module_level=True)
@@ -25,7 +25,7 @@ from aiter.ops.shuffle import (  # noqa: E402
 )
 from aiter.utility import fp4_utils  # noqa: E402
 
-from aphrodite.model_executor.layers.quantization import mxfp4  # noqa: E402
+from sonar.model_executor.layers.quantization import mxfp4  # noqa: E402
 
 NUM_EXPERTS, ROWS, COLS = 128, 256, 2048
 # Kimi-K3 w2 per rank under TP8. 896 experts do not split evenly into chunks.

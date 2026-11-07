@@ -12,9 +12,9 @@ from unittest.mock import patch
 import pytest
 import zmq
 
-from aphrodite.utils.network_utils import make_zmq_listener, make_zmq_socket
-from aphrodite.v1.engine.admission_control import SharedAdmissionStats
-from aphrodite.v1.utils import (
+from sonar.utils.network_utils import make_zmq_listener, make_zmq_socket
+from sonar.v1.engine.admission_control import SharedAdmissionStats
+from sonar.v1.utils import (
     APIServerProcessManager,
     wait_for_completion_or_failure,
 )
@@ -222,7 +222,7 @@ def test_api_server_processes_share_admission_stats(api_server_args):
         worker_args.results.join_thread()
 
 
-@patch("aphrodite.v1.utils.run_api_server_worker_proc", mock_run_api_server_worker)
+@patch("sonar.v1.utils.run_api_server_worker_proc", mock_run_api_server_worker)
 def test_wait_for_completion_or_failure(api_server_args):
     """Test that wait_for_completion_or_failure works with failures."""
     global WORKER_RUNTIME_SECONDS
@@ -403,9 +403,9 @@ def test_rust_frontend_launch_log_redacts_credentials(monkeypatch):
     Credentials must not reach the log line."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.utils import RustFrontendProcessManager
+    from sonar.entrypoints.common.cli_args import make_arg_parser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.utils import RustFrontendProcessManager
 
     hf_token = "hf_TESTTOKEN123"
     api_key = "sk-TESTKEY456"
@@ -428,9 +428,9 @@ def test_rust_frontend_launch_log_redacts_credentials(monkeypatch):
     output_listener = make_zmq_listener("tcp://127.0.0.1:0", zmq.PULL)
     try:
         monkeypatch.setattr(subprocess_mod, "Popen", lambda *a, **kw: _FakeProc())
-        with patch("aphrodite.v1.utils.logger.info") as log_info:
+        with patch("sonar.v1.utils.logger.info") as log_info:
             RustFrontendProcessManager(
-                binary_path="/nonexistent/aphrodite-rs",
+                binary_path="/nonexistent/sonar-rs",
                 sock=sock,
                 args=args,
                 input_listener=input_listener,
@@ -455,9 +455,9 @@ def test_rust_frontend_uses_config_model_as_model_tag(monkeypatch, caplog, tmp_p
     """Config-only model selection must be forwarded to the Rust frontend."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.utils import RustFrontendProcessManager
+    from sonar.entrypoints.common.cli_args import make_arg_parser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.utils import RustFrontendProcessManager
 
     config_path = tmp_path / "config.yml"
     config_path.write_text("model: org/model\n")
@@ -480,9 +480,9 @@ def test_rust_frontend_uses_config_model_as_model_tag(monkeypatch, caplog, tmp_p
     output_listener = make_zmq_listener("tcp://127.0.0.1:0", zmq.PULL)
     try:
         monkeypatch.setattr(subprocess_mod, "Popen", lambda *a, **kw: _FakeProc())
-        with caplog.at_level("INFO", logger="aphrodite.v1.utils"):
+        with caplog.at_level("INFO", logger="sonar.v1.utils"):
             RustFrontendProcessManager(
-                binary_path="/nonexistent/aphrodite-rs",
+                binary_path="/nonexistent/sonar-rs",
                 sock=sock,
                 args=args,
                 input_listener=input_listener,
@@ -501,9 +501,9 @@ def test_rust_frontend_inherits_grpc_listener(monkeypatch):
     """The Python-bound gRPC socket is passed to Rust like the HTTP one."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.utils import RustFrontendProcessManager
+    from sonar.entrypoints.common.cli_args import make_arg_parser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.utils import RustFrontendProcessManager
 
     args = make_arg_parser(FlexibleArgumentParser()).parse_args(["--model", "org/model", "--grpc-port", "50051"])
 
@@ -532,7 +532,7 @@ def test_rust_frontend_inherits_grpc_listener(monkeypatch):
     try:
         monkeypatch.setattr(subprocess_mod, "Popen", fake_popen)
         RustFrontendProcessManager(
-            binary_path="/nonexistent/aphrodite-rs",
+            binary_path="/nonexistent/sonar-rs",
             sock=sock,
             args=args,
             input_listener=input_listener,
@@ -559,9 +559,9 @@ def test_rust_frontend_inherits_grpc_listener(monkeypatch):
 
 def test_rust_frontend_spawn_failure_cleans_up_listeners(tmp_path):
     """No child owns the listeners when Popen fails, so the parent removes them."""
-    from aphrodite.entrypoints.common.cli_args import make_arg_parser
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-    from aphrodite.v1.utils import RustFrontendProcessManager
+    from sonar.entrypoints.common.cli_args import make_arg_parser
+    from sonar.utils.argparse_utils import FlexibleArgumentParser
+    from sonar.v1.utils import RustFrontendProcessManager
 
     args = make_arg_parser(FlexibleArgumentParser()).parse_args(["--model", "org/model"])
     input_listener = make_zmq_listener(f"ipc://{tmp_path}/input.sock", zmq.ROUTER)
@@ -570,7 +570,7 @@ def test_rust_frontend_spawn_failure_cleans_up_listeners(tmp_path):
     try:
         with pytest.raises(FileNotFoundError):
             RustFrontendProcessManager(
-                binary_path=str(tmp_path / "missing-aphrodite-rs"),
+                binary_path=str(tmp_path / "missing-sonar-rs"),
                 sock=sock,
                 args=args,
                 input_listener=input_listener,

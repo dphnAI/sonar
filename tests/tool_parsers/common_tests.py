@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers import ToolParserManager
 from tests.tool_parsers.utils import run_tool_extraction
 
 

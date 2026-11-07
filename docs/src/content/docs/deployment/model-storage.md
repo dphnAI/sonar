@@ -11,7 +11,7 @@ files required by the selected architecture.
 
 ```bash
 export HF_TOKEN="hf_..."
-aphrodite serve ORGANIZATION/PRIVATE_MODEL
+sonar serve ORGANIZATION/PRIVATE_MODEL
 ```
 
 Give the token read access only. Do not put it in a command argument or image
@@ -20,7 +20,7 @@ layer.
 ## Pin a revision
 
 ```bash
-aphrodite serve ORGANIZATION/MODEL \
+sonar serve ORGANIZATION/MODEL \
   --revision MODEL_COMMIT \
   --tokenizer-revision TOKENIZER_COMMIT
 ```
@@ -34,7 +34,7 @@ Use `HF_HOME` to place the Hugging Face cache on persistent storage:
 
 ```bash
 export HF_HOME=/srv/sonar/huggingface
-aphrodite serve ORGANIZATION/MODEL
+sonar serve ORGANIZATION/MODEL
 ```
 
 The cache needs enough temporary space for concurrent downloads and extracted
@@ -48,7 +48,7 @@ Download and verify the complete model on a connected machine. Copy the
 snapshot to the offline host and pass its local path:
 
 ```bash
-aphrodite serve /models/qwen3-8b
+sonar serve /models/qwen3-8b
 ```
 
 Include tokenizer files and custom code. Test startup with network access
@@ -63,7 +63,7 @@ startup on a supported storage system.
 Set a load format only when the checkpoint or storage stack requires it:
 
 ```bash
-aphrodite serve MODEL --load-format safetensors
+sonar serve MODEL --load-format safetensors
 ```
 
 Use the [server argument reference](/reference/server-arguments/) to inspect

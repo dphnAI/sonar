@@ -18,7 +18,7 @@ typedef __hip_bfloat16 nv_bfloat16;
 #include <cstdlib>
 #include <cstring>
 
-namespace aphrodite {
+namespace sonar {
 constexpr int kMaxCustomCollectiveRanks = 16;
 
 #define CUDACHECK(cmd)                                              \
@@ -298,4 +298,4 @@ DINLINE P packed_reduce(const P* ptrs[], int idx) {
   return downcast<P>(tmp);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

@@ -8,7 +8,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.models.kimi_k3.amd.linear import KimiDecoderLayer, KimiMLAAttention
+from sonar.models.kimi_k3.amd.linear import KimiDecoderLayer, KimiMLAAttention
 
 
 class _DirectMLA(KimiMLAAttention):
@@ -46,11 +46,11 @@ def test_mla_self_attention_returns_projection_storage_directly() -> None:
 @pytest.mark.parametrize("fused_decode", [False, True])
 def test_mla_forward_preserves_output_shape_with_fp8_input(monkeypatch, quantized: bool, fused_decode: bool) -> None:
     """Both MLA paths accept producer-quantized input after decode fusion."""
-    from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kFp8DynamicTokenSym,
     )
-    from aphrodite.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
+    from sonar.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
 
     hidden_states = torch.randn(4, 8, dtype=torch.bfloat16)
     if quantized:
@@ -97,7 +97,7 @@ def test_mla_forward_preserves_output_shape_with_fp8_input(monkeypatch, quantize
     if fused_decode:
         attention.mla_attn = SimpleNamespace(layer_name="test")
         monkeypatch.setattr(
-            "aphrodite.models.kimi_k3.amd.mla.get_attention_context",
+            "sonar.models.kimi_k3.amd.mla.get_attention_context",
             lambda _: (
                 SimpleNamespace(num_actual_tokens=4, num_decode_tokens=4),
                 None,
@@ -120,7 +120,7 @@ def test_fused_decode_feeds_zero_positions_to_kernel(monkeypatch) -> None:
     Not every AITER variant clamps positions into the one-row cos/sin cache, and
     the kernel takes its token count from slot_mapping, padding included.
     """
-    from aphrodite.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
+    from sonar.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
 
     calls = []
     cache_ops = ModuleType("aiter.ops.cache")

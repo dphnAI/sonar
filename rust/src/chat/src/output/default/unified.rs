@@ -8,10 +8,10 @@
 //! tool-call deltas, then normalizes those parser events into internal
 //! assistant events.
 
-use aphrodite_parser::unified::{UnifiedParser, UnifiedParserEvent, UnifiedParserOutput};
-use aphrodite_text::output::{DecodedText, DecodedTextEvent, SampledDelta};
 use asynk_strim_attr::{TryYielder, try_stream};
 use futures::{StreamExt as _, pin_mut};
+use sonar_parser::unified::{UnifiedParser, UnifiedParserEvent, UnifiedParserOutput};
+use sonar_text::output::{DecodedText, DecodedTextEvent, SampledDelta};
 use thiserror_ext::AsReport;
 use tracing::warn;
 
@@ -144,7 +144,7 @@ impl UnifiedParserState {
     /// Apply one parsed tool-call delta emitted by the parser.
     fn process_tool_item(
         &mut self,
-        item: aphrodite_parser::tool::ToolCallDelta,
+        item: sonar_parser::tool::ToolCallDelta,
         events: &mut Vec<AssistantEvent>,
     ) -> Result<()> {
         if let Some(name) = item.name {
@@ -297,15 +297,15 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::Arc;
 
-    use aphrodite_parser::reasoning::ReasoningError;
-    use aphrodite_parser::tool::{HermesToolParser, Tool, ToolCallDelta, ToolParser as _};
-    use aphrodite_parser::unified::{
+    use futures::{StreamExt as _, stream};
+    use sonar_parser::reasoning::ReasoningError;
+    use sonar_parser::tool::{HermesToolParser, Tool, ToolCallDelta, ToolParser as _};
+    use sonar_parser::unified::{
         CombinedParser, Gemma4UnifiedParser, UnifiedParserError, UnifiedParserOutput,
     };
-    use aphrodite_text::DecodedText;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
-    use aphrodite_tokenizer::{TokenAnchor, TokenAttribution};
-    use futures::{StreamExt as _, stream};
+    use sonar_text::DecodedText;
+    use sonar_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::{TokenAnchor, TokenAttribution};
 
     use super::unified_event_stream;
     use crate::event::{AssistantBlockKind, ChatTokenUsage};
@@ -349,11 +349,11 @@ mod tests {
         }
     }
 
-    impl aphrodite_parser::unified::UnifiedParser for ScriptedParser {
+    impl sonar_parser::unified::UnifiedParser for ScriptedParser {
         fn create(
-            _tools: &[aphrodite_parser::tool::Tool],
-            _tokenizer: aphrodite_tokenizer::DynTokenizer,
-        ) -> aphrodite_parser::unified::Result<Box<dyn aphrodite_parser::unified::UnifiedParser>>
+            _tools: &[sonar_parser::tool::Tool],
+            _tokenizer: sonar_tokenizer::DynTokenizer,
+        ) -> sonar_parser::unified::Result<Box<dyn sonar_parser::unified::UnifiedParser>>
         where
             Self: Sized + 'static,
         {
@@ -364,7 +364,7 @@ mod tests {
             &mut self,
             _delta: DecodedText,
             output: &mut UnifiedParserOutput,
-        ) -> aphrodite_parser::unified::Result<()> {
+        ) -> sonar_parser::unified::Result<()> {
             match self.steps.pop_front().expect("unexpected parser call") {
                 ScriptedStep::Output(next) => {
                     output.append(next);
@@ -389,7 +389,7 @@ mod tests {
             self.tool_call_id.as_deref()
         }
 
-        fn finish(&mut self) -> aphrodite_parser::unified::Result<UnifiedParserOutput> {
+        fn finish(&mut self) -> sonar_parser::unified::Result<UnifiedParserOutput> {
             if let Some(reset_text) = self.finish_error_reset_text.take() {
                 self.reset_text = reset_text;
                 return Err(UnifiedParserError::Reasoning(
@@ -406,20 +406,20 @@ mod tests {
         }
     }
 
-    fn decoded_delta(delta: &str) -> aphrodite_text::output::DecodedTextEvent {
-        aphrodite_text::output::DecodedTextEvent::TextDelta {
+    fn decoded_delta(delta: &str) -> sonar_text::output::DecodedTextEvent {
+        sonar_text::output::DecodedTextEvent::TextDelta {
             decoded: DecodedText::unattributed(delta),
-            sampled: aphrodite_text::SampledDelta::default(),
+            sampled: sonar_text::SampledDelta::default(),
             finished: None,
         }
     }
 
-    fn finished_delta(delta: &str) -> aphrodite_text::output::DecodedTextEvent {
-        aphrodite_text::output::DecodedTextEvent::TextDelta {
+    fn finished_delta(delta: &str) -> sonar_text::output::DecodedTextEvent {
+        sonar_text::output::DecodedTextEvent::TextDelta {
             decoded: DecodedText::unattributed(delta),
-            sampled: aphrodite_text::SampledDelta::default(),
-            finished: Some(Box::new(aphrodite_text::output::Finished {
-                usage: aphrodite_llm::TokenUsage::default(),
+            sampled: sonar_text::SampledDelta::default(),
+            finished: Some(Box::new(sonar_text::output::Finished {
+                usage: sonar_llm::TokenUsage::default(),
                 finish_reason: crate::FinishReason::Stop(None),
                 kv_transfer_params: None,
                 ec_transfer_params: None,
@@ -433,7 +433,7 @@ mod tests {
 
     async fn collect(
         parser: ScriptedParser,
-        events: Vec<aphrodite_text::output::DecodedTextEvent>,
+        events: Vec<sonar_text::output::DecodedTextEvent>,
     ) -> Vec<AssistantEvent> {
         let stream = stream::iter(events.into_iter().map(Ok));
         unified_event_stream(stream, Box::new(parser))
@@ -474,7 +474,7 @@ mod tests {
 
     fn tool_call(name: &str, arguments: &str) -> UnifiedParserOutput {
         UnifiedParserOutput {
-            events: vec![aphrodite_parser::unified::UnifiedParserEvent::ToolCall(
+            events: vec![sonar_parser::unified::UnifiedParserEvent::ToolCall(
                 ToolCallDelta {
                     tool_index: 0,
                     name: Some(name.to_string()),
@@ -486,7 +486,7 @@ mod tests {
 
     fn tool_call_arguments(arguments: &str) -> UnifiedParserOutput {
         UnifiedParserOutput {
-            events: vec![aphrodite_parser::unified::UnifiedParserEvent::ToolCall(
+            events: vec![sonar_parser::unified::UnifiedParserEvent::ToolCall(
                 ToolCallDelta {
                     tool_index: 0,
                     name: None,
@@ -506,7 +506,7 @@ mod tests {
     /// reasoning token count.
     fn done_usage(reasoning_tokens: usize) -> ChatTokenUsage {
         ChatTokenUsage {
-            engine: aphrodite_llm::TokenUsage::default(),
+            engine: sonar_llm::TokenUsage::default(),
             reasoning_tokens,
         }
     }

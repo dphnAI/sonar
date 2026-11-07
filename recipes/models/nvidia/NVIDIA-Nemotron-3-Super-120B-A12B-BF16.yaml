@@ -36,7 +36,7 @@ features:
       - "--tool-call-parser"
       - "qwen3_coder"
   reasoning:
-    description: "Built-in nemotron_v3 reasoning parser (Aphrodite >= 0.17.1)"
+    description: "Built-in nemotron_v3 reasoning parser (Sonar >= 0.17.1)"
     args:
       - "--reasoning-parser"
       - "nemotron_v3"
@@ -51,7 +51,7 @@ features:
       - "--max-model-len"
       - "1048576"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -105,8 +105,8 @@ variants:
           - "float32"
           - "--enable-prefix-caching"
         extra_env:
-          APHRODITE_FLOAT32_MATMUL_PRECISION: "high"
-          APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+          SONAR_FLOAT32_MATMUL_PRECISION: "high"
+          SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
   base_bf16:
     model_id: "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-Base-BF16"
@@ -141,15 +141,15 @@ guide: |
   ## Prerequisites
 
   - Hardware: 4-8x H100/H200/B200/RTX Pro 6000, DGX Station, or DGX Spark
-  - Aphrodite >= 0.17.1
+  - Sonar >= 0.17.1
   - Docker with NVIDIA Container Toolkit (recommended)
 
   ## Launch commands
 
-  Reference command from the [Aphrodite blog](https://vllm.ai/blog/nemotron-3-super) (BF16, 4x H100, FP8 KV cache):
+  Reference command from the [Sonar blog](https://vllm.ai/blog/nemotron-3-super) (BF16, 4x H100, FP8 KV cache):
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
@@ -162,7 +162,7 @@ guide: |
   FP8 weights:
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 4 \
     --trust-remote-code \
@@ -174,7 +174,7 @@ guide: |
   NVFP4 (Blackwell only):
 
   ```bash
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --enable-auto-tool-choice \
@@ -187,8 +187,8 @@ guide: |
   The NVFP4 variant runs on a single DGX Spark (GB10) at TP=1 inside the
   `vllm/vllm-openai:v0.28.0-ubuntu2404` container. The command below is the optimal
   config tuned end-to-end on DGX Spark: the full 262144-token context fits with an FP8
-  KV cache and a float32 Mamba SSM cache (`APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1` allows the
-  long context, `APHRODITE_FLOAT32_MATMUL_PRECISION=high` keeps the Mamba scan numerically
+  KV cache and a float32 Mamba SSM cache (`SONAR_ALLOW_LONG_MAX_MODEL_LEN=1` allows the
+  long context, `SONAR_FLOAT32_MATMUL_PRECISION=high` keeps the Mamba scan numerically
   stable), `--gpu-memory-utilization 0.8` leaves headroom in the 128 GB unified memory,
   batching is sized for a single GB10 (`--max-num-seqs 8`,
   `--max-num-batched-tokens 16384`), `--load-format fastsafetensors` speeds up weight
@@ -198,9 +198,9 @@ guide: |
   ```bash
   # Use container: vllm/vllm-openai:v0.28.0-ubuntu2404
 
-  APHRODITE_FLOAT32_MATMUL_PRECISION="high" \
-  APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1 \
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  SONAR_FLOAT32_MATMUL_PRECISION="high" \
+  SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
       --host 0.0.0.0 \
       --port 8000 \
       --max-model-len 262144 \
@@ -221,18 +221,18 @@ guide: |
 
   ### RTX Pro 6000 NVFP4
 
-  The NVFP4 variant runs on a single RTX Pro 6000 at TP=1. Requires Aphrodite v0.24.0 or later. A few notes:
+  The NVFP4 variant runs on a single RTX Pro 6000 at TP=1. Requires Sonar v0.24.0 or later. A few notes:
 
   - **Set `--gpu-memory-utilization 0.92`** to avoid an OOM at startup. If you encounter an OOM, try adjusting the value.
-  - **Set `APHRODITE_FLOAT32_MATMUL_PRECISION="high"`** to use high precision for the matmul operations.
-  - **Set `APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1`** to allow the model to use the full context length.
+  - **Set `SONAR_FLOAT32_MATMUL_PRECISION="high"`** to use high precision for the matmul operations.
+  - **Set `SONAR_ALLOW_LONG_MAX_MODEL_LEN=1`** to allow the model to use the full context length.
 
   ```bash
   # Use container: vllm/vllm-openai:v0.28.0-ubuntu2404
 
-  APHRODITE_FLOAT32_MATMUL_PRECISION="high" \
-  APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1 \
-  aphrodite serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  SONAR_FLOAT32_MATMUL_PRECISION="high" \
+  SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 \
+  sonar serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
       --max-model-len 262144 \
       --gpu-memory-utilization 0.92 \
       --max-num-seqs 8 \
@@ -250,7 +250,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8 \
     --trust-remote-code \
     --dataset-name random \
@@ -263,8 +263,8 @@ guide: |
 
   ## References
 
-  - [Aphrodite blog: Nemotron-3-Super](https://vllm.ai/blog/nemotron-3-super)
-  - [Aphrodite blog: Aphrodite on DGX Spark](https://vllm.ai/blog/2026-06-01-vllm-dgx-spark)
+  - [Sonar blog: Nemotron-3-Super](https://vllm.ai/blog/nemotron-3-super)
+  - [Sonar blog: Sonar on DGX Spark](https://vllm.ai/blog/2026-06-01-vllm-dgx-spark)
   - [Nemotron-3-Super-120B-A12B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16)
   - [Nemotron-3-Super-120B-A12B-FP8](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8)
   - [Nemotron-3-Super-120B-A12B-NVFP4](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4)

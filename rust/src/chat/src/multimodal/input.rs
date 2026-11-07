@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
 use llm_multimodal::MediaContentPart;
+use sonar_engine_core_client::protocol::multimodal::MmFeatures;
 
 /// Media preparation stage supplied by a frontend handler.
 #[derive(Debug)]

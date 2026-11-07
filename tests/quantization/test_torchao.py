@@ -7,16 +7,16 @@ import pytest
 import torch
 from packaging import version
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.platforms import current_platform
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from sonar.config import set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.platforms import current_platform
+from tests.quantization.utils import load_model_without_sonar_runner
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 else:
 
     def on_gfx950() -> bool:
@@ -49,7 +49,7 @@ def restore_float32_matmul_precision():
 )
 @pytest.mark.skipif(not TORCHAO_AVAILABLE, reason="torchao is not available")
 def test_pre_quantized_model(monkeypatch, dist_init, workspace_init):
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         "torchao-testing/opt-125m-Float8WeightOnlyConfig-v2-0.15.0",
         quantization="torchao",
         dtype="bfloat16",
@@ -59,8 +59,8 @@ def test_pre_quantized_model(monkeypatch, dist_init, workspace_init):
     input_ids = torch.tensor([1, 2, 3, 4], device=DEVICE_TYPE)
     positions = torch.arange(input_ids.numel(), device=DEVICE_TYPE)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
         hidden_states = model(input_ids, positions, None)
         logits = model.compute_logits(hidden_states)
@@ -73,10 +73,10 @@ def test_pre_quantized_model(monkeypatch, dist_init, workspace_init):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_awq_int4wo_model_loading_with_params(aphrodite_runner):
+def test_opt_125m_awq_int4wo_model_loading_with_params(sonar_runner):
     torch._dynamo.reset()
     model_name = "torchao-testing/opt-125m-AWQConfig-Int4WeightOnlyConfig-v2-0.14.0.dev"
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -92,7 +92,7 @@ def test_opt_125m_awq_int4wo_model_loading_with_params(aphrodite_runner):
     on_gfx950() and not TORCHAO_VERSION_0_18_AVAILABLE,
     reason="requires torchao>=0.18.0 on gfx950",
 )
-def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
+def test_online_quant_config_dict_json(sonar_runner, enable_pickle):
     """Testing online quantization, load_weights integration point,
     with config dict serialized to json string
     """
@@ -106,7 +106,7 @@ def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
 
     torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
     hf_overrides = {"quantization_config_dict_json": json.dumps(config_to_dict(torchao_quant_config))}
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         dtype="bfloat16",
         pt_load_map_location=f"{DEVICE_TYPE}:0",
@@ -116,8 +116,8 @@ def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
     ) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
-        load_config = llm.llm.llm_engine.aphrodite_config.load_config
-        model_config = llm.llm.llm_engine.aphrodite_config.model_config
+        load_config = llm.llm.llm_engine.sonar_config.load_config
+        model_config = llm.llm.llm_engine.sonar_config.model_config
 
         def load_weights(model):
             model_loader = get_model_loader(load_config)
@@ -136,7 +136,7 @@ def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
     on_gfx950() and not TORCHAO_VERSION_0_18_AVAILABLE,
     reason="requires torchao>=0.18.0 on gfx950",
 )
-def test_online_quant_config_file(aphrodite_runner):
+def test_online_quant_config_file(sonar_runner):
     """Testing on the fly quantization, load_weights integration point,
     with config file
     """
@@ -157,7 +157,7 @@ def test_online_quant_config_file(aphrodite_runner):
         config_file_name = str(f.name)
 
         hf_overrides = {"quantization_config_file": config_file_name}
-        with aphrodite_runner(
+        with sonar_runner(
             model_name=model_name,
             dtype="bfloat16",
             pt_load_map_location=f"{DEVICE_TYPE}:0",
@@ -181,7 +181,7 @@ def test_reload_weights():
     from torchao.core.config import config_to_dict
     from torchao.quantization import Float8DynamicActivationFloat8WeightConfig, PerRow
 
-    from aphrodite import LLM, SamplingParams
+    from sonar import LLM, SamplingParams
 
     torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
 
@@ -226,11 +226,11 @@ def test_reload_weights():
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.15.0.dev+) for now"
 )
-def test_safetensors_model_loading_with_params(aphrodite_runner):
+def test_safetensors_model_loading_with_params(sonar_runner):
     torch._dynamo.reset()
     # using this model to test safetensors loading with file sharding
     model_name = "torchao-testing/Qwen3-8B-INT4-0.15.0dev-safetensors"
-    with aphrodite_runner(model_name=model_name, dtype="bfloat16") as llm:
+    with sonar_runner(model_name=model_name, dtype="bfloat16") as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
         assert output
@@ -242,10 +242,10 @@ def test_safetensors_model_loading_with_params(aphrodite_runner):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_module_fqn_to_config_regex_model(aphrodite_runner):
+def test_opt_125m_module_fqn_to_config_regex_model(sonar_runner):
     torch._dynamo.reset()
     model_name = "torchao-testing/opt-125m-ModuleFqnToConfig-v1-regex-0.14.0.dev"
-    with aphrodite_runner(model_name=model_name, dtype="bfloat16", pt_load_map_location=f"{DEVICE_TYPE}:0") as llm:
+    with sonar_runner(model_name=model_name, dtype="bfloat16", pt_load_map_location=f"{DEVICE_TYPE}:0") as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
     assert output
@@ -257,20 +257,20 @@ def test_opt_125m_module_fqn_to_config_regex_model(aphrodite_runner):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_int4wo_model_running_preshuffled_kernel(aphrodite_runner, monkeypatch):
+def test_opt_125m_int4wo_model_running_preshuffled_kernel(sonar_runner, monkeypatch):
     """We load a model with Int4Tensor (plain format) linear weights
     and verify that the weight is updated to Int4PreshuffledTensor
-    after loading in aphrodite
+    after loading in sonar
     """
     from torchao.quantization import Int4PreshuffledTensor
     from torchao.utils import _is_fbgemm_gpu_genai_available, is_sm_at_least_90
 
     torch._dynamo.reset()
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     model_name = "torchao-testing/opt-125m-Int4WeightOnlyConfig-v2-0.14.0.dev"
     # Note: using enforce_eager=True because the `bf16i4bf16_shuffled` doesn't
     # have meta kernel implemented yet, can remove this flag after that is implemented
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -317,7 +317,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel(aphrodite_runner, monk
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(aphrodite_runner, monkeypatch):
+def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(sonar_runner, monkeypatch):
     """We load a bf16 model and online quantize the model to int4, then verify that
     the weights are updated to Int4PreshuffledTensor after online quantization
     """
@@ -327,7 +327,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(aphrodite
     torch._dynamo.reset()
     model_name = "facebook/opt-125m"
 
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
     import json
 
@@ -339,7 +339,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(aphrodite
 
     # Note: using enforce_eager=True because the `bf16i4bf16_shuffled` doesn't
     # have meta kernel implemented yet, can remove this flag after that is implemented
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",

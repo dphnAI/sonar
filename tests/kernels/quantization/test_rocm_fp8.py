@@ -9,9 +9,9 @@ import warnings
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+import sonar._custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.quant_utils import (
     ref_dynamic_per_tensor_fp8_quant,
     ref_dynamic_per_token_quant,
@@ -25,9 +25,9 @@ FP8_DTYPE = current_platform.fp8_dtype()
 fp8_only = pytest.mark.skipif(not current_platform.supports_fp8(), reason="ROCm FP8 only")
 
 ENV_DEFAULTS = {
-    "APHRODITE_ROCM_FP8_PADDING": True,
-    "APHRODITE_ROCM_USE_AITER_FP8BMM": False,
-    "APHRODITE_ROCM_FP8_MFMA_PAGE_ATTN": False,
+    "SONAR_ROCM_FP8_PADDING": True,
+    "SONAR_ROCM_USE_AITER_FP8BMM": False,
+    "SONAR_ROCM_FP8_MFMA_PAGE_ATTN": False,
 }
 
 SCALED_MM_CASES = [
@@ -38,7 +38,7 @@ SCALED_MM_CASES = [
 
 
 def _reload_envs():
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     return importlib.reload(envs)
 
@@ -47,14 +47,14 @@ def _reload_envs():
 def _restore_rocm_env_state():
     """Restore global env + AITER flag state after every test.
 
-    Tests here reload ``aphrodite.envs`` (a module singleton) and refresh the
+    Tests here reload ``sonar.envs`` (a module singleton) and refresh the
     cached ``rocm_aiter_ops`` env flags. Restoring in a fixture teardown
     guarantees cleanup even when an assertion fails mid-test, preventing
     state from leaking into other tests in the same worker.
     """
     yield
     _reload_envs()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
 
@@ -207,12 +207,12 @@ def test_rocm_fp8_env_defaults(monkeypatch):
 @pytest.mark.parametrize(
     ("env_name", "raw_value", "expected"),
     [
-        ("APHRODITE_ROCM_FP8_PADDING", "0", False),
-        ("APHRODITE_ROCM_FP8_PADDING", "1", True),
-        ("APHRODITE_ROCM_USE_AITER_FP8BMM", "0", False),
-        ("APHRODITE_ROCM_USE_AITER_FP8BMM", "1", True),
-        ("APHRODITE_ROCM_FP8_MFMA_PAGE_ATTN", "0", False),
-        ("APHRODITE_ROCM_FP8_MFMA_PAGE_ATTN", "1", True),
+        ("SONAR_ROCM_FP8_PADDING", "0", False),
+        ("SONAR_ROCM_FP8_PADDING", "1", True),
+        ("SONAR_ROCM_USE_AITER_FP8BMM", "0", False),
+        ("SONAR_ROCM_USE_AITER_FP8BMM", "1", True),
+        ("SONAR_ROCM_FP8_MFMA_PAGE_ATTN", "0", False),
+        ("SONAR_ROCM_FP8_MFMA_PAGE_ATTN", "1", True),
     ],
 )
 def test_rocm_fp8_env_overrides(env_name, raw_value, expected, monkeypatch):
@@ -224,14 +224,14 @@ def test_rocm_fp8_env_overrides(env_name, raw_value, expected, monkeypatch):
 
 @fp8_only
 def test_maybe_pad_fp8_weight_respects_env(monkeypatch):
-    from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.fp8_utils import (
         _maybe_pad_fp8_weight,
     )
 
     weight = torch.randn(64, 512, device=DEVICE).to(FP8_DTYPE)
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_FP8_PADDING", "1")
+        mp.setenv("SONAR_ROCM_FP8_PADDING", "1")
         _reload_envs()
         padded = _maybe_pad_fp8_weight(weight)
         assert padded.shape == weight.shape
@@ -240,7 +240,7 @@ def test_maybe_pad_fp8_weight_respects_env(monkeypatch):
         torch.testing.assert_close(padded.float(), weight.float())
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_FP8_PADDING", "0")
+        mp.setenv("SONAR_ROCM_FP8_PADDING", "0")
         _reload_envs()
         unpadded = _maybe_pad_fp8_weight(weight)
         assert unpadded.data_ptr() == weight.data_ptr()
@@ -256,13 +256,13 @@ def test_maybe_pad_fp8_weight_respects_env(monkeypatch):
     ],
 )
 def test_aiter_fp8bmm_enabled_api_respects_env(use_aiter, fp8bmm_enabled, expected, monkeypatch):
-    from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+    from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 
     assert is_aiter_found_and_supported()
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_FP8BMM", "1" if fp8bmm_enabled else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER_FP8BMM", "1" if fp8bmm_enabled else "0")
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
         assert rocm_aiter_ops.is_fp8bmm_enabled() is expected
@@ -332,8 +332,8 @@ def test_fp8_scaled_mm_determinism():
 def test_aiter_fp8_kv_attention_matches_bf16_reference():
     import aiter
 
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
+    from sonar._aiter_ops import is_aiter_found_and_supported
+    from sonar.v1.attention.backends.rocm_aiter_fa import cp_mha_gather_cache
 
     assert is_aiter_found_and_supported()
 
@@ -460,7 +460,7 @@ def test_fp8_per_tensor_quant_matches_reference(shape):
 def test_aiter_group_fp8_quant_roundtrip():
     from aiter import dtypes
 
-    from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+    from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 
     assert is_aiter_found_and_supported()
 

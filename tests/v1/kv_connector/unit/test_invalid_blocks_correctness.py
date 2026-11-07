@@ -14,15 +14,15 @@ from collections.abc import Callable
 
 import pytest
 
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.request import FinishReason, Request, RequestStatus
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.request import FinishReason, Request, RequestStatus
 
 from .utils import (
-    create_aphrodite_config,
     create_mock_connector,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -42,19 +42,19 @@ def _make_get_num_new_matched_tokens(
 @pytest.fixture
 def fail_scheduler():
     """Scheduler with kv_load_failure_policy='fail'."""
-    aphrodite_config = create_aphrodite_config()
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_load_failure_policy = "fail"
-    return create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_load_failure_policy = "fail"
+    return create_scheduler(sonar_config)
 
 
 @pytest.fixture
 def recompute_scheduler():
     """Scheduler with kv_load_failure_policy='recompute'."""
-    aphrodite_config = create_aphrodite_config()
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_load_failure_policy = "recompute"
-    return create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_load_failure_policy = "recompute"
+    return create_scheduler(sonar_config)
 
 
 def test_sync_recompute_blocks_not_freed_for_running_requests(

@@ -16,8 +16,8 @@ from typing import cast
 import pytest
 from transformers import PreTrainedConfig
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.config import (
+from sonar.config import ModelConfig
+from sonar.model_executor.models.config import (
     MODELS_CONFIG_MAP,
     JinaEmbeddingsV5ModelConfig,
 )

@@ -5,14 +5,14 @@ import pytest
 import torch
 import torch.nn as nn
 
-import aphrodite
-from aphrodite.compilation.passes.utility.scatter_split_replace import (
+import sonar
+from sonar.compilation.passes.utility.scatter_split_replace import (
     ScatterSplitReplacementPass,
 )
-from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.platforms import current_platform
+from sonar.compilation.passes.utility.split_coalescing import SplitCoalescingPass
+from sonar.config import CompilationConfig, CompilationMode, SonarConfig
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.platforms import current_platform
 from tests.compile.backend import TestBackend
 
 DEVICE_TYPE = current_platform.device_type
@@ -72,16 +72,16 @@ def test_scatter_split_replace(dtype):
     num_kv_heads = 4
     head_size = 64
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=["+rotary_embedding"],
         ),
     )
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
+    with sonar.config.set_current_sonar_config(sonar_config):
         # ScatterSplitReplacementPass requires SplitCoalescingPass to be run before it
-        coalesce_pass = SplitCoalescingPass(aphrodite_config)
-        replace_pass = ScatterSplitReplacementPass(aphrodite_config)
+        coalesce_pass = SplitCoalescingPass(sonar_config)
+        replace_pass = ScatterSplitReplacementPass(sonar_config)
         passes = [coalesce_pass, replace_pass]
         backend = TestBackend(*passes)
 

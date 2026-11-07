@@ -4,14 +4,14 @@ import pytest
 import torch
 from torch import Generator
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.sample.ops.topk_topp_sampler import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.sample.ops.topk_topp_sampler import (
     apply_top_k_top_p_pytorch,
     random_sample,
 )
-from aphrodite.v1.sample.sampler import Sampler
+from sonar.v1.sample.sampler import Sampler
 from tests.utils import large_gpu_mark
 
 DEVICE_TYPE = current_platform.device_type
@@ -32,7 +32,7 @@ def _flashinfer_topk_topp_supported() -> bool:
     try:
         import flashinfer  # noqa: F401
 
-        from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
+        from sonar.v1.attention.backends.flashinfer import FlashInferBackend
     except ImportError:
         return False
     capability = current_platform.get_device_capability()
@@ -73,7 +73,7 @@ def test_sampler_threads_fp64_gumbel_to_topk_topp_sampler():
 def test_rocm_aiter_sampler_defers_import_when_generators_force_native(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from aphrodite.v1.sample.ops import topk_topp_sampler
+    from sonar.v1.sample.ops import topk_topp_sampler
 
     class MockPlatform:
         @staticmethod
@@ -179,7 +179,7 @@ def test_flashinfer_sampler_fallback_when_jit_cannot_target_gpu(monkeypatch):
     import flashinfer.jit.core
     from flashinfer.compilation_context import CompilationContext
 
-    from aphrodite.v1.sample.ops.topk_topp_sampler import flashinfer_sampler_supported
+    from sonar.v1.sample.ops.topk_topp_sampler import flashinfer_sampler_supported
 
     def fake_check_cuda_arch():
         raise RuntimeError("FlashInfer requires GPUs with sm75 or higher")
@@ -194,10 +194,10 @@ def test_flashinfer_sampler_fallback_when_jit_cannot_target_gpu(monkeypatch):
         staticmethod(fake_normalize_cuda_arch),
     )
 
-    monkeypatch.delenv("APHRODITE_USE_FLASHINFER_SAMPLER", raising=False)
+    monkeypatch.delenv("SONAR_USE_FLASHINFER_SAMPLER", raising=False)
     assert flashinfer_sampler_supported() is False
 
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "1")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "1")
     with pytest.raises(RuntimeError, match="SM 12.x requires CUDA >= 12.9"):
         flashinfer_sampler_supported()
 
@@ -206,14 +206,14 @@ def test_flashinfer_sampler_fallback_when_jit_cannot_target_gpu(monkeypatch):
 def test_flashinfer_sampler_fallback_when_flashinfer_disabled(monkeypatch):
     """Without flashinfer-cubin, nvcc or ninja, FlashInfer cannot build its
     sampling kernels, so the sampler must fall back to native sampling."""
-    from aphrodite.v1.sample.ops import topk_topp_sampler
+    from sonar.v1.sample.ops import topk_topp_sampler
 
     monkeypatch.setattr(topk_topp_sampler, "has_flashinfer", lambda: False)
 
-    monkeypatch.delenv("APHRODITE_USE_FLASHINFER_SAMPLER", raising=False)
+    monkeypatch.delenv("SONAR_USE_FLASHINFER_SAMPLER", raising=False)
     assert topk_topp_sampler.flashinfer_sampler_supported() is False
 
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "1")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "1")
     with pytest.raises(RuntimeError, match="FlashInfer kernels are disabled"):
         topk_topp_sampler.flashinfer_sampler_supported()
 
@@ -245,7 +245,7 @@ class TestTritonTopkTopp:
         For top-p (with or without top-k), we allow small differences due to
         floating-point precision in probability sum calculations.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         # Clone logits for both implementations
         logits_pytorch = logits.clone()
@@ -345,7 +345,7 @@ class TestTritonTopkTopp:
 
     def test_both_disabled(self):
         """Test when both k and p are None (should be no-op)."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         logits = torch.randn(32, 1024, generator=self.generator, dtype=torch.float32)
         logits_clone = logits.clone()
@@ -409,7 +409,7 @@ class TestTritonTopkTopp:
         logits as row 0: an overflow there would read a different row and change
         the kept set.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         if not current_platform.is_cuda():
             pytest.skip("int32 row-offset overflow is a CUDA kernel issue")
@@ -439,7 +439,7 @@ class TestTritonTopkTopp:
     )
     def test_noncontiguous_logits_match_contiguous(self, mode: str):
         """Non-contiguous logits views should behave like contiguous inputs."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         device = torch.device(DEVICE_TYPE)
         batch_size, vocab_size, pad = 16, 4096, 8
@@ -490,7 +490,7 @@ class TestTritonTopkTopp:
         can happen when structured-output grammar masks are applied before
         sampling.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -513,7 +513,7 @@ class TestTritonTopkTopp:
     @pytest.mark.parametrize("inf_fraction", [0.5, 0.9, 0.99])
     def test_topp_with_neginf_logits(self, inf_fraction: float):
         """Top-p with many -inf logits."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -533,7 +533,7 @@ class TestTritonTopkTopp:
     @pytest.mark.parametrize("inf_fraction", [0.5, 0.9, 0.99])
     def test_topk_topp_with_neginf_logits(self, inf_fraction: float):
         """Combined top-k + top-p with many -inf logits."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -551,7 +551,7 @@ class TestTritonTopkTopp:
 
     def test_all_neginf_logits(self):
         """All logits are -inf (fully masked). Kernel should be a no-op."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 16, 128256
         logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
@@ -576,7 +576,7 @@ class TestTritonTopkTopp:
 
     def test_few_valid_tokens_with_neginf(self):
         """Only a handful of tokens are finite per row (strict grammar)."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
@@ -624,7 +624,7 @@ class TestTritonTopkTopp:
         causing the strict `>` keep_mask to exclude everything.
         Regression test for the `final_pivot >= max_logit` guard.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
@@ -658,7 +658,7 @@ class TestTritonTopkTopp:
         Ensures the kernel handles near-degenerate probability
         distributions where the ternary search range collapses.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
         logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
@@ -677,7 +677,7 @@ class TestTritonTopkTopp:
 
     def test_mixed_neginf_and_normal_rows(self):
         """Batch with a mix of normal rows and heavily-masked rows."""
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 32000
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -721,7 +721,7 @@ class TestTritonTopkTopp:
         self._compare_results(logits, k, p)
 
         # Top-p must actually trim the grammar rows beyond the (no-op) top-k.
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         kept_topk_only = (apply_top_k_top_p_triton(logits.clone(), k, None)[:3] != float("-inf")).sum(-1)
         kept_topk_topp = (apply_top_k_top_p_triton(logits.clone(), k, p)[:3] != float("-inf")).sum(-1)
@@ -734,7 +734,7 @@ class TestTritonTopkTopp:
         """has_topp_only_rows=False skips the split pipeline; the result must
         not change when every top-p row also has a top-k, grammar rows
         (k >= #finite logits) included."""
-        import aphrodite.v1.sample.ops.topk_topp_triton as tt
+        import sonar.v1.sample.ops.topk_topp_triton as tt
 
         vocab_size = 32000
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -758,7 +758,7 @@ class TestTritonTopkTopp:
         cross-program atomic order, so which copies of a tied boundary value
         survived could vary between identical calls.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 4, 128256
         # 1000 tied top tokens; the p=0.5 boundary lands inside the tie
@@ -792,7 +792,7 @@ class TestTritonTopkTopp:
         space as log(pivot) + log(Z) + M, which fp32 rounds to M at that
         magnitude, so every token was masked and sampling produced token 0.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         vocab_size, forced_token = 131072, 13
         logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
@@ -815,7 +815,7 @@ class TestTritonTopkTopp:
         boundary-value copies at every 8192-entry block, so each block of a
         slice could keep up to `numkeep` copies of its own.
         """
-        from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
+        from sonar.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size, num_ties = 64, 151936, 4096
         # 4096 tied tokens spread over many blocks, between 64 tokens above
@@ -948,7 +948,7 @@ class TestFlashInferTopkToppRobustness:
         Direct call into ``flashinfer_sample`` — exactly the code path
         ``TopKTopPSampler.forward_cuda`` takes when FI is enabled.
         """
-        from aphrodite.v1.sample.ops.topk_topp_sampler import flashinfer_sample
+        from sonar.v1.sample.ops.topk_topp_sampler import flashinfer_sample
 
         logits = self._make_logits(pattern)
         k = (
@@ -1021,7 +1021,7 @@ class TestFlashInferDistributionMatch:
     def test_distribution_matches_theoretical(self, topk, topp):
         from scipy.stats import chisquare
 
-        from aphrodite.v1.sample.ops.topk_topp_sampler import (
+        from sonar.v1.sample.ops.topk_topp_sampler import (
             apply_top_k_top_p,
             flashinfer_sample,
             random_sample,

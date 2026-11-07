@@ -6,7 +6,7 @@ import pytest
 
 grpc = pytest.importorskip("grpc")
 health_pb2 = pytest.importorskip("grpc_health.v1.health_pb2")
-AphroditeHealthServicer = pytest.importorskip("aphrodite.entrypoints.grpc.health_servicer").AphroditeHealthServicer
+SonarHealthServicer = pytest.importorskip("sonar.entrypoints.grpc.health_servicer").SonarHealthServicer
 
 SERVING = health_pb2.HealthCheckResponse.SERVING
 NOT_SERVING = health_pb2.HealthCheckResponse.NOT_SERVING
@@ -27,7 +27,7 @@ def context():
 
 @pytest.fixture
 def servicer(async_llm):
-    return AphroditeHealthServicer(async_llm)
+    return SonarHealthServicer(async_llm)
 
 
 @pytest.fixture
@@ -49,8 +49,8 @@ async def test_check_serving_overall(servicer, request_msg, context, async_llm):
 
 
 @pytest.mark.asyncio
-async def test_check_serving_aphrodite_service(servicer, request_msg, context, async_llm):
-    request_msg.service = "aphrodite.grpc.engine.AphroditeEngine"
+async def test_check_serving_sonar_service(servicer, request_msg, context, async_llm):
+    request_msg.service = "sonar.grpc.engine.SonarEngine"
     response = await servicer.Check(request_msg, context)
     assert response.status == SERVING
     async_llm.check_health.assert_awaited_once()
@@ -91,7 +91,7 @@ async def test_check_unknown_service_grpc_code(servicer, request_msg, context):
 
 
 @pytest.mark.asyncio
-@patch("aphrodite.entrypoints.grpc.health_servicer.logger")
+@patch("sonar.entrypoints.grpc.health_servicer.logger")
 async def test_check_logs_exception_on_error(mock_logger, servicer, request_msg, context, async_llm):
     async_llm.check_health = AsyncMock(side_effect=Exception("engine exploded"))
     request_msg.service = ""

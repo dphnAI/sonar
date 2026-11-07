@@ -139,7 +139,7 @@ if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND QUTLASS_ARCHS)
     list(APPEND QUTLASS_INCLUDES
       "${qutlass_SOURCE_DIR}/qutlass/third_party/cutlass/include"
       "${qutlass_SOURCE_DIR}/qutlass/third_party/cutlass/tools/util/include")
-    message(STATUS "[QUTLASS] Using QuTLASS vendored CUTLASS headers (no Aphrodite CUTLASS detected).")
+    message(STATUS "[QUTLASS] Using QuTLASS vendored CUTLASS headers (no Sonar CUTLASS detected).")
   else()
     message(FATAL_ERROR "[QUTLASS] CUTLASS headers not found. "
                         "Set -DCUTLASS_INCLUDE_DIR=/path/to/cutlass/include")
@@ -152,11 +152,11 @@ if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND QUTLASS_ARCHS)
 
   define_extension_target(
     _qutlass_C
-    DESTINATION aphrodite
-    LANGUAGE ${APHRODITE_GPU_LANG}
+    DESTINATION sonar
+    LANGUAGE ${SONAR_GPU_LANG}
     SOURCES ${QUTLASS_SOURCES}
-    COMPILE_FLAGS ${APHRODITE_GPU_FLAGS}
-    ARCHITECTURES ${APHRODITE_GPU_ARCHES}
+    COMPILE_FLAGS ${SONAR_GPU_FLAGS}
+    ARCHITECTURES ${SONAR_GPU_ARCHES}
     INCLUDE_DIRECTORIES ${QUTLASS_INCLUDES}
     USE_SABI 3
     WITH_SOABI)

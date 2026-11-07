@@ -3,12 +3,12 @@
 """Sanity tests for the small registry / CLI-arg / config additions made
 by the Cohere v2 chat API:
 
-* ``aphrodite/renderers/registry.py``: new ``"cohere"`` renderer entry.
-* ``aphrodite/tokenizers/registry.py``: new ``"cohere"`` tokenizer entry
+* ``sonar/renderers/registry.py``: new ``"cohere"`` renderer entry.
+* ``sonar/tokenizers/registry.py``: new ``"cohere"`` tokenizer entry
   (aliased to the cached HF tokenizer).
-* ``aphrodite/entrypoints/common/cli_args.py``: new
+* ``sonar/entrypoints/common/cli_args.py``: new
   ``cohere_is_reasoning_model`` field.
-* ``aphrodite/config/model.py``: ``"cohere"`` added to ``TokenizerMode``
+* ``sonar/config/model.py``: ``"cohere"`` added to ``TokenizerMode``
   Literal.
 """
 
@@ -17,11 +17,11 @@ import typing
 
 import pytest
 
-from aphrodite.config.model import TokenizerMode
-from aphrodite.entrypoints.common.cli_args import BaseFrontendArgs, make_arg_parser
-from aphrodite.renderers.registry import RENDERER_REGISTRY
-from aphrodite.tokenizers.registry import TokenizerRegistry
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.config.model import TokenizerMode
+from sonar.entrypoints.common.cli_args import BaseFrontendArgs, make_arg_parser
+from sonar.renderers.registry import RENDERER_REGISTRY
+from sonar.tokenizers.registry import TokenizerRegistry
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class TestRendererRegistry:
@@ -30,7 +30,7 @@ class TestRendererRegistry:
         cls = RENDERER_REGISTRY.load_renderer_cls("cohere")
         assert cls.__name__ == "CohereRenderer"
         # Sanity: class lives in the cohere renderer module.
-        assert cls.__module__ == "aphrodite.renderers.cohere"
+        assert cls.__module__ == "sonar.renderers.cohere"
 
 
 class TestTokenizerRegistry:

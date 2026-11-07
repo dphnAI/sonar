@@ -4,23 +4,23 @@
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
 )
-from aphrodite.parser.minicpmv import (
+from sonar.parser.minicpmv import (
     EscapedNewlineNormalizer,
     MiniCPMVOutputNormalizer,
     recover_newlines,
 )
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.parser.parser_manager import ParserManager
+from sonar.reasoning import ReasoningParserManager
+from sonar.tool_parsers import ToolParserManager
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import simulate_reasoning_streaming
 

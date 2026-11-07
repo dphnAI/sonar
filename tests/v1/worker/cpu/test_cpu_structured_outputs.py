@@ -5,10 +5,10 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.cpu.structured_outputs import CPUStructuredOutputsWorker
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.cpu.structured_outputs import CPUStructuredOutputsWorker
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,

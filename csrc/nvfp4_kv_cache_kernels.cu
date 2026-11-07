@@ -23,7 +23,7 @@
 #include <cmath>
 #include <string>
 
-namespace aphrodite {
+namespace sonar {
 
 // The cache layout is identical; this only selects the store-time scale search.
 enum class NVFP4KVScaleSearch {
@@ -307,7 +307,7 @@ __global__ void reshape_and_cache_nvfp4_kernel(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Non-template entry point callable from cache_kernels.cu.
 // Receives key_cache/value_cache as kv_cache[:, 0] and kv_cache[:, 1].
@@ -390,11 +390,11 @@ void reshape_and_cache_nvfp4_dispatch(
       key.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       key.scalar_type(), "reshape_and_cache_nvfp4", [&] {
         if (kv_cache_dtype == "nvfp4") {
-          aphrodite::reshape_and_cache_nvfp4_kernel<
-              scalar_t, aphrodite::NVFP4KVScaleSearch::DEFAULT>
+          sonar::reshape_and_cache_nvfp4_kernel<
+              scalar_t, sonar::NVFP4KVScaleSearch::DEFAULT>
               <<<grid, block, 0, stream>>>(
                   key.const_data_ptr<scalar_t>(),
                   value.const_data_ptr<scalar_t>(),
@@ -407,8 +407,8 @@ void reshape_and_cache_nvfp4_dispatch(
                   scale_block_stride, scale_head_stride,
                   scale_block_offset_stride);
         } else if (kv_cache_dtype == "nvfp4_4over6") {
-          aphrodite::reshape_and_cache_nvfp4_kernel<
-              scalar_t, aphrodite::NVFP4KVScaleSearch::FOUR_OVER_SIX>
+          sonar::reshape_and_cache_nvfp4_kernel<
+              scalar_t, sonar::NVFP4KVScaleSearch::FOUR_OVER_SIX>
               <<<grid, block, 0, stream>>>(
                   key.const_data_ptr<scalar_t>(),
                   value.const_data_ptr<scalar_t>(),

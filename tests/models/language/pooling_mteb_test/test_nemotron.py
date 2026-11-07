@@ -52,11 +52,11 @@ RERANK_MODELS = [
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
-def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
-    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info)
+def test_embed_models_mteb(hf_runner, sonar_runner, model_info: EmbedModelInfo) -> None:
+    mteb_test_embed_models(hf_runner, sonar_runner, model_info)
 
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(aphrodite_runner, model_info)
+def test_rerank_models_mteb(sonar_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(sonar_runner, model_info)

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.serve.utils.request_logger import RequestLogger
 
 
 def test_request_logger_log_outputs():
@@ -15,7 +15,7 @@ def test_request_logger_log_outputs():
     # Create a mock logger to capture log calls
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test basic output logging
@@ -41,7 +41,7 @@ def test_request_logger_log_outputs_streaming_delta():
     """Test log_outputs with streaming delta mode."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test streaming delta logging
@@ -67,7 +67,7 @@ def test_request_logger_log_outputs_streaming_complete():
     """Test log_outputs with streaming complete mode."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test streaming complete logging
@@ -93,7 +93,7 @@ def test_request_logger_log_outputs_with_truncation():
     """Test log_outputs respects max_log_len setting."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         # Set max_log_len to 10
         request_logger = RequestLogger(max_log_len=10)
 
@@ -129,7 +129,7 @@ def test_request_logger_log_output_token_ids_require_debug():
     mock_logger = MagicMock()
     mock_logger.isEnabledFor.side_effect = lambda level: level >= logging.INFO
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=4)
 
         request_logger.log_outputs(
@@ -154,7 +154,7 @@ def test_request_logger_log_outputs_none_values():
     """Test log_outputs handles None values correctly."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test with None output_token_ids
@@ -179,7 +179,7 @@ def test_request_logger_log_outputs_empty_output():
     """Test log_outputs handles empty output correctly."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=5)
 
         # Test with empty output
@@ -204,7 +204,7 @@ def test_request_logger_log_outputs_integration():
     """Test that log_outputs can be called alongside log_inputs."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test that both methods can be called without interference
@@ -245,7 +245,7 @@ def test_streaming_complete_logs_full_text_content():
     full accumulated text, not just token count."""
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         request_logger = RequestLogger(max_log_len=None)
 
         # Test with actual content instead of token count format
@@ -281,7 +281,7 @@ def test_request_logger_log_request_body_truncation(max_log_len):
     full_body = request.model_dump_json(exclude_unset=True)
     mock_logger = MagicMock()
 
-    with patch("aphrodite.entrypoints.serve.utils.request_logger.logger", mock_logger):
+    with patch("sonar.entrypoints.serve.utils.request_logger.logger", mock_logger):
         RequestLogger(max_log_len=max_log_len).log_request_body(request)
 
     mock_logger.log.assert_called_once()

@@ -8,8 +8,6 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Result as AnyResult, bail};
-use aphrodite_chat::ChatEvent;
-use aphrodite_text::{DecodedTextEvent, TextOutputStreamExt as _};
 use asynk_strim_attr::{TryYielder, try_stream};
 use axum::Json;
 use axum::extract::State;
@@ -20,6 +18,8 @@ use futures::future::try_join_all;
 use futures::{Stream, StreamExt as _, pin_mut};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sonar_chat::ChatEvent;
+use sonar_text::{DecodedTextEvent, TextOutputStreamExt as _};
 use validator::Validate;
 
 use crate::error::{ApiError, chat_submit_error, invalid_request, server_error, text_submit_error};
@@ -175,9 +175,9 @@ fn reject_greedy_choices(
     Ok(())
 }
 
-/// Python's `APHRODITE_MAX_N_SEQUENCES` limit on choices per prompt.
+/// Python's `SONAR_MAX_N_SEQUENCES` limit on choices per prompt.
 fn max_n_sequences() -> u64 {
-    std::env::var("APHRODITE_MAX_N_SEQUENCES")
+    std::env::var("SONAR_MAX_N_SEQUENCES")
         .ok()
         .and_then(|value| value.trim().parse().ok())
         .unwrap_or(16384)
@@ -196,7 +196,7 @@ fn expand(mut body: Value, chat: bool) -> Result<Vec<Value>, ApiError> {
             .filter(|n| (1..=max_n).contains(n))
             .ok_or_else(|| {
                 invalid_request!(
-                    "n must be an integer from 1 to {max_n}; set APHRODITE_MAX_N_SEQUENCES to raise the limit"
+                    "n must be an integer from 1 to {max_n}; set SONAR_MAX_N_SEQUENCES to raise the limit"
                 )
             })?,
     };
@@ -267,11 +267,11 @@ enum PreparedChoice {
     Text(text::convert::PreparedRequest),
 }
 
-type TextStream = Pin<Box<dyn Stream<Item = aphrodite_text::Result<DecodedTextEvent>> + Send>>;
+type TextStream = Pin<Box<dyn Stream<Item = sonar_text::Result<DecodedTextEvent>> + Send>>;
 
 enum SubmittedChoice {
     Chat {
-        stream: aphrodite_chat::ChatEventStream,
+        stream: sonar_chat::ChatEventStream,
         request_id: String,
         response_model: String,
         options: chat::convert::ResponseOptions,
@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn expansion_enforces_python_choice_limit_before_allocating() {
-        // Python accepts 1..=APHRODITE_MAX_N_SEQUENCES (default 16384) for both APIs.
+        // Python accepts 1..=SONAR_MAX_N_SEQUENCES (default 16384) for both APIs.
         assert_eq!(
             expand(json!({"messages": [], "n": 11}), true).unwrap().len(),
             11

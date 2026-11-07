@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::runtime::BackgroundShutdownRuntime;
+use sonar_engine_core_client::runtime::BackgroundShutdownRuntime;
 use tokio::runtime::Builder;
 use tracing::{info, warn};
 
-const REQUEST_WORKER_THREADS_ENV: &str = "APHRODITE_RS_REQUEST_WORKER_THREADS";
+const REQUEST_WORKER_THREADS_ENV: &str = "SONAR_RS_REQUEST_WORKER_THREADS";
 const DEFAULT_MAX_REQUEST_WORKER_THREADS: usize = 32;
 
 /// Build a Tokio runtime for heavyweight request paths outside the HTTP runtime.
@@ -17,7 +17,7 @@ const DEFAULT_MAX_REQUEST_WORKER_THREADS: usize = 32;
 pub(crate) fn build_request_runtime() -> BackgroundShutdownRuntime {
     Builder::new_multi_thread()
         .enable_all()
-        .thread_name("aphrodite-request")
+        .thread_name("sonar-request")
         .worker_threads(request_worker_threads())
         .build()
         .expect("failed to build request runtime")
@@ -26,7 +26,7 @@ pub(crate) fn build_request_runtime() -> BackgroundShutdownRuntime {
 
 /// Get the number of worker threads to use for the request runtime.
 ///
-/// If `APHRODITE_RS_REQUEST_WORKER_THREADS` is set to a valid positive integer, it is
+/// If `SONAR_RS_REQUEST_WORKER_THREADS` is set to a valid positive integer, it is
 /// used directly. Otherwise, the runtime uses available parallelism capped by
 /// `DEFAULT_MAX_REQUEST_WORKER_THREADS`.
 fn request_worker_threads() -> usize {

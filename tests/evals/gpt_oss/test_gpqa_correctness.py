@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""GPQA evaluation using Aphrodite server and GPT-OSS evaluation package.
+"""GPQA evaluation using Sonar server and GPT-OSS evaluation package.
 
 Usage:
 pytest -s -v tests/evals/gpt_oss/test_gpqa_correctness.py \

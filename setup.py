@@ -21,8 +21,8 @@ from setuptools.command.build_py import build_py
 from setuptools_scm import get_version
 from torch.utils.cpp_extension import CUDA_HOME, ROCM_HOME
 
-# Select Aphrodite release tags, excluding crate tags such as "proto-v0.3.0".
-APHRODITE_GIT_DESCRIBE_COMMAND = [
+# Select Sonar release tags, excluding crate tags such as "proto-v0.3.0".
+SONAR_GIT_DESCRIBE_COMMAND = [
     "git",
     "describe",
     "--dirty",
@@ -45,63 +45,63 @@ def load_module_from_path(module_name, path):
 ROOT_DIR = Path(__file__).parent
 logger = logging.getLogger(__name__)
 
-PRECOMPILED_RUST_FRONTEND_PATH = ROOT_DIR / "aphrodite" / "aphrodite-rs"
-# cannot import envs directly because it depends on aphrodite,
+PRECOMPILED_RUST_FRONTEND_PATH = ROOT_DIR / "sonar" / "sonar-rs"
+# cannot import envs directly because it depends on sonar,
 #  which is not installed yet
-envs = load_module_from_path("envs", os.path.join(ROOT_DIR, "aphrodite", "envs.py"))
+envs = load_module_from_path("envs", os.path.join(ROOT_DIR, "sonar", "envs.py"))
 
-APHRODITE_TARGET_DEVICE = envs.APHRODITE_TARGET_DEVICE
+SONAR_TARGET_DEVICE = envs.SONAR_TARGET_DEVICE
 
 # Skips all native builds (CMake/CUDA and Rust) and extracts binaries from the
 # matching per-commit wheel.
-APHRODITE_USE_PRECOMPILED = envs.APHRODITE_USE_PRECOMPILED
+SONAR_USE_PRECOMPILED = envs.SONAR_USE_PRECOMPILED
 
 
 def should_require_rust_frontend() -> bool:
-    value = os.getenv("APHRODITE_REQUIRE_RUST_FRONTEND", "")
+    value = os.getenv("SONAR_REQUIRE_RUST_FRONTEND", "")
     return value.lower() not in ("", "0", "false", "no")
 
 
 def should_use_precompiled_rust() -> bool:
-    value = os.getenv("APHRODITE_USE_PRECOMPILED_RUST", "")
+    value = os.getenv("SONAR_USE_PRECOMPILED_RUST", "")
     return value.lower() in ("1", "true", "yes")
 
 
 def get_precompiled_rust_extension_paths() -> list[Path]:
-    return sorted((ROOT_DIR / "aphrodite").glob("_rust_*.so"))
+    return sorted((ROOT_DIR / "sonar").glob("_rust_*.so"))
 
 
 def is_metadata_only_build() -> bool:
     return bool({"egg_info", "dist_info"}.intersection(sys.argv[1:]))
 
 
-if sys.platform.startswith("darwin") and APHRODITE_TARGET_DEVICE not in ("cpu", "metal"):
-    logger.warning("APHRODITE_TARGET_DEVICE automatically set to `metal` due to macOS")
-    APHRODITE_TARGET_DEVICE = "metal"
+if sys.platform.startswith("darwin") and SONAR_TARGET_DEVICE not in ("cpu", "metal"):
+    logger.warning("SONAR_TARGET_DEVICE automatically set to `metal` due to macOS")
+    SONAR_TARGET_DEVICE = "metal"
 elif not (sys.platform.startswith("linux") or sys.platform.startswith("darwin")):
     logger.warning(
-        "Aphrodite only supports Linux platform (including WSL) and MacOS."
+        "Sonar only supports Linux platform (including WSL) and MacOS."
         "Building on %s, "
-        "so Aphrodite may not be able to run correctly",
+        "so Sonar may not be able to run correctly",
         sys.platform,
     )
-    APHRODITE_TARGET_DEVICE = "empty"
-elif sys.platform.startswith("linux") and os.getenv("APHRODITE_TARGET_DEVICE") is None:
+    SONAR_TARGET_DEVICE = "empty"
+elif sys.platform.startswith("linux") and os.getenv("SONAR_TARGET_DEVICE") is None:
     if torch.version.hip is not None:
-        APHRODITE_TARGET_DEVICE = "rocm"
+        SONAR_TARGET_DEVICE = "rocm"
         logger.info("Auto-detected ROCm")
     elif torch.version.xpu is not None:
-        APHRODITE_TARGET_DEVICE = "xpu"
+        SONAR_TARGET_DEVICE = "xpu"
         logger.info("Auto-detected XPU")
     elif torch.version.cuda is not None:
-        APHRODITE_TARGET_DEVICE = "cuda"
+        SONAR_TARGET_DEVICE = "cuda"
         logger.info("Auto-detected CUDA")
     else:
-        APHRODITE_TARGET_DEVICE = "cpu"
+        SONAR_TARGET_DEVICE = "cpu"
 
 
 def is_sccache_available() -> bool:
-    return which("sccache") is not None and not bool(int(os.getenv("APHRODITE_DISABLE_SCCACHE", "0")))
+    return which("sccache") is not None and not bool(int(os.getenv("SONAR_DISABLE_SCCACHE", "0")))
 
 
 def is_ccache_available() -> bool:
@@ -120,7 +120,7 @@ def should_bundle_tcmalloc() -> bool:
     import platform
 
     return (
-        APHRODITE_TARGET_DEVICE == "cpu"
+        SONAR_TARGET_DEVICE == "cpu"
         and sys.platform.startswith("linux")
         and platform.machine() in ("aarch64", "x86_64", "s390x")
     )
@@ -169,7 +169,7 @@ def bundle_tcmalloc(build_lib: str) -> None:
         )
         return
 
-    bundle_dir = os.path.join(build_lib, "aphrodite", "libs")
+    bundle_dir = os.path.join(build_lib, "sonar", "libs")
     os.makedirs(bundle_dir, exist_ok=True)
     bundle_path = os.path.join(bundle_dir, tcmalloc_library.name)
     shutil.copy2(tcmalloc_library, bundle_path)
@@ -185,7 +185,7 @@ class CMakeExtension(Extension):
         self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
 
 
-class aphrodite_build_py(build_py):
+class sonar_build_py(build_py):
     """Copy runtime Metal shaders into wheel builds."""
 
     def run(self) -> None:
@@ -193,7 +193,7 @@ class aphrodite_build_py(build_py):
         if not _is_metal():
             return
 
-        destination = Path(self.build_lib) / "aphrodite" / "metal" / "metal"
+        destination = Path(self.build_lib) / "sonar" / "metal" / "metal"
         for directory in ("kernels_v1", "kernels_v2"):
             shutil.copytree(
                 ROOT_DIR / "csrc" / "metal" / directory,
@@ -266,7 +266,7 @@ class cmake_build_ext(build_ext):
 
         cmake_args = [
             f"-DCMAKE_BUILD_TYPE={cfg}",
-            f"-DAPHRODITE_TARGET_DEVICE={APHRODITE_TARGET_DEVICE}",
+            f"-DSONAR_TARGET_DEVICE={SONAR_TARGET_DEVICE}",
         ]
 
         verbose = envs.VERBOSE
@@ -290,11 +290,11 @@ class cmake_build_ext(build_ext):
 
         # Pass the python executable to cmake so it can find an exact
         # match.
-        cmake_args += [f"-DAPHRODITE_PYTHON_EXECUTABLE={sys.executable}"]
+        cmake_args += [f"-DSONAR_PYTHON_EXECUTABLE={sys.executable}"]
 
         # Pass the python path to cmake so it can reuse the build dependencies
         # on subsequent calls to python.
-        cmake_args += ["-DAPHRODITE_PYTHON_PATH={}".format(":".join(sys.path))]
+        cmake_args += ["-DSONAR_PYTHON_PATH={}".format(":".join(sys.path))]
 
         # Override the base directory for FetchContent downloads to $ROOT/.deps
         # This allows sharing dependencies between profiles,
@@ -352,7 +352,7 @@ class cmake_build_ext(build_ext):
         def target_name(s: str) -> str:
             if s.endswith("._paged_ops"):
                 return "_paged_ops"
-            return s.removeprefix("aphrodite.").removeprefix("vllm_flash_attn.")
+            return s.removeprefix("sonar.").removeprefix("vllm_flash_attn.")
 
         # Build all the extensions
         for ext in self.extensions:
@@ -405,101 +405,99 @@ class cmake_build_ext(build_ext):
         if should_bundle_tcmalloc():
             bundle_tcmalloc(self.build_lib)
 
-        # copy aphrodite/vllm_flash_attn/**/*.py from self.build_lib to current
+        # copy sonar/vllm_flash_attn/**/*.py from self.build_lib to current
         # directory so that they can be included in the editable build
         import glob
 
         files = glob.glob(
-            os.path.join(self.build_lib, "aphrodite", "vllm_flash_attn", "**", "*.py"),
+            os.path.join(self.build_lib, "sonar", "vllm_flash_attn", "**", "*.py"),
             recursive=True,
         )
         for file in files:
-            dst_file = os.path.join("aphrodite/vllm_flash_attn", file.split("aphrodite/vllm_flash_attn/")[-1])
+            dst_file = os.path.join("sonar/vllm_flash_attn", file.split("sonar/vllm_flash_attn/")[-1])
             print(f"Copying {file} to {dst_file}")
             os.makedirs(os.path.dirname(dst_file), exist_ok=True)
             self.copy_file(file, dst_file)
 
         if _is_cuda() or _is_hip():
-            # copy aphrodite/third_party/triton_kernels/**/*.py from self.build_lib
+            # copy sonar/third_party/triton_kernels/**/*.py from self.build_lib
             # to current directory so that they can be included in the editable
             # build
-            print(
-                f"Copying {self.build_lib}/aphrodite/third_party/triton_kernels to aphrodite/third_party/triton_kernels"
-            )
+            print(f"Copying {self.build_lib}/sonar/third_party/triton_kernels to sonar/third_party/triton_kernels")
             shutil.copytree(
-                f"{self.build_lib}/aphrodite/third_party/triton_kernels",
-                "aphrodite/third_party/triton_kernels",
+                f"{self.build_lib}/sonar/third_party/triton_kernels",
+                "sonar/third_party/triton_kernels",
                 dirs_exist_ok=True,
             )
 
         if _is_cuda():
             # copy vendored deep_gemm package from build_lib to source tree
             # for editable installs
-            deep_gemm_build = os.path.join(self.build_lib, "aphrodite", "third_party", "deep_gemm")
+            deep_gemm_build = os.path.join(self.build_lib, "sonar", "third_party", "deep_gemm")
             if os.path.exists(deep_gemm_build):
                 if (Path(deep_gemm_build) / "_C_extension.abi3.so").is_file():
-                    destination = ROOT_DIR / "aphrodite" / "third_party" / "deep_gemm"
+                    destination = ROOT_DIR / "sonar" / "third_party" / "deep_gemm"
                     for pattern in ("_C.cpython-*.so", "_C.abi3.so"):
                         for stale_binding in destination.glob(pattern):
                             if stale_binding.is_file() or stale_binding.is_symlink():
                                 stale_binding.unlink()
-                print(f"Copying {deep_gemm_build} to aphrodite/third_party/deep_gemm")
+                print(f"Copying {deep_gemm_build} to sonar/third_party/deep_gemm")
                 shutil.copytree(
                     deep_gemm_build,
-                    "aphrodite/third_party/deep_gemm",
+                    "sonar/third_party/deep_gemm",
                     dirs_exist_ok=True,
                 )
 
             # copy vendored fmha_sm100 package from build_lib to source tree
             # for editable installs
-            fmha_sm100_build = os.path.join(self.build_lib, "aphrodite", "third_party", "fmha_sm100")
+            fmha_sm100_build = os.path.join(self.build_lib, "sonar", "third_party", "fmha_sm100")
             if os.path.exists(fmha_sm100_build):
-                print(f"Copying {fmha_sm100_build} to aphrodite/third_party/fmha_sm100")
+                print(f"Copying {fmha_sm100_build} to sonar/third_party/fmha_sm100")
                 shutil.copytree(
                     fmha_sm100_build,
-                    "aphrodite/third_party/fmha_sm100",
+                    "sonar/third_party/fmha_sm100",
                     dirs_exist_ok=True,
                 )
 
             # copy vendored tml-fa4 package from build_lib to source tree
             # for editable installs
-            tml_fa4_build = os.path.join(self.build_lib, "aphrodite", "third_party", "tml_fa4")
+            tml_fa4_build = os.path.join(self.build_lib, "sonar", "third_party", "tml_fa4")
             if os.path.exists(tml_fa4_build):
-                print(f"Copying {tml_fa4_build} to aphrodite/third_party/tml_fa4")
+                print(f"Copying {tml_fa4_build} to sonar/third_party/tml_fa4")
                 shutil.copytree(
                     tml_fa4_build,
-                    "aphrodite/third_party/tml_fa4",
+                    "sonar/third_party/tml_fa4",
                     dirs_exist_ok=True,
                 )
 
 
 def _no_device() -> bool:
-    return APHRODITE_TARGET_DEVICE == "empty"
+    return SONAR_TARGET_DEVICE == "empty"
 
 
 def _is_cuda() -> bool:
     has_cuda = torch.version.cuda is not None
-    return APHRODITE_TARGET_DEVICE == "cuda" and has_cuda and not _is_tpu()
+    return SONAR_TARGET_DEVICE == "cuda" and has_cuda and not _is_tpu()
 
 
 def _is_hip() -> bool:
-    return (APHRODITE_TARGET_DEVICE == "cuda" or APHRODITE_TARGET_DEVICE == "rocm") and torch.version.hip is not None
+    return (SONAR_TARGET_DEVICE == "cuda" or SONAR_TARGET_DEVICE == "rocm") and torch.version.hip is not None
 
 
 def _is_tpu() -> bool:
-    return APHRODITE_TARGET_DEVICE == "tpu"
+    return SONAR_TARGET_DEVICE == "tpu"
 
 
 def _is_cpu() -> bool:
-    return APHRODITE_TARGET_DEVICE == "cpu"
+    return SONAR_TARGET_DEVICE == "cpu"
 
 
 def _is_xpu() -> bool:
-    return APHRODITE_TARGET_DEVICE == "xpu"
+    return SONAR_TARGET_DEVICE == "xpu"
 
 
 def _is_metal() -> bool:
-    return APHRODITE_TARGET_DEVICE == "metal"
+    return SONAR_TARGET_DEVICE == "metal"
 
 
 def _build_custom_ops() -> bool:
@@ -548,41 +546,41 @@ def get_nvcc_cuda_version() -> Version:
     return nvcc_cuda_version
 
 
-def get_aphrodite_version() -> str:
+def get_sonar_version() -> str:
     # Allow overriding the version. This is useful to build platform-specific
     # wheels (e.g. CPU, TPU) without modifying the source.
-    if env_version := os.getenv("APHRODITE_VERSION_OVERRIDE"):
-        print(f"Overriding APHRODITE version with {env_version} from APHRODITE_VERSION_OVERRIDE")
+    if env_version := os.getenv("SONAR_VERSION_OVERRIDE"):
+        print(f"Overriding SONAR version with {env_version} from SONAR_VERSION_OVERRIDE")
         os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = env_version
         return get_version(
-            write_to="aphrodite/_version.py",
-            git_describe_command=APHRODITE_GIT_DESCRIBE_COMMAND,
+            write_to="sonar/_version.py",
+            git_describe_command=SONAR_GIT_DESCRIBE_COMMAND,
         )
 
     version = get_version(
-        write_to="aphrodite/_version.py",
-        git_describe_command=APHRODITE_GIT_DESCRIBE_COMMAND,
+        write_to="sonar/_version.py",
+        git_describe_command=SONAR_GIT_DESCRIBE_COMMAND,
     )
     sep = "+" if "+" not in version else "."  # dev versions might contain +
 
-    if not envs.APHRODITE_SKIP_VERSION_SUFFIX:
+    if not envs.SONAR_SKIP_VERSION_SUFFIX:
         if _no_device():
-            if envs.APHRODITE_TARGET_DEVICE == "empty":
+            if envs.SONAR_TARGET_DEVICE == "empty":
                 version += f"{sep}empty"
         elif _is_cuda():
-            if APHRODITE_USE_PRECOMPILED:
-                if not envs.APHRODITE_SKIP_PRECOMPILED_VERSION_SUFFIX:
+            if SONAR_USE_PRECOMPILED:
+                if not envs.SONAR_SKIP_PRECOMPILED_VERSION_SUFFIX:
                     version += f"{sep}precompiled"
             else:
                 cuda_version = str(get_nvcc_cuda_version())
-                if cuda_version != envs.APHRODITE_MAIN_CUDA_VERSION:
+                if cuda_version != envs.SONAR_MAIN_CUDA_VERSION:
                     cuda_version_str = cuda_version.replace(".", "")[:3]
                     # skip this for source tarball, required for pypi
                     if "sdist" not in sys.argv:
                         version += f"{sep}cu{cuda_version_str}"
         elif _is_hip():
             rocm_version = get_rocm_version() or torch.version.hip
-            if rocm_version and rocm_version != envs.APHRODITE_MAIN_CUDA_VERSION:
+            if rocm_version and rocm_version != envs.SONAR_MAIN_CUDA_VERSION:
                 version += f"{sep}rocm{rocm_version.replace('.', '')[:3]}"
         elif _is_tpu():
             version += f"{sep}tpu"
@@ -713,7 +711,7 @@ def get_requirements() -> list[str]:
     elif _is_cpu():
         # Direct URL requirements (triton-cpu) work with `pip install -r`, but uv rejects them in
         # a wheel's metadata unless the user also requests the same URL, which breaks
-        # `uv pip install aphrodite-engine`. docs/public/install.sh requests triton-cpu itself.
+        # `uv pip install sonar` from our index. docs/public/install.sh requests triton-cpu itself.
         requirements = [req for req in _read_requirements("cpu.txt") if " @ " not in req.split(";")[0]]
     elif _is_metal():
         requirements = _read_requirements("metal.txt")
@@ -729,7 +727,7 @@ def get_rocm_device_requirements() -> list[str]:
 
     TheRock ships GPU kernels as separate per-arch wheels selected through
     ``[device-<arch>]`` extras on torch, torchvision and rocm. Require them for
-    every arch this wheel was compiled for, so ``pip install aphrodite`` works on
+    every arch this wheel was compiled for, so installing ``sonar`` works on
     any supported GPU.
     """
     if not _is_hip() or importlib.util.find_spec("rocm_sdk") is None:
@@ -740,72 +738,72 @@ def get_rocm_device_requirements() -> list[str]:
 
 ext_modules = []
 
-ext_modules.append(CMakeExtension(name="aphrodite._phrase_matcher"))
-ext_modules.append(CMakeExtension(name="aphrodite._proof_C"))
+ext_modules.append(CMakeExtension(name="sonar._phrase_matcher"))
+ext_modules.append(CMakeExtension(name="sonar._proof_C"))
 
 if _is_cuda() or _is_hip():
-    ext_modules.append(CMakeExtension(name="aphrodite.cumem_allocator"))
+    ext_modules.append(CMakeExtension(name="sonar.cumem_allocator"))
     # Optional since this doesn't get built (produce an .so file). This is just
     # copying the relevant .py files from the source repository.
-    ext_modules.append(CMakeExtension(name="aphrodite.triton_kernels", optional=True))
+    ext_modules.append(CMakeExtension(name="sonar.triton_kernels", optional=True))
 
 if not _is_xpu():
-    ext_modules.append(CMakeExtension(name="aphrodite.spinloop"))
-    ext_modules.append(CMakeExtension(name="aphrodite.fs_io_C"))
+    ext_modules.append(CMakeExtension(name="sonar.spinloop"))
+    ext_modules.append(CMakeExtension(name="sonar.fs_io_C"))
 
 if _is_hip():
-    ext_modules.append(CMakeExtension(name="aphrodite._rocm_C"))
+    ext_modules.append(CMakeExtension(name="sonar._rocm_C"))
 
 if _is_cuda():
-    ext_modules.append(CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa2_C"))
+    ext_modules.append(CMakeExtension(name="sonar.vllm_flash_attn._vllm_fa2_C"))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.3"):
         # FA3 requires CUDA 12.3 or later
-        ext_modules.append(CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa3_C"))
+        ext_modules.append(CMakeExtension(name="sonar.vllm_flash_attn._vllm_fa3_C"))
     # FA4 CuteDSL - Python-only component for FA4's cute DSL support
     # Optional since this doesn't produce a .so file, just copies Python files
-    ext_modules.append(CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa4_cutedsl_C", optional=True))
+    ext_modules.append(CMakeExtension(name="sonar.vllm_flash_attn._vllm_fa4_cutedsl_C", optional=True))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.9"):
         # FlashMLA requires CUDA 12.9 or later
         # Optional since this doesn't get built (produce an .so file) when
         # not targeting a hopper system
-        ext_modules.append(CMakeExtension(name="aphrodite._flashmla_C", optional=True))
-        ext_modules.append(CMakeExtension(name="aphrodite._flashmla_extension_C", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._flashmla_C", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._flashmla_extension_C", optional=True))
         # DeepSelect requires CUDA 12.9 or later (SM100a/SM103a only).
-        ext_modules.append(CMakeExtension(name="aphrodite._deepselect_C", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._deepselect_C", optional=True))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.0"):
-        ext_modules.append(CMakeExtension(name="aphrodite._flashkda_C", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._flashkda_C", optional=True))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.3"):
         # DeepGEMM requires CUDA 12.3+ (SM90/SM100)
         # Optional since it won't build on unsupported architectures
-        ext_modules.append(CMakeExtension(name="aphrodite._deep_gemm_C", optional=True))
-        ext_modules.append(CMakeExtension(name="aphrodite._qutlass_C", optional=True))
-    # fmha_sm100 is a Python/CuTe-DSL package installed into aphrodite.third_party.
-    ext_modules.append(CMakeExtension(name="aphrodite.fmha_sm100", optional=True))
-    # tml-fa4 is copied into an isolated aphrodite.third_party package.
-    ext_modules.append(CMakeExtension(name="aphrodite.tml_fa4", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._deep_gemm_C", optional=True))
+        ext_modules.append(CMakeExtension(name="sonar._qutlass_C", optional=True))
+    # fmha_sm100 is a Python/CuTe-DSL package installed into sonar.third_party.
+    ext_modules.append(CMakeExtension(name="sonar.fmha_sm100", optional=True))
+    # tml-fa4 is copied into an isolated sonar.third_party package.
+    ext_modules.append(CMakeExtension(name="sonar.tml_fa4", optional=True))
 
 if _is_cpu():
     import platform
 
     if platform.machine() in ("x86_64", "AMD64"):
-        ext_modules.append(CMakeExtension(name="aphrodite._C"))
-        ext_modules.append(CMakeExtension(name="aphrodite._C_AVX512"))
-        ext_modules.append(CMakeExtension(name="aphrodite._C_AVX2"))
+        ext_modules.append(CMakeExtension(name="sonar._C"))
+        ext_modules.append(CMakeExtension(name="sonar._C_AVX512"))
+        ext_modules.append(CMakeExtension(name="sonar._C_AVX2"))
     else:
-        ext_modules.append(CMakeExtension(name="aphrodite._C"))
+        ext_modules.append(CMakeExtension(name="sonar._C"))
 
 if _build_custom_ops():
     if _is_metal():
-        # MLX/nanobind paged-attention Metal kernel (aphrodite/metal/metal/_paged_ops).
-        ext_modules.append(CMakeExtension(name="aphrodite.metal.metal._paged_ops", py_limited_api=False))
+        # MLX/nanobind paged-attention Metal kernel (sonar/metal/metal/_paged_ops).
+        ext_modules.append(CMakeExtension(name="sonar.metal.metal._paged_ops", py_limited_api=False))
     if _is_hip():
-        ext_modules.append(CMakeExtension(name="aphrodite._C"))
+        ext_modules.append(CMakeExtension(name="sonar._C"))
     if _is_cuda() or _is_hip():
-        ext_modules.append(CMakeExtension(name="aphrodite._C_stable_libtorch"))
-        ext_modules.append(CMakeExtension(name="aphrodite._moe_C_stable_libtorch"))
+        ext_modules.append(CMakeExtension(name="sonar._C_stable_libtorch"))
+        ext_modules.append(CMakeExtension(name="sonar._moe_C_stable_libtorch"))
 
 package_data = {
-    "aphrodite": [
+    "sonar": [
         "py.typed",
         "libs/*.so*",
         "model_executor/layers/fused_moe/configs/*.json",
@@ -842,31 +840,31 @@ package_data = {
 }
 
 
-def add_aphrodite_package_data(filename: str) -> None:
-    aphrodite_files = package_data.setdefault("aphrodite", [])
-    if filename not in aphrodite_files:
-        aphrodite_files.append(filename)
+def add_sonar_package_data(filename: str) -> None:
+    sonar_files = package_data.setdefault("sonar", [])
+    if filename not in sonar_files:
+        sonar_files.append(filename)
 
 
 # If the rust frontend binary is already present in the source tree (e.g.,
 # pre-built in a separate Docker build stage), ship it as-is.
 if PRECOMPILED_RUST_FRONTEND_PATH.exists():
-    add_aphrodite_package_data("aphrodite-rs")
+    add_sonar_package_data("sonar-rs")
 for rust_extension_path in get_precompiled_rust_extension_paths():
-    add_aphrodite_package_data(rust_extension_path.name)
+    add_sonar_package_data(rust_extension_path.name)
 
 if _no_device():
     ext_modules = []
 
-if APHRODITE_USE_PRECOMPILED and not is_metadata_only_build():
+if SONAR_USE_PRECOMPILED and not is_metadata_only_build():
     precompiled_wheel = load_module_from_path(
         "precompiled_wheel",
-        os.path.join(ROOT_DIR, "aphrodite", "build_utils", "precompiled.py"),
+        os.path.join(ROOT_DIR, "sonar", "build_utils", "precompiled.py"),
     )
     wheel = precompiled_wheel.determine_wheel(
         ROOT_DIR,
-        location=envs.APHRODITE_PRECOMPILED_WHEEL_LOCATION,
-        commit=envs.APHRODITE_PRECOMPILED_WHEEL_COMMIT,
+        location=envs.SONAR_PRECOMPILED_WHEEL_LOCATION,
+        commit=envs.SONAR_PRECOMPILED_WHEEL_COMMIT,
     )
     package_data_patch = precompiled_wheel.extract_precompiled_wheel(
         ROOT_DIR,
@@ -878,18 +876,18 @@ if APHRODITE_USE_PRECOMPILED and not is_metadata_only_build():
         package_data.setdefault(package, []).extend(files)
     ext_modules = []
 
-cmdclass = {"build_py": aphrodite_build_py}
+cmdclass = {"build_py": sonar_build_py}
 if ext_modules:
     cmdclass["build_ext"] = cmake_build_ext
 
-# Resolve the Python version first because get_aphrodite_version() may set
+# Resolve the Python version first because get_sonar_version() may set
 # SETUPTOOLS_SCM_PRETEND_VERSION, which the Rust version should inherit.
-aphrodite_version = get_aphrodite_version()
+sonar_version = get_sonar_version()
 
 # Rust artifacts, built via setuptools-rust and installed into the package
 # directory alongside the Python modules. Imported lazily: setuptools-rust does
 # not need to be installed when nothing is being built.
-if APHRODITE_USE_PRECOMPILED or should_use_precompiled_rust():
+if SONAR_USE_PRECOMPILED or should_use_precompiled_rust():
     rust_extensions = []
 else:
     rust_build = load_module_from_path("rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py"))
@@ -898,7 +896,7 @@ else:
 
 setup(
     # static metadata should rather go in pyproject.toml
-    version=aphrodite_version,
+    version=sonar_version,
     license_files=[
         "LICENSE",
         "csrc/proof/licenses/BLAKE3-Apache-2.0.txt",
@@ -930,11 +928,8 @@ setup(
         "flashinfer": [],  # Kept for backwards compatibility
         "b12x": ["flashinfer-python==0.7.2"],
         # Optional deps for Helion kernel development
-        # NOTE: When updating helion version, also update CI files:
-        #   - .buildkite/test_areas/kernels.yaml
-        #   - .buildkite/test-amd.yaml
         "helion": ["helion==1.4.0"],
-        # Optional deps for gRPC server (aphrodite serve --grpc)
+        # Optional deps for gRPC server (sonar serve --grpc)
         "grpc": [
             "smg-grpc-proto>=0.4.6",
             "grpcio>=1.78.0",

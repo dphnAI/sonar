@@ -9,16 +9,16 @@ import dataclasses
 import pytest
 import torch
 
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     SlidingWindowMLASpec,
 )
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import RequestStatus
+from sonar.v1.structured_output import StructuredOutputManager
 from tests.v1.kv_connector.unit.utils import MockKVConfig, create_model_runner_output
 
 from .utils import create_requests, create_scheduler
@@ -44,7 +44,7 @@ def _replay_scheduler(
         long_prefill_token_threshold=long_prefill_token_threshold,
         use_kv_connector=use_kv_connector,
     )
-    aphrodite_config = base.aphrodite_config
+    sonar_config = base.sonar_config
     kv_cache_config = KVCacheConfig(
         num_blocks=10000,
         kv_cache_tensors=[],
@@ -72,11 +72,11 @@ def _replay_scheduler(
         ],
     )
     scheduler = Scheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         block_size=BLOCK_SIZE,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
     )
     scheduler.use_v2_model_runner = True
     assert scheduler.prefix_replay_tokens == WINDOW

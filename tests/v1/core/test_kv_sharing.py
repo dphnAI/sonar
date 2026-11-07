@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
-from aphrodite.v1.worker.utils import add_kv_sharing_layers_to_kv_cache_groups
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
+from sonar.v1.worker.utils import add_kv_sharing_layers_to_kv_cache_groups
 
 pytestmark = pytest.mark.cpu_test
 

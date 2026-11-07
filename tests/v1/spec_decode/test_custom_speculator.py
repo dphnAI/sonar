@@ -13,18 +13,18 @@ from unittest.mock import patch
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, SpeculativeConfig
-from aphrodite.model_executor.models.registry import ModelRegistry
-from aphrodite.v1.worker.gpu.spec_decode import init_speculator
-from aphrodite.v1.worker.gpu.spec_decode import speculator_config as speculator_config_module
-from aphrodite.v1.worker.gpu.spec_decode.ngram.config import NgramGPUSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.standalone_ar.config import (
+import sonar.envs as envs
+from sonar.config import SonarConfig, SpeculativeConfig
+from sonar.model_executor.models.registry import ModelRegistry
+from sonar.v1.worker.gpu.spec_decode import init_speculator
+from sonar.v1.worker.gpu.spec_decode import speculator_config as speculator_config_module
+from sonar.v1.worker.gpu.spec_decode.ngram.config import NgramGPUSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
+from sonar.v1.worker.gpu.spec_decode.speculator_config import SpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.standalone_ar.config import (
     StandaloneARSpeculatorConfig,
 )
-from aphrodite.v1.worker.gpu.spec_decode.v1_speculator_configs import (
+from sonar.v1.worker.gpu.spec_decode.v1_speculator_configs import (
     V1CustomProposerConfig,
 )
 from tests.v1.spec_decode.utils import fake_speculative_config
@@ -35,8 +35,8 @@ def _qualname(cls: type) -> str:
 
 
 class DummySpeculator(BaseSpeculator):
-    def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device, req_states):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config: SonarConfig, device: torch.device, req_states):
+        self.sonar_config = sonar_config
         self.req_states = req_states
 
     def init_cudagraph_manager(self, cudagraph_mode) -> None:
@@ -99,10 +99,10 @@ def test_custom_speculator(register, lazy: bool):
     assert spec_config.method is None
     assert type(spec_config.speculator_config) is DummySpeculatorConfig
 
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.speculative_config = spec_config
     assert config.num_lookahead_tokens == 0
-    with patch.object(envs, "APHRODITE_USE_V2_MODEL_RUNNER", None):
+    with patch.object(envs, "SONAR_USE_V2_MODEL_RUNNER", None):
         assert config.use_v2_model_runner
     with pytest.raises(ValueError, match="V1 does not support: custom speculative method 'dummy'"):
         config._validate_v1_model_runner()
@@ -173,7 +173,7 @@ def test_custom_speculator_validation(register, config, kwargs, error, match):
 
 
 def test_v1_custom_proposer_unsupported_by_v2_model_runner():
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.speculative_config = SpeculativeConfig(
         method="custom_class", model="my_module.MyProposer", num_speculative_tokens=3
     )
@@ -182,18 +182,18 @@ def test_v1_custom_proposer_unsupported_by_v2_model_runner():
     assert config._get_v2_model_runner_unsupported_features() == ["speculative method 'custom_class'"]
 
 
-def _aphrodite_config(config_cls: type[SpeculatorConfig], method: str = "dummy") -> Any:
+def _sonar_config(config_cls: type[SpeculatorConfig], method: str = "dummy") -> Any:
     return SimpleNamespace(speculative_config=fake_speculative_config(config_cls, method=method))
 
 
 def test_init_speculator():
-    aphrodite_config = _aphrodite_config(DummySpeculatorConfig)
+    sonar_config = _sonar_config(DummySpeculatorConfig)
     req_states = object()
 
-    speculator = init_speculator(aphrodite_config, torch.device("cpu"), req_states)
+    speculator = init_speculator(sonar_config, torch.device("cpu"), req_states)
 
     assert type(speculator) is DummySpeculator
-    assert speculator.aphrodite_config is aphrodite_config
+    assert speculator.sonar_config is sonar_config
     assert speculator.req_states is req_states
     # Defaults the model runner relies on for any speculator.
     assert speculator.draft_logits is None
@@ -202,9 +202,9 @@ def test_init_speculator():
 
 
 @pytest.mark.parametrize(
-    ("aphrodite_config", "error", "match"),
+    ("sonar_config", "error", "match"),
     [
-        (_aphrodite_config(NotASpeculatorConfig), TypeError, "must be a subclass of"),
+        (_sonar_config(NotASpeculatorConfig), TypeError, "must be a subclass of"),
         (
             SimpleNamespace(speculative_config=fake_speculative_config(method="suffix")),
             NotImplementedError,
@@ -212,9 +212,9 @@ def test_init_speculator():
         ),
     ],
 )
-def test_init_speculator_rejects(aphrodite_config, error, match):
+def test_init_speculator_rejects(sonar_config, error, match):
     with pytest.raises(error, match=match):
-        init_speculator(aphrodite_config, torch.device("cpu"), req_states=object())
+        init_speculator(sonar_config, torch.device("cpu"), req_states=object())
 
 
 def test_speculator_configs_do_not_import_speculators():
@@ -224,7 +224,7 @@ def test_speculator_configs_do_not_import_speculators():
         """
         import importlib, pkgutil, sys
 
-        import aphrodite.v1.worker.gpu.spec_decode as pkg
+        import sonar.v1.worker.gpu.spec_decode as pkg
 
         for module in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
             if module.name.endswith(("config", "_configs")):
@@ -234,7 +234,7 @@ def test_speculator_configs_do_not_import_speculators():
         heavy = [
             name
             for name in sys.modules
-            if name.startswith("aphrodite.v1.worker.gpu.") and name.endswith(suffixes)
+            if name.startswith("sonar.v1.worker.gpu.") and name.endswith(suffixes)
         ]
         assert not heavy, heavy
         """
@@ -242,7 +242,7 @@ def test_speculator_configs_do_not_import_speculators():
     subprocess.run([sys.executable, "-c", script], check=True)
 
 
-_SPEC = "aphrodite.v1.worker.gpu.spec_decode"
+_SPEC = "sonar.v1.worker.gpu.spec_decode"
 _DSPARK = f"{_SPEC}.dspark.config.DSparkSpeculatorConfig"
 _LILICORR = f"{_SPEC}.lilicorr.config.LiLiCorrSpeculatorConfig"
 _GEMMA4_MTP = f"{_SPEC}.gemma4.config.Gemma4MTPSpeculatorConfig"

@@ -15,13 +15,13 @@ if not torch.cuda.is_available():
         allow_module_level=True,
     )
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.logits_processor import (
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.logits_processor import (
     LogitsContext,
     LogitsProcessor,
 )
-from aphrodite.v1.worker.gpu.sample.sampler import Sampler
-from aphrodite.v1.worker.gpu.states import RequestState
+from sonar.v1.worker.gpu.sample.sampler import Sampler
+from sonar.v1.worker.gpu.states import RequestState
 
 DEVICE = torch.device("cuda")
 VOCAB_SIZE = 128
@@ -40,7 +40,7 @@ class MockReasoningConfig:
 class RecordingProcessor(LogitsProcessor):
     """Adds BOOST to TARGET_TOKEN and records every lifecycle callback."""
 
-    def __init__(self, aphrodite_config: Any, req_state: Any):
+    def __init__(self, sonar_config: Any, req_state: Any):
         self.events: list[str] = []
         self.seen_logits: torch.Tensor | None = None
 
@@ -68,7 +68,7 @@ def _make_sampler(processor: RecordingProcessor) -> Sampler:
         device=DEVICE,
     )
     return Sampler(
-        aphrodite_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
+        sonar_config=SimpleNamespace(reasoning_config=MockReasoningConfig()),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=DEVICE,

@@ -16,13 +16,13 @@ import itertools
 
 import torch
 
-from aphrodite import _custom_ops as aphrodite_ops
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import _custom_ops as sonar_ops
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
     get_masked_input_and_mask,
     pad_vocab_size,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 
 def get_shard_indices(vocab_size, org_vocab_size, tp_rank, tp_size):
@@ -50,7 +50,7 @@ def embedding_reference(input_ids, weight, shard_indices):
 
 
 def embedding_fused(input_ids, weight, shard_indices):
-    return aphrodite_ops.vocab_parallel_embedding(
+    return sonar_ops.vocab_parallel_embedding(
         input_ids,
         weight,
         shard_indices.org_vocab_start_index,

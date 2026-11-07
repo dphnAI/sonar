@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from aphrodite.parser.deepseek_v41 import deepseek_v41_config
-from aphrodite.parser.parser_manager import ParserManager
+from sonar.parser.deepseek_v41 import deepseek_v41_config
+from sonar.parser.parser_manager import ParserManager
 from tests.parser.engine.replay_harness import (
     DUMMY_TOOLS,
     MockTokenizer,

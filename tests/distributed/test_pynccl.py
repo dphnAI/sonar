@@ -9,19 +9,19 @@ import pytest
 import torch
 import torch.distributed
 
-import aphrodite.envs as envs
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
-from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-from aphrodite.distributed.device_communicators.pynccl_wrapper import NCCLLibrary
-from aphrodite.distributed.parallel_state import (
+import sonar.envs as envs
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
+from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+from sonar.distributed.device_communicators.pynccl_wrapper import NCCLLibrary
+from sonar.distributed.parallel_state import (
     ensure_model_parallel_initialized,
     get_tp_group,
     get_world_group,
     graph_capture,
     init_distributed_environment,
 )
-from aphrodite.utils.system_utils import update_environment_variables
-from tests.utils import ensure_current_aphrodite_config
+from sonar.utils.system_utils import update_environment_variables
+from tests.utils import ensure_current_sonar_config
 
 mp.set_start_method("spawn", force=True)
 
@@ -80,7 +80,7 @@ def test_pynccl():
 @worker_fn_wrapper
 def multiple_allreduce_worker_fn():
     device = torch.device(f"cuda:{torch.distributed.get_rank()}")
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         # Eager-init path: parent PG has bound_device_id + a CPU backend,
         # so split_group is supported.
         group = torch.distributed.split_group(split_ranks=[[0, 1], [2, 3]], backend="cpu:gloo,cuda:nccl")
@@ -112,9 +112,9 @@ def test_pynccl_multiple_allreduce():
 
 
 @worker_fn_wrapper
-def multiple_allreduce_with_aphrodite_worker_fn():
+def multiple_allreduce_with_sonar_worker_fn():
     device = torch.device(f"cuda:{torch.distributed.get_rank()}")
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         ensure_model_parallel_initialized(2, 2)
     tensor = torch.ones(16, 1024, 1024, dtype=torch.float32, device=device)
     with graph_capture(device=device):
@@ -131,10 +131,10 @@ def multiple_allreduce_with_aphrodite_worker_fn():
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs to run the test.")
-def test_pynccl_multiple_allreduce_with_aphrodite():
-    # this tests pynccl for multiple tp groups, together with aphrodite
+def test_pynccl_multiple_allreduce_with_sonar():
+    # this tests pynccl for multiple tp groups, together with sonar
     # i.e. call `tensor_model_parallel_all_reduce`
-    distributed_run(multiple_allreduce_with_aphrodite_worker_fn, 4)
+    distributed_run(multiple_allreduce_with_sonar_worker_fn, 4)
 
 
 @worker_fn_wrapper
@@ -181,7 +181,7 @@ def test_pynccl_all_gather():
 
 @worker_fn_wrapper
 def cuda_communicator_all_gather_dim_worker_fn():
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         ensure_model_parallel_initialized(2, 1)
 
     tp_group = get_tp_group()
@@ -373,7 +373,7 @@ def test_pynccl_send_recv():
 @worker_fn_wrapper
 def multiple_send_recv_worker_fn():
     device = torch.device(f"cuda:{torch.distributed.get_rank()}")
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         group = torch.distributed.split_group(split_ranks=[[0, 2], [1, 3]], backend="cpu:gloo,cuda:nccl")
     else:
         groups = [

@@ -6,15 +6,15 @@ router assignment, exercised through the real moe_align_block_size buffers."""
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
+from sonar.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 if not current_platform.is_cuda():
     pytest.skip(reason="swordfish requires CUDA", allow_module_level=True)

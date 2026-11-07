@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
-use aphrodite_engine_core_client::protocol::utility::{PauseMode as EnginePauseMode, SleepLevel};
 use serde_json::Value as JsonValue;
+use sonar_engine_core_client::EngineCoreClient;
+use sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
+use sonar_engine_core_client::protocol::utility::{PauseMode as EnginePauseMode, SleepLevel};
 use thiserror_ext::AsReport as _;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -96,7 +96,7 @@ impl ControlServiceImpl {
     fn require_weight_transfer(&self) -> Result<(), Status> {
         self.weight_transfer_backend().map(|_| ()).ok_or_else(|| {
             Status::failed_precondition(
-                "weight transfer is not configured; start Aphrodite with --weight-transfer-config",
+                "weight transfer is not configured; start Sonar with --weight-transfer-config",
             )
         })
     }
@@ -104,15 +104,15 @@ impl ControlServiceImpl {
     fn require_sleep_mode(&self) -> Result<(), Status> {
         self.sleep_mode_enabled().then_some(()).ok_or_else(|| {
             Status::failed_precondition(
-                "sleep mode is not configured; start Aphrodite with --enable-sleep-mode",
+                "sleep mode is not configured; start Sonar with --enable-sleep-mode",
             )
         })
     }
 }
 
-const GRPC_API_VERSION: &str = "aphrodite";
+const GRPC_API_VERSION: &str = "sonar";
 
-fn utility_status(method: &'static str, error: aphrodite_engine_core_client::Error) -> Status {
+fn utility_status(method: &'static str, error: sonar_engine_core_client::Error) -> Status {
     Status::internal(format!("{method} failed: {}", error.to_report_string()))
 }
 
@@ -207,7 +207,7 @@ impl pb::control_server::Control for ControlServiceImpl {
     ) -> Result<Response<pb::ServerInfo>, Status> {
         let ready = self.ready();
         Ok(Response::new(pb::ServerInfo {
-            engine_version: ready.aphrodite_version.clone(),
+            engine_version: ready.sonar_version.clone(),
             api_version: GRPC_API_VERSION.to_string(),
             instance_id: ready.instance_id.clone(),
             parallelism: Some(self.parallelism_info()),

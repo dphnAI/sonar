@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Containing tests that check for regressions in Aphrodite's behavior.
+"""Containing tests that check for regressions in Sonar's behavior.
 
 It should include tests that are reported by users and making sure they
 will never happen again.
@@ -12,8 +12,8 @@ import gc
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
 from tests.utils import large_gpu_mark
 
 
@@ -58,7 +58,7 @@ def test_gc():
 def test_model_from_modelscope(monkeypatch: pytest.MonkeyPatch):
     # model: https://www.modelscope.ai/models/qwen/Qwen1.5-0.5B-Chat
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_USE_MODELSCOPE", "True")
+        m.setenv("SONAR_USE_MODELSCOPE", "True")
         m.setenv("MODELSCOPE_DOMAIN", "www.modelscope.ai")
         # Don't use HF_TOKEN for ModelScope repos, otherwise it will fail
         # with 400 Client Error: Bad Request.

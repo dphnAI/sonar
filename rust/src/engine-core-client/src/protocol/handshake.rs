@@ -74,10 +74,10 @@ pub struct EngineCoreReadyResponse {
     pub block_size: u64,
     /// DP coordinator stats publish address, if applicable.
     pub dp_stats_address: Option<String>,
-    /// Effective model dtype after Python Aphrodite resolves `--dtype`.
+    /// Effective model dtype after Python Sonar resolves `--dtype`.
     pub dtype: ModelDtype,
-    /// Python Aphrodite version reported by the engine process.
-    pub aphrodite_version: String,
+    /// Python Sonar version reported by the engine process.
+    pub sonar_version: String,
     /// Per-DP-engine world size (TP * PP * PCP) from the parallel config.
     /// Deployment-wide world size also multiplies by `data_parallel_size`.
     pub world_size: u64,
@@ -124,10 +124,10 @@ pub struct EngineCoreReadyResponse {
     /// Full-attention block size in tokens after initialization, or unavailable.
     #[serde(default)]
     pub effective_attention_block_size: Option<u64>,
-    /// JSON-mode dump of this engine's `AphroditeConfig`, reported only when the
-    /// engine runs with `APHRODITE_SERVER_DEV_MODE` (for `/server_info`).
+    /// JSON-mode dump of this engine's `SonarConfig`, reported only when the
+    /// engine runs with `SONAR_SERVER_DEV_MODE` (for `/server_info`).
     #[serde(default)]
-    pub aphrodite_config: Option<serde_json::Value>,
+    pub sonar_config: Option<serde_json::Value>,
     /// Set when the engine hashes request blocks and accepts prompt block
     /// hashes from the frontend.
     #[serde(default)]

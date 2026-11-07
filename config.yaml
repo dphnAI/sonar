@@ -1,8 +1,8 @@
-# Sample configuration file for Aphrodite Engine
+# Sample configuration file for Sonar Engine
 # You can launch the engine using a provided config file by running
-# `aphrodite yaml config.yaml` in the CLI
+# `sonar yaml config.yaml` in the CLI
 
-# You can run `aphrodite run -h` to see the full list of options
+# You can run `sonar run -h` to see the full list of options
 # that you can pass to the engine.
 
 # Uncomment and modify the following lines to configure the engine
@@ -42,7 +42,7 @@ basic_args:
   # Takes a boolean value (true/false)
   - enable_chunked_prefill:
 
-  # By default, Aphrodite Engine reserves 90% of VRAM for every GPU it's using.
+  # By default, Sonar Engine reserves 90% of VRAM for every GPU it's using.
   # Pass a value between 0-1 (e.g. 0.95 for 95%) to increase or decrease this.
   - gpu_memory_utilization:
 

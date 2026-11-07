@@ -8,15 +8,15 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.torch_utils import make_tensor_with_pad
-from aphrodite.v1.pool.metadata import PoolingMetadata
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.utils import CpuGpuBuffer
-from aphrodite.v1.worker.block_table import BlockTable, MultiGroupBlockTable
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.utils.torch_utils import make_tensor_with_pad
+from sonar.v1.pool.metadata import PoolingMetadata
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.utils import CpuGpuBuffer
+from sonar.v1.worker.block_table import BlockTable, MultiGroupBlockTable
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 
 VOCAB_SIZE = 1024
 NUM_OUTPUT_TOKENS = 20
@@ -434,7 +434,7 @@ def test_swap_states_preserves_allowed_token_ids_mask(device: str):
 
 
 def _construct_pooling_request(req_id_suffix: int, pooling_params=None):
-    from aphrodite.pooling_params import PoolingParams
+    from sonar.pooling_params import PoolingParams
 
     prompt_token_ids = [np.random.randint(0, VOCAB_SIZE) for _ in range(np.random.randint(10, MAX_PROMPT_SIZE))]
     return CachedRequestState(
@@ -536,7 +536,7 @@ def test_pooling_metadata_token_id_buffers(
     pooling_params: dict[str, object],
     expect_cpu_prompt_token_ids: bool,
 ):
-    from aphrodite.pooling_params import PoolingParams
+    from sonar.pooling_params import PoolingParams
 
     input_batch = InputBatch(
         max_num_reqs=1,
@@ -581,7 +581,7 @@ def _make_input_batch(is_pooling_model: bool = False) -> InputBatch:
 
 
 def _make_embeds_request(req_id: str, pooling: bool = False) -> CachedRequestState:
-    from aphrodite.pooling_params import PoolingParams
+    from sonar.pooling_params import PoolingParams
 
     return CachedRequestState(
         req_id=req_id,

@@ -63,7 +63,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -112,7 +112,7 @@ hardware_overrides:
   cpu:
     extra_env:
       # Allow cold weight downloads and CPU compilation to finish before startup times out.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "1800"
+      SONAR_ENGINE_READY_TIMEOUT_S: "1800"
   xpu:
     extra_args:
       - "--enforce-eager"
@@ -129,7 +129,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
+  - **Sonar version:** >= 0.17.0
   - **Hardware (BF16):** 1x H200, 2x H100, 2x Xeon 6 NUMA nodes, 4x Intel Arc Pro B60 / B70
   - **Hardware (FP8):** single H100/H200
   - **Hardware (Int4):** single 24 GB GPU
@@ -140,7 +140,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   #### CPU
@@ -148,8 +148,7 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  export APHRODITE_VERSION=$(curl -s https://api.github.com/repos/vllm-project/vllm/releases/latest | jq -r .tag_name | sed 's/^v//')
-  uv pip install https://github.com/vllm-project/vllm/releases/download/v${APHRODITE_VERSION}/vllm-${APHRODITE_VERSION}+cpu-cp38-abi3-manylinux_2_35_x86_64.whl --torch-backend cpu
+  curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel release
   ```
 
   ### Docker
@@ -162,7 +161,7 @@ guide: |
   ### Single-GPU FP8
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-35B-A3B-FP8 \
+  sonar serve Qwen/Qwen3.5-35B-A3B-FP8 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
   ```
@@ -170,7 +169,7 @@ guide: |
   ### BF16 on 2xH200 (TP2)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-35B-A3B \
+  sonar serve Qwen/Qwen3.5-35B-A3B \
     --tensor-parallel-size 2 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -178,13 +177,13 @@ guide: |
 
   ### Intel Xeon 6 Deployment via Docker
 
-  Launch the x86 CPU Aphrodite Docker container for `Qwen/Qwen3.5-35B-A3B`:
+  Launch the x86 CPU Sonar Docker container for `Qwen/Qwen3.5-35B-A3B`:
 
   ```bash
   docker run \
     --privileged --ipc=host -p 8000:8000 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
-    -e APHRODITE_ENGINE_READY_TIMEOUT_S=1800 \
+    -e SONAR_ENGINE_READY_TIMEOUT_S=1800 \
     vllm/vllm-openai-cpu:latest-x86_64 Qwen/Qwen3.5-35B-A3B \
     --trust-remote-code \
     --tensor-parallel-size 1 \
@@ -197,7 +196,7 @@ guide: |
   ### MTP speculative decoding
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-35B-A3B-FP8 \
+  sonar serve Qwen/Qwen3.5-35B-A3B-FP8 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
   ```
@@ -205,7 +204,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 4× Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \
@@ -238,11 +237,11 @@ guide: |
 
   - **CPU startup timeout:** a cold weight download followed by CPU compilation
     can exceed the default 600-second engine readiness timeout. The CPU recipe
-    sets `APHRODITE_ENGINE_READY_TIMEOUT_S=1800`; set any external health-check
+    sets `SONAR_ENGINE_READY_TIMEOUT_S=1800`; set any external health-check
     deadline higher (for example, 2100 seconds). Increasing only the external
     deadline does not prevent the frontend from timing out.
   - **CUDA graph / Mamba cache size error:** reduce `--max-cudagraph-capture-size`
-    (default 512). See [Aphrodite PR #34571](https://github.com/vllm-project/vllm/pull/34571).
+    (default 512). See [Sonar PR #34571](https://github.com/vllm-project/vllm/pull/34571).
   - **Disable reasoning:** add `--default-chat-template-kwargs '{"enable_thinking": false}'`.
   - **Prefix Caching (Mamba):** currently experimental in "align" mode.
 

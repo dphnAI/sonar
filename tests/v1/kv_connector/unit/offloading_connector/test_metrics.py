@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from prometheus_client import Counter, Gauge, Histogram
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorLogging
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorLogging
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     KV_OFFLOAD_CONFIG_INFO,
     OffloadingConnectorStats,
     OffloadPromMetrics,
@@ -18,16 +18,16 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import
     _TransferMetricName,
     get_connector_metric_definitions,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
     OffloadingConnector,
 )
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     OffloadingCounterMetadata,
     OffloadingGaugeMetadata,
     OffloadingHistogramMetadata,
 )
-from aphrodite.v1.kv_offload.factory import OffloadingSpecFactory
-from aphrodite.v1.kv_offload.tiering.base import TieringOffloadingMetrics
+from sonar.v1.kv_offload.factory import OffloadingSpecFactory
+from sonar.v1.kv_offload.tiering.base import TieringOffloadingMetrics
 
 LOAD_BYTES = _TransferMetricName.LOAD_BYTES
 LOAD_TIME = _TransferMetricName.LOAD_TIME
@@ -35,9 +35,9 @@ LOAD_SIZE = _TransferMetricName.LOAD_SIZE
 STORE_BYTES = _TransferMetricName.STORE_BYTES
 STORE_TIME = _TransferMetricName.STORE_TIME
 STORE_SIZE = _TransferMetricName.STORE_SIZE
-STORES_SKIPPED = "aphrodite:kv_offload_stores_skipped"
-PENDING_STORES = "aphrodite:kv_offload_pending_stores"
-LOOKUP_LATENCY = "aphrodite:kv_offload_lookup_latency_seconds"
+STORES_SKIPPED = "sonar:kv_offload_stores_skipped"
+PENDING_STORES = "sonar:kv_offload_pending_stores"
+LOOKUP_LATENCY = "sonar:kv_offload_lookup_latency_seconds"
 MY_COUNTER = "my_counter"
 MY_LABEL = "my_label"
 
@@ -103,7 +103,7 @@ class _FakeMetric:
         self.set_values.append(value)
 
 
-class _FakeAphroditeConfig:
+class _FakeSonarConfig:
     def __init__(
         self,
         store_threshold: int = 2,
@@ -488,7 +488,7 @@ def test_reset():
 
 def test_prom_metrics_observes_manager_counter():
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(),
+        sonar_config=_FakeSonarConfig(),
         metric_types={
             Gauge: _FakeMetric,
             Counter: _FakeMetric,
@@ -508,13 +508,13 @@ def test_prom_metrics_observes_manager_counter():
     counter = prom_metrics.offloading_metrics[(0, STORES_SKIPPED, ())]
     assert counter.increments == [7]
     counter_def = prom_metrics._offloading_metric_defs[STORES_SKIPPED]
-    assert counter_def.kwargs["name"] == "aphrodite:kv_offload_stores_skipped"
+    assert counter_def.kwargs["name"] == "sonar:kv_offload_stores_skipped"
     assert counter.labelvalues == ("model", "0")
 
 
 def test_prom_metrics_observes_flat_transfer_metrics_and_legacy_metrics():
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(),
+        sonar_config=_FakeSonarConfig(),
         metric_types={
             Gauge: _FakeMetric,
             Counter: _FakeMetric,
@@ -576,7 +576,7 @@ def test_prom_metrics_observes_manager_gauge_and_histogram():
         return_value=_spec_cls_with_metric_definitions(metric_definitions),
     ):
         prom_metrics = OffloadPromMetrics(
-            aphrodite_config=_FakeAphroditeConfig(store_threshold=0),
+            sonar_config=_FakeSonarConfig(store_threshold=0),
             metric_types={
                 Gauge: _FakeMetric,
                 Counter: _FakeMetric,
@@ -620,7 +620,7 @@ def test_prom_metrics_lazily_observes_labeled_metric():
         return_value=_spec_cls_with_metric_definitions(metric_definitions),
     ):
         prom_metrics = OffloadPromMetrics(
-            aphrodite_config=_FakeAphroditeConfig(store_threshold=0),
+            sonar_config=_FakeSonarConfig(store_threshold=0),
             metric_types={
                 Gauge: _FakeMetric,
                 Counter: _FakeMetric,
@@ -659,7 +659,7 @@ def test_prom_metrics_rejects_wrong_label_count():
         return_value=_spec_cls_with_metric_definitions(metric_definitions),
     ):
         prom_metrics = OffloadPromMetrics(
-            aphrodite_config=_FakeAphroditeConfig(store_threshold=0),
+            sonar_config=_FakeSonarConfig(store_threshold=0),
             metric_types={
                 Gauge: _FakeMetric,
                 Counter: _FakeMetric,
@@ -680,7 +680,7 @@ def test_prom_metrics_rejects_wrong_label_count():
 
 def test_prom_metrics_uses_configured_manager_metrics():
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(store_threshold=0),
+        sonar_config=_FakeSonarConfig(store_threshold=0),
         metric_types={
             Gauge: _FakeMetric,
             Counter: _FakeMetric,
@@ -695,7 +695,7 @@ def test_prom_metrics_uses_configured_manager_metrics():
 
 def test_prom_metrics_registers_tiering_metrics_from_spec():
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(
+        sonar_config=_FakeSonarConfig(
             store_threshold=0,
             extra_config={
                 "spec_name": "TieringOffloadingSpec",
@@ -747,7 +747,7 @@ def test_aggregate_into_empty_stats():
 def test_prom_metrics_multi_engine_routing():
     """Metrics are routed to the correct engine index."""
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(),
+        sonar_config=_FakeSonarConfig(),
         metric_types={
             Gauge: _FakeMetric,
             Counter: _FakeMetric,
@@ -773,7 +773,7 @@ def test_prom_metrics_multi_engine_routing():
 def test_prom_metrics_rejects_undeclared_metric():
     """observe() asserts if a metric was never declared in metadata."""
     prom_metrics = OffloadPromMetrics(
-        aphrodite_config=_FakeAphroditeConfig(store_threshold=0),
+        sonar_config=_FakeSonarConfig(store_threshold=0),
         metric_types={
             Gauge: _FakeMetric,
             Counter: _FakeMetric,
@@ -800,7 +800,7 @@ def _prom_metrics(
     spec_cls = _spec_cls_with_metric_definitions(metric_definitions or {}, info_keys)
     with patch.object(OffloadingSpecFactory, "get_spec_cls", return_value=spec_cls):
         return OffloadPromMetrics(
-            aphrodite_config=_FakeAphroditeConfig(store_threshold=0),  # type: ignore[arg-type]
+            sonar_config=_FakeSonarConfig(store_threshold=0),  # type: ignore[arg-type]
             metric_types={
                 Gauge: _FakeMetric,
                 Counter: _FakeMetric,
@@ -953,7 +953,7 @@ def test_prom_metrics_empties_a_declared_info_label_no_manager_fills():
     """
     prom_metrics = _prom_metrics(info_keys=("filled", "skipped"))
 
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
         prom_metrics.observe({_StatsKey.INFO: [{"filled": 512}]})
 
     assert mock_logger.warning_once.call_count == 1
@@ -972,7 +972,7 @@ def test_prom_metrics_keeps_quiet_when_a_name_belongs_to_another_series():
     """
     prom_metrics = _prom_metrics(info_keys=("source", "root_dir_name", "bucket"))
 
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
         prom_metrics.observe(
             {
                 _StatsKey.INFO: [
@@ -995,7 +995,7 @@ def test_prom_metrics_drops_an_info_label_the_spec_did_not_declare():
     did not declare cannot join the gauge. It warns and publishes the rest."""
     prom_metrics = _prom_metrics(info_keys=("declared",))
 
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics.logger") as mock_logger:
         prom_metrics.observe({_StatsKey.INFO: [{"declared": 512, "undeclared": 1}]})
 
     assert mock_logger.warning_once.call_count == 1

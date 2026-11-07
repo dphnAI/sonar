@@ -31,7 +31,7 @@ description: Select Sonar features for common inference workloads.
 ## Operations
 
 - [Observability](/features/observability/) covers logs, metrics, and health checks.
-- [`aphrodite bench`](/deployment/benchmarking/) measures latency, throughput,
+- [`sonar bench`](/deployment/benchmarking/) measures latency, throughput,
   startup, and live-server load.
 - [Production deployment](/deployment/production/) covers lifecycle and
   readiness.

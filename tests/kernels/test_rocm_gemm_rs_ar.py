@@ -13,25 +13,25 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.distributed import cleanup_dist_env_and_memory, get_tp_group
-from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
-from aphrodite.distributed.parallel_state import (
+from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.distributed import cleanup_dist_env_and_memory, get_tp_group
+from sonar.distributed.device_communicators.cuda_communicator import CudaCommunicator
+from sonar.distributed.parallel_state import (
     graph_capture,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.linear import RowParallelLinear
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.linear import RowParallelLinear
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     _mxfp8_e4m3_quantize_torch,
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.models.common.ops.sequence_parallel import sp_reduce_scatter
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.models.common.ops.sequence_parallel import sp_reduce_scatter
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 from tests.kernels.test_gemm_rs_ar import _N, _SHAPES
 
 # Retain the expanded parent's shape transitions, plus fully padded RS ranks.
@@ -102,10 +102,10 @@ def _run_mode(device: torch.device, backend: str, all_reduce: bool, world_size: 
         layer.weight = torch.nn.Parameter(weight, requires_grad=False)
         layer.quant_method.process_weights_after_loading(layer)
         if backend == "mxfp8":
-            from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+            from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
                 RocmDotScaledMxfp8LinearKernel,
             )
-            from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
+            from sonar.model_executor.layers.quantization.online.mxfp8 import (
                 Mxfp8OnlineLinearMethod,
             )
 
@@ -150,7 +150,7 @@ def _run_mode(device: torch.device, backend: str, all_reduce: bool, world_size: 
     torch.accelerator.synchronize(device)
     dist.barrier(group=group.device_group)
     graph = torch.cuda.CUDAGraph()
-    # Aphrodite's context registers the AITER IPC addresses used by graph replay.
+    # Sonar's context registers the AITER IPC addresses used by graph replay.
     with (
         graph_capture(device=device) as context,
         torch.cuda.graph(graph, stream=context.stream),
@@ -179,10 +179,10 @@ def _worker(rank: int, world_size: int, port: int, backend: str) -> None:
             "MASTER_PORT": str(port),
         }
     )
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.model_config = ModelConfig(dtype="bfloat16")
     try:
-        with set_current_aphrodite_config(config), torch.inference_mode():
+        with set_current_sonar_config(config), torch.inference_mode():
             init_distributed_environment()
             initialize_model_parallel(tensor_model_parallel_size=world_size)
             for all_reduce in (False, True):
@@ -208,9 +208,9 @@ def test_rocm_gemm_rs_ar(monkeypatch: pytest.MonkeyPatch, world_size: int, backe
     """Preserve rank reduction, tails, shape reuse, lifetime, and graph replay."""
     if torch.accelerator.device_count() < world_size:
         pytest.skip(f"GEMM-RS/AR requires {world_size} GPUs")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_CUSTOM_AR", "1")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
     try:
         mp.spawn(_worker, args=(world_size, get_open_port(), backend), nprocs=world_size)
     finally:

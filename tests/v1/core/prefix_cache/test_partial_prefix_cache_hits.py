@@ -11,20 +11,20 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import SupportsHMA
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import SupportsHMA
+from sonar.model_executor.layers.mamba.checkpoint import (
     compute_mamba_prefill_checkpoints,
 )
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_utils import (
     KVCacheBlockCopy,
     get_block_hash,
     get_group_id,
     init_none_hash,
     resolve_cache_hit_alignment_tokens,
 )
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -1097,7 +1097,7 @@ def test_connector_finish_registers_partial_tail_before_cleanup():
 
     scheduler = object.__new__(Scheduler)
     scheduler.connector = _Connector()
-    scheduler.aphrodite_config = SimpleNamespace(kv_transfer_config=SimpleNamespace(is_kv_producer=True))
+    scheduler.sonar_config = SimpleNamespace(kv_transfer_config=SimpleNamespace(is_kv_producer=True))
     scheduler.kv_cache_manager = MagicMock()
     scheduler.kv_cache_manager.finalize_partial_tail_offloads.return_value = [(1, 9, 12)]
     scheduler.kv_cache_manager.get_block_ids_for_computed_tokens.return_value = (
@@ -1789,8 +1789,8 @@ def test_full_attention_eagle_drops_one_hash_unit():
     """With fine-grained partial hits, eagle rewinds the hit by one hash unit
     instead of a whole cache block: the tail block's KV is append-only, so it
     still covers the reduced length and stays in the hit as a partial block."""
-    from aphrodite.v1.core.block_pool import BlockPool
-    from aphrodite.v1.core.single_type_kv_cache_manager import FullAttentionManager
+    from sonar.v1.core.block_pool import BlockPool
+    from sonar.v1.core.single_type_kv_cache_manager import FullAttentionManager
 
     hash_block_size = 2
     block_size = 4
@@ -2189,7 +2189,7 @@ def test_resolved_cache_hit_alignment_matches_coordinator(with_sliding_window):
         enable_caching=True,
         hash_block_size=hash_block_size,
     ).coordinator
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(enable_prefix_caching=True),
         parallel_config=SimpleNamespace(decode_context_parallel_size=1),
     )
@@ -2198,7 +2198,7 @@ def test_resolved_cache_hit_alignment_matches_coordinator(with_sliding_window):
     assert (
         resolve_cache_hit_alignment_tokens(
             kv_cache_config,
-            aphrodite_config,
+            sonar_config,
             coordinator.scheduler_block_size,
             hash_block_size,
         )

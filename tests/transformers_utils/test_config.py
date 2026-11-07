@@ -14,17 +14,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 from transformers import PreTrainedConfig
 
-from aphrodite.config.model import ModelConfig
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.transformers_utils import config as config_module
-from aphrodite.transformers_utils.config import (
+from sonar.config.model import ModelConfig
+from sonar.tokenizers import get_tokenizer
+from sonar.transformers_utils import config as config_module
+from sonar.transformers_utils.config import (
     get_safetensors_params_metadata,
     mrope_num_dims,
     patch_legacy_rope_type,
     try_get_generation_config,
     uses_mrope,
 )
-from aphrodite.transformers_utils.configs.mistral import adapt_config_dict
+from sonar.transformers_utils.configs.mistral import adapt_config_dict
 
 
 @pytest.mark.parametrize("layout", ["mixed", "flat"])

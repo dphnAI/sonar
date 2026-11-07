@@ -5,7 +5,7 @@
 //
 // The swap-in algorithm is a port of SGLang's hisparse
 // load_cache_to_device_buffer kernel (sgl jit_kernel/csrc/hisparse.cuh),
-// adapted to Aphrodite addressing:
+// adapted to Sonar addressing:
 //  - tokens are keyed by their global KV slot id (block_table-converted
 //    indexer output) instead of in-request positions, so no per-request
 //    host-location table is needed: host pool row i is global slot i.

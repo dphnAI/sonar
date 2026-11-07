@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TokensPrompt
+from sonar import LLM, SamplingParams
+from sonar.inputs import TokensPrompt
 
 from ..models.utils import dummy_hf_overrides
 from ..utils import create_new_process_for_each_test
@@ -135,5 +135,5 @@ def test_no_runtime_jit(spec: JitModel, monkeypatch: pytest.MonkeyPatch):
     """Assert JIT-heavy backends do not JIT-compile during inference."""
     # Set here rather than in the child so the spawned process inherits it:
     # the engine core must not be forked once the test process has CUDA up.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     can_run_without_jit(spec)

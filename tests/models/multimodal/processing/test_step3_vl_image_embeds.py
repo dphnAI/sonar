@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.step3_vl import (
+from sonar.model_executor.models.step3_vl import (
     Step3VLForConditionalGeneration,
     Step3VLImageEmbeddingInputs,
 )

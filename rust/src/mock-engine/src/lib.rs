@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 use anyhow::{Context, Result, bail};
-use aphrodite_engine_core_client::EngineId;
-use aphrodite_engine_core_client::mock_engine::{
+use clap::Parser;
+use sonar_engine_core_client::EngineId;
+use sonar_engine_core_client::mock_engine::{
     MockEngineConfig, MockEngineSockets, connect_to_frontend,
 };
-use clap::Parser;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -18,8 +18,8 @@ pub mod io;
 /// Standalone engine-core protocol emulator for frontend stress testing.
 #[derive(Debug, Clone, Parser)]
 #[command(
-    name = "aphrodite-mock-engine",
-    about = "Run a mock Aphrodite headless engine for Rust frontend stress testing."
+    name = "sonar-mock-engine",
+    about = "Run a mock Sonar headless engine for Rust frontend stress testing."
 )]
 pub struct Opt {
     /// Frontend-owned ZMQ handshake address.

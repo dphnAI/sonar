@@ -5,12 +5,12 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.completion.serving import OpenAIServingCompletion
-from aphrodite.inputs import tokens_input
-from aphrodite.logprobs import Logprob
-from aphrodite.outputs import CompletionOutput, RequestOutput
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.completion.serving import OpenAIServingCompletion
+from sonar.inputs import tokens_input
+from sonar.logprobs import Logprob
+from sonar.outputs import CompletionOutput, RequestOutput
 
 TOKENS = [(1, "abc"), (2, " de"), (3, "!")]
 # Text deltas as the detokenizer streams them with stop=["\n\n"]: one char is

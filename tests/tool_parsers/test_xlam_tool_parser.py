@@ -6,15 +6,15 @@ from collections.abc import Generator
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tool_parsers.xlam_tool_parser import xLAMToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tool_parsers.xlam_tool_parser import xLAMToolParser
 from tests.tool_parsers.utils import get_function_delta
 
 # Use a common model that is likely to be available

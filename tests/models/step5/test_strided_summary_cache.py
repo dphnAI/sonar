@@ -11,7 +11,7 @@ pages.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Step5 kernels require a GPU")
 
@@ -54,7 +54,7 @@ def _slots(positions):
 
 
 def _run_updates(cache: Cache, key, z):
-    from aphrodite.models.step5.common.ops.summary_update import (
+    from sonar.models.step5.common.ops.summary_update import (
         build_prefill_groups,
         update_decode,
         update_prefill,
@@ -125,8 +125,8 @@ def test_summary_updates_match_on_strided_blocks():
 
 
 def test_summary_reads_match_on_strided_blocks():
-    from aphrodite.models.step5.common.ops.sparse_indexer import pack_summary_pages
-    from aphrodite.models.step5.common.ops.sparse_indexer_scores import (
+    from sonar.models.step5.common.ops.sparse_indexer import pack_summary_pages
+    from sonar.models.step5.common.ops.sparse_indexer_scores import (
         decode_summary_scores,
     )
 

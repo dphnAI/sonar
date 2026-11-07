@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal.media import MEDIA_CONNECTOR_REGISTRY
-from aphrodite.renderers.chat_utils import (
+from sonar.config import ModelConfig
+from sonar.multimodal.media import MEDIA_CONNECTOR_REGISTRY
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     parse_chat_messages,
     parse_chat_messages_async,

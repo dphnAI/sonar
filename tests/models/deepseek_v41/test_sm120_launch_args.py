@@ -13,7 +13,7 @@ from cutlass.base_dsl.common import DSLUserCodeError  # noqa: E402
 from cutlass.base_dsl.diagnostics import DiagId  # noqa: E402
 from cutlass.base_dsl.jit_executor import ExecutionArgs  # noqa: E402
 
-from aphrodite.models.deepseek_v41.sm120.launch_args import _get_rectified_args  # noqa: E402
+from sonar.models.deepseek_v41.sm120.launch_args import _get_rectified_args  # noqa: E402
 
 
 def kernel(x, scale=2, *, out, stream=None):

@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig, CUDAGraphMode
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.config import CompilationConfig, CUDAGraphMode
+from sonar.platforms import current_platform
 from tests.utils import single_gpu_only
 
 from ...utils import get_spec_decode_metric_value
@@ -27,7 +27,7 @@ PLACEHOLDER_REGRESSION_NUM_SPEC_TOKENS = 3
 @single_gpu_only
 def test_mtp_rejected_placeholders_match_greedy_token_ids(
     cudagraph_mode: CUDAGraphMode,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Rejected MTP padding must not alter the non-speculative token stream."""
     common_kwargs: dict[str, Any] = {
@@ -60,18 +60,18 @@ def test_mtp_rejected_placeholders_match_greedy_token_ids(
             cudagraph_capture_sizes=[1, PLACEHOLDER_REGRESSION_NUM_SPEC_TOKENS + 1],
         )
 
-    with aphrodite_runner(
+    with sonar_runner(
         PLACEHOLDER_REGRESSION_MODEL,
         compilation_config=compilation_config(),
         **common_kwargs,
     ) as ref_runner:
-        ref_mode = ref_runner.llm.llm_engine.aphrodite_config.compilation_config.cudagraph_mode
+        ref_mode = ref_runner.llm.llm_engine.sonar_config.compilation_config.cudagraph_mode
         assert ref_mode == cudagraph_mode
         ref_token_ids = generate_token_ids(ref_runner)
         expected_token_ids = (PLACEHOLDER_REGRESSION_ALLOWED_TOKEN_ID,) * (PLACEHOLDER_REGRESSION_MAX_TOKENS)
         assert ref_token_ids == expected_token_ids
 
-    with aphrodite_runner(
+    with sonar_runner(
         PLACEHOLDER_REGRESSION_MODEL,
         speculative_config={
             "method": "mtp",
@@ -84,13 +84,13 @@ def test_mtp_rejected_placeholders_match_greedy_token_ids(
         compilation_config=compilation_config(),
         **common_kwargs,
     ) as spec_runner:
-        spec_mode = spec_runner.llm.llm_engine.aphrodite_config.compilation_config.cudagraph_mode
+        spec_mode = spec_runner.llm.llm_engine.sonar_config.compilation_config.cudagraph_mode
         assert spec_mode == cudagraph_mode
         spec_token_ids = generate_token_ids(spec_runner)
         metrics = spec_runner.llm.get_metrics()
-        num_drafts = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_drafts")
-        num_draft_tokens = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_draft_tokens")
-        num_accepted_tokens = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_accepted_tokens")
+        num_drafts = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_drafts")
+        num_draft_tokens = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_draft_tokens")
+        num_accepted_tokens = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_accepted_tokens")
 
     assert num_drafts > 0, "MTP drafter did not run"
     assert num_draft_tokens > 0, "MTP drafter did not produce draft tokens"

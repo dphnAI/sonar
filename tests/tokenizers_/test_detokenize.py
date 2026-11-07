@@ -7,17 +7,17 @@ from typing import Any, cast
 import pytest
 from transformers import AutoTokenizer, PythonBackend, TokenizersBackend
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers.detokenizer_utils import (
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers.detokenizer_utils import (
     convert_ids_list_to_tokens,
     convert_prompt_ids_to_tokens,
     detokenize_incrementally,
 )
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.tokenizers.protocol import TokenizerLike
-from aphrodite.transformers_utils.repo_utils import with_retry
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.detokenizer import (
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.protocol import TokenizerLike
+from sonar.transformers_utils.repo_utils import with_retry
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.detokenizer import (
     FastIncrementalDetokenizer,
     IncrementalDetokenizer,
     SlowIncrementalDetokenizer,
@@ -29,7 +29,7 @@ SPECIAL_TOKS_TRUTH = [
 
 TRUTH = [
     "Hello here, this is a simple test",
-    "Aphrodite is a high-throughput and memory-efficient inference and serving engine for LLMs. It is designed to be used in production environments, where inference and serving",  # noqa
+    "Sonar is a high-throughput and memory-efficient inference and serving engine for LLMs. It is designed to be used in production environments, where inference and serving",  # noqa
     "我很感谢你的热情",
     # Burmese text triggers an edge-case for Mistral's V3-Tekken tokenizer (eg.
     # for mistralai/Pixtral-12B-2409) where tokens may map to bytes with

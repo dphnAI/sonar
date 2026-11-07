@@ -8,7 +8,7 @@ from typing import NamedTuple
 import pytest
 from transformers import AutoTokenizer
 
-from ...conftest import AphroditeRunner
+from ...conftest import SonarRunner
 from ...models.utils import check_logprobs_close
 from ...utils import multi_gpu_test
 
@@ -41,7 +41,7 @@ MODELS = [
 
 
 def check_model_outputs(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -55,7 +55,7 @@ def check_model_outputs(
         prompts = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     # Run gguf model.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model.gguf_model_path,
         enforce_eager=True,
         tokenizer_name=model.original_model,
@@ -68,7 +68,7 @@ def check_model_outputs(
     # Run unquantized model.
     # Should run with tp=1, otherwise the test will stuck at
     # nccl initialization.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model.original_model,
         enforce_eager=True,  # faster tests
         dtype=dtype,
@@ -91,7 +91,7 @@ def check_model_outputs(
 @pytest.mark.parametrize("num_logprobs", [8])
 @pytest.mark.parametrize("tp_size", [1])
 def test_models(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -99,7 +99,7 @@ def test_models(
     num_logprobs: int,
     tp_size: int,
 ) -> None:
-    check_model_outputs(aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)
+    check_model_outputs(sonar_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -109,7 +109,7 @@ def test_models(
 @pytest.mark.parametrize("tp_size", [2])
 @multi_gpu_test(num_gpus=2)
 def test_distributed(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     example_prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -117,4 +117,4 @@ def test_distributed(
     num_logprobs: int,
     tp_size: int,
 ) -> None:
-    check_model_outputs(aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)
+    check_model_outputs(sonar_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)

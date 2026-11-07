@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -62,8 +62,8 @@ def _assert_sink_output_close(actual, expected, value_scale, score_error, probab
 
 
 def _require_aiter() -> None:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar._aiter_ops import is_aiter_found_and_supported
+    from sonar.platforms.rocm import get_cdna_version
 
     if get_cdna_version() not in (3, 4):
         pytest.skip("AITER MLA requires CDNA 3 or 4")
@@ -95,8 +95,8 @@ def _require_aiter() -> None:
 def test_sparse_mla_sink_matches_ragged_reference(real_heads: int, cache_kind: str) -> None:
     """Exercise ragged sink decode, head padding, and FP8 scale forwarding."""
     _require_aiter()
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
 
@@ -192,7 +192,7 @@ def test_sparse_mla_sink_matches_ragged_reference(real_heads: int, cache_kind: s
         assert torch.all(lse_error <= lse_allowance)
         torch.testing.assert_close(lse[0].double(), expected_lse[0], atol=0, rtol=0)
     else:
-        from aphrodite.platforms.rocm import on_gfx942
+        from sonar.platforms.rocm import on_gfx942
 
         assert cache_kind == "bf16" and real_heads in (40, 48, 64) and on_gfx942()
     _assert_sink_output_close(
@@ -213,7 +213,7 @@ def test_sparse_mla_sink_matches_ragged_reference(real_heads: int, cache_kind: s
     ],
 )
 def test_sparse_mla_sink_rejects_unsupported_aiter_dtypes(q_dtype: torch.dtype, kv_dtype: torch.dtype) -> None:
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
 
@@ -253,7 +253,7 @@ def _make_noncontiguous_sink() -> torch.Tensor:
     ],
 )
 def test_sparse_mla_sink_validation(sinks: torch.Tensor, match: str) -> None:
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
 
@@ -275,8 +275,8 @@ def test_sparse_mla_sink_validation(sinks: torch.Tensor, match: str) -> None:
 
 
 def test_sparse_mla_backend_reports_sink_support_for_current_hardware() -> None:
-    from aphrodite.platforms.rocm import get_cdna_version
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.platforms.rocm import get_cdna_version
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseBackend,
     )
 
@@ -284,9 +284,9 @@ def test_sparse_mla_backend_reports_sink_support_for_current_hardware() -> None:
 
 
 def test_sparse_mla_backend_rejects_dcp() -> None:
-    from aphrodite.platforms.rocm import RocmPlatform
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-    from aphrodite.v1.attention.selector import AttentionSelectorConfig
+    from sonar.platforms.rocm import RocmPlatform
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.selector import AttentionSelectorConfig
 
     selector_config = AttentionSelectorConfig(
         head_size=Q_HEAD_DIM,
@@ -321,11 +321,11 @@ def test_sparse_mla_sink_matches_dense_attention_with_empty_rows_and_paged_cache
 ) -> None:
     """Preserve head-specific sinks and latent values across ragged cache pages."""
     _require_aiter()
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
-    from aphrodite.v1.attention.backends.mla.sparse_utils import flat_kv_row_view
+    from sonar.v1.attention.backends.mla.sparse_utils import flat_kv_row_view
 
     head_dim, value_dim = 576, 512
     generator = torch.Generator().manual_seed(421)
@@ -409,13 +409,13 @@ def test_sparse_mla_sink_matches_dense_attention_with_empty_rows_and_paged_cache
 
 @pytest.mark.parametrize("layout", ["LBNHC", "LBHNC", "BLNHC"])
 def test_sparse_mla_backend_resolves_only_contiguous_layer_layouts(monkeypatch, layout):
-    from aphrodite.config import CacheConfig
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.config import CacheConfig
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseBackend,
     )
-    from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
+    from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
 
-    monkeypatch.setenv("APHRODITE_KV_CACHE_LAYOUT", layout)
+    monkeypatch.setenv("SONAR_KV_CACHE_LAYOUT", layout)
     config = SimpleNamespace(cache_config=CacheConfig())
     supported = [[x.name for x in ROCMAiterMLASparseBackend.supported_kv_cache_layouts()]]
     if layout == "BLNHC":
@@ -430,7 +430,7 @@ def test_sparse_mla_backend_resolves_only_contiguous_layer_layouts(monkeypatch, 
 def test_sparse_mla_sink_forward_mqa_preserves_split_query(dtype):
     """The public sparse forward joins latent/RoPE queries in the model dtype."""
     _require_aiter()
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
 

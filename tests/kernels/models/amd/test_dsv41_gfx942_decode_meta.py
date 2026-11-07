@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""The one-launch DeepSeek-V4.1 decode metadata of gfx942 against the Aphrodite
+"""The one-launch DeepSeek-V4.1 decode metadata of gfx942 against the Sonar
 ops that it replaces.
 
 swa_decode_meta.launch replaces the decode part of the ROCm SWA metadata
@@ -9,7 +9,7 @@ _compute_swa_indices_and_lens_kernel (or the DSpark draft block's
 ComputeDSparkNoncausalSWAIndicesKernel), build_ragged_indices_from_dense and
 _copy_ragged_to_graph_buffers. topk_pack.launch replaces
 compute_global_topk_ragged_indices_and_indptr. For each random decode batch
-Aphrodite's ops run first. Then every output buffer is overwritten with -7
+Sonar's ops run first. Then every output buffer is overwritten with -7
 (is_valid_token with its negation), the fused launch runs, and every output
 that a reader uses must be equal.
 """
@@ -17,7 +17,7 @@ that a reader uses must be equal.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="the fused launches are for ROCm")
 
@@ -84,14 +84,14 @@ def _swa_buffers(width, noncausal):
 
 
 def _swa_old_ops(c, b):
-    """The decode part of Aphrodite's SWA metadata build and its ROCm ragged
+    """The decode part of Sonar's SWA metadata build and its ROCm ragged
     step."""
-    from aphrodite.models.deepseek_v41.amd.rocm import _copy_ragged_to_graph_buffers
-    from aphrodite.v1.attention.backends.mla.sparse_swa import (
+    from sonar.models.deepseek_v41.amd.rocm import _copy_ragged_to_graph_buffers
+    from sonar.v1.attention.backends.mla.sparse_swa import (
         _COMPUTE_DSPARK_NONCAUSAL_SWA_INDICES_KERNEL,
         _COMPUTE_SWA_INDICES_AND_LENS_KERNEL,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         build_ragged_indices_from_dense,
     )
 
@@ -132,9 +132,9 @@ def _swa_old_ops(c, b):
 
 
 @pytest.mark.parametrize("noncausal", [False, True])
-def test_swa_decode_meta_matches_aphrodite_ops(noncausal):
-    from aphrodite.models.deepseek_v41.amd.ops import swa_decode_meta
-    from aphrodite.v1.attention.backends.mla.compressor_utils import (
+def test_swa_decode_meta_matches_sonar_ops(noncausal):
+    from sonar.models.deepseek_v41.amd.ops import swa_decode_meta
+    from sonar.v1.attention.backends.mla.compressor_utils import (
         get_dspark_swa_index_width,
     )
 
@@ -219,9 +219,9 @@ def _topk_case(g, max_rows) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, i
     )
 
 
-def test_topk_pack_matches_aphrodite():
-    from aphrodite.models.deepseek_v41.amd import rocm
-    from aphrodite.models.deepseek_v41.amd.ops import topk_pack
+def test_topk_pack_matches_sonar():
+    from sonar.models.deepseek_v41.amd import rocm
+    from sonar.models.deepseek_v41.amd.ops import topk_pack
 
     g = torch.Generator().manual_seed(4321)
     failed = []

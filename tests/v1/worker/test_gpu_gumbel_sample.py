@@ -17,15 +17,15 @@ import math
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytest.importorskip("triton")
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
     pytest.skip("CUDA required for Gumbel sampler tests", allow_module_level=True)
 
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
-from aphrodite.v1.worker.gpu.sample.gumbel import (
+from sonar.triton_utils import tl, triton
+from sonar.v1.worker.gpu.sample.greedy_argmax import greedy_argmax
+from sonar.v1.worker.gpu.sample.gumbel import (
     _uniform64_from_random53,
     gumbel_sample,
     murmur3_hash32,

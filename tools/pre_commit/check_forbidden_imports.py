@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 import regex as re
 
-# Hub entry points that must go through the Aphrodite-tagged repo_utils helpers.
+# Hub entry points that must go through the Sonar-tagged repo_utils helpers.
 _HF_NAMES = (
     r"HfApi|HfFileSystem|hf_hub_download|snapshot_download"
     r"|list_repo_files|file_exists|try_to_load_from_cache"
@@ -43,36 +43,36 @@ CHECK_IMPORTS = {
         # STOP AND READ BEFORE YOU ADD ANYTHING ELSE TO THIS LIST:
         #  The pickle and cloudpickle modules are known to be unsafe when
         #  deserializing data from potentially untrusted parties. They have
-        #  resulted in multiple CVEs for Aphrodite and numerous vulnerabilities in
+        #  resulted in multiple CVEs for Sonar and numerous vulnerabilities in
         #  the Python ecosystem more broadly. Before adding new uses of
         #  pickle/cloudpickle, please consider safer alternatives like msgpack or
-        #  pydantic that are already in use in Aphrodite. Only add to this list if
+        #  pydantic that are already in use in Sonar. Only add to this list if
         #  absolutely necessary and after careful security review.
         allowed_files={
             # pickle
-            "aphrodite/multimodal/hasher.py",
-            "aphrodite/transformers_utils/config.py",
-            "aphrodite/model_executor/models/registry.py",
-            "aphrodite/compilation/caching.py",
-            "aphrodite/env_override.py",
-            "aphrodite/compilation/piecewise_backend.py",
-            "aphrodite/distributed/utils.py",
-            "aphrodite/distributed/parallel_state.py",
-            "aphrodite/distributed/device_communicators/all_reduce_utils.py",
-            "aphrodite/distributed/device_communicators/shm_broadcast.py",
-            "aphrodite/distributed/device_communicators/shm_object_storage.py",
+            "sonar/multimodal/hasher.py",
+            "sonar/transformers_utils/config.py",
+            "sonar/model_executor/models/registry.py",
+            "sonar/compilation/caching.py",
+            "sonar/env_override.py",
+            "sonar/compilation/piecewise_backend.py",
+            "sonar/distributed/utils.py",
+            "sonar/distributed/parallel_state.py",
+            "sonar/distributed/device_communicators/all_reduce_utils.py",
+            "sonar/distributed/device_communicators/shm_broadcast.py",
+            "sonar/distributed/device_communicators/shm_object_storage.py",
             # Encoder-only Pickler subclass for the existing trusted local queue.
             # shm_broadcast disables its shared-memory arena when remote readers exist.
-            "aphrodite/distributed/device_communicators/shm_tensor_arena.py",
-            "aphrodite/distributed/weight_transfer/ipc_engine.py",
-            "aphrodite/distributed/weight_transfer/clients.py",
-            "examples/rl/rlhf_http_ipc_no_aphrodite.py",
+            "sonar/distributed/device_communicators/shm_tensor_arena.py",
+            "sonar/distributed/weight_transfer/ipc_engine.py",
+            "sonar/distributed/weight_transfer/clients.py",
+            "examples/rl/rlhf_http_ipc_no_sonar.py",
             # CUDA IPC tensor handles between same-UID local processes only. Both
             # peers check socket ownership and the private directory's permissions.
-            "aphrodite/model_executor/model_loader/weight_cache/protocol.py",
+            "sonar/model_executor/model_loader/weight_cache/protocol.py",
             "tests/distributed/test_shm_broadcast.py",
             "tests/distributed/test_weight_transfer.py",
-            "aphrodite/utils/hashing.py",
+            "sonar/utils/hashing.py",
             "tests/multimodal/media/test_base.py",
             "tests/tokenizers_/test_hf.py",
             "tests/utils_/test_hashing.py",
@@ -86,11 +86,11 @@ CHECK_IMPORTS = {
             "benchmarks/cutlass_benchmarks/sparse_benchmarks.py",
             "benchmarks/cutlass_benchmarks/w8a8_benchmarks.py",
             # cloudpickle
-            "aphrodite/v1/executor/multiproc_executor.py",
-            "aphrodite/entrypoints/llm.py",
+            "sonar/v1/executor/multiproc_executor.py",
+            "sonar/entrypoints/llm.py",
             "tests/utils.py",
             # pickle and cloudpickle
-            "aphrodite/v1/serial_utils.py",
+            "sonar/v1/serial_utils.py",
         },
     ),
     "base64": ForbiddenImport(
@@ -110,18 +110,18 @@ CHECK_IMPORTS = {
     ),
     "triton": ForbiddenImport(
         pattern=r"^(from|import)\s+triton(\s|\.|$)",
-        tip="Use 'from aphrodite.triton_utils import triton' instead.",
-        allowed_pattern=re.compile("from aphrodite.triton_utils import (triton|tl|tl, triton)"),
-        allowed_files={"aphrodite/triton_utils/importing.py"},
+        tip="Use 'from sonar.triton_utils import triton' instead.",
+        allowed_pattern=re.compile("from sonar.triton_utils import (triton|tl|tl, triton)"),
+        allowed_files={"sonar/triton_utils/importing.py"},
     ),
     "tilelang": ForbiddenImport(
         pattern=r"^(from|import)\s+tilelang(\s|\.|$)",
-        tip="Use 'from aphrodite.tilelang_utils import tilelang, T' instead.",
+        tip="Use 'from sonar.tilelang_utils import tilelang, T' instead.",
         allowed_pattern=re.compile(
-            r"from\s+aphrodite\.tilelang_utils\s+import\s+"
+            r"from\s+sonar\.tilelang_utils\s+import\s+"
             r"(tilelang|T|T, tilelang|tilelang, T)\b"
         ),
-        allowed_files={"aphrodite/tilelang_utils/__init__.py"},
+        allowed_files={"sonar/tilelang_utils/__init__.py"},
     ),
     "huggingface_hub repo API": ForbiddenImport(
         # Catch `from huggingface_hub import <fn>`, including parenthesized,
@@ -132,12 +132,12 @@ CHECK_IMPORTS = {
             r"^\s*from\s+huggingface_hub\s+import\b[^\n]*\b(?:" + _HF_NAMES + r")\b"
         ),
         tip=(
-            "Use the shared, Aphrodite-tagged helpers from "
-            "aphrodite.transformers_utils.repo_utils (e.g. hf_api(), hf_fs(), "
+            "Use the shared, Sonar-tagged helpers from "
+            "sonar.transformers_utils.repo_utils (e.g. hf_api(), hf_fs(), "
             "list_repo_files, file_exists) instead of calling "
             "huggingface_hub directly."
         ),
-        allowed_files={"aphrodite/transformers_utils/repo_utils.py"},
+        allowed_files={"sonar/transformers_utils/repo_utils.py"},
         allowed_dirs={"examples/"},
     ),
     "transformers legacy names": ForbiddenImport(
@@ -234,10 +234,10 @@ def test_regex():
         # the "triton" rule, so mocked-module test imports are not flagged.
         ("    import tilelang", False),
         ("        from tilelang.jit import JITImpl", False),
-        ("from aphrodite.tilelang_utils import tilelang", False),
-        ("from aphrodite.tilelang_utils import T", False),
-        ("from aphrodite.tilelang_utils import T, tilelang", False),
-        ("from aphrodite.tilelang_utils import tilelang, T", False),
+        ("from sonar.tilelang_utils import tilelang", False),
+        ("from sonar.tilelang_utils import T", False),
+        ("from sonar.tilelang_utils import T, tilelang", False),
+        ("from sonar.tilelang_utils import tilelang, T", False),
         ("import tilelang_kernels", False),
     ]
     for i, (content, should_match) in enumerate(tilelang_cases):
@@ -267,7 +267,7 @@ def test_regex():
         ("from huggingface_hub import PyTorchModelHubMixin", False),
         ("from huggingface_hub.constants import HF_HUB_CACHE", False),
         ("from huggingface_hub.utils import EntryNotFoundError", False),
-        ("from aphrodite.transformers_utils.repo_utils import hf_api", False),
+        ("from sonar.transformers_utils.repo_utils import hf_api", False),
         ("from huggingface_hub import (\n    PyTorchModelHubMixin,\n)", False),
         ("# from huggingface_hub import snapshot_download", False),
     ]
@@ -306,7 +306,7 @@ def test_regex():
             False,
         ),
         ("from transformers.models.qwen2_vl import Qwen2VLImageProcessor", False),
-        ("from aphrodite.foo import GLM4VImageProcessorFast", False),
+        ("from sonar.foo import GLM4VImageProcessorFast", False),
         ("from transformers import (\n    PreTrainedConfig,\n)", False),
         ("# from transformers import PretrainedConfig", False),
     ]

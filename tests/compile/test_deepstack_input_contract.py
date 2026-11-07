@@ -4,25 +4,25 @@
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.models.qwen3_vl import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.models.qwen3_vl import (
     Qwen3VLForConditionalGeneration,
 )
-from aphrodite.sequence import IntermediateTensors
+from sonar.sequence import IntermediateTensors
 
 
 @support_torch_compile(
     dynamic_arg_dims={"x": 0, "deepstack_input_embeds": 0},
 )
 class _DeepStackDecoder(nn.Module):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, sonar_config: SonarConfig, prefix: str = "") -> None:
         super().__init__()
 
     def forward(
@@ -38,12 +38,12 @@ class _DeepStackDecoder(nn.Module):
 def _run_contract(
     deepstack_buffer: Qwen3VLForConditionalGeneration,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    config = AphroditeConfig(compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE))
-    with set_current_aphrodite_config(config):
-        model = _DeepStackDecoder(aphrodite_config=config).eval().cuda()
+    config = SonarConfig(compilation_config=CompilationConfig(mode=CompilationMode.SONAR_COMPILE))
+    with set_current_sonar_config(config):
+        model = _DeepStackDecoder(sonar_config=config).eval().cuda()
 
     x = torch.arange(8, dtype=torch.float32, device="cuda").reshape(2, 4)
-    with torch.inference_mode(), set_forward_context(None, aphrodite_config=config):
+    with torch.inference_mode(), set_forward_context(None, sonar_config=config):
         empty_payload = deepstack_buffer._get_deepstack_input_embeds(num_tokens=2)
         first = model(x, empty_payload)
 
@@ -57,7 +57,7 @@ def _run_contract(
 
 
 def test_qwen3_vl_deepstack_payload_after_empty_compile(monkeypatch):
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
     deepstack_buffer = object.__new__(Qwen3VLForConditionalGeneration)
     deepstack_buffer.deepstack_input_embeds = [torch.zeros(2, 4, device="cuda")]

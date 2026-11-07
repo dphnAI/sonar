@@ -7,12 +7,12 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import AphroditeConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.v1.core.sched.utils import check_stop
-from aphrodite.v1.engine.input_processor import InputProcessor
-from aphrodite.v1.request import Request, RequestStatus
+from sonar import SamplingParams
+from sonar.config import SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.v1.core.sched.utils import check_stop
+from sonar.v1.engine.input_processor import InputProcessor
+from sonar.v1.request import Request, RequestStatus
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -80,7 +80,7 @@ def _validate(enable_trace_replay: bool) -> None:
             enable_trace_replay=enable_trace_replay,
             is_diffusion=False,
         ),
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             reasoning_config=None,
             # Engine has no watermark configuration.
             _check_supports_watermarking=lambda params: False,
@@ -98,7 +98,7 @@ def _validate(enable_trace_replay: bool) -> None:
 
 
 def test_trace_request_rejected_when_feature_disabled():
-    with pytest.raises(AphroditeValidationError, match="--enable-trace-replay"):
+    with pytest.raises(SonarValidationError, match="--enable-trace-replay"):
         _validate(enable_trace_replay=False)
 
 
@@ -113,4 +113,4 @@ def test_trace_replay_requires_v2_model_runner():
     )
 
     with pytest.raises(ValueError, match="trace replay requires Model Runner V2"):
-        AphroditeConfig._verify_trace_replay_config(config)
+        SonarConfig._verify_trace_replay_config(config)

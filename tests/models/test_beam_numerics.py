@@ -43,7 +43,7 @@ def _assert_boundary_close(actual, expected, *, relative_tolerance=1e-4):
 @pytest.mark.parametrize("cap", [7.3, 30.0])
 @torch.inference_mode()
 def test_softcap_rounds_into_original_logits_without_touching_padding(dtype, rows, cap):
-    from aphrodite.models.beam.nvidia.activation import beam_softcap_logits
+    from sonar.models.beam.nvidia.activation import beam_softcap_logits
 
     torch.manual_seed(42)
     storage = torch.randn(rows, 264, device="cuda", dtype=dtype) * (cap * 3)
@@ -68,10 +68,10 @@ def test_softcap_rounds_into_original_logits_without_touching_padding(dtype, row
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 @pytest.mark.parametrize("rows,width", [(0, 2560), (1, 5120), (8, 2560), (33, 513), (2048, 2560)])
 @torch.inference_mode()
-def test_dense_activation_rounds_after_product(default_aphrodite_config, dtype, rows, width):
+def test_dense_activation_rounds_after_product(default_sonar_config, dtype, rows, width):
     """BF16 I/O must not round the SiLU result before multiplication."""
-    import aphrodite._custom_ops  # noqa: F401
-    from aphrodite.models.beam.nvidia.activation import beam_silu_mul
+    import sonar._custom_ops  # noqa: F401
+    from sonar.models.beam.nvidia.activation import beam_silu_mul
 
     torch.manual_seed(42)
     x = torch.randn(rows, 2 * width, device="cuda", dtype=dtype) * 4
@@ -96,7 +96,7 @@ def test_dense_activation_rounds_after_product(default_aphrodite_config, dtype, 
 @torch.inference_mode()
 def test_fused_norm_preserves_fp32_affine_for_strided_rows(dtype, shape):
     """QKV slices and near-epsilon values retain the reference's FP32 affine."""
-    from aphrodite.models.beam.nvidia.layernorm import beam_rms_norm
+    from sonar.models.beam.nvidia.layernorm import beam_rms_norm
 
     generator = torch.Generator(device="cuda").manual_seed(42)
     storage = torch.randn(
@@ -126,7 +126,7 @@ def test_fused_norm_preserves_fp32_affine_for_strided_rows(dtype, shape):
 @torch.inference_mode()
 def test_norm_residual_norm_preserves_intermediate_rounding(dtype, shape, next_):
     """Both residual and next input must retain BF16 casts between fused stages."""
-    from aphrodite.models.beam.nvidia.layernorm import beam_norm_residual_norm
+    from sonar.models.beam.nvidia.layernorm import beam_norm_residual_norm
 
     torch.manual_seed(42)
     x = torch.randn(shape[0], shape[1] + 32, device="cuda", dtype=dtype)[:, 1 : shape[1] + 1]
@@ -165,7 +165,7 @@ def _separate_qk_norm_rope(
     neox=True,
     ssmax=False,
 ):
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     q = _torch_rms_norm(q.reshape(-1, q.shape[-1] // head_dim, head_dim), qw, eps).reshape_as(q)
     k = _torch_rms_norm(k.reshape(-1, k.shape[-1] // head_dim, head_dim), kw, eps).reshape_as(k)
@@ -185,7 +185,7 @@ def _separate_qk_norm_rope(
 @pytest.mark.parametrize("packed", [False, True])
 @torch.inference_mode()
 def test_output_gate_preserves_activation_dtype_rounding(dtype, rows, packed):
-    from aphrodite.models.beam.nvidia.attention_ops import beam_output_gate
+    from sonar.models.beam.nvidia.attention_ops import beam_output_gate
 
     torch.manual_seed(42)
     x = torch.randn(rows, 768, device="cuda", dtype=dtype)
@@ -205,7 +205,7 @@ def test_output_gate_preserves_activation_dtype_rounding(dtype, rows, packed):
 @pytest.mark.parametrize("head_dim,q_heads,k_heads", [(128, 6, 1), (80, 4, 2)])
 @torch.inference_mode()
 def test_qk_norm_rope_keeps_norm_rounding_and_fp32_rotation(dtype, rotary_dim, neox, head_dim, q_heads, k_heads):
-    from aphrodite.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
 
     torch.manual_seed(42)
     rows = 17
@@ -234,7 +234,7 @@ def test_qk_norm_rope_keeps_norm_rounding_and_fp32_rotation(dtype, rotary_dim, n
 @torch.inference_mode()
 def test_qk_norm_rope_inserts_only_mapped_kv(rows, kv_heads, nhd, rotary_dim, neox):
     """Cache insertion preserves Q/K and follows live slot mappings on replay."""
-    from aphrodite.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
 
     torch.manual_seed(42)
     sizes = (6 * kv_heads * 128, kv_heads * 128, kv_heads * 128)
@@ -284,7 +284,7 @@ def test_qk_norm_rope_inserts_only_mapped_kv(rows, kv_heads, nhd, rotary_dim, ne
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
 @torch.inference_mode()
 def test_ssmax_fuses_after_norm_rounding_and_scales_only_queries(dtype):
-    from aphrodite.models.beam.nvidia.attention_ops import beam_qk_norm_rope
+    from sonar.models.beam.nvidia.attention_ops import beam_qk_norm_rope
 
     torch.manual_seed(42)
     positions = torch.tensor([0, 1, 15, 2047, 2048, 16384, 100000, 1048575], device="cuda")
@@ -308,7 +308,7 @@ def test_ssmax_fuses_after_norm_rounding_and_scales_only_queries(dtype):
 @pytest.mark.parametrize("rotary_dim", [0, 128])
 @torch.inference_mode()
 def test_attention_fusions_replay_with_changed_positions_and_gates(rotary_dim):
-    from aphrodite.models.beam.nvidia.attention_ops import (
+    from sonar.models.beam.nvidia.attention_ops import (
         beam_output_gate,
         beam_qk_norm_rope,
     )
@@ -365,12 +365,12 @@ def test_fused_kernels_reuse_specializations_across_token_counts(monkeypatch, ro
     """Warm tile buckets once, then vary batch sizes, positions offsets and scales."""
     from triton import knobs
 
-    from aphrodite.models.beam.nvidia.activation import beam_softcap_logits
-    from aphrodite.models.beam.nvidia.attention_ops import (
+    from sonar.models.beam.nvidia.activation import beam_softcap_logits
+    from sonar.models.beam.nvidia.attention_ops import (
         beam_output_gate,
         beam_qk_norm_rope,
     )
-    from aphrodite.models.beam.nvidia.layernorm import beam_norm_residual_norm, beam_rms_norm
+    from sonar.models.beam.nvidia.layernorm import beam_norm_residual_norm, beam_rms_norm
 
     device = "cuda"
     dtype = torch.bfloat16
@@ -419,7 +419,7 @@ def test_fused_kernels_reuse_specializations_across_token_counts(monkeypatch, ro
         run(tokens, 0, (0.125, 0.9682458365518543))
 
     def unexpected_compile(**kwargs):
-        if kwargs["fn"].module.startswith("aphrodite.models.beam.nvidia"):
+        if kwargs["fn"].module.startswith("sonar.models.beam.nvidia"):
             pytest.fail(f"Unexpected shape specialization: {kwargs['fn'].name}")
 
     with monkeypatch.context() as patch:
@@ -443,7 +443,7 @@ def _beam_allreduce_worker(rank, world_size, port, hidden_size, host="127.0.0.1"
 
     import torch.distributed as dist
 
-    from aphrodite.models.beam.nvidia.allreduce import (
+    from sonar.models.beam.nvidia.allreduce import (
         BeamAllReduceWorkspace,
         beam_allreduce_norm_residual_norm,
     )
@@ -524,7 +524,7 @@ def test_allreduce_boundary_handles_batch_changes_and_graph_replay(world_size, h
     """Changing token counts must not consume stale Lamport slots or deadlock."""
     from torch.multiprocessing import spawn
 
-    from aphrodite.utils.network_utils import get_open_port
+    from sonar.utils.network_utils import get_open_port
 
     if torch.accelerator.device_count() < world_size:
         pytest.skip(f"Requires {world_size} GPUs")
@@ -539,8 +539,8 @@ def test_allreduce_boundary_handles_batch_changes_and_graph_replay(world_size, h
 def _beam_finalize_worker(rank, world_size, port, hidden_size):
     import torch.distributed as dist
 
-    from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
-    from aphrodite.models.beam.nvidia.allreduce import (
+    from sonar.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
+    from sonar.models.beam.nvidia.allreduce import (
         BeamAllReduceWorkspace,
         beam_allreduce_norm_residual_norm,
         beam_finalize_allreduce_norm_residual_norm,
@@ -637,7 +637,7 @@ def test_moe_finalize_allreduce_preserves_local_rounding_and_replay(world_size):
     """Empty local routes and live routing metadata retain BF16 casts on replay."""
     from torch.multiprocessing import spawn
 
-    from aphrodite.utils.network_utils import get_open_port
+    from sonar.utils.network_utils import get_open_port
 
     if torch.accelerator.device_count() < world_size:
         pytest.skip(f"Requires {world_size} GPUs")
@@ -655,7 +655,7 @@ def test_moe_finalize_allreduce_preserves_local_rounding_and_replay(world_size):
 @torch.inference_mode()
 def test_packed_attention_projection(rows, qkv_rows, gate_rows):
     """The shared GEMMs preserve QKV/gate ordering and BF16 output accuracy."""
-    from aphrodite.models.beam.nvidia.projection import (
+    from sonar.models.beam.nvidia.projection import (
         packed_projection,
         use_low_latency_gemm,
     )

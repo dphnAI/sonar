@@ -16,7 +16,7 @@ import torch
 
 pytest.importorskip("triton")
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
     pytest.skip(
@@ -24,7 +24,7 @@ if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
         allow_module_level=True,
     )
 
-from aphrodite.v1.worker.gpu.model_states.prompt_embeds import PromptEmbedsState
+from sonar.v1.worker.gpu.model_states.prompt_embeds import PromptEmbedsState
 
 HIDDEN = 24
 MAX_NUM_REQS = 8

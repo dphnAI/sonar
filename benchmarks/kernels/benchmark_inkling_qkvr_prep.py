@@ -6,8 +6,8 @@ import statistics
 import torch
 from tabulate import tabulate
 
-from aphrodite.models.inkling.nvidia.ops import qkvr_prep
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.models.inkling.nvidia.ops import qkvr_prep
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 def make_inputs(tokens: int, tp_size: int, is_local: bool):

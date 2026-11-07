@@ -4,12 +4,12 @@
 use std::collections::HashMap;
 use std::mem::size_of;
 
-use aphrodite_engine_core_client::protocol::dtype::{ModelDtype, TensorDtype};
-use aphrodite_engine_core_client::protocol::multimodal::MmKwargValue as ProtocolKwargValue;
-use aphrodite_engine_core_client::protocol::tensor::{WireArrayData, WireTensor};
 use half::{bf16, f16};
 use llm_multimodal::{ModelSpecificValue, PreprocessedEncoderInputs};
 use ndarray::ArrayD;
+use sonar_engine_core_client::protocol::dtype::{ModelDtype, TensorDtype};
+use sonar_engine_core_client::protocol::multimodal::MmKwargValue as ProtocolKwargValue;
+use sonar_engine_core_client::protocol::tensor::{WireArrayData, WireTensor};
 
 use crate::error::{Error, Result, bail_multimodal, multimodal};
 
@@ -148,7 +148,7 @@ impl KwargValue {
     /// Convert one media item from a batched tensor field to wire bytes.
     ///
     /// Batched fields use their first axis as media-item index and drop that
-    /// axis in the per-feature value, matching Aphrodite's batched-field semantics.
+    /// axis in the per-feature value, matching Sonar's batched-field semantics.
     pub(super) fn batched_wire_value_at(&self, index: usize) -> Result<ProtocolKwargValue> {
         match self {
             Self::Passthrough(ProtocolKwargValue::List(values)) => values

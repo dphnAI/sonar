@@ -95,7 +95,7 @@ __device__ __forceinline__ uint8_t rocm_cvt_float_to_fp8_e4m3(float val) {
 }
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace minimax_m3_fused_ops {
 
 namespace {
@@ -187,7 +187,7 @@ __device__ __forceinline__ void normAndRope(
 template <typename scalar_t>
 __device__ __forceinline__ void loadElems(scalar_t const* __restrict__ src,
                                           float (&elems)[kElemsPerLane]) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   uint2 v = *reinterpret_cast<uint2 const*>(src);
   auto const* p =
       reinterpret_cast<typename Converter::packed_hip_type const*>(&v);
@@ -203,7 +203,7 @@ __device__ __forceinline__ void loadElems(scalar_t const* __restrict__ src,
 template <typename scalar_t>
 __device__ __forceinline__ void storeElems(
     scalar_t* __restrict__ dst, float const (&elems)[kElemsPerLane]) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   uint2 v;
   auto* p = reinterpret_cast<typename Converter::packed_hip_type*>(&v);
 #pragma unroll
@@ -225,7 +225,7 @@ __device__ __forceinline__ void storeCacheElems(
   } else {
 #ifdef USE_ROCM
     // Match ROCm's model-dtype materialization before FP8 cache conversion.
-    using Converter = aphrodite::_typeConvert<scalar_t>;
+    using Converter = sonar::_typeConvert<scalar_t>;
     using rounded_t = typename Converter::hip_type;
     rounded_t rounded[kElemsPerLane];
   #pragma unroll
@@ -281,7 +281,7 @@ __device__ __forceinline__ void storeElemsFp8(
 template <typename scalar_t>
 __device__ __forceinline__ void storeUnitScaleQElemsFp8(
     uint8_t* __restrict__ dst, float const (&elems)[kElemsPerLane]) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   __nv_fp8x2_storage_t out2[kElemsPerLane / 2];
   #pragma unroll
   for (int i = 0; i < kElemsPerLane / 2; i++) {
@@ -303,7 +303,7 @@ template <typename scalar_t>
 __device__ __forceinline__ void storeScaledQElemsFp8(
     uint8_t* __restrict__ dst, float const (&elems)[kElemsPerLane],
     float const inv_scale) {
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
 #ifndef USE_ROCM
   if (inv_scale == 1.0f) {
     storeUnitScaleQElemsFp8<scalar_t>(dst, elems);
@@ -326,7 +326,7 @@ template <typename scalar_t>
 __device__ __forceinline__ void storeIndexQElemsFp8(
     uint8_t* __restrict__ dst, float const (&elems)[kElemsPerLane]) {
 #ifndef USE_ROCM
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   __nv_fp8x2_storage_t out2[kElemsPerLane / 2];
   #pragma unroll
   for (int i = 0; i < kElemsPerLane / 2; i++) {
@@ -560,7 +560,7 @@ template <typename scalar_t>
 __device__ __forceinline__ uint16_t nvfp4QuantizeElems(
     float const (&elems)[kElemsPerLane], float const scale, uint8_t& sf_byte) {
   // Quantize the model-dtype value that the unfused path reads back from qkv.
-  using Converter = aphrodite::_typeConvert<scalar_t>;
+  using Converter = sonar::_typeConvert<scalar_t>;
   float x[kElemsPerLane];
   float group_max = 0.0f;
   #pragma unroll
@@ -899,7 +899,7 @@ __global__ void fusedMiniMaxM3QNormRopeKVInsertKernel(
           if constexpr (!kHasIndex) {
             // Dense layers stand in for reshape_and_cache_flash, which
             // quantizes the k already materialized in the model dtype.
-            using Converter = aphrodite::_typeConvert<scalar_t>;
+            using Converter = sonar::_typeConvert<scalar_t>;
 #pragma unroll
             for (int i = 0; i < kElemsPerLane; i++) {
               elems[i] = Converter::convert(Converter::convert(elems[i]));
@@ -1426,7 +1426,7 @@ __device__ __forceinline__ void runWarp(
   #pragma unroll
           for (int c = 0; c < kLaneChunks; c++) {
             if constexpr (!kHasIndex) {
-              using Converter = aphrodite::_typeConvert<scalar_t>;
+              using Converter = sonar::_typeConvert<scalar_t>;
   #pragma unroll
               for (int i = 0; i < kElemsPerLane; i++) {
                 e[c][i] = Converter::convert(Converter::convert(e[c][i]));
@@ -1929,12 +1929,12 @@ __device__ __forceinline__ uint2 bf16x8ToE4m3(uint4 const p,
         __CUDA_ARCH_FAMILY_SPECIFIC__ >= 1000) ||                              \
        (defined(__CUDA_ARCH_SPECIFIC__) && __CUDA_ARCH_SPECIFIC__ >= 1000)) && \
       defined(CUDART_VERSION) && CUDART_VERSION >= 13010
-    #define APHRODITE_CTX_KV_BF16X2_TO_E4M3X2
+    #define SONAR_CTX_KV_BF16X2_TO_E4M3X2
   #endif
 // Eight bf16 -> e4m3 with a unit scale (exact); one convert per pair where
 // the arch and toolkit (PTX ISA 9.1+) convert bf16x2 -> e4m3x2.
 __device__ __forceinline__ uint2 bf16x8ToE4m3(uint4 const p) {
-  #ifdef APHRODITE_CTX_KV_BF16X2_TO_E4M3X2
+  #ifdef SONAR_CTX_KV_BF16X2_TO_E4M3X2
   uint32_t r[2];
   uint32_t const w[4] = {p.x, p.y, p.z, p.w};
     #pragma unroll
@@ -2046,7 +2046,7 @@ __global__ void __launch_bounds__(kCtxBlockSize)
   constexpr int kV = kHeadDim * kElemBytes;
   float const k_inv = __fdividef(1.0f, k_scale);
   float const v_inv = __fdividef(1.0f, v_scale);
-  #ifdef APHRODITE_CTX_KV_BF16X2_TO_E4M3X2
+  #ifdef SONAR_CTX_KV_BF16X2_TO_E4M3X2
   bool const unit_scale = k_scale == 1.0f && v_scale == 1.0f;
   #else
   constexpr bool unit_scale = false;
@@ -2150,11 +2150,11 @@ void launchFusedMiniMaxM3DSparkContextKV(
 #endif  // !USE_ROCM
 
 }  // namespace minimax_m3_fused_ops
-}  // namespace aphrodite
+}  // namespace sonar
 
 // clang-format off
 #define CALL_FUSED_MINIMAX_M3_IMPL(CACHE_T, KV_DTYPE, NVFP4)              \
-  aphrodite::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T, KV_DTYPE,      \
+  sonar::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T, KV_DTYPE,      \
                                                    NVFP4>(                \
       reinterpret_cast<st*>(qkv.data_ptr()),                                   \
       q_out.has_value() ? reinterpret_cast<st*>(q_out->data_ptr()) : nullptr,  \
@@ -2243,11 +2243,11 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
                       k_norm_weight.scalar_type() == qkv.scalar_type(),
                   "q/k norm weight dtype must match qkv");
   STD_TORCH_CHECK(
-      q_norm_weight.numel() == aphrodite::minimax_m3_fused_ops::kHeadDim &&
-          k_norm_weight.numel() == aphrodite::minimax_m3_fused_ops::kHeadDim,
+      q_norm_weight.numel() == sonar::minimax_m3_fused_ops::kHeadDim &&
+          k_norm_weight.numel() == sonar::minimax_m3_fused_ops::kHeadDim,
       "q/k norm weight must have 128 elements");
   STD_TORCH_CHECK(rotary_dim > 0 && rotary_dim % 8 == 0 &&
-                      rotary_dim <= aphrodite::minimax_m3_fused_ops::kHeadDim,
+                      rotary_dim <= sonar::minimax_m3_fused_ops::kHeadDim,
                   "rotary_dim must be a positive multiple of 8 and <= 128");
 
   int const num_tokens = static_cast<int>(qkv.size(0));
@@ -2261,10 +2261,10 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
   bool const insert_kv = kv_cache.has_value();
   bool const process_index = has_index && !skip_index_branch;
   bool const nvfp4_kv = kv_cache_dtype == "nvfp4";
-  aphrodite::Fp8KVCacheDataType const kv_dt =
-      nvfp4_kv ? aphrodite::Fp8KVCacheDataType::kAuto
-               : aphrodite::get_fp8_kv_cache_data_type(kv_cache_dtype);
-  int const kHeadDim = aphrodite::minimax_m3_fused_ops::kHeadDim;
+  sonar::Fp8KVCacheDataType const kv_dt =
+      nvfp4_kv ? sonar::Fp8KVCacheDataType::kAuto
+               : sonar::get_fp8_kv_cache_data_type(kv_cache_dtype);
+  int const kHeadDim = sonar::minimax_m3_fused_ops::kHeadDim;
   int const expected_row =
       (nq + 2 * nkv + (has_index ? niq + 1 : 0)) * kHeadDim;
   STD_TORCH_CHECK(qkv.size(1) == expected_row,
@@ -2313,7 +2313,7 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
       STD_TORCH_CHECK(
           kv_cache->scalar_type() == torch::headeronly::ScalarType::Byte,
           "nvfp4 kv_cache must use uint8 storage");
-    } else if (kv_dt == aphrodite::Fp8KVCacheDataType::kAuto) {
+    } else if (kv_dt == sonar::Fp8KVCacheDataType::kAuto) {
       STD_TORCH_CHECK(kv_cache->scalar_type() == qkv.scalar_type(),
                       "auto kv_cache dtype must match qkv");
     } else {
@@ -2464,11 +2464,11 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
 
   if (nvfp4_kv) {
 #ifndef USE_ROCM
-    APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+    SONAR_STABLE_DISPATCH_HALF_TYPES(
         qkv.scalar_type(), "fused_minimax_m3_qknorm_rope_kv_insert_nvfp4", [&] {
           using st = scalar_t;
-          CALL_FUSED_MINIMAX_M3_IMPL(
-              uint8_t, aphrodite::Fp8KVCacheDataType::kAuto, true);
+          CALL_FUSED_MINIMAX_M3_IMPL(uint8_t, sonar::Fp8KVCacheDataType::kAuto,
+                                     true);
         });
 #else
     STD_TORCH_CHECK(false, "nvfp4 kv_cache is not supported on ROCm");
@@ -2476,7 +2476,7 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
     return;
   }
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       qkv.scalar_type(), "fused_minimax_m3_qknorm_rope_kv_insert", [&] {
         using st = scalar_t;
         DISPATCH_BY_KV_CACHE_DTYPE(qkv.scalar_type(), kv_cache_dtype,
@@ -2505,7 +2505,7 @@ void fused_minimax_m3_dspark_context_kv(
   STD_TORCH_CHECK(false, "fused_minimax_m3_dspark_context_kv is CUDA-only");
 #else
   using torch::headeronly::ScalarType;
-  int const kHeadDim = aphrodite::minimax_m3_fused_ops::kHeadDim;
+  int const kHeadDim = sonar::minimax_m3_fused_ops::kHeadDim;
   STD_TORCH_CHECK(all_kv.is_cuda() && all_kv.dim() == 5 &&
                       all_kv.size(2) == 2 && all_kv.size(4) == kHeadDim &&
                       all_kv.stride(4) == 1 &&
@@ -2579,7 +2579,7 @@ void fused_minimax_m3_dspark_context_kv(
   // all_kv strides in 16-byte vectors.
   auto launch = [&](auto fp8_tag) {
     constexpr bool kFp8 = decltype(fp8_tag)::value;
-    aphrodite::minimax_m3_fused_ops::launchFusedMiniMaxM3DSparkContextKV<kFp8>(
+    sonar::minimax_m3_fused_ops::launchFusedMiniMaxM3DSparkContextKV<kFp8>(
         reinterpret_cast<uint4 const*>(all_kv.data_ptr()),
         reinterpret_cast<uint4 const*>(k_norm_weight.data_ptr()),
         reinterpret_cast<uint4 const*>(cos_sin_cache.data_ptr()),

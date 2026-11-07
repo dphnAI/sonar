@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from openai import OpenAI
 
-# Modify OpenAI's API key and API base to use Aphrodite's API server.
+# Modify OpenAI's API key and API base to use Sonar's API server.
 openai_api_key = "EMPTY"
 openai_api_base = "http://localhost:2242/v1"
 

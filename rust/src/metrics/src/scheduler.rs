@@ -91,7 +91,7 @@ pub struct WaitingReasonLabels {
     pub reason: &'static str,
 }
 
-/// Labels for `aphrodite:engine_sleep_state`: one series per engine and state,
+/// Labels for `sonar:engine_sleep_state`: one series per engine and state,
 /// `awake`, `weights_offloaded` (sleep level 1) or `discard_all` (level 2).
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct EngineSleepStateLabels {
@@ -148,7 +148,7 @@ impl EncodeLabelValue for LoraAdapterNames {
     }
 }
 
-/// Labels for `aphrodite:lora_requests_info`.
+/// Labels for `sonar:lora_requests_info`.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct LoraInfoLabels {
     pub running_lora_adapters: LoraAdapterNames,
@@ -248,11 +248,11 @@ pub struct SchedulerMetrics {
     pub scheduler_kv_fetch_by_stage: Family<KvFetchStageLabels, U64Gauge>,
     pub kv_cache_usage: Family<EngineLabels, F64Gauge>,
 
-    /// `aphrodite:engine_sleep_state`, set by the engine client's sleep and wake
+    /// `sonar:engine_sleep_state`, set by the engine client's sleep and wake
     /// calls rather than from `SchedulerStats`.
     pub engine_sleep_state: Family<EngineSleepStateLabels, U64Gauge>,
 
-    /// `aphrodite:lora_requests_info`. Value is the emit-time unix timestamp in
+    /// `sonar:lora_requests_info`. Value is the emit-time unix timestamp in
     /// seconds.
     pub lora_info: Family<LoraInfoLabels, F64Gauge>,
 
@@ -321,31 +321,31 @@ impl SchedulerMetrics {
         // Scheduler state gauges.
         let scheduler_running = Family::default();
         registry.register(
-            "aphrodite:num_requests_running",
+            "sonar:num_requests_running",
             "Number of requests in model execution batches",
             scheduler_running.clone(),
         );
 
         let scheduler_waiting = Family::default();
         registry.register(
-            "aphrodite:num_requests_waiting",
+            "sonar:num_requests_waiting",
             "Number of requests waiting to be processed",
             scheduler_waiting.clone(),
         );
 
         let scheduler_waiting_by_reason = Family::default();
         registry.register(
-            "aphrodite:num_requests_waiting_by_reason",
+            "sonar:num_requests_waiting_by_reason",
             "Number of waiting requests by reason. \
              Reason labels: 'capacity' = waiting for scheduling capacity; \
              'deferred' = deferred by transient constraints (LoRA budget, KV transfer, \
-             blocked status). Sum of all reasons equals aphrodite:num_requests_waiting.",
+             blocked status). Sum of all reasons equals sonar:num_requests_waiting.",
             scheduler_waiting_by_reason.clone(),
         );
 
         let scheduler_kv_fetch_by_stage = Family::default();
         registry.register(
-            "aphrodite:num_requests_kv_fetch_by_stage",
+            "sonar:num_requests_kv_fetch_by_stage",
             "Number of waiting requests by async KV load stage. \
              Stage labels: 'waiting_to_start' = needs an async KV load that has not started; \
              'in_progress' = load started and not yet reported finished; \
@@ -355,14 +355,14 @@ impl SchedulerMetrics {
 
         let kv_cache_usage = Family::default();
         registry.register(
-            "aphrodite:kv_cache_usage_perc",
+            "sonar:kv_cache_usage_perc",
             "KV-cache usage. 1 means 100 percent usage",
             kv_cache_usage.clone(),
         );
 
         let engine_sleep_state = Family::default();
         registry.register(
-            "aphrodite:engine_sleep_state",
+            "sonar:engine_sleep_state",
             "Engine sleep state; awake = 0 means engine is sleeping; \
              awake = 1 means engine is awake; \
              weights_offloaded = 1 means sleep level 1; \
@@ -372,7 +372,7 @@ impl SchedulerMetrics {
 
         let lora_info = Family::default();
         registry.register(
-            "aphrodite:lora_requests_info",
+            "sonar:lora_requests_info",
             "Running stats on lora requests.",
             lora_info.clone(),
         );
@@ -380,21 +380,21 @@ impl SchedulerMetrics {
         // Prefix-cache counters, including the connector-backed external cache path.
         let prefix_cache_queries = Family::default();
         registry.register(
-            "aphrodite:prefix_cache_queries",
+            "sonar:prefix_cache_queries",
             "Prefix cache queries, in terms of number of queried tokens",
             prefix_cache_queries.clone(),
         );
 
         let prefix_cache_hits = Family::default();
         registry.register(
-            "aphrodite:prefix_cache_hits",
+            "sonar:prefix_cache_hits",
             "Prefix cache hits, in terms of number of cached tokens.",
             prefix_cache_hits.clone(),
         );
 
         let external_prefix_cache_queries = Family::default();
         registry.register(
-            "aphrodite:external_prefix_cache_queries",
+            "sonar:external_prefix_cache_queries",
             "External prefix cache queries from KV connector cross-instance cache sharing, in terms of number of queried tokens.",
             external_prefix_cache_queries.clone(),
         );
@@ -403,12 +403,12 @@ impl SchedulerMetrics {
 
         let prompt_tokens_cached_by_source = Family::default();
         registry.register(
-            "aphrodite:prompt_tokens_cached_by_source",
-            "Prefix-cache hit tokens by the cache tier that supplied them: device (local HBM), host (offloaded to DRAM), disk, p2p (transferred from another Aphrodite instance) or external_unspecified. Counted at admission; sums to aphrodite:prefix_cache_hits + aphrodite:external_prefix_cache_hits.",
+            "sonar:prompt_tokens_cached_by_source",
+            "Prefix-cache hit tokens by the cache tier that supplied them: device (local HBM), host (offloaded to DRAM), disk, p2p (transferred from another Sonar instance) or external_unspecified. Counted at admission; sums to sonar:prefix_cache_hits + sonar:external_prefix_cache_hits.",
             prompt_tokens_cached_by_source.clone(),
         );
         registry.register(
-            "aphrodite:external_prefix_cache_hits",
+            "sonar:external_prefix_cache_hits",
             "External prefix cache hits from KV connector cross-instance cache sharing, in terms of number of cached tokens.",
             external_prefix_cache_hits.clone(),
         );
@@ -416,28 +416,28 @@ impl SchedulerMetrics {
         // Speculative decoding counters.
         let spec_decode_num_drafts = Family::default();
         registry.register(
-            "aphrodite:spec_decode_num_drafts",
+            "sonar:spec_decode_num_drafts",
             "Number of spec decoding drafts.",
             spec_decode_num_drafts.clone(),
         );
 
         let spec_decode_num_draft_tokens = Family::default();
         registry.register(
-            "aphrodite:spec_decode_num_draft_tokens",
+            "sonar:spec_decode_num_draft_tokens",
             "Number of draft tokens.",
             spec_decode_num_draft_tokens.clone(),
         );
 
         let spec_decode_num_accepted_tokens = Family::default();
         registry.register(
-            "aphrodite:spec_decode_num_accepted_tokens",
+            "sonar:spec_decode_num_accepted_tokens",
             "Number of accepted tokens.",
             spec_decode_num_accepted_tokens.clone(),
         );
 
         let spec_decode_num_accepted_tokens_per_pos = Family::default();
         registry.register(
-            "aphrodite:spec_decode_num_accepted_tokens_per_pos",
+            "sonar:spec_decode_num_accepted_tokens_per_pos",
             "Accepted tokens per draft position.",
             spec_decode_num_accepted_tokens_per_pos.clone(),
         );
@@ -445,21 +445,21 @@ impl SchedulerMetrics {
         // Per-engine performance / MFU counters.
         let estimated_flops_per_gpu = Family::default();
         registry.register(
-            "aphrodite:estimated_flops_per_gpu",
+            "sonar:estimated_flops_per_gpu",
             "Estimated number of floating point operations per GPU (for Model Flops Utilization calculations).",
             estimated_flops_per_gpu.clone(),
         );
 
         let estimated_read_bytes_per_gpu = Family::default();
         registry.register(
-            "aphrodite:estimated_read_bytes_per_gpu",
+            "sonar:estimated_read_bytes_per_gpu",
             "Estimated number of bytes read from memory per GPU (for Model Flops Utilization calculations).",
             estimated_read_bytes_per_gpu.clone(),
         );
 
         let estimated_write_bytes_per_gpu = Family::default();
         registry.register(
-            "aphrodite:estimated_write_bytes_per_gpu",
+            "sonar:estimated_write_bytes_per_gpu",
             "Estimated number of bytes written to memory per GPU (for Model Flops Utilization calculations).",
             estimated_write_bytes_per_gpu.clone(),
         );
@@ -470,7 +470,7 @@ impl SchedulerMetrics {
             buckets,
         ));
         registry.register(
-            "aphrodite:kv_block_lifetime_seconds",
+            "sonar:kv_block_lifetime_seconds",
             "Histogram of KV cache block lifetime from allocation to eviction. Sampled metrics (controlled by --kv-cache-metrics-sample).",
             kv_block_lifetime_seconds.clone(),
         );
@@ -479,7 +479,7 @@ impl SchedulerMetrics {
             FamilyHistogram::new(BucketFamily::KvCacheResidency, buckets),
         );
         registry.register(
-            "aphrodite:kv_block_idle_before_evict_seconds",
+            "sonar:kv_block_idle_before_evict_seconds",
             "Histogram of idle time before KV cache block eviction. Sampled metrics (controlled by --kv-cache-metrics-sample).",
             kv_block_idle_before_evict_seconds.clone(),
         );
@@ -489,7 +489,7 @@ impl SchedulerMetrics {
             buckets,
         ));
         registry.register(
-            "aphrodite:kv_block_reuse_gap_seconds",
+            "sonar:kv_block_reuse_gap_seconds",
             "Histogram of time gaps between consecutive KV cache block accesses. Only the most recent accesses are recorded (ring buffer). Sampled metrics (controlled by --kv-cache-metrics-sample).",
             kv_block_reuse_gap_seconds.clone(),
         );
@@ -498,40 +498,40 @@ impl SchedulerMetrics {
         let mooncake_operation_time_seconds =
             Family::new_with_constructor(mooncake_operation_time_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:mooncake_store_operation_time_seconds",
+            "sonar:mooncake_store_operation_time_seconds",
             "Histogram of Mooncake store communication time.",
             mooncake_operation_time_seconds.clone(),
         );
 
         // NOTE: registration names below omit the `_total` suffix that the
-        // Python metric names carry (e.g. `aphrodite:mooncake_store_operation_total`)
+        // Python metric names carry (e.g. `sonar:mooncake_store_operation_total`)
         // because this crate's `prometheus-client` (unlike Python's, which
         // strips a user-supplied `_total` before re-adding it) appends
         // `_total` unconditionally for counters; see the note in `lib.rs`.
         let mooncake_operation_total = Family::default();
         registry.register(
-            "aphrodite:mooncake_store_operation",
+            "sonar:mooncake_store_operation",
             "Number of Mooncake store communication operations.",
             mooncake_operation_total.clone(),
         );
 
         let mooncake_operation_keys_total = Family::default();
         registry.register(
-            "aphrodite:mooncake_store_operation_keys",
+            "sonar:mooncake_store_operation_keys",
             "Number of Mooncake store keys touched by operations.",
             mooncake_operation_keys_total.clone(),
         );
 
         let mooncake_operation_bytes_total = Family::default();
         registry.register(
-            "aphrodite:mooncake_store_operation_bytes",
+            "sonar:mooncake_store_operation_bytes",
             "Number of bytes transferred by Mooncake store operations.",
             mooncake_operation_bytes_total.clone(),
         );
 
         let mooncake_operation_failed_keys_total = Family::default();
         registry.register(
-            "aphrodite:mooncake_store_operation_failed_keys",
+            "sonar:mooncake_store_operation_failed_keys",
             "Number of Mooncake store keys that failed in operations.",
             mooncake_operation_failed_keys_total.clone(),
         );
@@ -541,7 +541,7 @@ impl SchedulerMetrics {
         let mooncake_xfer_time_seconds =
             Family::new_with_constructor(nixl_xfer_time_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:mooncake_xfer_time_seconds",
+            "sonar:mooncake_xfer_time_seconds",
             "Histogram of transfer duration for Mooncake KV Cache transfers.",
             mooncake_xfer_time_seconds.clone(),
         );
@@ -549,7 +549,7 @@ impl SchedulerMetrics {
         let mooncake_bytes_transferred =
             Family::new_with_constructor(nixl_bytes_transferred_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:mooncake_bytes_transferred",
+            "sonar:mooncake_bytes_transferred",
             "Histogram of bytes transferred per Mooncake KV Cache transfer.",
             mooncake_bytes_transferred.clone(),
         );
@@ -557,28 +557,28 @@ impl SchedulerMetrics {
         let mooncake_num_descriptors =
             Family::new_with_constructor(nixl_num_descriptors_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:mooncake_num_descriptors",
+            "sonar:mooncake_num_descriptors",
             "Histogram of number of descriptors per Mooncake KV Cache transfer.",
             mooncake_num_descriptors.clone(),
         );
 
         let mooncake_num_failed_transfers = Family::default();
         registry.register(
-            "aphrodite:mooncake_num_failed_transfers",
+            "sonar:mooncake_num_failed_transfers",
             "Number of failed Mooncake KV Cache transfers.",
             mooncake_num_failed_transfers.clone(),
         );
 
         let mooncake_num_failed_recvs = Family::default();
         registry.register(
-            "aphrodite:mooncake_num_failed_recvs",
+            "sonar:mooncake_num_failed_recvs",
             "Number of failed Mooncake KV Cache receives.",
             mooncake_num_failed_recvs.clone(),
         );
 
         let mooncake_num_kv_expired_reqs = Family::default();
         registry.register(
-            "aphrodite:mooncake_num_kv_expired_reqs",
+            "sonar:mooncake_num_kv_expired_reqs",
             "Number of requests that had their KV expire. \
              NOTE: This metric is tracked on the P instance.",
             mooncake_num_kv_expired_reqs.clone(),
@@ -588,7 +588,7 @@ impl SchedulerMetrics {
         let nixl_xfer_time_seconds =
             Family::new_with_constructor(nixl_xfer_time_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:nixl_xfer_time_seconds",
+            "sonar:nixl_xfer_time_seconds",
             "Histogram of transfer duration for NIXL KV Cache transfers.",
             nixl_xfer_time_seconds.clone(),
         );
@@ -596,7 +596,7 @@ impl SchedulerMetrics {
         let nixl_post_time_seconds =
             Family::new_with_constructor(nixl_post_time_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:nixl_post_time_seconds",
+            "sonar:nixl_post_time_seconds",
             "Histogram of transfer post time for NIXL KV Cache transfers.",
             nixl_post_time_seconds.clone(),
         );
@@ -604,7 +604,7 @@ impl SchedulerMetrics {
         let nixl_bytes_transferred =
             Family::new_with_constructor(nixl_bytes_transferred_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:nixl_bytes_transferred",
+            "sonar:nixl_bytes_transferred",
             "Histogram of bytes transferred per NIXL KV Cache transfers.",
             nixl_bytes_transferred.clone(),
         );
@@ -612,31 +612,31 @@ impl SchedulerMetrics {
         let nixl_num_descriptors =
             Family::new_with_constructor(nixl_num_descriptors_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:nixl_num_descriptors",
+            "sonar:nixl_num_descriptors",
             "Histogram of number of descriptors per NIXL KV Cache transfers.",
             nixl_num_descriptors.clone(),
         );
 
         let nixl_num_failed_transfers = Family::default();
         registry.register(
-            "aphrodite:nixl_num_failed_transfers",
+            "sonar:nixl_num_failed_transfers",
             "Number of failed NIXL KV Cache transfers, including handshake and notification \
              failures. NOTE: KV expiry is tracked separately in \
-             aphrodite:nixl_num_kv_expired_reqs.",
+             sonar:nixl_num_kv_expired_reqs.",
             nixl_num_failed_transfers.clone(),
         );
 
         let nixl_num_failed_notifications = Family::default();
         registry.register(
-            "aphrodite:nixl_num_failed_notifications",
+            "sonar:nixl_num_failed_notifications",
             "Number of failed NIXL KV Cache notifications. Retained for compatibility; \
-             these failures are also included in aphrodite:nixl_num_failed_transfers.",
+             these failures are also included in sonar:nixl_num_failed_transfers.",
             nixl_num_failed_notifications.clone(),
         );
 
         let nixl_num_kv_expired_reqs = Family::default();
         registry.register(
-            "aphrodite:nixl_num_kv_expired_reqs",
+            "sonar:nixl_num_kv_expired_reqs",
             "Number of requests that had their KV expire. \
              NOTE: This metric is tracked on the P instance.",
             nixl_num_kv_expired_reqs.clone(),
@@ -644,7 +644,7 @@ impl SchedulerMetrics {
 
         let nixl_num_notifications_after_expiry = Family::default();
         registry.register(
-            "aphrodite:nixl_num_notifications_after_expiry",
+            "sonar:nixl_num_notifications_after_expiry",
             "Number of completion notifications for requests that were no longer tracked, \
              usually because their KV lease expired. The KV blocks may have been reused \
              before the transfer finished. Counted per notification (one per remote rank).",
@@ -654,28 +654,28 @@ impl SchedulerMetrics {
         // UMBP store connector telemetry.
         let umbp_transfer_submitted_total = Family::default();
         registry.register(
-            "aphrodite:umbp_transfer_submitted",
+            "sonar:umbp_transfer_submitted",
             "Number of UMBP objects submitted",
             umbp_transfer_submitted_total.clone(),
         );
 
         let umbp_transfer_completed_total = Family::default();
         registry.register(
-            "aphrodite:umbp_transfer_completed",
+            "sonar:umbp_transfer_completed",
             "Number of UMBP objects completed",
             umbp_transfer_completed_total.clone(),
         );
 
         let umbp_transfer_failed_total = Family::default();
         registry.register(
-            "aphrodite:umbp_transfer_failed",
+            "sonar:umbp_transfer_failed",
             "Number of UMBP objects failed",
             umbp_transfer_failed_total.clone(),
         );
 
         let umbp_transfer_bytes_total = Family::default();
         registry.register(
-            "aphrodite:umbp_transfer_bytes",
+            "sonar:umbp_transfer_bytes",
             "Bytes in successfully completed UMBP transfer ranges",
             umbp_transfer_bytes_total.clone(),
         );
@@ -748,18 +748,20 @@ mod tests {
         metrics.scheduler.estimated_write_bytes_per_gpu.get_or_create(&labels).inc();
 
         let rendered = metrics.render().unwrap();
+        assert!(
+            rendered.contains(
+                "sonar:estimated_flops_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
+            )
+        );
         assert!(rendered.contains(
-            "aphrodite:estimated_flops_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
+            "sonar:estimated_read_bytes_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
         ));
         assert!(rendered.contains(
-            "aphrodite:estimated_read_bytes_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
+            "sonar:estimated_write_bytes_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
         ));
-        assert!(rendered.contains(
-            "aphrodite:estimated_write_bytes_per_gpu_total{model_name=\"model\",engine=\"0\"} 1"
-        ));
-        assert!(!rendered.contains("aphrodite:estimated_flops_per_gpu_total_total"));
-        assert!(!rendered.contains("aphrodite:estimated_read_bytes_per_gpu_total_total"));
-        assert!(!rendered.contains("aphrodite:estimated_write_bytes_per_gpu_total_total"));
+        assert!(!rendered.contains("sonar:estimated_flops_per_gpu_total_total"));
+        assert!(!rendered.contains("sonar:estimated_read_bytes_per_gpu_total_total"));
+        assert!(!rendered.contains("sonar:estimated_write_bytes_per_gpu_total_total"));
     }
 
     #[test]

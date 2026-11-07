@@ -10,11 +10,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
     UMBPStoreConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockIdentityCodec,
     BlockLoadBatch,
     BlockTransferPlan,
@@ -26,42 +26,42 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     UMBPConnectorMetadata,
     UMBPNamespace,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
     EmbeddedRuntime,
     UMBPRuntimeConfig,
     UMBPRuntimeFactory,
     embedded,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime.embedded import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime.embedded import (
     _lookup_socket_path,
     _MoriLookupServer,
     _MoriSchedulerHandle,
     _MoriWorkerHandle,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
     UMBPStoreConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheTensor,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.request import RequestStatus
 from tests.v1.kv_connector.umbp_test_utils import (
-    _aphrodite_config,
     _kv_cache_config,
+    _sonar_config,
     handshake,
     install_memory_runtime,
     make_kv_caches,
 )
 from tests.v1.kv_connector.unit.utils import (
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 
 mori_available = importlib.util.find_spec("mori") is not None
@@ -243,7 +243,7 @@ def test_bulk_load_falls_back_for_entire_mixed_batch(bulk_worker, special):
 )
 def test_runtime_config_rejects_invalid_embedded_dram_options(options, error):
     with pytest.raises(ValueError, match=error):
-        UMBPRuntimeFactory.build(UMBPRuntimeConfig.from_aphrodite(_aphrodite_config({"mode": "embedded", **options})))
+        UMBPRuntimeFactory.build(UMBPRuntimeConfig.from_sonar(_sonar_config({"mode": "embedded", **options})))
 
 
 def test_mori_client_is_created_only_for_worker(monkeypatch, socket_dir):
@@ -282,8 +282,8 @@ def test_mori_client_is_created_only_for_worker(monkeypatch, socket_dir):
 
 
 def test_runtime_config_resolves_total_embedded_capacity_per_rank():
-    config = UMBPRuntimeConfig.from_aphrodite(
-        _aphrodite_config({"mode": "embedded", "total_capacity_bytes": 4096})
+    config = UMBPRuntimeConfig.from_sonar(
+        _sonar_config({"mode": "embedded", "total_capacity_bytes": 4096})
     ).resolve_for_rank_count(4)
 
     runtime = EmbeddedRuntime.from_config(config)
@@ -295,7 +295,7 @@ def test_runtime_config_resolves_total_embedded_capacity_per_rank():
 def test_embedded_connector_rejects_pipeline_parallelism():
     with pytest.raises(NotImplementedError, match="pipeline parallelism"):
         UMBPStoreConnector(
-            _aphrodite_config(
+            _sonar_config(
                 {"mode": "embedded"},
                 pipeline_parallel_size=2,
             ),
@@ -640,7 +640,7 @@ def test_object_evicted_after_lookup_follows_failure_policy(monkeypatch, socket_
             )
             for name in ("full", "window")
         }
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="UMBPStoreConnector",
         kv_role="kv_both",
         kv_connector_extra_config={
@@ -651,11 +651,11 @@ def test_object_evicted_after_lookup_follows_failure_policy(monkeypatch, socket_
         kv_load_failure_policy=policy,
     )
     scheduler = create_scheduler(
-        aphrodite_config,
+        sonar_config,
         num_blocks=kv_cache_config.num_blocks,
         kv_cache_config=kv_cache_config,
     )
-    worker = UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    worker = UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     worker.register_kv_caches(kv_caches)
     handshake(scheduler.connector, worker)
     num_tokens = 3 * scheduler.block_size + 1

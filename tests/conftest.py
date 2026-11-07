@@ -30,7 +30,7 @@ import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from aphrodite.transformers_utils.repo_utils import hf_api, with_retry
+from sonar.transformers_utils.repo_utils import hf_api, with_retry
 from PIL import Image
 from transformers import (
     AutoConfig,
@@ -46,28 +46,28 @@ from tests.models.utils import (
     TokensTextLogprobsPromptLogprobs,
     softmax,
 )
-from aphrodite import LLM, SamplingParams, envs
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.assets.image import ImageAsset
-from aphrodite.assets.video import VideoAsset
-from aphrodite.config.cache import CacheConfig
-from aphrodite.config.model import ConvertOption, RunnerOption, _get_and_verify_dtype
-from aphrodite.connections import global_http_connection
-from aphrodite.distributed import (
+from sonar import LLM, SamplingParams, envs
+from sonar.assets.audio import AudioAsset
+from sonar.assets.image import ImageAsset
+from sonar.assets.video import VideoAsset
+from sonar.config.cache import CacheConfig
+from sonar.config.model import ConvertOption, RunnerOption, _get_and_verify_dtype
+from sonar.connections import global_http_connection
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.logger import init_logger
-from aphrodite.logprobs import Logprob, PromptLogprobs, SampleLogprobs
-from aphrodite.multimodal.media import MediaWithBytes
-from aphrodite.multimodal.utils import fetch_image
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import BeamSearchParams
-from aphrodite.transformers_utils.utils import maybe_model_redirect
-from aphrodite.utils.collection_utils import is_list_of
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
+from sonar.logger import init_logger
+from sonar.logprobs import Logprob, PromptLogprobs, SampleLogprobs
+from sonar.multimodal.media import MediaWithBytes
+from sonar.multimodal.utils import fetch_image
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.sampling_params import BeamSearchParams
+from sonar.transformers_utils.utils import maybe_model_redirect
+from sonar.utils.collection_utils import is_list_of
+from sonar.utils.torch_utils import set_default_torch_num_threads
 
 from torch._inductor.utils import fresh_cache
 
@@ -232,7 +232,7 @@ def init_test_http_connection():
 
 @pytest.fixture
 def dist_init():
-    from tests.utils import ensure_current_aphrodite_config
+    from tests.utils import ensure_current_sonar_config
 
     # Close the fd returned by mkstemp; FileStore opens the path itself.
     # Leaving it open leaks one FD per test and eventually exhausts the
@@ -242,7 +242,7 @@ def dist_init():
     os.close(fd)
 
     try:
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             init_distributed_environment(
                 world_size=1,
                 rank=0,
@@ -259,18 +259,18 @@ def dist_init():
 
 
 @pytest.fixture
-def default_aphrodite_config(monkeypatch):
-    """Set a default AphroditeConfig for tests that directly test CustomOps or pathways
-    that use get_current_aphrodite_config() outside of a full engine context.
+def default_sonar_config(monkeypatch):
+    """Set a default SonarConfig for tests that directly test CustomOps or pathways
+    that use get_current_sonar_config() outside of a full engine context.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
+    from sonar.config import SonarConfig, set_current_sonar_config
 
     # Creating a breakable-by-default model config sets
-    # APHRODITE_USE_BREAKABLE_CUDAGRAPH process-wide; shield the default config
+    # SONAR_USE_BREAKABLE_CUDAGRAPH process-wide; shield the default config
     # from such leaks (it would flip custom_ops to "all").
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "0")
-    config = AphroditeConfig()
-    with set_current_aphrodite_config(config):
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "0")
+    config = SonarConfig()
+    with set_current_sonar_config(config):
         yield config
 
 
@@ -297,10 +297,10 @@ def workspace_init():
 
     This fixture initializes the workspace manager with the current
     platform's accelerator device if available, and resets it after the test
-    completes. Tests that create a full Aphrodite engine should NOT use this
+    completes. Tests that create a full Sonar engine should NOT use this
     fixture as the engine will initialize the workspace manager itself.
     """
-    from aphrodite.v1.worker.workspace import (
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         reset_workspace_manager,
     )
@@ -353,7 +353,7 @@ def _fix_v4_tied_weights_keys(model_cls: type) -> None:
 
 class HfRunner:
     def get_default_device(self):
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         return "cpu" if current_platform.is_cpu() else current_platform.device_type
 
@@ -433,7 +433,7 @@ class HfRunner:
             trust_remote_code=trust_remote_code,
         )
         # HF runner should use the HF config so that it's consistent with the HF model
-        if self.config.__module__.startswith("aphrodite.transformers_utils.configs"):
+        if self.config.__module__.startswith("sonar.transformers_utils.configs"):
             from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 
             del CONFIG_MAPPING._extra_content[self.config.model_type]
@@ -479,7 +479,7 @@ class HfRunner:
             if trust_remote_code and hasattr(self.config, "auto_map"):
                 cls_ref = self.config.auto_map.get(auto_cls.__name__)
                 if cls_ref is not None:
-                    from aphrodite.transformers_utils.dynamic_module import (
+                    from sonar.transformers_utils.dynamic_module import (
                         try_get_class_from_dynamic_module,
                     )
 
@@ -556,7 +556,7 @@ class HfRunner:
 
             # A concurrent refresh of the shared HF cache can briefly hide
             # processor configuration files. Retry just as model config loading
-            # does in aphrodite.transformers_utils.config.
+            # does in sonar.transformers_utils.config.
             self.processor = with_retry(
                 lambda: AutoProcessor.from_pretrained(
                     model_name,
@@ -890,7 +890,7 @@ class HfRunner:
             # initialized after significant GPU memory is already occupied,
             # e.g. in
             # tests/basic_correctness/models/test_basic_correctness.py::test_models_distributed
-            # where aphrodite worker processes are still alive and holding GPU
+            # where sonar worker processes are still alive and holding GPU
             # memory when hf_runner.__exit__ is called.
             from tests.utils import record_gpu_memory_usage_stats
 
@@ -927,10 +927,10 @@ def _default_block_size() -> int:
     return 16
 
 
-class AphroditeRunner:
+class SonarRunner:
     """
     The default value of some arguments have been modified from
-    {class}`~aphrodite.LLM` as follows:
+    {class}`~sonar.LLM` as follows:
 
     - `trust_remote_code`: Set to `True` instead of `False` for convenience.
     - `seed`: Set to `0` instead of `None` for test reproducibility.
@@ -985,7 +985,7 @@ class AphroditeRunner:
             ):
                 kwargs["compilation_config"]["cudagraph_capture_sizes"].append(num_speculative_tokens + 1)
 
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_rocm():
             gpu_memory_utilization = kwargs.get(
@@ -1361,8 +1361,8 @@ class AphroditeRunner:
         # This is needed because when executing consecutive tests, the GC
         # might not be fast enough in shutting down the llm engine. This can lead to OOMs
         # because when the next test starts some GPU memory is still in use.
-        gpu_memory_utilization = self.llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
-        from aphrodite.platforms import current_platform
+        gpu_memory_utilization = self.llm.llm_engine.sonar_config.cache_config.gpu_memory_utilization
+        from sonar.platforms import current_platform
 
         try:
             # Give the engine core time to run its own graceful shutdown
@@ -1384,25 +1384,25 @@ class AphroditeRunner:
 
 
 @pytest.fixture(scope="session")
-def aphrodite_runner():
-    return AphroditeRunner
+def sonar_runner():
+    return SonarRunner
 
 
 @pytest.fixture()
 def temporary_enable_log_propagate(monkeypatch):
     import logging
 
-    from aphrodite.logger import DEFAULT_LOGGING_CONFIG
+    from sonar.logger import DEFAULT_LOGGING_CONFIG
 
     # The first LLM init in a process reapplies DEFAULT_LOGGING_CONFIG, which
     # would otherwise turn propagation back off mid-test.
-    monkeypatch.setitem(DEFAULT_LOGGING_CONFIG["loggers"]["aphrodite"], "propagate", True)
-    monkeypatch.setattr(logging.getLogger("aphrodite"), "propagate", True)
+    monkeypatch.setitem(DEFAULT_LOGGING_CONFIG["loggers"]["sonar"], "propagate", True)
+    monkeypatch.setattr(logging.getLogger("sonar"), "propagate", True)
 
 
 @pytest.fixture()
-def caplog_aphrodite(temporary_enable_log_propagate, caplog):
-    # caplog depends on logs propagated to the root logger. The Aphrodite logger
+def caplog_sonar(temporary_enable_log_propagate, caplog):
+    # caplog depends on logs propagated to the root logger. The Sonar logger
     # inherits this INFO level until runtime initialization configures it.
     import logging
 
@@ -1414,7 +1414,7 @@ def caplog_aphrodite(temporary_enable_log_propagate, caplog):
 def caplog_mp_fork():
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It should be used in conjunction with caplog_aphrodite.
+    It should be used in conjunction with caplog_sonar.
 
     By default, subprocess logs do not go through the parent process.
     We instead create a queue listener in the parent process which
@@ -1459,7 +1459,7 @@ class LogHolder:
 def caplog_mp_spawn(tmp_path, monkeypatch):
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It does not require caplog_aphrodite (but it only contains logs from the child).
+    It does not require caplog_sonar (but it only contains logs from the child).
 
     By default, subprocess logs do not go through the parent process.
     We instead add a FileHandler to the config so the spawned child process
@@ -1473,32 +1473,32 @@ def caplog_mp_spawn(tmp_path, monkeypatch):
 
     @contextlib.contextmanager
     def ctx(level: int | str):
-        from aphrodite.logger import DEFAULT_LOGGING_CONFIG
+        from sonar.logger import DEFAULT_LOGGING_CONFIG
 
-        config_path = tmp_path / "aphrodite_logging_config.json"
-        log_path = tmp_path / "aphrodite.log"
+        config_path = tmp_path / "sonar_logging_config.json"
+        log_path = tmp_path / "sonar.log"
         log_holder = LogHolder()
 
         config = deepcopy(DEFAULT_LOGGING_CONFIG)
-        if envs.APHRODITE_LOGGING_CONFIG_PATH:
-            path = pathlib.Path(envs.APHRODITE_LOGGING_CONFIG_PATH)
+        if envs.SONAR_LOGGING_CONFIG_PATH:
+            path = pathlib.Path(envs.SONAR_LOGGING_CONFIG_PATH)
             assert path.exists()
             config = json.loads(path.read_text())
 
-        config["loggers"]["aphrodite"]["handlers"] += ["aphrodite_file"]
-        config["handlers"]["aphrodite_file"] = {
+        config["loggers"]["sonar"]["handlers"] += ["sonar_file"]
+        config["handlers"]["sonar_file"] = {
             "class": "logging.FileHandler",
-            "formatter": "aphrodite",
+            "formatter": "sonar",
             "level": level,
             "filename": log_path.as_posix(),
         }
-        config["loggers"]["aphrodite"]["level"] = level
+        config["loggers"]["sonar"]["level"] = level
 
         config_path.write_text(json.dumps(config))
 
         with monkeypatch.context() as monkeypatch_ctx:
-            monkeypatch_ctx.setenv("APHRODITE_LOGGING_CONFIG_PATH", config_path.as_posix())
-            monkeypatch_ctx.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+            monkeypatch_ctx.setenv("SONAR_LOGGING_CONFIG_PATH", config_path.as_posix())
+            monkeypatch_ctx.setenv("SONAR_CONFIGURE_LOGGING", "1")
             yield log_holder
 
         log_holder.text = log_path.read_text()
@@ -1511,7 +1511,7 @@ def num_gpus_available():
     """Get number of GPUs without initializing the CUDA context
     in current process."""
 
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     return current_platform.device_count()
 
@@ -1741,14 +1741,14 @@ def image_urls(request, local_asset_server) -> list[str]:
 
 @pytest.fixture
 def disable_deepgemm_ue8m0(monkeypatch):
-    from aphrodite.utils.deep_gemm import is_deep_gemm_e8m0_used
+    from sonar.utils.deep_gemm import is_deep_gemm_e8m0_used
 
     with monkeypatch.context() as monkeypatch_ctx:
-        monkeypatch_ctx.setenv("APHRODITE_USE_DEEP_GEMM_E8M0", "0")
+        monkeypatch_ctx.setenv("SONAR_USE_DEEP_GEMM_E8M0", "0")
         is_deep_gemm_e8m0_used.cache_clear()
         yield
         # Clear cache so the next time it is used it is processed with the
-        # default APHRODITE_USE_DEEP_GEMM_E8M0  setting.
+        # default SONAR_USE_DEEP_GEMM_E8M0  setting.
         is_deep_gemm_e8m0_used.cache_clear()
 
 
@@ -1759,7 +1759,7 @@ def gpu_memory_cleared():
         return
 
     from tests.utils import wait_for_gpu_memory_to_clear
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     if on_gfx950():
         wait_for_gpu_memory_to_clear(
@@ -1773,7 +1773,7 @@ def gpu_memory_cleared():
 def _should_clean_gpu_memory_between_tests() -> bool:
     # This must stay opt-in: a function-scoped fixture cannot distinguish
     # stale VRAM from allocations owned by longer-lived module/session fixtures.
-    return os.getenv("APHRODITE_TEST_CLEAN_GPU_MEMORY", "0") == "1"
+    return os.getenv("SONAR_TEST_CLEAN_GPU_MEMORY", "0") == "1"
 
 
 @pytest.fixture(autouse=True)
@@ -1824,33 +1824,33 @@ def use_fresh_inductor_cache():
 
 
 @pytest.fixture
-def disable_aphrodite_compile_cache(monkeypatch, use_fresh_inductor_cache):
+def disable_sonar_compile_cache(monkeypatch, use_fresh_inductor_cache):
     """
-    Use a fresh inductor cache AND disable Aphrodite's on-disk torch.compile cache.
+    Use a fresh inductor cache AND disable Sonar's on-disk torch.compile cache.
 
     This forces compilation (and any custom compile passes) to actually run
     instead of being served from a warm cache left behind by previous runs
     (e.g. on persistent CI agents). Use this for tests that inspect what
     happens during compilation; use ``use_fresh_inductor_cache`` (or
-    ``fresh_aphrodite_cache``) instead when the Aphrodite compile cache must stay
+    ``fresh_sonar_cache``) instead when the Sonar compile cache must stay
     enabled (e.g. cache save/load tests).
     """
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
     yield
 
 
 @pytest.fixture
-def fresh_aphrodite_cache(monkeypatch, use_fresh_inductor_cache):
-    """Temporary APHRODITE_CACHE_ROOT combined with a fresh inductor cache."""
+def fresh_sonar_cache(monkeypatch, use_fresh_inductor_cache):
+    """Temporary SONAR_CACHE_ROOT combined with a fresh inductor cache."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        monkeypatch.setenv("APHRODITE_CACHE_ROOT", tmp_dir)
+        monkeypatch.setenv("SONAR_CACHE_ROOT", tmp_dir)
         yield tmp_dir
 
 
 @pytest.fixture(scope="function")
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 @pytest.fixture(scope="function")
@@ -1860,7 +1860,7 @@ def disable_log_dedup(monkeypatch):
     """
 
     # Patch logger._print_warning_once to remove the lru_cache decorator
-    from aphrodite import logger
+    from sonar import logger
 
     original_print_warning_once = logger._print_warning_once
     original_print_info_once = logger._print_info_once
@@ -1877,23 +1877,23 @@ def disable_log_dedup(monkeypatch):
 
 
 @pytest.fixture(scope="function")
-def fake_aphrodite_ir(monkeypatch):
+def fake_sonar_ir(monkeypatch):
     """
     Pytest fixture to allow isolated IR op registration in tests.
 
-    Replaces IrOp.registry with an empty dict and swaps ``aphrodite_ir_torch_lib`` for a
+    Replaces IrOp.registry with an empty dict and swaps ``sonar_ir_torch_lib`` for a
     fresh ``Library`` with a unique namespace per test (see ``Library.ns``).
 
     Torch keeps registrations for the process lifetime; reusing the fragment
-    name ``aphrodite_ir`` and defining the same op string again can segfault. A
+    name ``sonar_ir`` and defining the same op string again can segfault. A
     random library name keeps each fixture run on a disjoint namespace.
 
     The test Library is kept alive until after monkeypatch teardown so PyTorch's
     C++ state is not freed while references may still exist.
 
     Usage:
-        def test_my_ir_op(fake_aphrodite_ir):
-            @aphrodite.ir.register_op
+        def test_my_ir_op(fake_sonar_ir):
+            @sonar.ir.register_op
             def my_test_op(x: torch.Tensor) -> torch.Tensor:
                 return x * 2
 
@@ -1903,14 +1903,14 @@ def fake_aphrodite_ir(monkeypatch):
     import secrets
 
     from torch.library import Library
-    from aphrodite.ir.op import IrOp
+    from sonar.ir.op import IrOp
 
     monkeypatch.setattr(IrOp, "registry", {})
 
     # Keep a local reference so the Library is not GC'd before monkeypatch
     # teardown restores the original reference.
-    test_lib = Library(f"aphrodite_ir_{secrets.token_hex(8)}", "FRAGMENT")
-    monkeypatch.setattr("aphrodite.ir.op.aphrodite_ir_torch_lib", test_lib)
+    test_lib = Library(f"sonar_ir_{secrets.token_hex(8)}", "FRAGMENT")
+    monkeypatch.setattr("sonar.ir.op.sonar_ir_torch_lib", test_lib)
 
     yield
 

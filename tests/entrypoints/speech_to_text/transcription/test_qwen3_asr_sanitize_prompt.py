@@ -11,7 +11,7 @@ so nested payloads cannot reconstruct a valid token after a single pass.
 
 import pytest
 
-from aphrodite.model_executor.models.qwen3_asr import _sanitize_transcription_user_text
+from sonar.model_executor.models.qwen3_asr import _sanitize_transcription_user_text
 
 
 @pytest.mark.parametrize(

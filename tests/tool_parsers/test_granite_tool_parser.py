@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tool_parsers.granite_engine_tool_parser import GraniteEngineToolParser
+from sonar.tokenizers import get_tokenizer
+from sonar.tool_parsers.granite_engine_tool_parser import GraniteEngineToolParser
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,

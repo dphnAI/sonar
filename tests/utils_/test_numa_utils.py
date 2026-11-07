@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from aphrodite.config import ParallelConfig
-from aphrodite.utils import numa_utils
+from sonar.config import ParallelConfig
+from sonar.utils import numa_utils
 
 
 @pytest.fixture(autouse=True)
@@ -76,21 +76,20 @@ def _make_config(**parallel_kwargs):
 
 
 def test_get_numactl_args_with_node_binding():
-    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
+    sonar_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
-        == "--cpunodebind=1 --membind=1"
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1) == "--cpunodebind=1 --membind=1"
     )
 
 
 def test_get_numactl_args_with_cpu_binding():
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 1],
         numa_bind_cpus=["0-3", "4-7"],
     )
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1)
         == "--physcpubind=4-7 --membind=1"
     )
 
@@ -227,32 +226,32 @@ def test_pct_binding_returns_none_when_node_cpulist_missing(monkeypatch):
 @pytest.mark.parametrize("automatic", [False, True])
 def test_get_numactl_args_uses_pct_when_user_did_not_specify_cpus(monkeypatch, automatic):
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    aphrodite_config = _make_config(numa_bind=True, _numa_bind_auto=automatic, numa_bind_nodes=[0, 1])
+    sonar_config = _make_config(numa_bind=True, _numa_bind_auto=automatic, numa_bind_nodes=[0, 1])
     memory_policy = "preferred" if automatic else "membind"
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1)
         == f"--physcpubind=0,1,16,17,64,65,80,81 --{memory_policy}=1"
     )
 
 
 def test_get_numactl_args_engine_core_baseline_single_node_shard():
     """Baseline (no PCT): single-NUMA shard -> single-node bind."""
-    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
+    sonar_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == "--cpunodebind=0 --membind=0"
     )
 
 
 def test_get_numactl_args_engine_core_baseline_spans_shard_numa_nodes():
     """Baseline (no PCT): a TP=4 shard spanning both NUMA nodes -> bind to both."""
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=4,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
@@ -268,14 +267,14 @@ def test_get_numactl_args_engine_core_pct_spans_shard_numa_nodes(monkeypatch, au
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         _numa_bind_auto=automatic,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=4,
     )
     memory_policy = "preferred-many" if automatic else "membind"
-    assert numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0) == (
+    assert numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0) == (
         f"--physcpubind=0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209 --{memory_policy}=0,1"
     )
 
@@ -288,7 +287,7 @@ def test_get_numactl_args_engine_core_pct_dp_shard_picks_local_nodes(monkeypatch
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=2,
@@ -296,7 +295,7 @@ def test_get_numactl_args_engine_core_pct_dp_shard_picks_local_nodes(monkeypatch
     )
     # Shard 1 owns gpu_indices 2 and 3 -> nodes [1, 1] -> {1}.
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == "--physcpubind=64,65,80,81,192,193,208,209 --membind=1"
     )
 
@@ -314,13 +313,13 @@ def test_get_numactl_args_engine_core_pct_external_launcher_spans_local_nodes(
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 0, 0, 1, 1, 1, 1],
         distributed_executor_backend="external_launcher",
         tensor_parallel_size=8,
     )
-    assert numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0) == (
+    assert numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0) == (
         "--physcpubind=0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209 --membind=0,1"
     )
 
@@ -328,14 +327,14 @@ def test_get_numactl_args_engine_core_pct_external_launcher_spans_local_nodes(
 def test_get_numactl_args_engine_core_baseline_multi_node_within_dp_spans_locals():
     """Multi-node-within-DP fallback: bind EngineCore to all local NUMA
     nodes that the visible ``numa_bind_nodes`` reference."""
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 0, 0, 1, 1, 1, 1],
         nnodes_within_dp=2,
         tensor_parallel_size=8,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
@@ -350,27 +349,27 @@ def test_get_numactl_args_engine_core_skips_user_cpu_list(monkeypatch):
     the user is explicit (its priority-core union may not be a superset
     of the user's per-worker cores)."""
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         numa_bind_cpus=["0-3", "4-7", "64-67", "68-71"],
         tensor_parallel_size=4,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
 
 def test_get_numactl_args_user_cpus_override_pct(monkeypatch):
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 1],
         numa_bind_cpus=["0-3", "4-7"],
     )
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1)
         == "--physcpubind=4-7 --membind=1"
     )
 
@@ -378,7 +377,7 @@ def test_get_numactl_args_user_cpus_override_pct(monkeypatch):
 @pytest.mark.parametrize("pcp,pp", [(1, 1), (2, 1), (2, 2)])
 def test_get_numactl_args_uses_dp_offset(pcp, pp):
     workers_per_dp = 2 * pcp * pp
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0] * workers_per_dp + [1] * workers_per_dp,
         data_parallel_rank_local=1,
@@ -387,8 +386,7 @@ def test_get_numactl_args_uses_dp_offset(pcp, pp):
         prefill_context_parallel_size=pcp,
     )
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
-        == "--cpunodebind=1 --membind=1"
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1) == "--cpunodebind=1 --membind=1"
     )
 
 
@@ -399,7 +397,7 @@ def test_get_numactl_args_uses_dp_offset(pcp, pp):
 )
 def test_pcp_worker_cpu_binding_uses_dp_gpu_index(local_dp_rank, global_dp_rank, launch_dp_rank):
     """CPU overrides use the same PCP-aware GPU index as device selection."""
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0] * 4 + [1] * 4,
         numa_bind_cpus=[f"{4 * i}-{4 * i + 3}" for i in range(8)],
@@ -409,9 +407,7 @@ def test_pcp_worker_cpu_binding_uses_dp_gpu_index(local_dp_rank, global_dp_rank,
         data_parallel_index=global_dp_rank,
     )
     assert (
-        numa_utils._get_numactl_worker_args(
-            aphrodite_config.parallel_config, local_rank=1, dp_local_rank=launch_dp_rank
-        )
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1, dp_local_rank=launch_dp_rank)
         == "--physcpubind=20-23 --membind=1"
     )
 
@@ -419,7 +415,7 @@ def test_pcp_worker_cpu_binding_uses_dp_gpu_index(local_dp_rank, global_dp_rank,
 @pytest.mark.parametrize("dp_rank,expected_nodes", [(0, "0,1"), (1, "2,3")])
 def test_pcp_engine_core_covers_all_shard_workers(dp_rank, expected_nodes):
     """EngineCore includes every PCP worker's NUMA node in its DP shard."""
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1, 2, 2, 3, 3],
         tensor_parallel_size=2,
@@ -427,7 +423,7 @@ def test_pcp_engine_core_covers_all_shard_workers(dp_rank, expected_nodes):
         data_parallel_rank_local=dp_rank,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_enginecore_args(sonar_config.parallel_config, local_rank=0)
         == f"--cpunodebind={expected_nodes} --membind={expected_nodes}"
     )
 
@@ -444,7 +440,7 @@ def test_pcp_engine_core_covers_all_shard_workers(dp_rank, expected_nodes):
 )
 def test_pcp_worker_keeps_local_gpu_index_without_dp_offset(parallel_kwargs):
     """Node-local launcher ranks do not acquire a colocated DP offset."""
-    aphrodite_config = _make_config(
+    sonar_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 1],
         tensor_parallel_size=2,
@@ -453,26 +449,25 @@ def test_pcp_worker_keeps_local_gpu_index_without_dp_offset(parallel_kwargs):
         **parallel_kwargs,
     )
     assert (
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
-        == "--cpunodebind=1 --membind=1"
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=1) == "--cpunodebind=1 --membind=1"
     )
 
 
 def test_get_numactl_args_requires_detectable_nodes(monkeypatch):
-    aphrodite_config = _make_config(numa_bind=True)
+    sonar_config = _make_config(numa_bind=True)
     monkeypatch.setattr(numa_utils, "get_auto_numa_nodes", lambda: None)
     with pytest.raises(RuntimeError):
-        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_worker_args(sonar_config.parallel_config, local_rank=0)
 
 
 def test_configure_subprocess_rejects_unknown_process_kind():
     """configure_subprocess only knows 'worker' and 'EngineCore'; anything
     else must raise ValueError instead of silently routing to the worker
     path."""
-    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
+    sonar_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
     with (
         pytest.raises(ValueError, match="process_kind"),
-        numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="bogus"),
+        numa_utils.configure_subprocess(sonar_config, local_rank=0, process_kind="bogus"),
     ):
         pass
 
@@ -499,8 +494,8 @@ def test_log_numactl_show(monkeypatch):
 def test_get_numactl_executable_points_to_fixed_wrapper(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/numactl")
     executable, debug_str = numa_utils._get_numactl_executable()
-    assert executable.endswith("/aphrodite/utils/numa_wrapper.sh")
-    assert "_APHRODITE_INTERNAL_NUMACTL_ARGS" in debug_str
+    assert executable.endswith("/sonar/utils/numa_wrapper.sh")
+    assert "_SONAR_INTERNAL_NUMACTL_ARGS" in debug_str
 
 
 def test_set_numa_wrapper_env_restores_previous_values():
@@ -563,7 +558,7 @@ def test_configure_subprocess_numa_fallback(monkeypatch):
     import multiprocessing
 
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/numactl")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     node_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
 
     monkeypatch.setattr(numa_utils.subprocess, "run", _fake_numactl_run([]))
@@ -596,10 +591,10 @@ def test_configure_subprocess_numa_fallback(monkeypatch):
 
 def _patch_auto_numa(monkeypatch, start_method, detect, visible_gpus=1, node_cpus="0-7"):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/numactl")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", start_method)
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", start_method)
     monkeypatch.setattr(numa_utils, "_is_auto_numa_available", lambda **kwargs: True)
     monkeypatch.setattr(numa_utils, "get_auto_numa_nodes", detect)
-    monkeypatch.setattr("aphrodite.platforms.current_platform.device_count", lambda: visible_gpus)
+    monkeypatch.setattr("sonar.platforms.current_platform.device_count", lambda: visible_gpus)
     real_read_text = numa_utils.Path.read_text
 
     def read_text(path, *args, **kwargs):
@@ -617,13 +612,13 @@ def test_configure_subprocess_auto_binds_and_records_result(monkeypatch, nodes):
     _patch_auto_numa(monkeypatch, "spawn", lambda: nodes, visible_gpus=len(nodes))
     monkeypatch.setattr(numa_utils.subprocess, "run", _fake_numactl_run([]))
 
-    aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=len(nodes))
+    sonar_config = _make_config(numa_bind=None, tensor_parallel_size=len(nodes))
     node_list = ",".join(map(str, nodes))
     preference = "preferred" if len(nodes) == 1 else "preferred-many"
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="EngineCore"):
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0, process_kind="EngineCore"):
         assert os.environ[numa_utils._NUMACTL_ARGS_ENV] == (f"--cpunodebind={node_list} --{preference}={node_list}")
-        child_config = deepcopy(aphrodite_config)
-    assert aphrodite_config.parallel_config.numa_bind is True
+        child_config = deepcopy(sonar_config)
+    assert sonar_config.parallel_config.numa_bind is True
     assert child_config.parallel_config._numa_bind_auto is True
     assert child_config.parallel_config.numa_bind_nodes == nodes
 
@@ -635,7 +630,7 @@ def test_configure_subprocess_auto_binds_and_records_result(monkeypatch, nodes):
 
 def test_parallel_config_auto_policy_survives_copy_without_changing_hash():
     """Copying the launch decision must not change the DP configuration hash."""
-    from aphrodite.config.utils import replace
+    from sonar.config.utils import replace
 
     parallel_config = ParallelConfig()
     original_hash = parallel_config.compute_hash()
@@ -676,17 +671,17 @@ def test_auto_numa_redetects_when_visible_devices_change(monkeypatch):
         return {"0,1": [0, 0], "2,3": [1, 1]}[devices]
 
     monkeypatch.setattr(
-        "aphrodite.platforms.current_platform.get_all_device_numa_nodes",
+        "sonar.platforms.current_platform.get_all_device_numa_nodes",
         detect,
         raising=False,
     )
     for devices, node in [("0,1", 0), ("2,3", 1)]:
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", devices)
-        aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=2)
-        with numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="EngineCore"):
+        sonar_config = _make_config(numa_bind=None, tensor_parallel_size=2)
+        with numa_utils.configure_subprocess(sonar_config, local_rank=0, process_kind="EngineCore"):
             numactl_args = os.environ[numa_utils._NUMACTL_ARGS_ENV]
             assert numactl_args == f"--cpunodebind={node} --preferred={node}"
-        assert aphrodite_config.parallel_config.numa_bind_nodes == [node, node]
+        assert sonar_config.parallel_config.numa_bind_nodes == [node, node]
     assert detections == ["0,1", "2,3"]
 
 
@@ -709,7 +704,7 @@ def test_configure_subprocess_respects_existing_mempolicy(monkeypatch, policy, e
     is_auto_numa_available = numa_utils._is_auto_numa_available
     _patch_auto_numa(monkeypatch, "spawn", numa_utils.get_auto_numa_nodes)
     monkeypatch.setattr(numa_utils, "_is_auto_numa_available", is_auto_numa_available)
-    monkeypatch.setattr("aphrodite.platforms.current_platform.is_cuda_alike", lambda: True)
+    monkeypatch.setattr("sonar.platforms.current_platform.is_cuda_alike", lambda: True)
     monkeypatch.setattr(numa_utils.os.path, "isdir", lambda path: True)
     monkeypatch.setattr(numa_utils.psutil, "cpu_count", lambda: 4)
     monkeypatch.setattr(
@@ -718,7 +713,7 @@ def test_configure_subprocess_respects_existing_mempolicy(monkeypatch, policy, e
         lambda pid: SimpleNamespace(cpu_affinity=lambda: [0, 1, 2, 3]),
     )
     monkeypatch.setattr(
-        "aphrodite.platforms.current_platform.get_all_device_numa_nodes",
+        "sonar.platforms.current_platform.get_all_device_numa_nodes",
         lambda: [0],
         raising=False,
     )
@@ -735,21 +730,21 @@ def test_configure_subprocess_respects_existing_mempolicy(monkeypatch, policy, e
         lambda: SimpleNamespace(numa_available=lambda: 0, get_mempolicy=get_mempolicy),
     )
     monkeypatch.setattr(numa_utils.subprocess, "run", _fake_numactl_run([]))
-    aphrodite_config = _make_config(numa_bind=True if explicit else None)
+    sonar_config = _make_config(numa_bind=True if explicit else None)
     if explicit and policy is None:
         with (
             pytest.raises(RuntimeError, match="could not detect"),
-            numa_utils.configure_subprocess(aphrodite_config, local_rank=0),
+            numa_utils.configure_subprocess(sonar_config, local_rank=0),
         ):
             pass
         return
 
     expected_bind = policy is not None and (policy == 0 or explicit)
     memory_arg = "--membind=0" if explicit else "--preferred=0"
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         numactl_args = os.environ.get(numa_utils._NUMACTL_ARGS_ENV)
         assert numactl_args == (f"--cpunodebind=0 {memory_arg}" if expected_bind else None)
-    assert aphrodite_config.parallel_config.numa_bind is expected_bind
+    assert sonar_config.parallel_config.numa_bind is expected_bind
 
 
 def _raise_probe_error():
@@ -774,11 +769,11 @@ def test_configure_subprocess_auto_falls_back_to_unbound(monkeypatch, start_meth
 
     _patch_auto_numa(monkeypatch, start_method, detect)
 
-    aphrodite_config = _make_config(numa_bind=None, assigned_physical_gpu_ids=assigned_gpus)
+    sonar_config = _make_config(numa_bind=None, assigned_physical_gpu_ids=assigned_gpus)
     before = multiprocessing.spawn.get_executable()
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert multiprocessing.spawn.get_executable() == before
-    assert aphrodite_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind is False
 
 
 @pytest.mark.parametrize(
@@ -798,38 +793,38 @@ def test_auto_numa_skips_unsupported_launchers(monkeypatch, parallel_kwargs):
         return [0, 1]
 
     _patch_auto_numa(monkeypatch, "spawn", detect, visible_gpus=2)
-    aphrodite_config = _make_config(numa_bind=None, **parallel_kwargs)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    sonar_config = _make_config(numa_bind=None, **parallel_kwargs)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
-    assert aphrodite_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind is False
     assert detections == []
 
 
 @pytest.mark.parametrize("nodes", [[0], [0, 1, 2], [0, -1], [0, None]])
 def test_auto_numa_rejects_incomplete_or_invalid_topology(monkeypatch, nodes):
     _patch_auto_numa(monkeypatch, "spawn", lambda: nodes, visible_gpus=2)
-    aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=2)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    sonar_config = _make_config(numa_bind=None, tensor_parallel_size=2)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
-    assert aphrodite_config.parallel_config.numa_bind is False
-    assert aphrodite_config.parallel_config.numa_bind_nodes is None
+    assert sonar_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind_nodes is None
 
 
 def test_auto_numa_checks_all_local_dp_workers_before_first_engine(monkeypatch):
     _patch_auto_numa(monkeypatch, "spawn", lambda: [0, 1], visible_gpus=2)
-    aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=2, data_parallel_size_local=2)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0, dp_local_rank=0, process_kind="EngineCore"):
+    sonar_config = _make_config(numa_bind=None, tensor_parallel_size=2, data_parallel_size_local=2)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0, dp_local_rank=0, process_kind="EngineCore"):
         assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
-    assert aphrodite_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind is False
 
 
 def test_auto_numa_multi_node_topology_is_local(monkeypatch):
     _patch_auto_numa(monkeypatch, "spawn", lambda: [2, 3], visible_gpus=2)
     monkeypatch.setattr(numa_utils.subprocess, "run", _fake_numactl_run([]))
-    aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=4, nnodes_within_dp=2)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="EngineCore"):
+    sonar_config = _make_config(numa_bind=None, tensor_parallel_size=4, nnodes_within_dp=2)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0, process_kind="EngineCore"):
         assert os.environ[numa_utils._NUMACTL_ARGS_ENV] == ("--cpunodebind=2,3 --preferred-many=2,3")
-        child_config = deepcopy(aphrodite_config)
+        child_config = deepcopy(sonar_config)
     with numa_utils.configure_subprocess(child_config, local_rank=1):
         assert os.environ[numa_utils._NUMACTL_ARGS_ENV] == "--cpunodebind=3 --preferred=3"
 
@@ -837,10 +832,10 @@ def test_auto_numa_multi_node_topology_is_local(monkeypatch):
 @pytest.mark.parametrize("node_cpus", [None, "", "invalid"])
 def test_auto_numa_skips_nodes_without_usable_cpus(monkeypatch, node_cpus):
     _patch_auto_numa(monkeypatch, "spawn", lambda: [0], node_cpus=node_cpus)
-    aphrodite_config = _make_config(numa_bind=None)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    sonar_config = _make_config(numa_bind=None)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
-    assert aphrodite_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind is False
 
 
 @pytest.mark.parametrize(
@@ -863,15 +858,15 @@ def test_auto_numa_records_effective_policy(monkeypatch, caplog, nodes, rejected
         return fake_run(cmd, *args, **kwargs)
 
     monkeypatch.setattr(numa_utils.subprocess, "run", run)
-    aphrodite_config = _make_config(numa_bind=None, tensor_parallel_size=len(nodes))
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="EngineCore"):
+    sonar_config = _make_config(numa_bind=None, tensor_parallel_size=len(nodes))
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0, process_kind="EngineCore"):
         assert os.environ.get(numa_utils._NUMACTL_ARGS_ENV) == expected_args
-        assert aphrodite_config.parallel_config.numa_bind is (expected_args is not None)
+        assert sonar_config.parallel_config.numa_bind is (expected_args is not None)
     launch_logs = [r.getMessage() for r in caplog.records if "Launching" in r.message]
     if expected_args is None:
         assert launch_logs == []
-        assert aphrodite_config.parallel_config.numa_bind_nodes is None
-        assert aphrodite_config.parallel_config._numa_bind_auto is False
+        assert sonar_config.parallel_config.numa_bind_nodes is None
+        assert sonar_config.parallel_config._numa_bind_auto is False
     else:
         assert len(launch_logs) == 1
         assert launch_logs[0].endswith(f"numactl {expected_args}")
@@ -903,18 +898,18 @@ def test_auto_numa_skips_unavailable_environment(monkeypatch, missing_numactl):
         monkeypatch.setattr("shutil.which", lambda name: None)
     else:
         monkeypatch.setattr(numa_utils, "_is_auto_numa_available", lambda **kwargs: False)
-    aphrodite_config = _make_config(numa_bind=None)
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    sonar_config = _make_config(numa_bind=None)
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
-    assert aphrodite_config.parallel_config.numa_bind is False
+    assert sonar_config.parallel_config.numa_bind is False
 
 
 def test_explicit_numa_nodes_bypass_auto_eligibility(monkeypatch):
     _patch_auto_numa(monkeypatch, "spawn", _raise_probe_error)
     monkeypatch.setattr(numa_utils, "_is_auto_numa_available", lambda **kwargs: False)
     monkeypatch.setattr(numa_utils.subprocess, "run", _fake_numactl_run([]))
-    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[7])
-    with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+    sonar_config = _make_config(numa_bind=True, numa_bind_nodes=[7])
+    with numa_utils.configure_subprocess(sonar_config, local_rank=0):
         assert os.environ[numa_utils._NUMACTL_ARGS_ENV] == "--cpunodebind=7 --membind=7"
 
 
@@ -930,21 +925,21 @@ def test_explicit_numa_requires_detectable_topology(monkeypatch):
 @pytest.mark.parametrize("numa_bind", [False, True])
 def test_explicit_numa_handles_missing_numactl(monkeypatch, numa_bind):
     monkeypatch.setattr("shutil.which", lambda name: None)
-    aphrodite_config = _make_config(numa_bind=numa_bind, numa_bind_nodes=[0])
+    sonar_config = _make_config(numa_bind=numa_bind, numa_bind_nodes=[0])
     if numa_bind:
         with (
             pytest.raises(RuntimeError, match="numactl is required"),
-            numa_utils.configure_subprocess(aphrodite_config, local_rank=0),
+            numa_utils.configure_subprocess(sonar_config, local_rank=0),
         ):
             pass
     else:
-        with numa_utils.configure_subprocess(aphrodite_config, local_rank=0):
+        with numa_utils.configure_subprocess(sonar_config, local_rank=0):
             assert numa_utils._NUMACTL_ARGS_ENV not in os.environ
 
 
 @pytest.mark.parametrize("affinity", [[0, 1], None, [3, 2, 1, 0]])
 def test_auto_numa_checks_cpu_affinity(monkeypatch, affinity):
-    monkeypatch.setattr("aphrodite.platforms.current_platform.is_cuda_alike", lambda: True)
+    monkeypatch.setattr("sonar.platforms.current_platform.is_cuda_alike", lambda: True)
     monkeypatch.setattr(numa_utils.os.path, "isdir", lambda path: True)
     monkeypatch.setattr(numa_utils.psutil, "cpu_count", lambda: 4)
     process = SimpleNamespace()
@@ -953,7 +948,7 @@ def test_auto_numa_checks_cpu_affinity(monkeypatch, affinity):
     monkeypatch.setattr(numa_utils.psutil, "Process", lambda pid: process)
     monkeypatch.setattr(numa_utils, "_get_mempolicy", lambda: 0)
     monkeypatch.setattr(
-        "aphrodite.platforms.current_platform.get_all_device_numa_nodes",
+        "sonar.platforms.current_platform.get_all_device_numa_nodes",
         lambda: [0, 1],
         raising=False,
     )

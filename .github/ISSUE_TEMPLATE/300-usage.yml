@@ -1,5 +1,5 @@
 name: 💻 Usage
-description: Raise an issue here if you don't know how to use Aphrodite.
+description: Raise an issue here if you don't know how to use Sonar.
 title: "[Usage]: "
 labels: ["usage"]
 
@@ -7,14 +7,14 @@ body:
 - type: markdown
   attributes:
     value: >
-      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/PygmalionAI/aphrodite-engine/issues?q=is%3Aissue+sort%3Acreated-desc+).
+      #### Before submitting an issue, please make sure the issue hasn't been already addressed by searching through [the existing and past issues](https://github.com/dphnAI/sonar/issues?q=is%3Aissue+sort%3Acreated-desc+).
 - type: textarea
   attributes:
     label: Your current environment
     description: |
       Please run the following and paste the output below.
       ```sh
-      wget https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/main/env.py
+      wget https://raw.githubusercontent.com/dphnAI/sonar/main/env.py
       # For security purposes, please check the contents of env.py before running it.
       python env.py
       ```
@@ -26,11 +26,11 @@ body:
     required: true
 - type: textarea
   attributes:
-    label: How would you like to use Aphrodite?
+    label: How would you like to use Sonar?
     description: |
-      A detailed description of how you want to use Aphrodite.
+      A detailed description of how you want to use Sonar.
     value: |
-      I want to run this [specific model](put link here). I don't know how to integrate it with Aphrodite.
+      I want to run this [specific model](put link here). I don't know how to integrate it with Sonar.
 - type: markdown
   attributes:
     value: >

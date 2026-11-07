@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """DeepSeek V4.1's ROCm MXFP4 sparse indexer against a torch reference.
 
-The indexer K cache is a view into Aphrodite's block-major KV pool: its pages are
+The indexer K cache is a view into Sonar's block-major KV pool: its pages are
 a block stride apart with other layers' pages in between, so the tests put
 it there. The reference reads the keys back from a second cache the same
 writer fills in natural order, so it shares none of the preshuffled
@@ -15,30 +15,30 @@ import types
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm-only", allow_module_level=True)
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.models.deepseek_v41.amd.rocm import (
+from sonar.config import CUDAGraphMode
+from sonar.models.deepseek_v41.amd.rocm import (
     rocm_mxfp4_indexer_k_store,
     rocm_mxfp4_indexer_q_quant,
 )
-from aphrodite.platforms.rocm import get_cdna_version
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.platforms.rocm import get_cdna_version
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerPrefillChunkMetadata,
 )
-from aphrodite.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
     RocmMxfp4IndexerMetadata,
     native_decode,
     plan_gather_launches,
     plan_prefill_chunks,
 )
-from aphrodite.v1.attention.ops import rocm_paged_mxfp4_indexer as ops
-from aphrodite.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
+from sonar.v1.attention.ops import rocm_paged_mxfp4_indexer as ops
+from sonar.v1.worker.workspace import init_workspace_manager, reset_workspace_manager
 
 if get_cdna_version() != 4:
     pytest.skip("CDNA4-only", allow_module_level=True)
@@ -289,7 +289,7 @@ def test_k_store_stays_inside_its_pages(block):
 
 @pytest.mark.parametrize(
     "rows, width, k",
-    # Aphrodite's kernel below 128 rows, aiter's from 128 rows and on every k=2048
+    # Sonar's kernel below 128 rows, aiter's from 128 rows and on every k=2048
     [(8, 4096, 512), (128, 4096, 512), (8, 16384, 2048)],
 )
 def test_topk_matches_torch_on_both_kernels(rows, width, k):
@@ -516,7 +516,7 @@ def _recall(selected, reference):
 @pytest.mark.parametrize("ratio", [2, 1])
 @pytest.mark.parametrize("step", ["decode", "prefill"])
 def test_selection_from_bf16_matches_torch(monkeypatch, step, ratio, block):
-    """End to end from bf16 K and Q: Aphrodite's MXFP4 K store and Q quant, the
+    """End to end from bf16 K and Q: Sonar's MXFP4 K store and Q quant, the
     paged pool, metadata from the planning functions the builder calls, and
     the indexer op pick what the same MXFP4 math picks in torch."""
     set_random_seed(0)

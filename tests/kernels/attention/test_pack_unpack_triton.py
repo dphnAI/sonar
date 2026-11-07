@@ -4,8 +4,8 @@
 import torch
 from torch.testing import assert_close
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
 
 DEVICE = current_platform.device_type
 

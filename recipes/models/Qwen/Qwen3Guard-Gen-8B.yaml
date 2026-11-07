@@ -57,7 +57,7 @@ strategy_overrides: {}
 guide: |
   ## Overview
 
-  **Qwen3Guard-Gen** is a lightweight text-only guardrail model. This guide describes how to run the 8B variant — as well as the 4B and 0.6B variants — on GPU using Aphrodite.
+  **Qwen3Guard-Gen** is a lightweight text-only guardrail model. This guide describes how to run the 8B variant — as well as the 4B and 0.6B variants — on GPU using Sonar.
 
   ## Prerequisites
 
@@ -65,30 +65,30 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### ROCm
-  > Note: The Aphrodite wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35.
+  > Note: The Sonar wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35.
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Deployment Configurations
 
   ### Single GPU (CUDA)
   ```bash
-  aphrodite serve Qwen/Qwen3Guard-Gen-8B \
+  sonar serve Qwen/Qwen3Guard-Gen-8B \
     --host 0.0.0.0 \
     --max-model-len 32768
   ```
 
   ### Single GPU (ROCm)
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve Qwen/Qwen3Guard-Gen-8B \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve Qwen/Qwen3Guard-Gen-8B \
     --host 0.0.0.0 \
     --max-model-len 32768
   ```
@@ -115,7 +115,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model Qwen/Qwen3Guard-Gen-8B \
     --dataset-name random \
     --random-input-len 2000 \
@@ -125,7 +125,7 @@ guide: |
 
   ## Available Variants
 
-  The Qwen3Guard-Gen series includes multiple model sizes, all compatible with the same Aphrodite serving commands:
+  The Qwen3Guard-Gen series includes multiple model sizes, all compatible with the same Sonar serving commands:
   - **Qwen/Qwen3Guard-Gen-8B**
   - **Qwen/Qwen3Guard-Gen-4B**
   - **Qwen/Qwen3Guard-Gen-0.6B**

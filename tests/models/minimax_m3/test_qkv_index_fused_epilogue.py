@@ -14,8 +14,8 @@ apart.
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.platforms import current_platform
+import sonar._custom_ops as ops
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not (current_platform.is_cuda() and current_platform.has_device_capability(100)),
@@ -48,7 +48,7 @@ def _make_inputs(nq, nkv, niq, M, nb, bs, slots):
     """MXFP8 activations / weight, norm weights, positions, the RoPE cache and
     the KV / index-cache slots: random unique with ~3% -1 (no insert), the
     last M of the cache, or all -1."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
         mxfp8_e4m3_quantize,
         swizzle_mxfp8_scale,
     )
@@ -176,7 +176,7 @@ def _check_cache(name, got, want, slots, bs):
 def test_qkv_index_fused_epilogue(case):
     import flashinfer
 
-    from aphrodite.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
+    from sonar.models.minimax_m3.nvidia.ops.qkv_index_fused_epilogue import (
         minimax_m3_qkv_index_fused_epilogue,
     )
 

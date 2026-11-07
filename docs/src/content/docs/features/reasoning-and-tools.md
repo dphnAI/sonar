@@ -9,7 +9,7 @@ fields. The parser must match the format produced by the model checkpoint.
 ## Configure reasoning
 
 ```bash
-aphrodite serve MODEL --reasoning-parser glm45
+sonar serve MODEL --reasoning-parser glm45
 ```
 
 The parser separates reasoning content from the final answer. Parser names are
@@ -18,7 +18,7 @@ model-format names, not general quality settings.
 List the registered values:
 
 ```bash
-aphrodite serve --help=reasoning-parser
+sonar serve --help=reasoning-parser
 ```
 
 Test a known prompt and inspect both response fields before production use.
@@ -27,7 +27,7 @@ Model template changes can alter delimiters that the parser expects.
 ## Configure automatic tool choice
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --enable-auto-tool-choice \
   --tool-call-parser glm47
 ```
@@ -39,7 +39,7 @@ call structure.
 List current parser names:
 
 ```bash
-aphrodite serve --help=tool-call-parser
+sonar serve --help=tool-call-parser
 ```
 
 ## Validate a model pair

@@ -5,7 +5,7 @@ description: Run Sonar with the experimental Rust HTTP frontend.
 
 The Rust frontend provides an alternative HTTP serving layer for Sonar. The
 Python supervisor still starts and manages the model engine. It passes the
-listening socket and engine transport addresses to the `aphrodite-rs`
+listening socket and engine transport addresses to the `sonar-rs`
 subprocess.
 
 The Rust frontend is experimental. It does not implement every route or
@@ -14,16 +14,16 @@ production use.
 
 ## Enable the packaged frontend
 
-Set `APHRODITE_USE_RUST_FRONTEND=1`:
+Set `SONAR_USE_RUST_FRONTEND=1`:
 
 ```bash
-APHRODITE_USE_RUST_FRONTEND=1 \
-  aphrodite serve Qwen/Qwen3-0.6B \
+SONAR_USE_RUST_FRONTEND=1 \
+  sonar serve Qwen/Qwen3-0.6B \
   --served-model-name qwen3
 ```
 
-Sonar searches for an executable named `aphrodite-rs` inside the installed
-`aphrodite` package. Startup fails with a file-path error when the package does
+Sonar searches for an executable named `sonar-rs` inside the installed
+`sonar` package. Startup fails with a file-path error when the package does
 not contain the binary.
 
 Set an explicit path when you build the binary from a source checkout:
@@ -32,11 +32,11 @@ Set an explicit path when you build the binary from a source checkout:
 cargo build \
   --release \
   --manifest-path rust/Cargo.toml \
-  --bin aphrodite-rs
+  --bin sonar-rs
 
-APHRODITE_USE_RUST_FRONTEND=1 \
-APHRODITE_RUST_FRONTEND_PATH="$PWD/rust/target/release/aphrodite-rs" \
-  aphrodite serve Qwen/Qwen3-0.6B \
+SONAR_USE_RUST_FRONTEND=1 \
+SONAR_RUST_FRONTEND_PATH="$PWD/rust/target/release/sonar-rs" \
+  sonar serve Qwen/Qwen3-0.6B \
   --served-model-name qwen3
 ```
 
@@ -51,7 +51,7 @@ The integrated launch has three parts:
 client
   |
   v
-aphrodite-rs HTTP frontend
+sonar-rs HTTP frontend
   |
   | ZMQ and MessagePack
   v
@@ -63,7 +63,7 @@ model workers
 
 Python binds the requested HTTP socket before it starts the Rust process. The
 Rust frontend inherits that socket. This keeps `--host`, `--port`, TLS, and
-process supervision in the normal `aphrodite serve` lifecycle.
+process supervision in the normal `sonar serve` lifecycle.
 
 Only one Rust API process can run for one integrated launch.
 `--api-server-count` values greater than one are rejected. Use complete Sonar
@@ -86,7 +86,7 @@ The current Rust router provides these public routes:
 | `/inference/v1/generate` | Token-input and token-output generation |
 
 Runtime LoRA routes are available when
-`APHRODITE_ALLOW_RUNTIME_LORA_UPDATING` is enabled. Development and profiling
+`SONAR_ALLOW_RUNTIME_LORA_UPDATING` is enabled. Development and profiling
 routes require their corresponding server settings.
 
 The Rust frontend supports streaming chat and completion responses. It also
@@ -98,7 +98,7 @@ templates, reasoning parsers, and tool parsers.
 Run this command from a source checkout:
 
 ```bash
-rust/target/release/aphrodite-rs serve --help
+rust/target/release/sonar-rs serve --help
 ```
 
 The help output contains a section named
@@ -157,23 +157,23 @@ curl --fail --no-buffer \
 The response must contain one or more `data:` events and end with
 `data: [DONE]`.
 
-Run [`aphrodite bench serve`](/deployment/benchmarking/) through the Rust
+Run [`sonar bench serve`](/deployment/benchmarking/) through the Rust
 frontend before production use. Use the same model, parsers, authentication,
 and streaming mode as the target workload.
 
 ## Diagnose startup
 
-If Sonar cannot find the binary, set `APHRODITE_RUST_FRONTEND_PATH` to an
+If Sonar cannot find the binary, set `SONAR_RUST_FRONTEND_PATH` to an
 absolute executable path. If the Rust process rejects an option, remove the
 option or use the Python frontend for that deployment.
 
 Check both Python and Rust log lines during startup. A successful launch reports
 that the engines connected before it reports the HTTP bind address.
 
-Unset `APHRODITE_USE_RUST_FRONTEND` to return to the Python frontend:
+Unset `SONAR_USE_RUST_FRONTEND` to return to the Python frontend:
 
 ```bash
-unset APHRODITE_USE_RUST_FRONTEND
-unset APHRODITE_RUST_FRONTEND_PATH
-aphrodite serve MODEL
+unset SONAR_USE_RUST_FRONTEND
+unset SONAR_RUST_FRONTEND_PATH
+sonar serve MODEL
 ```

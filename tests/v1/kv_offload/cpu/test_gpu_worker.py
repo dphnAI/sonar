@@ -10,21 +10,21 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.kv_offload.base import (
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.kv_offload.base import (
     CanonicalKVCacheRef,
     CanonicalKVCaches,
     CanonicalKVCacheTensor,
     GPULoadStoreSpec,
     TransferResult,
 )
-from aphrodite.v1.kv_offload.cpu import gpu_worker
-from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
-from aphrodite.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
+from sonar.v1.kv_offload.cpu import gpu_worker
+from sonar.v1.kv_offload.cpu.common import CPULoadStoreSpec
+from sonar.v1.kv_offload.cpu.gpu_worker import CPUOffloadingWorker
+from sonar.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 
 NUM_GPU_BLOCKS = [64]
 NUM_CPU_CHUNKS = [256]
@@ -108,7 +108,7 @@ def test_worker_shutdown_releases_region_and_runs_both_handlers() -> None:
 
 @pytest.mark.parametrize("failing_handler", ["store", "load"])
 def test_worker_logs_handler_error_and_cleans_region(
-    caplog_aphrodite, monkeypatch: pytest.MonkeyPatch, failing_handler
+    caplog_sonar, monkeypatch: pytest.MonkeyPatch, failing_handler
 ) -> None:
     worker = CPUOffloadingWorker.__new__(CPUOffloadingWorker)
     calls: list[str] = []
@@ -153,14 +153,14 @@ def test_worker_logs_handler_error_and_cleans_region(
     worker._expedited_load_handler = MagicMock()
     worker._mmap_region = mmap_region
 
-    with caplog_aphrodite.at_level(logging.ERROR, logger="aphrodite.v1.kv_offload.cpu.gpu_worker"):
+    with caplog_sonar.at_level(logging.ERROR, logger="sonar.v1.kv_offload.cpu.gpu_worker"):
         worker.shutdown()
 
     other = "load" if failing_handler == "store" else "store"
     getattr(worker, f"_{other}_handler").shutdown.assert_called_once_with()
     mmap_region.cleanup.assert_called_once_with()
     assert worker._mmap_region is None
-    assert f"Failed to shut down {failing_handler} offloading handler" in caplog_aphrodite.text
+    assert f"Failed to shut down {failing_handler} offloading handler" in caplog_sonar.text
     assert calls[-2:] == ["sync", "region"]
 
 
@@ -389,7 +389,7 @@ def test_wait_swallows_synchronize_failure() -> None:
 
 @pytest.mark.parametrize("device_sync_fails", [False, True])
 def test_worker_syncs_before_cleanup_after_handler_failure(
-    caplog_aphrodite, monkeypatch: pytest.MonkeyPatch, device_sync_fails: bool
+    caplog_sonar, monkeypatch: pytest.MonkeyPatch, device_sync_fails: bool
 ) -> None:
     worker = CPUOffloadingWorker.__new__(CPUOffloadingWorker)
     calls: list[str] = []
@@ -417,13 +417,13 @@ def test_worker_syncs_before_cleanup_after_handler_failure(
     worker._expedited_load_handler = MagicMock()
     worker._mmap_region = mmap_region
 
-    with caplog_aphrodite.at_level(logging.WARNING, logger="aphrodite.v1.kv_offload.cpu.gpu_worker"):
+    with caplog_sonar.at_level(logging.WARNING, logger="sonar.v1.kv_offload.cpu.gpu_worker"):
         worker.shutdown()
 
     assert calls == ["sync", "region"]
     mmap_region.cleanup.assert_called_once_with()
     if device_sync_fails:
-        assert "Device sync before mmap cleanup failed" in caplog_aphrodite.text
+        assert "Device sync before mmap cleanup failed" in caplog_sonar.text
 
 
 @pytest.mark.parametrize("gpu_to_cpu", [True, False])
@@ -439,7 +439,7 @@ def test_worker_syncs_before_cleanup_after_handler_failure(
 @pytest.mark.parametrize("replicated_layout", [False, True])
 @torch.inference_mode()
 def test_transfer(
-    default_aphrodite_config,
+    default_sonar_config,
     gpu_to_cpu: bool,
     num_mappings: int,
     gpu_page_size_bytes: int,
@@ -613,7 +613,7 @@ def test_transfer(
 @pytest.mark.parametrize("device", DEVICES)
 @torch.inference_mode()
 def test_transfer_multi_group(
-    default_aphrodite_config,
+    default_sonar_config,
     gpu_to_cpu: bool,
     num_mappings_per_group: int,
     gpu_page_size_bytes: int,
@@ -796,7 +796,7 @@ def test_transfer_multi_group(
     reason="stream ordering test requires a CUDA-like platform",
 )
 @torch.inference_mode()
-def test_load_waits_for_pending_compute_stream_writes(default_aphrodite_config) -> None:
+def test_load_waits_for_pending_compute_stream_writes(default_sonar_config) -> None:
     """A CPU load must land after pending writes to its GPU destination."""
     device = DEVICES[0]
     page_size_bytes = 128 * 1024
@@ -859,7 +859,7 @@ def test_load_waits_for_pending_compute_stream_writes(default_aphrodite_config) 
 @pytest.mark.parametrize("gpu_to_cpu", [True, False])
 @pytest.mark.parametrize("num_blocks", [16, 9000], ids=["one_batch", "fault_in_second_batch"])
 def test_device_fault_does_not_fail_the_next_kernel_launch(
-    default_aphrodite_config, gpu_to_cpu: bool, num_blocks: int
+    default_sonar_config, gpu_to_cpu: bool, num_blocks: int
 ) -> None:
     """A caught copy fault must not leave its error pending on the thread.
 

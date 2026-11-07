@@ -14,10 +14,10 @@ endif()
 #
 # Define environment variables for special configurations
 #
-set(ENABLE_X86_ISA $ENV{APHRODITE_CPU_X86})
-set(ENABLE_ARM_BF16 $ENV{APHRODITE_CPU_ARM_BF16})
-set(ENABLE_ARM_I8MM $ENV{APHRODITE_CPU_ARM_I8MM})
-set(ENABLE_RVV_BF16 $ENV{APHRODITE_CPU_RVV_BF16})
+set(ENABLE_X86_ISA $ENV{SONAR_CPU_X86})
+set(ENABLE_ARM_BF16 $ENV{SONAR_CPU_ARM_BF16})
+set(ENABLE_ARM_I8MM $ENV{SONAR_CPU_ARM_I8MM})
+set(ENABLE_RVV_BF16 $ENV{SONAR_CPU_RVV_BF16})
 
 include_directories("${CMAKE_SOURCE_DIR}/csrc")
 
@@ -31,27 +31,27 @@ if(MACOSX_FOUND)
     # needed: _C is a dynamic_lookup bundle and resolves libomp from torch.
     list(APPEND CXX_COMPILE_FLAGS
         "-Xpreprocessor" "-fopenmp"
-        "-DAPHRODITE_CPU_EXTENSION")
+        "-DSONAR_CPU_EXTENSION")
 else()
     list(APPEND CXX_COMPILE_FLAGS
         "-fopenmp"
-        "-DAPHRODITE_CPU_EXTENSION")
+        "-DSONAR_CPU_EXTENSION")
 
     # locate PyTorch's libgomp (e.g. site-packages/torch.libs/libgomp-947d5fa1.so.1.0.0)
     # and create a local shim dir with it. When PyTorch is built from source or packaged
     # by a distro (common on RISC-V, s390x, Fedora/RHEL aarch64), no vendored libgomp
     # exists and the shim dir is empty; fall back to the system libgomp in that case.
-    aphrodite_prepare_torch_gomp_shim(APHRODITE_TORCH_GOMP_SHIM_DIR)
+    sonar_prepare_torch_gomp_shim(SONAR_TORCH_GOMP_SHIM_DIR)
 
-    if(APHRODITE_TORCH_GOMP_SHIM_DIR)
+    if(SONAR_TORCH_GOMP_SHIM_DIR)
         find_library(OPEN_MP
             NAMES gomp
-            PATHS "${APHRODITE_TORCH_GOMP_SHIM_DIR}"
+            PATHS "${SONAR_TORCH_GOMP_SHIM_DIR}"
             NO_DEFAULT_PATH
             REQUIRED
         )
         # Use the same libgomp as PyTorch at runtime
-        set(ENV{LD_LIBRARY_PATH} "${APHRODITE_TORCH_GOMP_SHIM_DIR}:$ENV{LD_LIBRARY_PATH}")
+        set(ENV{LD_LIBRARY_PATH} "${SONAR_TORCH_GOMP_SHIM_DIR}:$ENV{LD_LIBRARY_PATH}")
     else()
         # Fall back to system / toolchain libgomp
         find_library(OPEN_MP NAMES gomp REQUIRED)
@@ -113,19 +113,19 @@ else()
     # Support cross-compilation by allowing override via environment variables
     if (ENABLE_ARM_BF16)
         set(ARM_BF16_FOUND ON)
-        message(STATUS "ARM BF16 support enabled via APHRODITE_CPU_ARM_BF16 environment variable")
+        message(STATUS "ARM BF16 support enabled via SONAR_CPU_ARM_BF16 environment variable")
     endif()
     if (ENABLE_ARM_I8MM)
         set(ARM_I8MM_FOUND ON)
         message(STATUS
-            "ARM I8MM support enabled via APHRODITE_CPU_ARM_I8MM environment variable")
+            "ARM I8MM support enabled via SONAR_CPU_ARM_I8MM environment variable")
     endif()
     # Some kernels (e.g. Bianbu on Spacemit X100) do not report zvfbfmin
-    # in /proc/cpuinfo despite hardware support. APHRODITE_CPU_RVV_BF16=1
+    # in /proc/cpuinfo despite hardware support. SONAR_CPU_RVV_BF16=1
     # overrides the detection result.
     if (ENABLE_RVV_BF16)
         set(RVV_BF16_FOUND ON)
-        message(STATUS "RVV BF16 support enabled via APHRODITE_CPU_RVV_BF16 environment variable")
+        message(STATUS "RVV BF16 support enabled via SONAR_CPU_RVV_BF16 environment variable")
     endif()
 endif()
 
@@ -229,14 +229,14 @@ elseif (S390_FOUND)
         "-mtune=native")
 elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
     message(STATUS "RISC-V detected")
-    if(DEFINED APHRODITE_RVV_VLEN AND APHRODITE_RVV_VLEN LESS 0)
+    if(DEFINED SONAR_RVV_VLEN AND SONAR_RVV_VLEN LESS 0)
         message(FATAL_ERROR
-            "APHRODITE_RVV_VLEN must be zero or a positive integer; got '${APHRODITE_RVV_VLEN}'")
+            "SONAR_RVV_VLEN must be zero or a positive integer; got '${SONAR_RVV_VLEN}'")
     endif()
-    # APHRODITE_RVV_VLEN selects the target VLEN. Auto-detected from /proc/cpuinfo
-    # by default; set -DAPHRODITE_RVV_VLEN=0 to force scalar RISC-V build.
-    # Override with -DAPHRODITE_RVV_VLEN=128 or -DAPHRODITE_RVV_VLEN=256 for RVV.
-    if(NOT DEFINED APHRODITE_RVV_VLEN)
+    # SONAR_RVV_VLEN selects the target VLEN. Auto-detected from /proc/cpuinfo
+    # by default; set -DSONAR_RVV_VLEN=0 to force scalar RISC-V build.
+    # Override with -DSONAR_RVV_VLEN=128 or -DSONAR_RVV_VLEN=256 for RVV.
+    if(NOT DEFINED SONAR_RVV_VLEN)
         # Auto-detect: find the largest zvl<N>b in /proc/cpuinfo isa line.
         # Skip when cross-compiling; /proc/cpuinfo describes the build host.
         if(CMAKE_CROSSCOMPILING)
@@ -257,30 +257,30 @@ elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
                 set(_best 256)
             endif()
             if(_best GREATER 0)
-                set(APHRODITE_RVV_VLEN ${_best})
+                set(SONAR_RVV_VLEN ${_best})
             endif()
         endif()
         # If auto-detect failed (no /proc/cpuinfo or no zvl<N>b reported)
         # but the compiler supports RVV, require explicit specification.
-        if(NOT DEFINED APHRODITE_RVV_VLEN AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
+        if(NOT DEFINED SONAR_RVV_VLEN AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
             message(FATAL_ERROR
                 "RISC-V RVV is available but VLEN could not be auto-detected. "
                 "Please specify VLEN explicitly via CMAKE_ARGS:\n"
-                "  CMAKE_ARGS='-DAPHRODITE_RVV_VLEN=128'   (for VLEN=128 hardware)\n"
-                "  CMAKE_ARGS='-DAPHRODITE_RVV_VLEN=256'   (for VLEN=256 hardware, e.g. Spacemit X100)")
+                "  CMAKE_ARGS='-DSONAR_RVV_VLEN=128'   (for VLEN=128 hardware)\n"
+                "  CMAKE_ARGS='-DSONAR_RVV_VLEN=256'   (for VLEN=256 hardware, e.g. Spacemit X100)")
         endif()
     endif()
-    if(APHRODITE_RVV_VLEN AND APHRODITE_RVV_VLEN GREATER 0)
-        message(STATUS "RISC-V RVV VLEN=${APHRODITE_RVV_VLEN}")
+    if(SONAR_RVV_VLEN AND SONAR_RVV_VLEN GREATER 0)
+        message(STATUS "RISC-V RVV VLEN=${SONAR_RVV_VLEN}")
         # Sources gate FP16/BF16 paths on the compiler-provided
         # __riscv_zvfh / __riscv_zvfbfmin macros, which GCC and clang
         # define automatically when those extensions appear in -march.
         if(RVV_BF16_FOUND)
             message(STATUS "BF16 extension detected")
-            set(MARCH_FLAGS -march=rv64gcv_zvfh_zfbfmin_zvfbfmin_zvl${APHRODITE_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
+            set(MARCH_FLAGS -march=rv64gcv_zvfh_zfbfmin_zvfbfmin_zvl${SONAR_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
         elseif(RVV_FP16_FOUND)
             message(WARNING "BF16 functionality is not available.")
-            set(MARCH_FLAGS -march=rv64gcv_zvfh_zvl${APHRODITE_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
+            set(MARCH_FLAGS -march=rv64gcv_zvfh_zvl${SONAR_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
         else()
             message(STATUS "compile riscv with scalar (no FP16/BF16)")
             set(MARCH_FLAGS -march=rv64gc)
@@ -291,7 +291,7 @@ elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
     endif()
     list(APPEND CXX_COMPILE_FLAGS ${MARCH_FLAGS})
 else()
-    message(FATAL_ERROR "Aphrodite CPU backend requires X86, Power9+ ISA, S390X ISA, ARMv8 or RISC-V support.")
+    message(FATAL_ERROR "Sonar CPU backend requires X86, Power9+ ISA, S390X ISA, ARMv8 or RISC-V support.")
 endif()
 
 
@@ -356,9 +356,9 @@ if (ENABLE_X86_ISA OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND 
         endif()
         message(STATUS "Arm Compute Library (ACL) built successfully.")
 
-        # APHRODITE/oneDNN settings for ACL
+        # SONAR/oneDNN settings for ACL
         set(ONEDNN_AARCH64_USE_ACL ON CACHE BOOL "" FORCE)
-        add_compile_definitions(APHRODITE_USE_ACL)
+        add_compile_definitions(SONAR_USE_ACL)
     endif()
 
     set(FETCHCONTENT_SOURCE_DIR_ONEDNN "$ENV{FETCHCONTENT_SOURCE_DIR_ONEDNN}" CACHE PATH "Path to a local oneDNN source directory.")
@@ -405,7 +405,7 @@ if (ENABLE_X86_ISA OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND 
     set(ONEDNN_VERBOSE "ON")
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
-    set(APHRODITE_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+    set(SONAR_BUILD_TYPE ${CMAKE_BUILD_TYPE})
     set(CMAKE_BUILD_TYPE "Release") # remove oneDNN debug symbols to reduce size
     if(S390_FOUND)
         FetchContent_GetProperties(oneDNN)
@@ -423,7 +423,7 @@ if (ENABLE_X86_ISA OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND 
     else()
         FetchContent_MakeAvailable(oneDNN)
     endif()
-    set(CMAKE_BUILD_TYPE ${APHRODITE_BUILD_TYPE})
+    set(CMAKE_BUILD_TYPE ${SONAR_BUILD_TYPE})
     add_library(dnnl_ext OBJECT "csrc/cpu/dnnl_helper.cpp")
     target_include_directories(
         dnnl_ext
@@ -458,18 +458,18 @@ if(ENABLE_NUMA)
     list(APPEND LIBS numa)
 else()
     message(STATUS "NUMA is disabled")
-    add_compile_definitions(-DAPHRODITE_NUMA_DISABLED)
+    add_compile_definitions(-DSONAR_NUMA_DISABLED)
 endif()
 
 # check if the pytorch wheel ships libopenblas.so.
-set(APHRODITE_OPENBLAS_LIB "")
+set(SONAR_OPENBLAS_LIB "")
 if (NOT ENABLE_X86_ISA)
-    file(GLOB _APHRODITE_TORCH_OPENBLAS_LIBS
+    file(GLOB _SONAR_TORCH_OPENBLAS_LIBS
         "${TORCH_INSTALL_PREFIX}/lib/libopenblas*.so*")
     # Note: we don't link openblas directly to _C extension, as it's available through libtorch.so 
-    if (_APHRODITE_TORCH_OPENBLAS_LIBS)
-        list(GET _APHRODITE_TORCH_OPENBLAS_LIBS 0 APHRODITE_OPENBLAS_LIB)
-        message(STATUS "CPU OpenBLAS library: ${APHRODITE_OPENBLAS_LIB}")
+    if (_SONAR_TORCH_OPENBLAS_LIBS)
+        list(GET _SONAR_TORCH_OPENBLAS_LIBS 0 SONAR_OPENBLAS_LIB)
+        message(STATUS "CPU OpenBLAS library: ${SONAR_OPENBLAS_LIB}")
     endif()
 endif()
 
@@ -489,7 +489,7 @@ endif()
 #
 # _C extension
 #
-set(APHRODITE_EXT_SRC
+set(SONAR_EXT_SRC
     "csrc/cpu/activation.cpp"
     "csrc/cpu/sgl-kernels/fla.cpp"
     "csrc/cpu/utils.cpp"
@@ -508,60 +508,60 @@ set(APHRODITE_EXT_SRC
     "csrc/cpu/fp8_quant.cpp"
     "csrc/cpu/torch_bindings.cpp")
 
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64" AND APHRODITE_RVV_VLEN AND
-        APHRODITE_RVV_VLEN GREATER 0 AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
-    set(APHRODITE_EXT_SRC
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64" AND SONAR_RVV_VLEN AND
+        SONAR_RVV_VLEN GREATER 0 AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
+    set(SONAR_EXT_SRC
         "csrc/cpu/cpu_wna16.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if (S390_FOUND)
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/cpu_wna16.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND)
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/shm.cpp"
         "csrc/cpu/activation_lut_bf16.cpp"
         "csrc/cpu/cpu_tanhf_neon.hpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
     if (ARM_BF16_FOUND)
-        set(APHRODITE_EXT_SRC "csrc/cpu/sgl-kernels/conv.cpp" ${APHRODITE_EXT_SRC})
+        set(SONAR_EXT_SRC "csrc/cpu/sgl-kernels/conv.cpp" ${SONAR_EXT_SRC})
         if (ARM_I8MM_FOUND)
-            set(APHRODITE_EXT_SRC "csrc/cpu/cpu_fused_moe_int8.cpp" ${APHRODITE_EXT_SRC})
+            set(SONAR_EXT_SRC "csrc/cpu/cpu_fused_moe_int8.cpp" ${SONAR_EXT_SRC})
         endif()
     endif()
 endif()
 
 if (POWER9_FOUND OR POWER10_FOUND OR POWER11_FOUND)
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/cpu_wna16.cpp"
         "csrc/cpu/shm.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if (POWER10_FOUND OR POWER11_FOUND)
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/cpu_fused_moe_int8.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if(USE_ONEDNN)
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/dnnl_kernels.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
-    set(APHRODITE_EXT_SRC
+    set(SONAR_EXT_SRC
         "csrc/cpu/sgl-kernels/gemm_int4.cpp"
-        ${APHRODITE_EXT_SRC})
+        ${SONAR_EXT_SRC})
 endif()
 
 if (ENABLE_X86_ISA)
-    set(APHRODITE_EXT_SRC_SGL
+    set(SONAR_EXT_SRC_SGL
         "csrc/cpu/sgl-kernels/conv.cpp"
         "csrc/cpu/sgl-kernels/gemm.cpp"
         "csrc/cpu/sgl-kernels/gemm_int8.cpp"
@@ -585,7 +585,7 @@ if (ENABLE_X86_ISA)
         "csrc/cpu/sgl-kernels/topk.cpp"
         "csrc/cpu/sgl-kernels/indexer.cpp")
 
-    set(APHRODITE_EXT_SRC_AVX512
+    set(SONAR_EXT_SRC_AVX512
         "csrc/cpu/sgl-kernels/fla.cpp"
         "csrc/cpu/shm.cpp"
         "csrc/cpu/cpu_wna16.cpp"
@@ -606,7 +606,7 @@ if (ENABLE_X86_ISA)
         "csrc/cpu/pos_encoding.cpp"
         "csrc/cpu/dynamic_4bit_int_moe_cpu.cpp") 
 
-    set(APHRODITE_EXT_SRC_AVX2
+    set(SONAR_EXT_SRC_AVX2
         "csrc/cpu/sgl-kernels/fla.cpp"
         "csrc/cpu/cpu_fused_moe.cpp"
         "csrc/cpu/utils.cpp"
@@ -625,9 +625,9 @@ if (ENABLE_X86_ISA)
         "csrc/cpu/pos_encoding.cpp"
         "csrc/cpu/dynamic_4bit_int_moe_cpu.cpp") 
 
-    message(STATUS "CPU extension (AVX512F + BF16 + VNNI + AMX) source files: ${APHRODITE_EXT_SRC_AVX512} ${APHRODITE_EXT_SRC_SGL}")
-    message(STATUS "CPU extension (AVX512F) source files: ${APHRODITE_EXT_SRC_AVX512}")
-    message(STATUS "CPU extension (AVX2) source files: ${APHRODITE_EXT_SRC_AVX2}")
+    message(STATUS "CPU extension (AVX512F + BF16 + VNNI + AMX) source files: ${SONAR_EXT_SRC_AVX512} ${SONAR_EXT_SRC_SGL}")
+    message(STATUS "CPU extension (AVX512F) source files: ${SONAR_EXT_SRC_AVX512}")
+    message(STATUS "CPU extension (AVX2) source files: ${SONAR_EXT_SRC_AVX2}")
 
     set(_C_LIBS numa dnnl_ext)
     set(_C_AVX512_LIBS numa dnnl_ext)
@@ -636,9 +636,9 @@ if (ENABLE_X86_ISA)
     # AMX + AVX512F + AVX512BF16 + AVX512VNNI
     define_extension_target(
         _C
-        DESTINATION aphrodite
+        DESTINATION sonar
         LANGUAGE CXX
-        SOURCES ${APHRODITE_EXT_SRC_AVX512} ${APHRODITE_EXT_SRC_SGL}
+        SOURCES ${SONAR_EXT_SRC_AVX512} ${SONAR_EXT_SRC_SGL}
         LIBRARIES ${_C_LIBS}
         COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX512_AMX}
         USE_SABI 3
@@ -661,9 +661,9 @@ if (ENABLE_X86_ISA)
     # AVX512F 
     define_extension_target(
         _C_AVX512
-        DESTINATION aphrodite
+        DESTINATION sonar
         LANGUAGE CXX
-        SOURCES ${APHRODITE_EXT_SRC_AVX512}
+        SOURCES ${SONAR_EXT_SRC_AVX512}
         LIBRARIES ${_C_AVX512_LIBS}
         COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX512}
         USE_SABI 3
@@ -673,32 +673,32 @@ if (ENABLE_X86_ISA)
     # AVX2 
     define_extension_target(
         _C_AVX2
-        DESTINATION aphrodite
+        DESTINATION sonar
         LANGUAGE CXX
-        SOURCES ${APHRODITE_EXT_SRC_AVX2}
+        SOURCES ${SONAR_EXT_SRC_AVX2}
         LIBRARIES ${_C_AVX2_LIBS}
         COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX2}
         USE_SABI 3
         WITH_SOABI
     )
 else()
-    message(STATUS "CPU extension source files: ${APHRODITE_EXT_SRC}")
+    message(STATUS "CPU extension source files: ${SONAR_EXT_SRC}")
     #
     # Define extension targets
     #
     define_extension_target(
         _C
-        DESTINATION aphrodite
+        DESTINATION sonar
         LANGUAGE CXX
-        SOURCES ${APHRODITE_EXT_SRC}
+        SOURCES ${SONAR_EXT_SRC}
         LIBRARIES ${LIBS}
         COMPILE_FLAGS ${CXX_COMPILE_FLAGS}
         USE_SABI 3
         WITH_SOABI
     )
-    target_compile_definitions(_C PRIVATE APHRODITE_STANDALONE_CPU_MRV2)
-    if (APHRODITE_OPENBLAS_LIB)
-        target_compile_definitions(_C PRIVATE APHRODITE_HAS_OPENBLAS)
+    target_compile_definitions(_C PRIVATE SONAR_STANDALONE_CPU_MRV2)
+    if (SONAR_OPENBLAS_LIB)
+        target_compile_definitions(_C PRIVATE SONAR_HAS_OPENBLAS)
     endif()
 endif()
 

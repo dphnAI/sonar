@@ -7,7 +7,7 @@
 //! unchanged; `prompt_logprob_token_ids` rows are padded into an array.
 
 use crate::backend::SamplingLimits;
-use aphrodite_engine_core_client::protocol::tensor::WireNdArray;
+use sonar_engine_core_client::protocol::tensor::WireNdArray;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

@@ -14,11 +14,11 @@ import dataclasses
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
 )
-from aphrodite.parser import glm47_moe
-from aphrodite.parser.glm47_moe import (
+from sonar.parser import glm47_moe
+from sonar.parser.glm47_moe import (
     THINK_END,
     THINK_START,
     TOOL_CALL_END,

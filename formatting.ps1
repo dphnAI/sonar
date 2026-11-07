@@ -71,7 +71,7 @@ elseif ($args[0] -eq '--all') {
 else {
     Invoke-SpellCheckChanged
 }
-Write-Host 'Aphrodite codespell: Done'
+Write-Host 'Sonar codespell: Done'
 
 # Ruff section
 function Invoke-Lint {
@@ -92,12 +92,12 @@ if ($args[0] -eq '--files') {
     Invoke-Lint $args[1..($args.Length-1)]
 }
 elseif ($args[0] -eq '--all') {
-    Invoke-Lint @("aphrodite", "tests")
+    Invoke-Lint @("sonar", "tests")
 }
 else {
     Invoke-LintChanged
 }
-Write-Host 'Aphrodite ruff: Done'
+Write-Host 'Sonar ruff: Done'
 
 # Isort section
 function Invoke-IsortCheck {
@@ -127,7 +127,7 @@ elseif ($args[0] -eq '--all') {
 else {
     Invoke-IsortCheckChanged
 }
-Write-Host 'Aphrodite isort: Done'
+Write-Host 'Sonar isort: Done'
 
 # Clang-format section
 $CLANG_FORMAT_EXCLUDES = @(
@@ -176,7 +176,7 @@ elseif ($args[0] -eq '--all') {
 else {
     Invoke-ClangFormatChanged
 }
-Write-Host 'Aphrodite clang-format: Done'
+Write-Host 'Sonar clang-format: Done'
 
 # Check for unstaged changes
 $hasChanges = git diff --quiet

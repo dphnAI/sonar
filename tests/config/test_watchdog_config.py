@@ -4,7 +4,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.config import WatchdogConfig
+from sonar.config import WatchdogConfig
 
 
 def test_watchdog_config_defaults():

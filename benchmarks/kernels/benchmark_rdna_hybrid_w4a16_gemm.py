@@ -16,10 +16,10 @@ import os
 
 import torch
 
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
+from sonar.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
     pack_skinny_int4,
 )
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 # ---------------------------------------------------------------------------
 # Weight shapes: [K, N], TP_SPLIT_DIM
@@ -124,12 +124,12 @@ def benchmark(batch_size, provider, N, K, group_size, dtype, weights):
             quantiles=quantiles,
         )
     elif provider in ("hybrid-w4a16", "hybrid-w4a16-zp"):
-        from aphrodite.model_executor.kernels.linear.mixed_precision import (
+        from sonar.model_executor.kernels.linear.mixed_precision import (
             rdna_hybrid_w4a16 as _k,
         )
 
         _rdna_hybrid_w4a16_apply_impl = _k._rdna_hybrid_w4a16_apply_impl
-        from aphrodite.utils.platform_utils import num_compute_units
+        from sonar.utils.platform_utils import num_compute_units
 
         w = weights
         cu_count = num_compute_units()

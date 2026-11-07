@@ -7,8 +7,8 @@ from typing import Any, NamedTuple
 import pytest
 import regex as re
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 
 class Matches(NamedTuple):
@@ -55,7 +55,7 @@ def nvfp4_kernel_exposes_input_quant_key() -> bool:
         return False
 
     try:
-        from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+        from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
             FlashInferCuteDslNvFp4LinearKernel,
         )
 
@@ -66,7 +66,7 @@ def nvfp4_kernel_exposes_input_quant_key() -> bool:
         pass
 
     try:
-        from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+        from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
             FlashInferCutlassNvFp4LinearKernel,
         )
 

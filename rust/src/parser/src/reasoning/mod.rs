@@ -29,7 +29,7 @@ mod qwen3;
 mod seed_oss;
 mod step3p5;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use thiserror::Error;
 use xgrammar_structural_tag::format::Format;
 
@@ -162,7 +162,7 @@ pub trait ReasoningParser: Send {
 #[derive(Debug, Error)]
 pub enum ReasoningError {
     #[error(transparent)]
-    Tokenizer(#[from] aphrodite_tokenizer::TokenizerError),
+    Tokenizer(#[from] sonar_tokenizer::TokenizerError),
     #[error("tokenizer is missing reasoning delimiter token `{token}`")]
     MissingToken { token: String },
     #[error(

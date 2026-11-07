@@ -10,19 +10,19 @@ import pytest
 import torch.distributed
 from torch.distributed import ProcessGroup
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
-from aphrodite.utils.import_utils import has_deep_ep_v2
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
+from sonar.utils.import_utils import has_deep_ep_v2
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import init_workspace_manager
 from tests.kernels.moe.utils import make_dummy_moe_config, make_test_weights
 from tests.kernels.utils import torch_experts
 
@@ -218,7 +218,7 @@ def _deep_ep_v2_moe(
     set_random_seed(7 + pgi.rank)
     test_tensors = TestTensors.make(config)
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         # Reference
         q_dtype = torch.float8_e4m3fn if is_quantized else None
         torch_combined = torch_experts(
@@ -349,10 +349,10 @@ def _make_experts(
     e_end = e_start + num_local_experts
 
     if experts_backend != "trtllm_fp8":
-        from aphrodite.model_executor.layers.fused_moe.config import (
+        from sonar.model_executor.layers.fused_moe.config import (
             FUSED_MOE_UNQUANTIZED_CONFIG,
         )
-        from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+        from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
             backend_to_kernel_cls,
             convert_to_unquantized_kernel_format,
             map_unquantized_backend,
@@ -379,10 +379,10 @@ def _make_experts(
         )
         return fused_experts, w1_ep, w2_ep, torch_combined, 1e-1, 2e-1
 
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
         TrtLlmFp8ExpertsModular,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
         Fp8MoeBackend,
         convert_to_fp8_moe_kernel_format,
     )
@@ -451,8 +451,8 @@ def _deep_ep_v2_moe_backends(
 ):
     import tempfile
 
-    from aphrodite.config import KernelConfig
-    from aphrodite.distributed import (
+    from sonar.config import KernelConfig
+    from sonar.distributed import (
         init_distributed_environment,
         initialize_model_parallel,
     )
@@ -486,10 +486,10 @@ def _deep_ep_v2_moe_backends(
     torch.distributed.broadcast(w1_bf16, src=0, group=pg)
     torch.distributed.broadcast(w2_bf16, src=0, group=pg)
 
-    aphrodite_cfg = AphroditeConfig()
-    aphrodite_cfg.kernel_config = KernelConfig(moe_backend="flashinfer_trtllm")
+    sonar_cfg = SonarConfig()
+    sonar_cfg.kernel_config = KernelConfig(moe_backend="flashinfer_trtllm")
 
-    with set_current_aphrodite_config(aphrodite_cfg):
+    with set_current_sonar_config(sonar_cfg):
         temp_file = tempfile.mktemp()
         init_distributed_environment(
             world_size=pgi.world_size,

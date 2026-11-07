@@ -32,8 +32,8 @@ Multi-node:
 import os
 from time import sleep
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.utils import get_open_port
+from sonar import LLM, SamplingParams
+from sonar.utils import get_open_port
 
 
 def parse_args():
@@ -51,11 +51,11 @@ def parse_args():
 
 
 def main(model, dp_size, local_dp_rank, global_dp_rank, dp_master_ip, dp_master_port, GPUs_per_dp_rank):
-    os.environ["APHRODITE_DP_RANK"] = str(global_dp_rank)
-    os.environ["APHRODITE_DP_RANK_LOCAL"] = str(local_dp_rank)
-    os.environ["APHRODITE_DP_SIZE"] = str(dp_size)
-    os.environ["APHRODITE_DP_MASTER_IP"] = dp_master_ip
-    os.environ["APHRODITE_DP_MASTER_PORT"] = str(dp_master_port)
+    os.environ["SONAR_DP_RANK"] = str(global_dp_rank)
+    os.environ["SONAR_DP_RANK_LOCAL"] = str(local_dp_rank)
+    os.environ["SONAR_DP_SIZE"] = str(dp_size)
+    os.environ["SONAR_DP_MASTER_IP"] = dp_master_ip
+    os.environ["SONAR_DP_MASTER_PORT"] = str(dp_master_port)
 
     # CUDA_VISIBLE_DEVICES for each DP rank is set automatically inside the
     # engine processes.

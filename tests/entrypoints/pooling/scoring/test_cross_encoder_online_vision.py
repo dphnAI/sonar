@@ -6,10 +6,10 @@ import json
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
-from aphrodite.multimodal.utils import encode_image_url, fetch_image
-from aphrodite.platforms import current_platform
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from sonar.multimodal.utils import encode_image_url, fetch_image
+from sonar.platforms import current_platform
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-VL-Reranker-2B"
 HF_OVERRIDES = {
@@ -92,7 +92,7 @@ def server(request):
         "--max-model-len",
         "8192",
         "--chat-template",
-        str(APHRODITE_PATH / "examples/pooling/score/template/qwen3_vl_reranker.jinja"),
+        str(SONAR_PATH / "examples/pooling/score/template/qwen3_vl_reranker.jinja"),
     ]
 
     env = dict()
@@ -101,7 +101,7 @@ def server(request):
         args += ROCM_EXTRA_ARGS
 
         if backend != "ROCM_AITER_FA":
-            env["APHRODITE_ROCM_USE_AITER"] = "0"
+            env["SONAR_ROCM_USE_AITER"] = "0"
 
     with RemoteOpenAIServer(MODEL_NAME, args, override_hf_configs=HF_OVERRIDES, env_dict=env) as remote_server:
         print(f"=== Server ready with backend: {backend} ===")

@@ -12,7 +12,7 @@ Run: pytest tests/models/quantization/test_per_token_kv_cache.py -v -s
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..utils import check_logprobs_close
 
@@ -39,7 +39,7 @@ from ..utils import check_logprobs_close
 @pytest.mark.parametrize("backend", ["TRITON_ATTN"])
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_per_token_head_kv_cache_accuracy(
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     base_model: str,
     test_model: str,
@@ -59,25 +59,25 @@ def test_per_token_head_kv_cache_accuracy(
         MAX_MODEL_LEN = 1024
         NUM_LOG_PROBS = 8
 
-        with aphrodite_runner(
+        with sonar_runner(
             base_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype="auto",
             attention_config={"backend": backend},
-        ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+        ) as sonar_model:
+            baseline_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
 
-        with aphrodite_runner(
+        with sonar_runner(
             test_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype=kv_cache_dtype,
             attention_config={"backend": backend},
-        ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+        ) as sonar_model:
+            test_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,

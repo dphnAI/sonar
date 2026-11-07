@@ -25,38 +25,38 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field, ValidationError
 
-from aphrodite.entrypoints.anthropic.api_router import attach_router
-from aphrodite.entrypoints.anthropic.protocol import (
+from sonar.entrypoints.anthropic.api_router import attach_router
+from sonar.entrypoints.anthropic.protocol import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,
 )
-from aphrodite.entrypoints.anthropic.serving import (
+from sonar.entrypoints.anthropic.serving import (
     AnthropicServingMessages,
     DisabledThinkingEffortResolver,
     _build_anthropic_usage,
 )
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
     ChatCompletionResponseStreamChoice,
     ChatCompletionStreamResponse,
     ChatMessage,
 )
-from aphrodite.entrypoints.serve.engine.protocol import PromptTokenUsageInfo, UsageInfo
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+from sonar.entrypoints.serve.engine.protocol import PromptTokenUsageInfo, UsageInfo
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.entrypoints.serve.exception_handling.handlers.validation import (
+from sonar.entrypoints.serve.exception_handling.handlers.validation import (
     validation_exception_handler,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 _convert = AnthropicServingMessages.to_chat_completion_request
 _img_url = AnthropicServingMessages._convert_image_source_to_url
@@ -190,15 +190,15 @@ class TestImageContentBlocks:
 
 
 # ======================================================================
-# aphrodite_xargs pass-through
+# sonar_xargs pass-through
 # ======================================================================
 
 
-class TestAphroditeXargs:
-    def test_aphrodite_xargs_passed_through(self):
+class TestSonarXargs:
+    def test_sonar_xargs_passed_through(self):
         request = _make_request(
             [{"role": "user", "content": "Hello"}],
-            aphrodite_xargs={
+            sonar_xargs={
                 "kv_cache_report_mode": "full",
                 "existing_extension": 7,
             },
@@ -206,19 +206,19 @@ class TestAphroditeXargs:
 
         result = _convert(request)
 
-        assert result.aphrodite_xargs == {
+        assert result.sonar_xargs == {
             "kv_cache_report_mode": "full",
             "existing_extension": 7,
         }
 
-    def test_aphrodite_xargs_reaches_sampling_params_with_kv_transfer(self):
+    def test_sonar_xargs_reaches_sampling_params_with_kv_transfer(self):
         kv_transfer_params = {
             "do_remote_decode": True,
             "do_remote_prefill": False,
         }
         request = _make_request(
             [{"role": "user", "content": "Hello"}],
-            aphrodite_xargs={
+            sonar_xargs={
                 "kv_cache_report_mode": "full",
                 "existing_extension": "kept",
             },
@@ -471,7 +471,7 @@ class TestThinkingBlockConversion:
     the Anthropic→OpenAI conversion.
 
     This is the Anthropic-endpoint path: the client echoes back the full
-    assistant message (including thinking blocks emitted by aphrodite) in
+    assistant message (including thinking blocks emitted by sonar) in
     subsequent requests.
     """
 
@@ -638,7 +638,7 @@ class TestThinkingBlockConversion:
         include thinking blocks must all be converted without a 400 error.
 
         This is the primary regression scenario from the bug report:
-        upgrading aphrodite from v0.15.1 → v0.17.0 introduced thinking-block
+        upgrading sonar from v0.15.1 → v0.17.0 introduced thinking-block
         support in responses, but echoing those responses back in subsequent
         requests caused a Pydantic validation failure.
         """
@@ -685,7 +685,7 @@ class TestThinkingBlockConversion:
     def test_redacted_thinking_block_is_accepted(self):
         """Anthropic clients may echo back redacted thinking blocks.
 
-        Aphrodite should accept these blocks (to avoid 400 validation errors)
+        Sonar should accept these blocks (to avoid 400 validation errors)
         and ignore them when constructing the OpenAI-format prompt.
         """
         request = _make_request(
@@ -729,7 +729,7 @@ class TestBuildAnthropicUsage:
     """Tests for _build_anthropic_usage helper.
 
     Anthropic defines: total_input = input_tokens + cache_read + cache_creation
-    Aphrodite's prompt_tokens is the total.
+    Sonar's prompt_tokens is the total.
     """
 
     def test_cache_hit(self):
@@ -1229,11 +1229,11 @@ class TestMessageStartIncludesTypeAndRole:
 class TestStreamingCacheUsageSemantics:
     """Locks in the documented streaming behavior of cache usage fields.
 
-    Aphrodite's OpenAI chat completion streaming only attaches
+    Sonar's OpenAI chat completion streaming only attaches
     ``prompt_tokens_details`` to the terminal usage chunk. The Anthropic layer
     mirrors that contract: cache fields are omitted on ``message_start`` (key
     absence signals "unknown") and populated on ``message_delta`` (the final
-    cumulative count). This is intentionally consistent with Aphrodite's OpenAI
+    cumulative count). This is intentionally consistent with Sonar's OpenAI
     behavior, even though Anthropic's upstream API populates cache fields on
     ``message_start``; closing that gap requires plumbing cache info into the
     first chunk at the OpenAI layer, which is out of scope here.
@@ -1241,7 +1241,7 @@ class TestStreamingCacheUsageSemantics:
 
     @pytest.mark.asyncio
     async def test_streaming_cache_fields_absent_then_populated(self):
-        """First chunk lacks prompt_tokens_details (Aphrodite contract);
+        """First chunk lacks prompt_tokens_details (Sonar contract);
         message_start omits cache fields. The final chunk carries
         prompt_tokens_details, so message_delta carries resolved values."""
 
@@ -1414,8 +1414,8 @@ class TestDetectMergeInlineSystem:
 
         Merging defeats prefix caching, so it is warned about at startup.
         """
-        import aphrodite.entrypoints.anthropic.serving as serving_mod
-        from aphrodite.renderers.hf import HfRenderer
+        import sonar.entrypoints.anthropic.serving as serving_mod
+        from sonar.renderers.hf import HfRenderer
 
         monkeypatch.setattr(serving_mod, "resolve_chat_template", lambda *a, **kw: resolved)
         mock_logger = MagicMock()
@@ -1444,14 +1444,14 @@ class TestDetectMergeInlineSystem:
     )
     def test_probes_non_jinja_renderer(self, model, expected):
         """Encoder-based renderers are probed by rendering, not registered."""
-        from aphrodite.config import AphroditeConfig, ModelConfig
-        from aphrodite.renderers import renderer_from_config
-        from aphrodite.renderers.online_renderer import OnlineRenderer
+        from sonar.config import ModelConfig, SonarConfig
+        from sonar.renderers import renderer_from_config
+        from sonar.renderers.online_renderer import OnlineRenderer
 
         model_config = ModelConfig(model=model)
         online_renderer = OnlineRenderer(
             model_config=model_config,
-            renderer=renderer_from_config(AphroditeConfig(model_config=model_config)),
+            renderer=renderer_from_config(SonarConfig(model_config=model_config)),
             request_logger=None,
             chat_template=None,
             chat_template_content_format="auto",
@@ -1479,7 +1479,7 @@ class TestDetectMergeInlineSystem:
 
     def test_non_jinja_merge_warning_omits_chat_template_hint(self, monkeypatch):
         """--chat-template may not apply to non-jinja renderers (e.g. V4)."""
-        import aphrodite.entrypoints.anthropic.serving as serving_mod
+        import sonar.entrypoints.anthropic.serving as serving_mod
 
         mock_logger = MagicMock()
         monkeypatch.setattr(serving_mod, "logger", mock_logger)
@@ -1590,7 +1590,7 @@ class TestCacheSalt:
 class TestStopSequenceReason:
     """When generation stops because a configured stop string matched, the
     Anthropic Messages API must report ``stop_reason="stop_sequence"`` and echo
-    the matched string in ``stop_sequence``. Aphrodite surfaces the matched string in
+    the matched string in ``stop_sequence``. Sonar surfaces the matched string in
     the OpenAI choice's ``stop_reason`` field (a str) while ``finish_reason``
     stays ``"stop"``. A natural EOS (stop_reason None) or a stop token id (int)
     must still map to ``end_turn``.
@@ -1820,10 +1820,10 @@ class TestClientErrorResponses:
         assert body["error"]["type"] == "invalid_request_error"
         assert "at most 4 items" in body["error"]["message"]
 
-    def test_aphrodite_client_error_returns_bad_request(self):
-        """AphroditeClientError raised by the serving layer maps to 400."""
+    def test_sonar_client_error_returns_bad_request(self):
+        """SonarClientError raised by the serving layer maps to 400."""
         handler = MagicMock(spec=AnthropicServingMessages)
-        handler.create_messages.side_effect = AphroditeValidationError("Invalid value for stop", parameter="stop")
+        handler.create_messages.side_effect = SonarValidationError("Invalid value for stop", parameter="stop")
 
         app = self._make_api_app(handler)
         with TestClient(app, raise_server_exceptions=False) as client:

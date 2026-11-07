@@ -11,7 +11,7 @@
 #define BLOCKWIDTH 128
 #define BLOCKHEIGHT4 16
 
-namespace aphrodite {
+namespace sonar {
 namespace squeezellm {
 
 __device__ inline unsigned int as_unsigned(int i) {
@@ -178,7 +178,7 @@ __global__ void NUQ4MatMulKernel(
 }
 
 }  // namespace squeezellm
-}  // namespace aphrodite
+}  // namespace sonar
 
 // 4-bit matvec kernel (LUT-based)
 void squeezellm_gemm(torch::Tensor vec, torch::Tensor mat, torch::Tensor mul,
@@ -195,7 +195,7 @@ void squeezellm_gemm(torch::Tensor vec, torch::Tensor mat, torch::Tensor mul,
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(vec));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  aphrodite::squeezellm::NUQ4MatMulKernel<<<blocks, threads, 0, stream>>>(
+  sonar::squeezellm::NUQ4MatMulKernel<<<blocks, threads, 0, stream>>>(
 #ifndef USE_ROCM
       (half2*)vec.data_ptr<at::Half>(),
 #else

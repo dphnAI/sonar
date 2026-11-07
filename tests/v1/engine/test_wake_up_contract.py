@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
-from aphrodite.v1.engine.core_client import DPLBAsyncMPClient
+from sonar.v1.engine.core_client import DPLBAsyncMPClient
 
 pytestmark = pytest.mark.cpu_test
 

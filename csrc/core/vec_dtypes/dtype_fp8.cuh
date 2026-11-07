@@ -11,7 +11,7 @@
   #endif  // USE_ROCM
 #endif    // ENABLE_FP8
 
-namespace aphrodite {
+namespace sonar {
 
 enum class Fp8KVCacheDataType {
   kAuto = 0,
@@ -21,7 +21,7 @@ enum class Fp8KVCacheDataType {
 
 inline Fp8KVCacheDataType get_fp8_kv_cache_data_type(
     const std::string& dtype_str) {
-  // dtype_str refers to CacheDType at aphrodite.config.cache.CacheDType
+  // dtype_str refers to CacheDType at sonar.config.cache.CacheDType
   if (dtype_str == "auto" || dtype_str == "float16" ||
       dtype_str == "bfloat16") {
     // unquantized kv cache
@@ -56,4 +56,4 @@ struct Vec<uint8_t, 8> {
   using Type = uint2;
 };
 
-}  // namespace aphrodite
+}  // namespace sonar

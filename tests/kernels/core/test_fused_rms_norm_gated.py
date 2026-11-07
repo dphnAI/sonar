@@ -10,11 +10,11 @@ import sys
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops.fused_norm_gate import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops.fused_norm_gate import (
     FusedRMSNormGated,
 )
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = "xpu:0" if current_platform.is_xpu() else "cuda:0"
 
@@ -32,9 +32,9 @@ def test_norm_gate_import_order(first):
     code = """
 import importlib
 import sys
-from aphrodite.model_executor.custom_op import op_registry
+from sonar.model_executor.custom_op import op_registry
 
-prefix = "aphrodite.third_party.flash_linear_attention.ops."
+prefix = "sonar.third_party.flash_linear_attention.ops."
 first, second = [importlib.import_module(prefix + name) for name in sys.argv[1:]]
 assert first.FusedRMSNormGated is second.FusedRMSNormGated
 assert op_registry["fused_rms_norm_gated"] is first.FusedRMSNormGated
@@ -55,7 +55,7 @@ assert op_registry["fused_rms_norm_gated"] is first.FusedRMSNormGated
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_compiled_vs_eager(
-    default_aphrodite_config,
+    default_sonar_config,
     num_tokens: int,
     hidden_size: int,
     activation: str,
@@ -105,7 +105,7 @@ def test_compiled_vs_eager(
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_compiled_vs_eager_multidim(
-    default_aphrodite_config,
+    default_sonar_config,
     shape: tuple,
     activation: str,
     elementwise_affine: bool,

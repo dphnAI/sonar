@@ -15,33 +15,33 @@ from collections.abc import Callable
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
     fp8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
     TrtLlmBf16ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
     TrtLlmFp8ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
     TrtLlmNvFp4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.router.routing_simulator_router import (
+from sonar.model_executor.layers.fused_moe.router.routing_simulator_router import (
     RoutingSimulatorRouter,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 try:
-    from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+    from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
 except ImportError:
     pytest.skip("flashinfer not available", allow_module_level=True)
 
@@ -157,7 +157,7 @@ def _bf16_kernel(top_k: int, routing_method: RoutingMethodType) -> Kernel:
 
 
 def _fp8_block_kernel(top_k: int, routing_method: RoutingMethodType) -> Kernel:
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         _shuffle_deepseek_fp8_moe_weights,
     )
 
@@ -278,11 +278,11 @@ def test_routing_replay_reports_the_routed_experts(
     routing_replay_out = torch.full((num_tokens + 1, top_k), -1, dtype=torch.int16, device=DEVICE)
 
     if simulated:
-        import aphrodite.envs as envs
+        import sonar.envs as envs
 
         monkeypatch.setitem(
             envs.environment_variables,
-            "APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY",
+            "SONAR_MOE_ROUTING_SIMULATION_STRATEGY",
             lambda: "uniform_random",
         )
         router = RoutingSimulatorRouter(top_k, NUM_EXPERTS, routing_method)

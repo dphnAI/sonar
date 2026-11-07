@@ -128,7 +128,7 @@ constexpr uint32_t kLongContextKeys = 131072;
 using PersistentKernel =
     decltype(&persist::fused_mqa_topk_fp8_prefill_kernel<16, 2048>);
 
-// Aphrodite dispatches chunks of >= 32K keys per row here
+// Sonar dispatches chunks of >= 32K keys per row here
 // (fused_mqa_topk_min_keys); smaller key counts are supported but take the same
 // <= 32K configuration.
 template <uint32_t TopK>

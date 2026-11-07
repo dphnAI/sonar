@@ -803,7 +803,7 @@ void dsv3_fused_a_gemm(torch::stable::Tensor& output,
   }
   DISPATCH_DSV3_SHAPE(2048, 2048)
 
-#ifdef APHRODITE_K3_BENCH_SHAPES
+#ifdef SONAR_K3_BENCH_SHAPES
   // The selector routes these shapes to CuTe or the default GEMM, so they are
   // never reached in production. They are compiled only for offline
   // DSV3-vs-CuTe benchmarking.
@@ -848,7 +848,7 @@ void dsv3_fused_a_gemm(torch::stable::Tensor& output,
         enable_pdl);
     return;
   }
-#ifdef APHRODITE_K3_BENCH_SHAPES
+#ifdef SONAR_K3_BENCH_SHAPES
   if (hd_in == 4224 && hd_out == 7168) {
     invokeFusedAGemmForTokens<__nv_bfloat16, 4224, 7168, 128>(
         output_ptr, mat_a_ptr, mat_b_ptr, num_tokens, input_row_stride, stream,

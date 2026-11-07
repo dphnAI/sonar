@@ -5,13 +5,13 @@ from threading import Lock
 import pytest
 import torch
 
-import aphrodite.lora.ops.torch_ops as torch_ops
-import aphrodite.lora.ops.triton_ops as triton_ops
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.lora.ops.triton_ops import LoRAKernelMeta
-from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+import sonar.lora.ops.torch_ops as torch_ops
+import sonar.lora.ops.triton_ops as triton_ops
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.lora.ops.triton_ops import LoRAKernelMeta
+from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 from .utils import PunicaTensors, assert_close, generate_data_for_nslices
 
@@ -312,7 +312,7 @@ def check_lora_expand_kernel(
 #  etc.)
 
 # We have collected the hidden_sizes included in the LoRA models
-# currently supported by Aphrodite. It tests whether the corresponding Triton
+# currently supported by Sonar. It tests whether the corresponding Triton
 # kernel can run normally when tensor parallelism is set to
 # [1, 2, 4, 8, 16, 32, 64].
 HIDDEN_SIZES = [
@@ -532,7 +532,7 @@ def test_add_lora_fused_moe_early_exit(device):
     """
     from types import SimpleNamespace
 
-    from aphrodite.lora.punica_wrapper.punica_gpu import PunicaWrapperGPU
+    from sonar.lora.punica_wrapper.punica_gpu import PunicaWrapperGPU
 
     torch.set_default_device(device)
     torch.accelerator.set_device_index(device)

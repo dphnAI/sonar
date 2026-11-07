@@ -25,7 +25,7 @@
 #include <iostream>
 #include <cstdlib>
 
-namespace aphrodite {
+namespace sonar {
 namespace aqlm {
 
 __global__ void Code1x16MatVec(
@@ -514,7 +514,7 @@ int4 accumulate_sizes(const std::vector<int64_t>& codebook_partition_sizes) {
 }
 
 }  // namespace aqlm
-}  // namespace aphrodite
+}  // namespace sonar
 
 torch::Tensor aqlm_gemm(const torch::Tensor& input, const torch::Tensor& codes,
                         const torch::Tensor& codebooks,
@@ -522,18 +522,18 @@ torch::Tensor aqlm_gemm(const torch::Tensor& input, const torch::Tensor& codes,
                         const std::vector<int64_t>& codebook_partition_sizes,
                         const std::optional<torch::Tensor>& bias) {
   int4 cumulative_sizes =
-      aphrodite::aqlm::accumulate_sizes(codebook_partition_sizes);
+      sonar::aqlm::accumulate_sizes(codebook_partition_sizes);
 
   int const nbooks = codebooks.size(0) / codebook_partition_sizes.size();
   int const entries = codebooks.size(1);
 
   if (nbooks == 1 && entries == (1 << 16)) {
-    return aphrodite::aqlm::code1x16_matmat(input, codes, codebooks, scales,
-                                            cumulative_sizes, bias);
+    return sonar::aqlm::code1x16_matmat(input, codes, codebooks, scales,
+                                        cumulative_sizes, bias);
   }
   if (nbooks == 2 && entries == (1 << 8)) {
-    return aphrodite::aqlm::code2x8_matmat(input, codes, codebooks, scales,
-                                           cumulative_sizes, bias);
+    return sonar::aqlm::code2x8_matmat(input, codes, codebooks, scales,
+                                       cumulative_sizes, bias);
   }
 
   TORCH_CHECK(false, "AQLM with ", nbooks, " codebooks and ", entries,
@@ -545,7 +545,7 @@ torch::Tensor aqlm_dequant(
     const torch::Tensor& codes, const torch::Tensor& codebooks,
     const std::vector<int64_t>& codebook_partition_sizes) {
   int4 cumulative_sizes =
-      aphrodite::aqlm::accumulate_sizes(codebook_partition_sizes);
+      sonar::aqlm::accumulate_sizes(codebook_partition_sizes);
 
   int const nbooks = codebooks.size(0) / codebook_partition_sizes.size();
   int const entries = codebooks.size(1);
@@ -566,10 +566,10 @@ torch::Tensor aqlm_dequant(
                                   .device(codebooks.device()));
 
   if (nbooks == 1 && entries == (1 << 16)) {
-    aphrodite::aqlm::code1x16_dequant_cuda(
-        codes.data_ptr(), weights.data_ptr(), codebooks.data_ptr(),
-        out_features, in_features, cumulative_sizes,
-        aphrodite::aqlm::codebook_stride(codebooks));
+    sonar::aqlm::code1x16_dequant_cuda(codes.data_ptr(), weights.data_ptr(),
+                                       codebooks.data_ptr(), out_features,
+                                       in_features, cumulative_sizes,
+                                       sonar::aqlm::codebook_stride(codebooks));
 
     // if you wanted to flip to scaling the weights, (though it's 30%-ish slower
     // and not consistent with gemv implementation.) weights *=
@@ -579,10 +579,10 @@ torch::Tensor aqlm_dequant(
   }
 
   if (nbooks == 2 && entries == (1 << 8)) {
-    aphrodite::aqlm::code2x8_dequant_cuda(
-        codes.data_ptr(), weights.data_ptr(), codebooks.data_ptr(),
-        out_features, in_features, cumulative_sizes,
-        aphrodite::aqlm::codebook_stride(codebooks));
+    sonar::aqlm::code2x8_dequant_cuda(codes.data_ptr(), weights.data_ptr(),
+                                      codebooks.data_ptr(), out_features,
+                                      in_features, cumulative_sizes,
+                                      sonar::aqlm::codebook_stride(codebooks));
 
     // if you wanted to flip to scaling the weights, (though it's 30%-ish slower
     // and not consistent with gemv implementation) weights *=

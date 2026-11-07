@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.models.whisper import WhisperProcessingInfo
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.model_executor.models.whisper import WhisperProcessingInfo
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ...utils import build_model_context
 

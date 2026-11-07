@@ -7,19 +7,19 @@ from concurrent.futures import Future
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
-from aphrodite.v1.structured_output.backend_guidance import (
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.config.model import ModelConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.sampling_params import SamplingParams, StructuredOutputsParams
+from sonar.tokenizers import get_tokenizer
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
+from sonar.v1.structured_output.backend_guidance import (
     GuidanceBackend,
     process_for_additional_properties,
 )
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
 
 TOKENIZER = "gpt2"
 
@@ -35,9 +35,9 @@ def mistral_tokenizer():
 def test_backend_guidance_rejects_grammar_matcher_cannot_build():
     # llguidance builds a matcher for a schema with unimplemented keywords
     # but leaves it in an error state; compilation must fail the request.
-    aphrodite_config = AphroditeConfig(structured_outputs_config=StructuredOutputsConfig(backend="guidance"))
+    sonar_config = SonarConfig(structured_outputs_config=StructuredOutputsConfig(backend="guidance"))
     backend = GuidanceBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=AutoTokenizer.from_pretrained(TOKENIZER),
         vocab_size=50257,
     )
@@ -57,11 +57,11 @@ def test_backend_guidance_rollback_terminated():
     # it should be reverted in case EOS is not accepted by the target
     # model.
     structured_outputs_config = StructuredOutputsConfig(backend="guidance")
-    aphrodite_config = AphroditeConfig(structured_outputs_config=structured_outputs_config)
+    sonar_config = SonarConfig(structured_outputs_config=structured_outputs_config)
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
 
     backend = GuidanceBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=tokenizer,
         vocab_size=50257,
     )
@@ -97,12 +97,12 @@ def test_backend_guidance_rollback_terminated():
 def test_grammar_bitmask_with_specdec():
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
     prompt = tokenizer.encode('{"a": "b"}')
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
         speculative_config=SpeculativeConfig(model="[ngram]", num_speculative_tokens=3),
     )
-    structured_output_manager = StructuredOutputManager(aphrodite_config)
+    structured_output_manager = StructuredOutputManager(sonar_config)
 
     for i in range(1, 2):
         sampling_params = SamplingParams(
@@ -164,12 +164,12 @@ def test_grammar_init_async_and_sync(async_grammar):
 
     # Use "external_launcher" for sync mode, None for async mode
     executor_backend = None if async_grammar else "external_launcher"
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
         parallel_config=ParallelConfig(distributed_executor_backend=executor_backend),
     )
-    structured_output_manager = StructuredOutputManager(aphrodite_config)
+    structured_output_manager = StructuredOutputManager(sonar_config)
 
     sampling_params = SamplingParams(
         structured_outputs=StructuredOutputsParams(
@@ -236,11 +236,11 @@ def test_mistral_tokenizer_compile_grammar(
     request_type: StructuredOutputOptions,
     grammar_spec: str,
 ) -> None:
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
     )
     backend = GuidanceBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=mistral_tokenizer,
         vocab_size=mistral_tokenizer.vocab_size,
     )
@@ -304,7 +304,7 @@ def test_disable_additional_properties_accepts_literal_with_properties_key(
     rewritten = {**feature, "additionalProperties": False}
     schema = {keyword: feature if keyword == "const" else [feature]}
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         structured_outputs_config=StructuredOutputsConfig(
             backend="guidance",
             disable_additional_properties=True,
@@ -312,7 +312,7 @@ def test_disable_additional_properties_accepts_literal_with_properties_key(
     )
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
     backend = GuidanceBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=tokenizer,
         vocab_size=50257,
     )

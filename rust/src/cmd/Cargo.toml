@@ -1,11 +1,11 @@
 [package]
-name = "aphrodite-cmd"
+name = "sonar-cmd"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "aphrodite-rs"
+name = "sonar-rs"
 path = "src/main.rs"
 
 [features]
@@ -27,14 +27,14 @@ tokio = { workspace = true, features = ["signal"] }
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-aphrodite-bench.workspace = true
-aphrodite-build-info.workspace = true
-aphrodite-chat.workspace = true
-aphrodite-engine-core-client.workspace = true
-aphrodite-managed-engine.workspace = true
-aphrodite-server.workspace = true
-aphrodite-text.workspace = true
-aphrodite-tracing.workspace = true
+sonar-bench.workspace = true
+sonar-build-info.workspace = true
+sonar-chat.workspace = true
+sonar-engine-core-client.workspace = true
+sonar-managed-engine.workspace = true
+sonar-server.workspace = true
+sonar-text.workspace = true
+sonar-tracing.workspace = true
 
 [dev-dependencies]
 expect-test.workspace = true

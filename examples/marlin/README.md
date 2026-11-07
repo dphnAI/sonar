@@ -64,4 +64,4 @@ Then simply run the following in this directory:
 python convert.py --model-id /path/to/gptq/model --save-path /path/to/output/marlin
 ```
 
-That should be all you'll need to do. Then simply launch Aphrodite, point `--model` to the marlin checkpoint, and that will be all. Happy prompting.
+That should be all you'll need to do. Then simply launch Sonar, point `--model` to the marlin checkpoint, and that will be all. Happy prompting.

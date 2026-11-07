@@ -18,12 +18,12 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.utils import AutoWeightsLoader
+from sonar.platforms import current_platform
 
 if current_platform.is_cuda():
-    from aphrodite.models.deepseek_v32.nvidia import model as deepseek_v32_model
-    from aphrodite.models.deepseek_v32.nvidia import mtp as deepseek_v32_mtp
+    from sonar.models.deepseek_v32.nvidia import model as deepseek_v32_model
+    from sonar.models.deepseek_v32.nvidia import mtp as deepseek_v32_mtp
 else:
     # The nvidia module chain is not importable on other platforms; the
     # shared model-executor CI job also collects this file on ROCm mirrors.

@@ -10,7 +10,7 @@ import regex as re
 import seaborn as sns
 from torch.utils.benchmark import Measurement as TMeasurement
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser(

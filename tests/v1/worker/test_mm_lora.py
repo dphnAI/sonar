@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from aphrodite.v1.worker.gpu.mm.lora import set_active_mm_loras
+from sonar.v1.worker.gpu.mm.lora import set_active_mm_loras
 
 
 class _FakeModel:

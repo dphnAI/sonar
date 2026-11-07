@@ -7,14 +7,14 @@ import json
 import jsonschema
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.outputs import RequestOutput
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.v1.metrics.reader import Metric
+from sonar import SamplingParams
+from sonar.outputs import RequestOutput
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.v1.metrics.reader import Metric
 from tests.utils import multi_gpu_only
 
 from ..utils import compute_acceptance_len, compute_acceptance_rate
-from .test_draft_model import ArgsTest, aphrodite_runner_kwargs
+from .test_draft_model import ArgsTest, sonar_runner_kwargs
 
 NUM_REQUEST_CYCLES = 6
 STRUCTURED_OUTPUT_SCHEMA = {
@@ -58,7 +58,7 @@ def case_to_test(pp_size: int, tp_size: int) -> ArgsTest:
         pytest.param(case_to_test(pp_size=2, tp_size=1), id="pp2-tp1"),
     ],
 )
-def test_specdec_pp_structured_output(args: ArgsTest, aphrodite_runner) -> None:
+def test_specdec_pp_structured_output(args: ArgsTest, sonar_runner) -> None:
     # Alternate full-size cohorts to turn over request IDs while PP batches are
     # still in flight.
     messages, sampling_params = _create_requests(
@@ -66,8 +66,8 @@ def test_specdec_pp_structured_output(args: ArgsTest, aphrodite_runner) -> None:
         num_cycles=NUM_REQUEST_CYCLES,
         cohort_size=args.max_num_seqs,
     )
-    kwargs = aphrodite_runner_kwargs(args)
-    with aphrodite_runner(args.target_model, **kwargs) as runner:
+    kwargs = sonar_runner_kwargs(args)
+    with sonar_runner(args.target_model, **kwargs) as runner:
         outputs = runner.llm.chat(
             messages,
             sampling_params,

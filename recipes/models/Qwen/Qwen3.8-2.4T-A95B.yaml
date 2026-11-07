@@ -19,7 +19,7 @@ meta:
   # their own GPU still wins — the stored preference outranks this.
   default_hardware: b300
   # `verified` = run end-to-end on that GPU. gb300 earned it on 2026-08-13: NVFP4 W4A4
-  # served at TP8 across two trays on Aphrodite 0.1.dev19754+g3a0914114, correct generations,
+  # served at TP8 across two trays on Sonar 0.1.dev19754+g3a0914114, correct generations,
   # full CUDA-graph capture, and a concurrency sweep (see the Performance section).
   # Everything else stays absent — the honest silent default. Nothing is `unsupported`:
   # no configuration has been observed to fail.
@@ -36,7 +36,7 @@ model:
   model_id: "Qwen/Qwen3.8-2.4T-A95B"
   # Verified against upstream, not taken from the model card (the README is a stub):
   # `Qwen3_5MoeForCausalLM` — the architecture this checkpoint declares — is present in
-  # aphrodite/model_executor/models/registry.py on `main` but ABSENT at v0.26.0, the latest
+  # sonar/model_executor/models/registry.py on `main` but ABSENT at v0.26.0, the latest
   # stable release, whose docs/models/supported_models.md lists only the
   # `*ForConditionalGeneration` members of the Qwen3.5 family. Nightly is a real
   # requirement here. Re-check at the next stable tag and pin it.
@@ -55,12 +55,12 @@ model:
   # staged copy tops out at 262144 on both fields.
   context_length: 262144
   # No --trust-remote-code: config.json carries no `auto_map`, so there is no remote code
-  # to trust — Aphrodite's own handler loads this architecture.
+  # to trust — Sonar's own handler loads this architecture.
   base_args: []
   base_env:
     # Weight load runs from 1.32 TiB (NVFP4) to 4.45 TiB (BF16). The default readiness
     # window expires long before the first token on a cold shared filesystem.
-    APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+    SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 dependencies:
   - note: "config.json declares transformers_version 5.4.0; older releases do not know this model_type."
@@ -133,7 +133,7 @@ variants:
     # NVFP4 already implies NVIDIA Blackwell in this catalog; listed explicitly because
     # W4A4 quantizes activations too and has not been exercised on every profile here.
     supported_hardware: [b200, b300, gb200, gb300]
-    # FlashInfer CuTe-DSL GEMM kernels. Aphrodite's own description of this value is
+    # FlashInfer CuTe-DSL GEMM kernels. Sonar's own description of this value is
     # "(NVFP4, MXFP8)", so it belongs to this variant specifically — not to the
     # block-scaled FP8 checkpoint, not to BF16 (no quantized linears at all), and not to
     # the MXFP4 build, whose ROCm path is the `aiter` backend instead. CUDA-only.
@@ -185,7 +185,7 @@ hardware_overrides: {}
 # no all2all happens, so the flag would be inert noise on single_node_tp / multi_node_tp /
 # multi_node_tp_pp.
 #
-# `allgather_reducescatter` is Aphrodite's CURRENT DEFAULT (aphrodite/config/parallel.py) and stays
+# `allgather_reducescatter` is Sonar's CURRENT DEFAULT (sonar/config/parallel.py) and stays
 # the portable baseline. The previous revision said to swap it "only with a measurement to
 # justify it" — that measurement now exists, so Blackwell moves to the one-sided NVLink
 # all2all: DEP16 on NVFP4 reaches ~4300 total TPS/GPU and TP4·DP4 + EP16 on FP8 reaches
@@ -248,12 +248,12 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite: nightly.** for the best performance
+  - **Sonar: nightly.** for the best performance
   - **transformers >= 5.4.0**, per the version recorded in `config.json`.
 
   ```bash
   uv venv && source .venv/bin/activate
-  uv pip install -U aphrodite-engine --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   uv pip install -U "transformers>=5.4.0"
   ```
 
@@ -281,7 +281,7 @@ guide: |
   NVFP4 W4A4, TP8 (one 8xB300 node, or two GB300 trays):
 
   ```bash
-  aphrodite serve Inferact/Qwen3.8-2.4T-A95B-NVFP4 \
+  sonar serve Inferact/Qwen3.8-2.4T-A95B-NVFP4 \
     --tensor-parallel-size 8 \
     --max-model-len 262144 \
     --kv-cache-dtype fp8 \
@@ -293,7 +293,7 @@ guide: |
   rank > 0 additionally takes `--headless` (it must not start an API server).
 
   ```bash
-  aphrodite serve Qwen/Qwen3.8-2.4T-A95B-FP8 \
+  sonar serve Qwen/Qwen3.8-2.4T-A95B-FP8 \
     --tensor-parallel-size 16 \
     --nnodes 2 --node-rank 0 --master-addr $HEAD_ADDR \
     --max-model-len 262144 \
@@ -319,7 +319,7 @@ guide: |
   - **NVFP4, DEP16** (`multi_node_dep`, 4 trays): add `--moe-backend flashinfer_cutedsl`.
 
   These MoE backends are deliberately NOT pinned in the variant args: they are measured
-  for the EP layouts above, and the plain-TP path has not been measured with them. Aphrodite
+  for the EP layouts above, and the plain-TP path has not been measured with them. Sonar
   auto-selects `FLASHINFER_TRTLLM` for NVFP4 under TP, which is what the TP8 numbers below
   were taken with.
 
@@ -356,7 +356,7 @@ guide: |
   and all-reduce fusion.
 
   **Verification run** (what earned `gb300: verified`) — NVFP4 W4A4, TP8 across 2 trays,
-  8k in / 1k out, Aphrodite `0.1.dev19754+g3a0914114`, no EP, default MoE backend:
+  8k in / 1k out, Sonar `0.1.dev19754+g3a0914114`, no EP, default MoE backend:
 
   | Concurrency | TPS/user | total TPS/GPU | TPOT |
   |---:|---:|---:|---:|
@@ -403,7 +403,7 @@ guide: |
   For example, to enable full 1M context length on this model:
 
   ```bash
-  APHRODITE_ALLOW_LONG_MAX_MODEL_LEN=1 aphrodite serve Qwen/Qwen3.8-2.4T-A95B \
+  SONAR_ALLOW_LONG_MAX_MODEL_LEN=1 sonar serve Qwen/Qwen3.8-2.4T-A95B \
     --max-model-len 1010000 \
     --hf-overrides '{"max_position_embeddings": 1010000}' \
     ...
@@ -417,12 +417,12 @@ guide: |
   `--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}'` if full capture
   misbehaves on this architecture. See <https://github.com/vllm-project/vllm/pull/34571>.
 
-  **Engine start times out.** Raise `APHRODITE_ENGINE_READY_TIMEOUT_S` (set to 3600 by this
+  **Engine start times out.** Raise `SONAR_ENGINE_READY_TIMEOUT_S` (set to 3600 by this
   recipe) and prefer a real `/v1/chat/completions` probe over `/health` for readiness —
   loading terabytes plus kernel JIT takes minutes.
 
   The linear backend feature "--linear-backend flashinfer_cutedsl" is Docker only until
-  FlashInfer version upgrade in the aphrodite build. The NVFP4 variant sets that flag, so on a
+  FlashInfer version upgrade in the sonar build. The NVFP4 variant sets that flag, so on a
   pip install either use the Docker image pinned above or drop the flag.
 
   ## References
@@ -433,4 +433,4 @@ guide: |
   - NVFP4 W4A4 build (NVIDIA): https://huggingface.co/Inferact/Qwen3.8-2.4T-A95B-NVFP4
   - NVFP4-REAP-25 build (RedHatAI): https://huggingface.co/RedHatAI/Qwen3.8-2.4T-A95B-NVFP4-REAP-25
   - REAP: Router-weighted Expert Activation Pruning: https://arxiv.org/abs/2510.13999
-  - Aphrodite documentation: https://docs.vllm.ai/
+  - Sonar documentation: https://docs.vllm.ai/

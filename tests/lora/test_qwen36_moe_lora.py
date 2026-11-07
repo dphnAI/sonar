@@ -3,10 +3,10 @@
 
 import pytest
 
-import aphrodite
-import aphrodite.config
-from aphrodite.assets.image import ImageAsset
-from aphrodite.lora.request import LoRARequest
+import sonar
+import sonar.config
+from sonar.assets.image import ImageAsset
+from sonar.lora.request import LoRARequest
 
 from ..utils import multi_gpu_test
 
@@ -41,10 +41,10 @@ def _build_prompts() -> list[dict]:
     ]
 
 
-def _generate(llm: aphrodite.LLM, lora_request) -> list[str]:
+def _generate(llm: sonar.LLM, lora_request) -> list[str]:
     outputs = llm.generate(
         _build_prompts(),
-        aphrodite.SamplingParams(temperature=0, max_tokens=128),
+        sonar.SamplingParams(temperature=0, max_tokens=128),
         lora_request=lora_request,
     )
     return [out.outputs[0].text.strip() for out in outputs]
@@ -56,7 +56,7 @@ def _run_mixed_2d_3d_lora_test(
     tensor_parallel_size: int,
     fully_sharded_loras: bool,
 ) -> None:
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         model=MODEL_PATH,
         max_model_len=4096,
         enable_lora=True,
@@ -72,7 +72,7 @@ def _run_mixed_2d_3d_lora_test(
         enable_tower_connector_lora=True,
         mm_processor_cache_gb=0,
         limit_mm_per_prompt={"image": 1},
-        compilation_config=aphrodite.config.CompilationConfig(
+        compilation_config=sonar.config.CompilationConfig(
             cudagraph_specialize_lora=False,
         ),
     )

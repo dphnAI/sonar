@@ -9,10 +9,10 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from aphrodite import SamplingParams
-from aphrodite.model_executor.model_loader.weight_utils import download_weights_from_hf
-from aphrodite.platforms import current_platform
-from aphrodite.v1.metrics.reader import Vector
+from sonar import SamplingParams
+from sonar.model_executor.model_loader.weight_utils import download_weights_from_hf
+from sonar.platforms import current_platform
+from sonar.v1.metrics.reader import Vector
 from tests.utils import single_gpu_only
 
 from ...utils import (
@@ -55,14 +55,14 @@ def test_mtp_draft_steps_use_their_own_module(
     monkeypatch: pytest.MonkeyPatch,
     sampling_config: SamplingParams,
     tmp_path: Path,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """With two MTP modules, draft step 2 must run module 1, also with the
     default drafter CUDA graphs. Module 1 has random weights, so its drafts are
     rejected while module 0's are still accepted."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     model = _add_random_mtp_module("Qwen/Qwen3.5-0.8B-Base", tmp_path)
-    with aphrodite_runner(
+    with sonar_runner(
         str(model),
         block_size=None,
         enable_chunked_prefill=None,
@@ -79,11 +79,9 @@ def test_mtp_draft_steps_use_their_own_module(
         runner.llm.chat(get_test_prompts(mm_enabled=False), sampling_config)
         metrics = runner.llm.get_metrics()
 
-    num_drafts = get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_drafts")
+    num_drafts = get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_drafts")
     accepted_per_pos = next(
-        m.values
-        for m in metrics
-        if isinstance(m, Vector) and m.name == "aphrodite:spec_decode_num_accepted_tokens_per_pos"
+        m.values for m in metrics if isinstance(m, Vector) and m.name == "sonar:spec_decode_num_accepted_tokens_per_pos"
     )
     step_1, step_2 = (accepted / num_drafts for accepted in accepted_per_pos)
     assert step_1 > 0.3, f"module 0 acceptance {step_1:.3f}"
@@ -108,7 +106,7 @@ def test_mtp_correctness(
     model_setup: tuple[str, str, int, str | None],
     mm_enabled: bool,
     expected_accuracy_threshold: float,
-    aphrodite_runner,
+    sonar_runner,
 ):
     check_mtp_correctness(
         monkeypatch,
@@ -116,7 +114,7 @@ def test_mtp_correctness(
         model_setup,
         mm_enabled,
         expected_accuracy_threshold,
-        aphrodite_runner,
+        sonar_runner,
     )
 
 
@@ -124,17 +122,17 @@ def test_mtp_correctness(
 def test_mtp_draft_lm_head_quantization(
     monkeypatch: pytest.MonkeyPatch,
     sampling_config: SamplingParams,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """A quantized draft copy of the shared lm_head only changes drafting:
     greedy outputs match stock MTP and acceptance stays within 10%."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     prompts = get_test_prompts(mm_enabled=False)
     results = {}
     # NVFP4 needs a CUDA W4A16 kernel.
     quants = (None, "fp8", "nvfp4") if current_platform.is_cuda() else (None, "fp8")
     for quant in quants:
-        with aphrodite_runner(
+        with sonar_runner(
             "Qwen/Qwen3.5-0.8B-Base",
             block_size=None,
             enable_chunked_prefill=None,
@@ -168,14 +166,14 @@ def test_mtp_draft_lm_head_quantization(
 def test_mtp_draft_lm_head_quantization_survives_sleep_and_reload(
     monkeypatch: pytest.MonkeyPatch,
     sampling_config: SamplingParams,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """The quantized draft head is derived from the target head: it must come
     back intact after a level 1 sleep and be re-derived after a target weight
     reload, so outputs and acceptance match the run before."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     prompts = get_test_prompts(mm_enabled=False)
-    with aphrodite_runner(
+    with sonar_runner(
         "Qwen/Qwen3.5-0.8B-Base",
         block_size=None,
         enable_chunked_prefill=None,

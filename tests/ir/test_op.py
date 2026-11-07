@@ -10,8 +10,8 @@ import torch
 from torch import fx
 from torch.fx.experimental.proxy_tensor import make_fx
 
-import aphrodite.ir.op
-from aphrodite.ir.op import RESERVED_PROVIDERS, IrOp, IrOpImpl
+import sonar.ir.op
+from sonar.ir.op import RESERVED_PROVIDERS, IrOp, IrOpImpl
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -21,10 +21,10 @@ class CustomError(Exception):
 
 
 @pytest.fixture
-def custom_add_op(fake_aphrodite_ir):
+def custom_add_op(fake_sonar_ir):
     """Register ``_custom_add`` plus impl_a, impl_b, impl_even for this test."""
 
-    @aphrodite.ir.register_op(allow_inplace=True)
+    @sonar.ir.register_op(allow_inplace=True)
     def _custom_add(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x + y
 
@@ -46,11 +46,11 @@ def custom_add_op(fake_aphrodite_ir):
     return _custom_add
 
 
-def test_registration_overloads(fake_aphrodite_ir):
+def test_registration_overloads(fake_sonar_ir):
     assert all(n not in IrOp.registry for n in ["_custom_sub", "_custom_mul", "_custom_div"])
 
     # Calling with decorator
-    @aphrodite.ir.register_op()
+    @sonar.ir.register_op()
     def _custom_sub(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x - y
 
@@ -58,7 +58,7 @@ def test_registration_overloads(fake_aphrodite_ir):
     assert _custom_sub is IrOp.registry["_custom_sub"]
 
     # Custom name
-    @aphrodite.ir.register_op(name="_custom_mul")
+    @sonar.ir.register_op(name="_custom_mul")
     def custom_mul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x * y
 
@@ -76,16 +76,16 @@ def test_registration_overloads(fake_aphrodite_ir):
     # Duplicate op registration not allowed
     with pytest.raises(AssertionError):
 
-        @aphrodite.ir.register_op
+        @sonar.ir.register_op
         def _custom_mul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
             return x * y - 100
 
 
-def test_no_kw_only_args(fake_aphrodite_ir):
+def test_no_kw_only_args(fake_sonar_ir):
     # kw-only args not supported
     with pytest.raises(ValueError, match="keyword-only arguments"):
 
-        @aphrodite.ir.register_op
+        @sonar.ir.register_op
         def _custom_kwarg_op(x: torch.Tensor, y: torch.Tensor, *, kwarg: int = 0) -> torch.Tensor:
             return x + y + kwarg
 
@@ -103,7 +103,7 @@ class TestIrOpCustomAdd:
 
     def test_torch_op_is_registered(self, custom_add_op):
         _custom_add = custom_add_op
-        torch_ops = getattr(torch.ops, aphrodite.ir.op.aphrodite_ir_torch_lib.ns)
+        torch_ops = getattr(torch.ops, sonar.ir.op.sonar_ir_torch_lib.ns)
         assert hasattr(torch_ops, "_custom_add")
         assert callable(torch_ops._custom_add.default)
         assert _custom_add.torch_op is torch_ops._custom_add.default
@@ -171,7 +171,7 @@ class TestIrOpCustomAdd:
         def find_fn(target: Any, gm: fx.GraphModule):
             return gm.graph.find_nodes(op="call_function", target=target)
 
-        with pytest.raises(CustomError), aphrodite.ir.enable_torch_wrap(enable_torch_wrap):
+        with pytest.raises(CustomError), sonar.ir.enable_torch_wrap(enable_torch_wrap):
             if symbolic_trace:
                 gm = torch.fx.symbolic_trace(fn)
             else:
@@ -330,9 +330,7 @@ class TestIrOpImplDispatch:
         # impl_unsupported skipped → impl_a
         assert out.item() == 1 + 2 + 10
 
-    def test_supports_args_runtime_dispatch_and_warning(
-        self, custom_add_op, caplog_aphrodite: pytest.LogCaptureFixture
-    ):
+    def test_supports_args_runtime_dispatch_and_warning(self, custom_add_op, caplog_sonar: pytest.LogCaptureFixture):
         _custom_add = custom_add_op
         x1 = torch.ones((2, 2), dtype=torch.int32)
         y1 = torch.full((2, 2), 2, dtype=torch.int32)
@@ -341,12 +339,12 @@ class TestIrOpImplDispatch:
         y2 = torch.full((2, 3), 2, dtype=torch.int32)
 
         with (
-            caplog_aphrodite.at_level(logging.WARNING),
+            caplog_sonar.at_level(logging.WARNING),
             _custom_add.set_priority(["impl_even"]),
         ):
             # Test the warning about native fallback is logged (before even dispatching)
-            assert len(caplog_aphrodite.records) == 1
-            message = caplog_aphrodite.records[0].message
+            assert len(caplog_sonar.records) == 1
+            message = caplog_sonar.records[0].message
             assert "_custom_add" in message
             assert "fallback to native" in message
             assert "priority" in message
@@ -360,14 +358,14 @@ class TestIrOpImplDispatch:
             out2 = _custom_add(x2, y2)  # size(1) == 3 → native fallback
 
         # no other warnings
-        assert len(caplog_aphrodite.records) == 1
+        assert len(caplog_sonar.records) == 1
         assert torch.all(out1 == 1 + 2 + 50)
         assert torch.all(out2 == 1 + 2)
 
     def test_default_priority(
         self,
         custom_add_op,
-        caplog_aphrodite: pytest.LogCaptureFixture,
+        caplog_sonar: pytest.LogCaptureFixture,
         disable_log_dedup,
     ):
         _custom_add = custom_add_op
@@ -377,7 +375,7 @@ class TestIrOpImplDispatch:
 
         # No priority set → falls back to native
         assert _custom_add.get_priority() == []
-        with caplog_aphrodite.at_level(logging.WARNING):
+        with caplog_sonar.at_level(logging.WARNING):
             # Native by default
             assert _custom_add.dispatch(x, y) is _custom_add.impls["native"]
             out = _custom_add(x, y)
@@ -386,8 +384,8 @@ class TestIrOpImplDispatch:
         assert out.item() == 3 + 4
 
         # Check warning
-        assert len(caplog_aphrodite.records) == 2
-        message = caplog_aphrodite.records[0].message.lower()
+        assert len(caplog_sonar.records) == 2
+        message = caplog_sonar.records[0].message.lower()
         assert "_custom_add" in message
         assert "priority not set" in message
 
@@ -395,28 +393,28 @@ class TestIrOpImplDispatch:
 @pytest.mark.parametrize("default", [True, False])
 def test_set_default_torch_wrap(default: bool):
     """set_default_torch_wrap permanently flips the global flag."""
-    original = aphrodite.ir.op._ENABLE_TORCH_WRAP
+    original = sonar.ir.op._ENABLE_TORCH_WRAP
     try:
-        aphrodite.ir.set_default_torch_wrap(default)
-        assert aphrodite.ir.op._ENABLE_TORCH_WRAP is default
+        sonar.ir.set_default_torch_wrap(default)
+        assert sonar.ir.op._ENABLE_TORCH_WRAP is default
 
         # Flag doesn't change after exiting the enable_torch_wrap context.
-        with aphrodite.ir.enable_torch_wrap(not default):
-            assert aphrodite.ir.op._ENABLE_TORCH_WRAP is (not default)
-        assert aphrodite.ir.op._ENABLE_TORCH_WRAP is default
+        with sonar.ir.enable_torch_wrap(not default):
+            assert sonar.ir.op._ENABLE_TORCH_WRAP is (not default)
+        assert sonar.ir.op._ENABLE_TORCH_WRAP is default
 
         # Should override the previous default.
-        aphrodite.ir.set_default_torch_wrap(not default)
-        assert aphrodite.ir.op._ENABLE_TORCH_WRAP is (not default)
+        sonar.ir.set_default_torch_wrap(not default)
+        assert sonar.ir.op._ENABLE_TORCH_WRAP is (not default)
     finally:
-        aphrodite.ir.op._ENABLE_TORCH_WRAP = original
+        sonar.ir.op._ENABLE_TORCH_WRAP = original
 
 
 @pytest.fixture
-def custom_mm_op(fake_aphrodite_ir):
-    """Fixture that registers ``_custom_mm`` (isolated by ``fake_aphrodite_ir``)."""
+def custom_mm_op(fake_sonar_ir):
+    """Fixture that registers ``_custom_mm`` (isolated by ``fake_sonar_ir``)."""
 
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _custom_mm(x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         tmp = x @ y
         return tmp if bias is None else tmp + bias
@@ -633,11 +631,11 @@ class TestTolerance:
             op.get_tolerance(torch.complex64)
 
 
-def test_naming_validation(fake_aphrodite_ir):
+def test_naming_validation(fake_sonar_ir):
     """Test that op and provider names are validated ([a-z_][a-z_0-9]*)."""
 
     # Valid op and provider names
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _valid_name_123(x: torch.Tensor) -> torch.Tensor:
         return x
 
@@ -648,13 +646,13 @@ def test_naming_validation(fake_aphrodite_ir):
     # Invalid op names should fail
     with pytest.raises(ValueError, match="name.*invalid"):
 
-        @aphrodite.ir.register_op
+        @sonar.ir.register_op
         def InvalidName(x: torch.Tensor) -> torch.Tensor:
             return x
 
     with pytest.raises(ValueError, match="name.*invalid"):
 
-        @aphrodite.ir.register_op(name="123invalid")
+        @sonar.ir.register_op(name="123invalid")
         def some_func(x: torch.Tensor) -> torch.Tensor:
             return x
 
@@ -666,10 +664,10 @@ def test_naming_validation(fake_aphrodite_ir):
             return x + 1
 
 
-def test_registration_stack_traces(fake_aphrodite_ir):
+def test_registration_stack_traces(fake_sonar_ir):
     """Test that stack traces are captured for ops and impls."""
 
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _test_stack(x: torch.Tensor) -> torch.Tensor:
         return x
 
@@ -683,7 +681,7 @@ def test_registration_stack_traces(fake_aphrodite_ir):
     op_stack_str = "".join(_test_stack._registration_stack)
     assert "test_op.py" in op_stack_str
     # Last frame should be the decorator in user code, not internal decorator logic
-    assert "@aphrodite.ir.register_op" in _test_stack._registration_stack[-1]
+    assert "@sonar.ir.register_op" in _test_stack._registration_stack[-1]
     assert "return decorator(f)" not in op_stack_str
 
     # Verify impl stack trace
@@ -696,10 +694,10 @@ def test_registration_stack_traces(fake_aphrodite_ir):
     assert '@_test_stack.register_impl("test_provider")' in impl._registration_stack[-1]
 
 
-def test_op_repr_uses_docstring(fake_aphrodite_ir):
+def test_op_repr_uses_docstring(fake_sonar_ir):
     """Test that __str__ uses the function's docstring and __repr__ is simple."""
 
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _test_repr_with_doc(x: torch.Tensor) -> torch.Tensor:
         """First line of docstring.
 
@@ -707,7 +705,7 @@ def test_op_repr_uses_docstring(fake_aphrodite_ir):
         """
         return x
 
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _test_repr_no_doc(x: torch.Tensor) -> torch.Tensor:
         return x
 
@@ -725,10 +723,10 @@ def test_op_repr_uses_docstring(fake_aphrodite_ir):
     assert repr(_test_repr_no_doc) == "IrOp('_test_repr_no_doc')"
 
 
-def test_aphrodite_ir_fixture(fake_aphrodite_ir):
-    """Test that the fake_aphrodite_ir fixture provides test isolation."""
+def test_sonar_ir_fixture(fake_sonar_ir):
+    """Test that the fake_sonar_ir fixture provides test isolation."""
 
-    @aphrodite.ir.register_op
+    @sonar.ir.register_op
     def _test_fixture(x: torch.Tensor) -> torch.Tensor:
         return x
 

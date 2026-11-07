@@ -78,7 +78,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: 2x Xeon 6 CPUs
-  - Aphrodite >= 0.8.5
+  - Sonar >= 0.8.5
 
   ### pip (Intel Xeon 6 CPUs)
 
@@ -99,7 +99,7 @@ guide: |
   not prescribe a Xeon 6 TP value or hard-code NUMA node IDs.
 
   ```bash
-  aphrodite serve Qwen/Qwen3-8B \
+  sonar serve Qwen/Qwen3-8B \
     --max-num-batched-tokens 16384 \
     --gpu-memory-utilization 0.8
   ```
@@ -135,4 +135,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/Qwen/Qwen3-8B)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

@@ -33,12 +33,12 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader import register_model_loader
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.platforms import current_platform
+from sonar.model_executor.model_loader import register_model_loader
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.platforms import current_platform
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner
 
 MODEL = "deepseek-ai/DeepSeek-V4.1-Flash"
 LOAD_FORMAT = "dsv41_nvidia_random"
@@ -116,7 +116,7 @@ def _fill(name: str, t: torch.Tensor) -> None:
 
 class _Probe:
     """Persistent buffers that the target model fills with every decoder
-    layer's residual streams (after attention) and FFN input, the Aphrodite
+    layer's residual streams (after attention) and FFN input, the Sonar
     routing margin of that input, and the model's output. Copies into
     persistent buffers, so CUDA graph replays fill them too.
 
@@ -125,8 +125,8 @@ class _Probe:
     fills them."""
 
     def __init__(self, core: torch.nn.Module):
-        from aphrodite.models.deepseek_v41.nvidia.model import DeepseekV4DecoderLayer
-        from aphrodite.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (  # noqa: E501
+        from sonar.models.deepseek_v41.nvidia.model import DeepseekV4DecoderLayer
+        from sonar.models.deepseek_v41.nvidia.specialized_decode.boundary.boundary import (  # noqa: E501
             Boundaries,
         )
 
@@ -212,8 +212,8 @@ class RandomWeightLoader(DummyModelLoader):
     the target model before its CUDA graphs are captured."""
 
     def load_weights(self, model, model_config) -> None:
-        from aphrodite.distributed import get_tensor_model_parallel_world_size
-        from aphrodite.models.deepseek_v41.nvidia.model import DeepseekV4Model
+        from sonar.distributed import get_tensor_model_parallel_world_size
+        from sonar.models.deepseek_v41.nvidia.model import DeepseekV4Model
 
         super().load_weights(model, model_config)
         for name, t in model.state_dict().items():
@@ -250,12 +250,12 @@ class StepRecorder:
 
     def paths(self) -> dict:
         """Which implementation each path took on this rank."""
-        from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-        from aphrodite.models.deepseek_v41.nvidia.model import (
+        from sonar.model_executor.layers.logits_processor import LogitsProcessor
+        from sonar.models.deepseek_v41.nvidia.model import (
             DeepseekV4DecoderLayer,
             DeepseekV4Model,
         )
-        from aphrodite.models.deepseek_v41.nvidia.ops import mhc
+        from sonar.models.deepseek_v41.nvidia.ops import mhc
 
         def layers(model):
             return [m for m in model.modules() if isinstance(m, DeepseekV4DecoderLayer)]
@@ -357,13 +357,13 @@ class StepRecorder:
             torch.save(self._steps, path)
 
 
-def _serve(aphrodite_runner, specialized_decode: bool, prompts, max_tokens, path: str):
+def _serve(sonar_runner, specialized_decode: bool, prompts, max_tokens, path: str):
     """Greedy decode of ``prompts``: each prompt's output tokens and the
     paths each rank took; the steps' rows saved under ``path``."""
-    from aphrodite import SamplingParams
-    from aphrodite.inputs import TokensPrompt
+    from sonar import SamplingParams
+    from sonar.inputs import TokensPrompt
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         tensor_parallel_size=4,
         load_format=LOAD_FORMAT,
@@ -460,7 +460,7 @@ def _check_close(got: dict, want: dict, keys: list, layers, output: bool) -> Non
     not current_platform.is_device_capability(103),
     reason="decode_backend=latency_specialized runs on GB300 (SM103)",
 )
-def test_specialized_decode_matches_the_model(aphrodite_runner, tmp_path):
+def test_specialized_decode_matches_the_model(sonar_runner, tmp_path):
     if torch.accelerator.device_count() < 4:
         pytest.skip("needs four GPUs")
     g = torch.Generator().manual_seed(0)
@@ -471,8 +471,8 @@ def test_specialized_decode_matches_the_model(aphrodite_runner, tmp_path):
     # requests decode together; the last runs on alone.
     max_tokens = [60 + 2 * i for i in range(len(prompts) - 1)] + [120]
 
-    on, paths_on = _serve(aphrodite_runner, True, prompts, max_tokens, f"{tmp_path}/on")
-    off, paths_off = _serve(aphrodite_runner, False, prompts, max_tokens, f"{tmp_path}/off")
+    on, paths_on = _serve(sonar_runner, True, prompts, max_tokens, f"{tmp_path}/on")
+    off, paths_off = _serve(sonar_runner, False, prompts, max_tokens, f"{tmp_path}/off")
 
     # The executor runs the target model only, over its stock layers, with
     # every MoE layer deferring onto the low-batch GEMMs.

@@ -7,8 +7,8 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import KernelConfig, ParallelConfig
-from aphrodite.platforms import current_platform
+from sonar.config import KernelConfig, ParallelConfig
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
@@ -17,21 +17,21 @@ pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-spe
 @pytest.mark.parametrize("vision", [False, True], ids=["text", "vision"])
 @torch.inference_mode()
 def test_rocm_moe_routing_and_shared_experts_match_reference(
-    hash_routing, vision, monkeypatch, default_aphrodite_config, dist_init
+    hash_routing, vision, monkeypatch, default_sonar_config, dist_init
 ) -> None:
     """AMD V4 routing, clamped experts and shared output agree with PyTorch."""
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.deepseek_v4.amd.model import DeepseekV4MoE
-    from aphrodite.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
-    from aphrodite.v1.worker.workspace import (
+    from sonar.forward_context import set_forward_context
+    from sonar.models.deepseek_v4.amd.model import DeepseekV4MoE
+    from sonar.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
+    from sonar.utils.torch_utils import set_default_torch_dtype
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         is_workspace_manager_initialized,
     )
 
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "0")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
-    default_aphrodite_config.kernel_config.moe_backend = "triton"
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "0")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", "0")
+    default_sonar_config.kernel_config.moe_backend = "triton"
     config = SimpleNamespace(
         hidden_size=512,
         n_routed_experts=8,
@@ -55,7 +55,7 @@ def test_rocm_moe_routing_and_shared_experts_match_reference(
                 model_config=SimpleNamespace(hf_config=config),
                 quant_config=None,
                 parallel_config=ParallelConfig(),
-                kernel_config=default_aphrodite_config.kernel_config,
+                kernel_config=default_sonar_config.kernel_config,
             ),
             prefix="model.layers.0.ffn",
         )
@@ -121,14 +121,14 @@ def test_rocm_moe_routing_and_shared_experts_match_reference(
     moe.experts._quant_method.process_weights_after_loading(routed)
     if not is_workspace_manager_initialized():
         init_workspace_manager(torch.device("cuda:0"))
-    with set_forward_context(None, default_aphrodite_config, num_tokens=hidden.shape[0]):
+    with set_forward_context(None, default_sonar_config, num_tokens=hidden.shape[0]):
         actual = moe(hidden, input_ids)
     torch.testing.assert_close(actual.float(), expected, rtol=0.02, atol=5e-5)
 
 
 def test_rocm_packed_kv_cache_auto_uses_ds_mla_layout() -> None:
-    from aphrodite.config import CacheConfig
-    from aphrodite.models.deepseek_v4.attention import _resolve_dsv4_kv_cache_dtype
+    from sonar.config import CacheConfig
+    from sonar.models.deepseek_v4.attention import _resolve_dsv4_kv_cache_dtype
 
     cache_config = CacheConfig()
 
@@ -144,8 +144,8 @@ def test_rocm_packed_kv_cache_auto_uses_ds_mla_layout() -> None:
 
 
 def test_rocm_packed_kv_cache_rejects_unquantized_dtype() -> None:
-    from aphrodite.config import CacheConfig
-    from aphrodite.models.deepseek_v4.attention import _resolve_dsv4_kv_cache_dtype
+    from sonar.config import CacheConfig
+    from sonar.models.deepseek_v4.attention import _resolve_dsv4_kv_cache_dtype
 
     cache_config = CacheConfig(cache_dtype="bfloat16")
 
@@ -158,8 +158,8 @@ def test_rocm_packed_kv_cache_rejects_unquantized_dtype() -> None:
 
 
 def test_vl_mapper_preserves_rocm_weight_mapping() -> None:
-    from aphrodite.models.deepseek_v4.amd.model import _make_deepseek_v4_weights_mapper
-    from aphrodite.models.deepseek_v4.common.vl_model import (
+    from sonar.models.deepseek_v4.amd.model import _make_deepseek_v4_weights_mapper
+    from sonar.models.deepseek_v4.common.vl_model import (
         _make_deepseek_v4_vl_weights_mapper,
     )
 
@@ -178,8 +178,8 @@ def test_vl_mapper_preserves_rocm_weight_mapping() -> None:
 def test_rocm_moe_wires_vision_routing_on_hash_and_regular_layers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.models.deepseek_v4.amd import model as rocm_model
-    from aphrodite.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
+    from sonar.models.deepseek_v4.amd import model as rocm_model
+    from sonar.models.deepseek_v4.common.mm_preprocess import IMAGE_SENTINEL_BASE_ID
 
     captured: list[dict] = []
 
@@ -210,15 +210,15 @@ def test_rocm_moe_wires_vision_routing_on_hash_and_regular_layers(
         vision_n_layers=1,
         n_shared_experts=None,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=config),
         quant_config=None,
         parallel_config=ParallelConfig(),
         kernel_config=KernelConfig(),
     )
 
-    hash_moe = rocm_model.DeepseekV4MoE(aphrodite_config, prefix="model.layers.0.ffn")
-    regular_moe = rocm_model.DeepseekV4MoE(aphrodite_config, prefix="model.layers.1.ffn")
+    hash_moe = rocm_model.DeepseekV4MoE(sonar_config, prefix="model.layers.0.ffn")
+    regular_moe = rocm_model.DeepseekV4MoE(sonar_config, prefix="model.layers.1.ffn")
 
     assert hash_moe.gate.tid2eid is not None
     assert regular_moe.gate.tid2eid is None
@@ -232,11 +232,11 @@ def test_rocm_moe_wires_vision_routing_on_hash_and_regular_layers(
 def test_rocm_fse_rejects_data_parallel_deployment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe.utils import (
+    from sonar.config import set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe.utils import (
         resolve_layer_fused_shared_expert,
     )
-    from aphrodite.models.deepseek_v4.amd import model as rocm_model
+    from sonar.models.deepseek_v4.amd import model as rocm_model
 
     class FakeGate(nn.Module):
         def __init__(self, **kwargs) -> None:
@@ -267,7 +267,7 @@ def test_rocm_fse_rejects_data_parallel_deployment(
         n_shared_experts=1,
     )
 
-    def build_aphrodite_config(parallel_config: ParallelConfig) -> SimpleNamespace:
+    def build_sonar_config(parallel_config: ParallelConfig) -> SimpleNamespace:
         return SimpleNamespace(
             model_config=SimpleNamespace(hf_config=config),
             quant_config=None,
@@ -278,25 +278,25 @@ def test_rocm_fse_rejects_data_parallel_deployment(
     # Data parallelism without expert parallelism fails fast at MoE construction.
     with pytest.raises(ValueError, match="not supported with data parallelism"):
         rocm_model.DeepseekV4MoE(
-            build_aphrodite_config(ParallelConfig(data_parallel_size=2)),
+            build_sonar_config(ParallelConfig(data_parallel_size=2)),
             prefix="model.layers.0.ffn",
         )
 
     # Under expert parallelism the resolver disables FSE instead of raising.
-    with set_current_aphrodite_config(
-        build_aphrodite_config(ParallelConfig(data_parallel_size=2, enable_expert_parallel=True))
+    with set_current_sonar_config(
+        build_sonar_config(ParallelConfig(data_parallel_size=2, enable_expert_parallel=True))
     ):
         assert not resolve_layer_fused_shared_expert(None, "model.layers.0.ffn", disable_under_ep=True)
 
     # Nothing blocks FSE once expert parallelism is off.
-    with set_current_aphrodite_config(build_aphrodite_config(ParallelConfig())):
+    with set_current_sonar_config(build_sonar_config(ParallelConfig())):
         assert resolve_layer_fused_shared_expert(None, "model.layers.0.ffn", disable_under_ep=True)
 
 
 def test_rocm_mtp_forwards_input_ids_for_vision_routing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.models.deepseek_v4.amd import mtp as rocm_mtp
+    from sonar.models.deepseek_v4.amd import mtp as rocm_mtp
 
     hidden_size = 4
     hc_mult = 2
@@ -363,7 +363,7 @@ def test_rocm_mtp_forwards_input_ids_for_vision_routing(
 
 
 def test_rocm_compute_logits_local_skips_gather() -> None:
-    from aphrodite.models.deepseek_v4.amd.model import DeepseekV4ForCausalLM
+    from sonar.models.deepseek_v4.amd.model import DeepseekV4ForCausalLM
 
     calls: list[tuple[nn.Module, torch.Tensor, bool]] = []
 

@@ -15,13 +15,13 @@ import pytest
 import torch
 
 # isort: off
-import aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm90 as sm90_mod
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm90 import (
+import sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm90 as sm90_mod
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm90 import (
     FlashInferMLASparseSM90Backend,
     FlashInferMLASparseSM90Builder,
     FlashInferMLASparseSM90Impl,
 )
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from sonar.v1.kv_cache_interface import MLAAttentionSpec
 # isort: on
 
 BLOCK_SIZE = 64
@@ -364,13 +364,13 @@ def test_builder_kpool_from_model_config(monkeypatch, index_kpool, prefill_lens,
     hf_config = SimpleNamespace(index_topk=2048)
     if index_kpool is not _NO_KPOOL:
         hf_config.index_kpool = index_kpool
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         compilation_config=SimpleNamespace(static_forward_context={"attn": SimpleNamespace(impl=impl)}),
         scheduler_config=SimpleNamespace(max_num_batched_tokens=64, async_scheduling=False),
         model_config=SimpleNamespace(hf_text_config=hf_config),
         speculative_config=None,
     )
-    builder = FlashInferMLASparseSM90Builder(spec, ["attn"], aphrodite_config, torch.device("cpu"))
+    builder = FlashInferMLASparseSM90Builder(spec, ["attn"], sonar_config, torch.device("cpu"))
     assert builder.state.kv_dtype == expected_kv_dtype
     # req0: prefill chunk ending at context 42295; req1: context <= topk.
     cam = SimpleNamespace(
@@ -502,7 +502,7 @@ def test_upper_bound_plan_reused_across_steps(monkeypatch):
         torch.testing.assert_close(outs[0], outs[1], atol=1e-2, rtol=1e-2)
 
 
-def test_supports_combination_gates(monkeypatch, default_aphrodite_config):
+def test_supports_combination_gates(monkeypatch, default_sonar_config):
     monkeypatch.setattr(sm90_mod, "has_flashinfer_sm90_nope_mla", lambda: True)
     call = lambda **kw: FlashInferMLASparseSM90Backend.supports_combination(
         head_size=576,
@@ -518,11 +518,11 @@ def test_supports_combination_gates(monkeypatch, default_aphrodite_config):
     )
     assert call() is None  # no model config: only the feature gate applies
 
-    import aphrodite.config as cfg
+    import sonar.config as cfg
 
     monkeypatch.setattr(
         cfg,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(model_config=None),
     )
     assert call() is None

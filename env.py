@@ -51,11 +51,11 @@ SystemEnv = namedtuple(
         "caching_allocator_config",
         "is_xnnpack_available",
         "cpu_info",
-        "rocm_version",  # aphrodite specific field
-        "neuron_sdk_version",  # aphrodite specific field
-        "aphrodite_version",  # aphrodite specific field
-        "aphrodite_build_flags",  # aphrodite specific field
-        "gpu_topo",  # aphrodite specific field
+        "rocm_version",  # sonar specific field
+        "neuron_sdk_version",  # sonar specific field
+        "sonar_version",  # sonar specific field
+        "sonar_build_flags",  # sonar specific field
+        "gpu_topo",  # sonar specific field
     ],
 )
 
@@ -257,16 +257,16 @@ def get_neuron_sdk_version(run_lambda):
         return "N/A"
 
 
-def get_aphrodite_version():
+def get_sonar_version():
     try:
-        import aphrodite
+        import sonar
 
-        return aphrodite.__version__
+        return sonar.__version__
     except ImportError:
         return "N/A"
 
 
-def summarize_aphrodite_build_flags():
+def summarize_sonar_build_flags():
     # This could be a static method if the flags are constant, or dynamic if you need to check environment variables, etc.
     return "CUDA Archs: {}; ROCm: {}; Neuron: {}".format(
         os.environ.get("TORCH_CUDA_ARCH_LIST", "Not Set"),
@@ -525,8 +525,8 @@ def get_env_info():
 
     rocm_version = get_rocm_version(run_lambda)
     neuron_sdk_version = get_neuron_sdk_version(run_lambda)
-    aphrodite_version = get_aphrodite_version()
-    aphrodite_build_flags = summarize_aphrodite_build_flags()
+    sonar_version = get_sonar_version()
+    sonar_build_flags = summarize_sonar_build_flags()
     gpu_topo = get_gpu_topo(run_lambda)
 
     return SystemEnv(
@@ -557,8 +557,8 @@ def get_env_info():
         cpu_info=get_cpu_info(run_lambda),
         rocm_version=rocm_version,
         neuron_sdk_version=neuron_sdk_version,
-        aphrodite_version=aphrodite_version,
-        aphrodite_build_flags=aphrodite_build_flags,
+        sonar_version=sonar_version,
+        sonar_build_flags=sonar_build_flags,
         gpu_topo=gpu_topo,
     )
 
@@ -603,9 +603,9 @@ env_info_fmt += "\n"
 env_info_fmt += """
 ROCM Version: {rocm_version}
 Neuron SDK Version: {neuron_sdk_version}
-Aphrodite Version: {aphrodite_version}
-Aphrodite Build Flags:
-{aphrodite_build_flags}
+Sonar Version: {sonar_version}
+Sonar Build Flags:
+{sonar_build_flags}
 GPU Topology:
 {gpu_topo}
 """.strip()

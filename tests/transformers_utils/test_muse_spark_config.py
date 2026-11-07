@@ -10,10 +10,10 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig, ParallelConfig, SpeculativeConfig
-from aphrodite.models.muse_spark.common.dspark import MuseSparkDSparkForCausalLM
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.transformers_utils.configs.muse_spark import (
+from sonar.config import ModelConfig, ParallelConfig, SpeculativeConfig
+from sonar.models.muse_spark.common.dspark import MuseSparkDSparkForCausalLM
+from sonar.transformers_utils.config import get_config
+from sonar.transformers_utils.configs.muse_spark import (
     GatedDeltaNetArgs,
     MetapArgs,
     MoEArgs,

@@ -14,12 +14,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config.watermarking import WatermarkConfig, derive_watermark_key
-from aphrodite.model_executor.warmup.watermark_sample_warmup import watermark_sample_warmup
-from aphrodite.platforms import current_platform
-from aphrodite.v1.watermarking.factory import create_watermarker
-from aphrodite.v1.watermarking.gpu_sampler import GPUWatermarkSampler
-from aphrodite.v1.watermarking.spec_decode import create_speculative_target_watermarker
+from sonar.config.watermarking import WatermarkConfig, derive_watermark_key
+from sonar.model_executor.warmup.watermark_sample_warmup import watermark_sample_warmup
+from sonar.platforms import current_platform
+from sonar.v1.watermarking.factory import create_watermarker
+from sonar.v1.watermarking.gpu_sampler import GPUWatermarkSampler
+from sonar.v1.watermarking.spec_decode import create_speculative_target_watermarker
 
 MASTER_KEY = 20250910
 KEY_A = derive_watermark_key(MASTER_KEY, b"key_a")
@@ -44,7 +44,7 @@ def _sampler(
 ) -> GPUWatermarkSampler:
     """The sampler ``GPUModelRunner`` builds for this config.
 
-    Mirrors ``aphrodite/v1/worker/gpu/model_runner.py:473-486``. ``__new__`` skips
+    Mirrors ``sonar/v1/worker/gpu/model_runner.py:473-486``. ``__new__`` skips
     ``Sampler.__init__``, which allocates UVA-backed device buffers; the warmup
     only reads the three attributes set here.
     """
@@ -72,7 +72,7 @@ def _worker(
     return SimpleNamespace(
         device=torch.device("cpu"),
         model_runner=SimpleNamespace(sampler=sampler),
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(
                 get_vocab_size=lambda: 128,
                 dtype=torch.bfloat16,
@@ -90,7 +90,7 @@ def _capture_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
         return torch.zeros(logits.shape[0], dtype=torch.int64)
 
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.sample.watermark.philox_gumbel_sample",
+        "sonar.v1.worker.gpu.sample.watermark.philox_gumbel_sample",
         fake_philox_gumbel_sample,
     )
     return calls
@@ -276,7 +276,7 @@ def test_warmup_failure_does_not_abort_startup(
         raise RuntimeError("no triton")
 
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.sample.watermark.philox_gumbel_sample",
+        "sonar.v1.worker.gpu.sample.watermark.philox_gumbel_sample",
         failing_philox_gumbel_sample,
     )
     with caplog.at_level(logging.WARNING):

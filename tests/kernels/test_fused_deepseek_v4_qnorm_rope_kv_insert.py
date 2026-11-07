@@ -18,14 +18,14 @@ The kernel is imported via
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar.models.deepseek_v4.common.ops import (
     dequantize_and_gather_k_cache,
     quantize_and_insert_k_cache,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.utils import bf16_ulp_distance, fp8_ulp_distance
 
 # ── Constants matching the kernel ────────────────────────────────────────────
@@ -37,7 +37,7 @@ QUANT_BLOCK = 64
 USE_FNUZ = current_platform.is_fp8_fnuz()
 _, FP8_MAX = get_fp8_min_max()
 # The kernel emits FNUZ-encoded fp8 bytes on gfx942 (rocm_cvt_float_to_fp8_e4m3)
-# but stores them into float8_e4m3fn-typed tensors, matching Aphrodite's ROCm cache
+# but stores them into float8_e4m3fn-typed tensors, matching Sonar's ROCm cache
 # convention. References must encode under the same scheme and the kernel's
 # e4m3fn-typed outputs must be reinterpreted under it before decoding.
 FP8_STORE_DTYPE = torch.float8_e4m3fnuz if USE_FNUZ else torch.float8_e4m3fn
@@ -411,10 +411,10 @@ def test_kv_path_mxfp8_record_matches_reference(num_tokens: int, block_size: int
     match the Triton encoder exactly apart from the documented 1-ULP bf16
     rounding split on the rotation itself.
     """
-    from aphrodite.models.deepseek_v41.common.ops import (
+    from sonar.models.deepseek_v41.common.ops import (
         dequantize_and_gather_k_cache as v41_dequantize_and_gather_k_cache,
     )
-    from aphrodite.models.deepseek_v41.common.ops import (
+    from sonar.models.deepseek_v41.common.ops import (
         quantize_and_insert_k_cache as v41_quantize_and_insert_k_cache,
     )
 
@@ -619,7 +619,7 @@ def test_q_interleaved_is_orthogonal_to_norm_and_rope(n_heads: int, apply_q_norm
     interleaved layout must equal running the interleaved path on a permuted
     input, bit for bit, for every norm/RoPE combination.
     """
-    from aphrodite.models.deepseek_v41.common.ops.fused_layout import permute_q_to_fused
+    from sonar.models.deepseek_v41.common.ops.fused_layout import permute_q_to_fused
 
     torch.manual_seed(7)
     device = "cuda"

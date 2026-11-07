@@ -10,10 +10,10 @@ import pytest
 import torch
 import torch.distributed as dist
 
-import aphrodite.v1.attention.ops.cp_common as cp_common
-import aphrodite.v1.attention.ops.dcp as dcp
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+import sonar.v1.attention.ops.cp_common as cp_common
+import sonar.v1.attention.ops.dcp as dcp
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 
 mp.set_start_method("spawn", force=True)
 
@@ -137,21 +137,21 @@ class TestDirectDCPGating:
         ("flag_name", "factory_name", "workspace_name", "factory_args", "gate_name"),
         [
             (
-                "APHRODITE_USE_DIRECT_DCP_A2A",
+                "SONAR_USE_DIRECT_DCP_A2A",
                 "get_direct_dcp_a2a_workspace",
                 "DirectDCPA2AWorkspace",
                 (16, 2, 32, torch.bfloat16, 1),
                 "direct_cp_enabled",
             ),
             (
-                "APHRODITE_USE_DIRECT_DCP_Q_GATHER",
+                "SONAR_USE_DIRECT_DCP_Q_GATHER",
                 "get_direct_dcp_q_gather_workspace",
                 "DirectDCPQGatherWorkspace",
                 (16, 2, 32, torch.bfloat16, 1),
                 "direct_cp_multicast_enabled",
             ),
             (
-                "APHRODITE_USE_DIRECT_DCP_KV_GATHER",
+                "SONAR_USE_DIRECT_DCP_KV_GATHER",
                 "get_direct_dcp_kv_gather_workspace",
                 "DirectDCPKVGatherWorkspace",
                 (64, 576, torch.bfloat16, 1),
@@ -177,7 +177,7 @@ class TestDirectDCPGating:
         assert factory(_FakeGroupCoordinator(), torch.device("cpu"), *factory_args) is None
 
     def test_forced_workspace_init_failure_raises(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "1")
         monkeypatch.setattr(dcp, "direct_cp_enabled", lambda *_args, **_kwargs: True)
         monkeypatch.setattr(
             dcp,
@@ -198,7 +198,7 @@ class TestDirectDCPGating:
             )
 
     def test_env_disabled_returns_none(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "0")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "0")
         dcp.get_direct_dcp_a2a_workspace.cache_clear()
         workspace = dcp.get_direct_dcp_a2a_workspace(
             _FakeGroupCoordinator(), torch.device("cpu"), 16, 2, 32, torch.bfloat16, 1
@@ -206,7 +206,7 @@ class TestDirectDCPGating:
         assert workspace is None
 
     def test_forced_with_unsupported_dtype_raises(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "1")
         dcp.get_direct_dcp_a2a_workspace.cache_clear()
         with pytest.raises(ValueError, match="does not support"):
             dcp.get_direct_dcp_a2a_workspace(
@@ -224,7 +224,7 @@ class TestDirectDCPGating:
             dcp.DirectDCPA2AWorkspace(None, torch.device("cpu"), 16, 2, 32, torch.bfloat16, num_ubatches=0)
 
     def test_auto_with_unsupported_dtype_returns_none(self, monkeypatch):
-        monkeypatch.delenv("APHRODITE_USE_DIRECT_DCP_A2A", raising=False)
+        monkeypatch.delenv("SONAR_USE_DIRECT_DCP_A2A", raising=False)
         dcp.get_direct_dcp_a2a_workspace.cache_clear()
         workspace = dcp.get_direct_dcp_a2a_workspace(
             _FakeGroupCoordinator(), torch.device("cpu"), 16, 2, 32, torch.float32, 1
@@ -232,8 +232,8 @@ class TestDirectDCPGating:
         assert workspace is None
 
     def test_q_gather_env_disabled_returns_none(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_Q_GATHER", "0")
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_Q_GATHER", "0")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "1")
         dcp.get_direct_dcp_q_gather_workspace.cache_clear()
         workspace = dcp.get_direct_dcp_q_gather_workspace(
             _FakeGroupCoordinator(),
@@ -247,8 +247,8 @@ class TestDirectDCPGating:
         assert workspace is None
 
     def test_q_gather_flag_is_independent(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_Q_GATHER", "1")
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "0")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_Q_GATHER", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "0")
         monkeypatch.setattr(cp_common, "_symm_mem_spans_group", lambda group: True)
         dcp.get_direct_dcp_q_gather_workspace.cache_clear()
         workspace = object()
@@ -273,8 +273,8 @@ class TestDirectDCPGating:
         assert init_workspace.call_args.args[5] == torch.float32
 
     def test_kv_gather_env_disabled_returns_none(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_KV_GATHER", "0")
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_KV_GATHER", "0")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "1")
         dcp.get_direct_dcp_kv_gather_workspace.cache_clear()
         workspace = dcp.get_direct_dcp_kv_gather_workspace(
             _FakeGroupCoordinator(), torch.device("cpu"), 64, 576, torch.bfloat16, 1
@@ -282,8 +282,8 @@ class TestDirectDCPGating:
         assert workspace is None
 
     def test_kv_gather_flag_is_independent(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_KV_GATHER", "1")
-        monkeypatch.setenv("APHRODITE_USE_DIRECT_DCP_A2A", "0")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_KV_GATHER", "1")
+        monkeypatch.setenv("SONAR_USE_DIRECT_DCP_A2A", "0")
         monkeypatch.setattr(cp_common, "_symm_mem_spans_group", lambda group: True)
         dcp.get_direct_dcp_kv_gather_workspace.cache_clear()
         workspace = object()
@@ -304,12 +304,12 @@ class TestDirectDCPGating:
         ("flag_name", "factory_name", "factory_args"),
         [
             (
-                "APHRODITE_USE_DIRECT_DCP_Q_GATHER",
+                "SONAR_USE_DIRECT_DCP_Q_GATHER",
                 "get_direct_dcp_q_gather_workspace",
                 (16, 2, 32, torch.bfloat16, 1),
             ),
             (
-                "APHRODITE_USE_DIRECT_DCP_KV_GATHER",
+                "SONAR_USE_DIRECT_DCP_KV_GATHER",
                 "get_direct_dcp_kv_gather_workspace",
                 (64, 576, torch.bfloat16, 1),
             ),
@@ -379,7 +379,7 @@ def _manager_config(dcp_comm_backend: str = "a2a"):
 
 
 def test_mla_dcp_manager_selects_direct_backends(monkeypatch):
-    import aphrodite.v1.attention.ops.dcp as dcp_manager
+    import sonar.v1.attention.ops.dcp as dcp_manager
 
     group = MagicMock(world_size=2)
     monkeypatch.setattr(dcp_manager, "get_dcp_group", lambda: group)
@@ -401,7 +401,7 @@ def test_mla_dcp_manager_selects_direct_backends(monkeypatch):
     )
 
     manager = dcp_manager.MLADCPManager(
-        aphrodite_config=_manager_config(),
+        sonar_config=_manager_config(),
         device=torch.device("cpu"),
         num_heads=2,
         query_head_dim=8,
@@ -440,7 +440,7 @@ def test_mla_dcp_manager_selects_direct_backends(monkeypatch):
 
 
 def test_mla_dcp_manager_selects_fallback_backends(monkeypatch):
-    import aphrodite.v1.attention.ops.dcp as dcp_manager
+    import sonar.v1.attention.ops.dcp as dcp_manager
 
     group = MagicMock(world_size=2)
     gathered_query = torch.empty(1, 4, 8)
@@ -453,7 +453,7 @@ def test_mla_dcp_manager_selects_fallback_backends(monkeypatch):
     monkeypatch.setattr(dcp_manager, "dcp_a2a_lse_reduce", fallback_combine)
 
     manager = dcp_manager.MLADCPManager(
-        aphrodite_config=_manager_config(),
+        sonar_config=_manager_config(),
         device=torch.device("cpu"),
         num_heads=2,
         query_head_dim=8,
@@ -519,11 +519,11 @@ def test_dcp_workspace_covers_decode_width(parallel_drafting, use_v2_model_runne
 
 
 def test_mla_dcp_manager_selects_pcp_combine(monkeypatch):
-    import aphrodite.v1.attention.ops.dcp as dcp_manager
+    import sonar.v1.attention.ops.dcp as dcp_manager
 
     monkeypatch.setattr(dcp_manager, "get_dcp_group", lambda: MagicMock(world_size=2))
     manager = dcp_manager.MLADCPManager(
-        aphrodite_config=_manager_config(dcp_comm_backend="ag_rs"),
+        sonar_config=_manager_config(dcp_comm_backend="ag_rs"),
         device=torch.device("cpu"),
         num_heads=2,
         query_head_dim=8,
@@ -541,7 +541,7 @@ def test_mla_dcp_manager_selects_pcp_combine(monkeypatch):
 
 
 def test_dcp_chunk_workspace_alignment_covers_interleave():
-    from aphrodite.model_executor.layers.attention.mla_attention import (
+    from sonar.model_executor.layers.attention.mla_attention import (
         align_mla_chunked_context_workspace_size,
     )
 
@@ -558,7 +558,7 @@ def test_dcp_chunk_workspace_alignment_covers_interleave():
 
 
 def test_sparse_mla_builder_initializes_dcp_manager(monkeypatch):
-    import aphrodite.model_executor.layers.attention.sparse_mla_attention as sparse_mla
+    import sonar.model_executor.layers.attention.sparse_mla_attention as sparse_mla
 
     monkeypatch.setattr(
         sparse_mla.AttentionMetadataBuilder,
@@ -606,7 +606,7 @@ def test_sparse_mla_builder_initializes_dcp_manager(monkeypatch):
 
 
 def test_sparse_mla_workspace_preserves_non_dcp_size():
-    from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+    from sonar.model_executor.layers.attention.sparse_mla_attention import (
         SparseMLACommonMetadataBuilder,
     )
 
@@ -847,7 +847,7 @@ def _distributed_direct_a2a_worker(env: dict[str, str]) -> None:
     torch.accelerator.set_device_index(local_rank)
     dist.init_process_group(backend="nccl")
     try:
-        from aphrodite.v1.attention.ops.dcp import _lse_weighted_combine
+        from sonar.v1.attention.ops.dcp import _lse_weighted_combine
 
         rank = dist.get_rank()
         world_size = dist.get_world_size()

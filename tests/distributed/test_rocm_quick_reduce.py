@@ -17,12 +17,12 @@ import pytest
 import torch
 import torch.distributed as dist
 
-import aphrodite.envs as envs
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
-from aphrodite.utils.network_utils import get_open_port
+import sonar.envs as envs
+from sonar import LLM, SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
+from sonar.utils.network_utils import get_open_port
 
 from ..utils import multi_gpu_test
 
@@ -52,7 +52,7 @@ def _make_quick_allreduce(
     use_fp16_kernels: bool = False,
     qr_max_size: int = 64 * MB,
 ):
-    from aphrodite.distributed.device_communicators.quick_all_reduce import (
+    from sonar.distributed.device_communicators.quick_all_reduce import (
         QuickAllReduce,
         QuickReduceRegime,
     )
@@ -76,8 +76,8 @@ def _quick_allreduce_worker(
     dtype_name: str,
     cast_bf16: bool,
 ):
-    os.environ["APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
-    os.environ["APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "1" if cast_bf16 else "0"
+    os.environ["SONAR_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
+    os.environ["SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "1" if cast_bf16 else "0"
     _log(f"worker start: rank={rank} quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
 
     device = torch.device(f"cuda:{rank}")
@@ -91,7 +91,7 @@ def _quick_allreduce_worker(
 
     qar = None
     try:
-        from aphrodite.distributed.device_communicators.quick_all_reduce import (
+        from sonar.distributed.device_communicators.quick_all_reduce import (
             QuickAllReduce,
         )
 
@@ -159,8 +159,8 @@ def _quick_allreduce_cudagraph_worker(
 ):
     # FP keeps the all-reduce bit-exact for small fp16 integers, so every
     # replayed round can be checked exactly.
-    os.environ["APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
-    os.environ["APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "0"
+    os.environ["SONAR_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
+    os.environ["SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "0"
     _log(f"cudagraph worker start: rank={rank} quant={quant_level}")
 
     device = torch.device(f"cuda:{rank}")
@@ -174,7 +174,7 @@ def _quick_allreduce_cudagraph_worker(
 
     qar = None
     try:
-        from aphrodite.distributed.device_communicators.quick_all_reduce import (
+        from sonar.distributed.device_communicators.quick_all_reduce import (
             QuickAllReduce,
         )
 
@@ -333,8 +333,8 @@ def _check_tp_allreduce_uses_quick_reduce(
     num_tokens: int,
     dtype_name: str = "float16",
 ) -> dict[str, int | bool]:
-    from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.communication_op import tensor_model_parallel_all_reduce
+    from sonar.distributed.parallel_state import get_tp_group
 
     assert self.device is not None
     qr_comm = get_tp_group().device_communicator.qr_comm
@@ -372,7 +372,7 @@ def _check_tp_allreduce_uses_quick_reduce(
 
 
 def _check_quick_reduce_disabled(self) -> int:
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.parallel_state import get_tp_group
 
     qr_comm = get_tp_group().device_communicator.qr_comm
     assert qr_comm is not None
@@ -457,8 +457,8 @@ def _run_generation(
     llm = None
     monkeypatch = pytest.MonkeyPatch()
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        m.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", quant_mode)
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", quant_mode)
         model_path = _get_model_path()
         _log(
             f"starting generation: backend={backend} quant={quant_mode} "
@@ -594,7 +594,7 @@ def run_quick_reduce_llm_e2e(
 
 
 def test_quick_reduce_regime_values():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickReduceRegime
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickReduceRegime
 
     assert QuickReduceRegime.FP.value == 0
     assert QuickReduceRegime.INT8.value == 1
@@ -605,7 +605,7 @@ def test_quick_reduce_regime_values():
 
 
 def test_quick_reduce_regime_names():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickReduceRegime
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickReduceRegime
 
     assert set(QuickReduceRegime.__members__) == {
         "FP",
@@ -619,50 +619,50 @@ def test_quick_reduce_regime_names():
 
 @pytest.mark.parametrize("quant_level", QUANT_LEVELS + ["NONE"])
 def test_quick_reduce_quantization_env_var(monkeypatch, quant_level):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", quant_level)
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", quant_level)
 
     reloaded_envs = _reload_envs()
-    assert quant_level == reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION
+    assert quant_level == reloaded_envs.SONAR_ROCM_QUICK_REDUCE_QUANTIZATION
 
 
 def test_quick_reduce_quantization_default(monkeypatch):
-    monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", raising=False)
 
     reloaded_envs = _reload_envs()
-    assert reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION == "NONE"
+    assert reloaded_envs.SONAR_ROCM_QUICK_REDUCE_QUANTIZATION == "NONE"
 
 
 @pytest.mark.parametrize("cast_bf16", [True, False])
 def test_quick_reduce_cast_bf16_to_fp16_env_var(monkeypatch, cast_bf16):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1" if cast_bf16 else "0")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1" if cast_bf16 else "0")
 
     reloaded_envs = _reload_envs()
-    assert reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 is cast_bf16
+    assert reloaded_envs.SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 is cast_bf16
 
 
 def test_quick_reduce_cast_bf16_to_fp16_default(monkeypatch):
-    monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", raising=False)
 
     reloaded_envs = _reload_envs()
-    assert reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 is True
+    assert reloaded_envs.SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 is True
 
 
 @pytest.mark.parametrize("max_mb", [128, 512, 2048, None])
 def test_quick_reduce_max_size_env_var(monkeypatch, max_mb):
     if max_mb is None:
-        monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", raising=False)
+        monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", str(max_mb))
+        monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", str(max_mb))
 
     reloaded_envs = _reload_envs()
-    assert max_mb == reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
+    assert max_mb == reloaded_envs.SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB
 
 
 def test_quick_reduce_max_size_default(monkeypatch):
-    monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", raising=False)
 
     reloaded_envs = _reload_envs()
-    assert reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB is None
+    assert reloaded_envs.SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB is None
 
 
 @pytest.mark.parametrize(
@@ -675,7 +675,7 @@ def test_quick_reduce_max_size_default(monkeypatch):
     ],
 )
 def test_quick_allreduce_rocm_arch_available(gcn_arch_name, expected):
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     qar = QuickAllReduce.__new__(QuickAllReduce)
     qar._flydsl_int4 = None
@@ -683,7 +683,7 @@ def test_quick_allreduce_rocm_arch_available(gcn_arch_name, expected):
 
     with (
         patch(
-            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
+            "sonar.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
             return_value=True,
         ),
         patch(
@@ -695,7 +695,7 @@ def test_quick_allreduce_rocm_arch_available(gcn_arch_name, expected):
 
 
 def test_quick_allreduce_rocm_arch_available_handles_probe_failure():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     qar = QuickAllReduce.__new__(QuickAllReduce)
     qar._flydsl_int4 = None
@@ -703,7 +703,7 @@ def test_quick_allreduce_rocm_arch_available_handles_probe_failure():
 
     with (
         patch(
-            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
+            "sonar.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
             return_value=True,
         ),
         patch("torch.cuda.get_device_properties", side_effect=RuntimeError),
@@ -771,19 +771,19 @@ def test_quick_allreduce_bf16_uses_fp16_threshold_when_cast_enabled():
 
 
 def test_quick_allreduce_supported_world_sizes():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     assert QuickAllReduce._SUPPORTED_WORLD_SIZES == [2, 4, 8]
 
 
 def test_quick_allreduce_supported_dtypes():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     assert [torch.float16, torch.bfloat16] == QuickAllReduce._SUPPORTED_DTYPES
 
 
 def test_quick_allreduce_min_size_table():
-    from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
+    from sonar.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     for dtype in [torch.float16, torch.bfloat16]:
         for world_size in QuickAllReduce._SUPPORTED_WORLD_SIZES:
@@ -793,7 +793,7 @@ def test_quick_allreduce_min_size_table():
 
 
 def test_qr_max_size():
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     max_size = ops.qr_max_size()
     assert isinstance(max_size, int)

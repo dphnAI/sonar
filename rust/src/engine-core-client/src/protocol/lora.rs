@@ -5,7 +5,7 @@ use serde_tuple::{Deserialize_tuple, Serialize_tuple};
 
 /// Request for a LoRA adapter.
 ///
-/// Mirrors Python `aphrodite.lora.request.LoRARequest`, which is a msgspec
+/// Mirrors Python `sonar.lora.request.LoRARequest`, which is a msgspec
 /// `array_like=True` struct. Keep the field order aligned with Python.
 #[derive(Debug, Clone, PartialEq, Serialize_tuple, Deserialize_tuple)]
 pub struct LoraRequest {

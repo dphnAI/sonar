@@ -358,7 +358,7 @@ void sm89_paged_mqa_logits_metadata(const torch::stable::Tensor& seq_lens,
 #endif
 }
 
-#ifdef APHRODITE_ENABLE_SM89_DSA
+#ifdef SONAR_ENABLE_SM89_DSA
 STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
   ops.impl("sm89_fp8_paged_mqa_logits", TORCH_BOX(&sm89_fp8_paged_mqa_logits));
   ops.impl("sm89_paged_mqa_logits_metadata",

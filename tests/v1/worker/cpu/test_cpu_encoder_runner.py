@@ -6,25 +6,25 @@ import pytest
 import torch
 from transformers import LlamaConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SchedulerConfig
-from aphrodite.entrypoints.pooling.scoring.utils import compress_token_type_ids
-from aphrodite.multimodal.inputs import (
+from sonar.config import ModelConfig, SchedulerConfig, SonarConfig
+from sonar.entrypoints.pooling.scoring.utils import compress_token_type_ids
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.core.sched.output import NewRequestData
-from aphrodite.v1.worker.cpu.encoder_cache import EncoderCache
-from aphrodite.v1.worker.cpu.encoder_runner import EncoderRunner
-from aphrodite.v1.worker.cpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.cpu.model_states.default import DefaultModelState
-from aphrodite.v1.worker.cpu.model_states.encoder_only import EncoderOnlyModelState
-from aphrodite.v1.worker.cpu.states import CPURequestState
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.pooling_params import PoolingParams
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.core.sched.output import NewRequestData
+from sonar.v1.worker.cpu.encoder_cache import EncoderCache
+from sonar.v1.worker.cpu.encoder_runner import EncoderRunner
+from sonar.v1.worker.cpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.cpu.model_states.default import DefaultModelState
+from sonar.v1.worker.cpu.model_states.encoder_only import EncoderOnlyModelState
+from sonar.v1.worker.cpu.states import CPURequestState
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -176,7 +176,7 @@ def test_execute_mm_encoder_batches_by_modality_and_restores_order() -> None:
 
 
 @pytest.fixture
-def aphrodite_config(tmp_path) -> AphroditeConfig:
+def sonar_config(tmp_path) -> SonarConfig:
     hf_config = LlamaConfig(
         hidden_size=HIDDEN_SIZE,
         intermediate_size=8,
@@ -201,14 +201,14 @@ def aphrodite_config(tmp_path) -> AphroditeConfig:
         max_num_seqs=2,
         is_multimodal_model=True,
     )
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
     )
 
 
 def test_model_state_caches_encoder_output_without_gathering(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> None:
     model = _EncoderModel()
     cache = EncoderCache()
@@ -220,7 +220,7 @@ def test_model_state_caches_encoder_output_without_gathering(
         ],
     )
     state = DefaultModelState(
-        aphrodite_config,
+        sonar_config,
         model,
         cache,
         torch.device("cpu"),
@@ -237,14 +237,14 @@ def test_model_state_caches_encoder_output_without_gathering(
 
 
 def test_model_state_empty_encoder_schedule_is_a_noop(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> None:
     model = _EncoderModel()
     cache = EncoderCache()
     cached = torch.ones(1, HIDDEN_SIZE)
     cache.encoder_outputs["existing"] = cached
     state = DefaultModelState(
-        aphrodite_config,
+        sonar_config,
         model,
         cache,
         torch.device("cpu"),
@@ -258,7 +258,7 @@ def test_model_state_empty_encoder_schedule_is_a_noop(
 
 
 def test_encoder_only_state_slices_compressed_token_types_for_chunk(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
 ) -> None:
     tokens = [10, 11, 12, 13, 14, 15]
     request = NewRequestData(
@@ -289,7 +289,7 @@ def test_encoder_only_state_slices_compressed_token_types_for_chunk(
         max_tokens=1,
     )
     req_index = req_states.req_id_to_index[request.req_id]
-    state = EncoderOnlyModelState(aphrodite_config, torch.nn.Module(), None, torch.device("cpu"))
+    state = EncoderOnlyModelState(sonar_config, torch.nn.Module(), None, torch.device("cpu"))
     state.add_request(req_index, request)
 
     input_batch = InputBatch.make_dummy(

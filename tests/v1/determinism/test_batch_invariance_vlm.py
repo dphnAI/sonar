@@ -11,10 +11,10 @@ import torch
 from PIL import Image
 from utils import _extract_step_logprobs, skip_if_not_cuda_alike
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TextPrompt
+from sonar import LLM, SamplingParams
+from sonar.inputs import TextPrompt
 
-VLM_TEST_MODEL = os.getenv("APHRODITE_VLM_TEST_MODEL", "Qwen/Qwen3-VL-2B-Instruct")
+VLM_TEST_MODEL = os.getenv("SONAR_VLM_TEST_MODEL", "Qwen/Qwen3-VL-2B-Instruct")
 
 IMAGE_PROMPT = (
     "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|><|im_start|>assistant\n"
@@ -86,13 +86,13 @@ def test_vlm_batch_invariance_bs1_vs_bsN(
     mm_encoder_attn_backend: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "0")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "0")
     _run_vlm_batch_invariance(input_type, mm_encoder_attn_backend, enforce_eager=True)
 
 
 @skip_if_not_cuda_alike
 def test_vlm_batch_invariance_default_execution(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "0")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "0")
     _run_vlm_batch_invariance("image", "FLASH_ATTN", enforce_eager=False)
 
 

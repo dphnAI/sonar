@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tool_parsers.functiongemma_tool_parser import FunctionGemmaToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tool_parsers.functiongemma_tool_parser import FunctionGemmaToolParser
 
 
 @pytest.fixture

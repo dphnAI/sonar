@@ -3,9 +3,9 @@
 
 import pytest
 
-import aphrodite
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test, multi_gpu_test
 
@@ -20,7 +20,7 @@ EXPECTED_LORA_OUTPUT = [
 ]
 
 
-def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
+def do_sample(llm: sonar.LLM, lora_path: str, lora_id: int) -> list[str]:
     prompts = [
         PROMPT_TEMPLATE.format(query="How many singers do we have?"),
         PROMPT_TEMPLATE.format(
@@ -30,7 +30,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
             query="What are all distinct countries where singers above age 20 are from?"  # noqa: E501
         ),
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=32)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=32)
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -47,7 +47,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
 
 
 def test_ilama_lora(ilama_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -69,7 +69,7 @@ def test_ilama_lora(ilama_lora_files):
 @multi_gpu_test(num_gpus=4)
 @create_new_process_for_each_test()
 def test_ilama_lora_tp4(ilama_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -93,7 +93,7 @@ def test_ilama_lora_tp4(ilama_lora_files):
 @multi_gpu_test(num_gpus=4)
 @create_new_process_for_each_test()
 def test_ilama_lora_tp4_fully_sharded_loras(ilama_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,

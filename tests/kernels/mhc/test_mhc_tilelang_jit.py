@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils import import_utils
+from sonar.platforms import current_platform
+from sonar.utils import import_utils
 
 
 class _PassConfigKey:
@@ -53,7 +53,7 @@ def _install_tilelang_stub(
     monkeypatch.setattr(import_utils, "has_tilelang", lambda: True)
     monkeypatch.setitem(sys.modules, "tilelang", tilelang)
     monkeypatch.setitem(sys.modules, "tilelang.language", ModuleType("tilelang.language"))
-    monkeypatch.delitem(sys.modules, "aphrodite.tilelang_utils", raising=False)
+    monkeypatch.delitem(sys.modules, "sonar.tilelang_utils", raising=False)
 
     return calls
 
@@ -65,7 +65,7 @@ def test_tilelang_jit_decorator_is_lazy_only_on_rocm(
         pytest.skip("Test requires CUDA or ROCm")
 
     calls = _install_tilelang_stub(monkeypatch)
-    module_name = "aphrodite.model_executor.kernels.mhc.tilelang_kernels"
+    module_name = "sonar.model_executor.kernels.mhc.tilelang_kernels"
     monkeypatch.delitem(sys.modules, module_name, raising=False)
     module = importlib.import_module(module_name)
 
@@ -88,7 +88,7 @@ def test_tilelang_jit_proxies_compile_only_warmup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = _install_tilelang_stub(monkeypatch)
-    module_name = "aphrodite.model_executor.kernels.mhc.tilelang_kernels"
+    module_name = "sonar.model_executor.kernels.mhc.tilelang_kernels"
     monkeypatch.delitem(sys.modules, module_name, raising=False)
     module = importlib.import_module(module_name)
 

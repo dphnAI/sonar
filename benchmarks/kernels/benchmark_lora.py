@@ -18,13 +18,13 @@ from torch.utils.benchmark import Measurement as TMeasurement
 from utils import ArgPool, Bench, CudaGraphBenchParams
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.triton_utils import HAS_TRITON
 
 if HAS_TRITON:
-    from aphrodite.lora.ops.triton_ops import LoRAKernelMeta, lora_expand, lora_shrink
-    from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
+    from sonar.lora.ops.triton_ops import LoRAKernelMeta, lora_expand, lora_shrink
+    from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 DEFAULT_MODELS = list(WEIGHT_SHAPES.keys())
 DEFAULT_TP_SIZES = [1]

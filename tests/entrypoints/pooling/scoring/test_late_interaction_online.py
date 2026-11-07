@@ -5,7 +5,7 @@
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from tests.utils import RemoteOpenAIServer
 
 from .util import ColBERTScoringHfRunner
@@ -30,11 +30,11 @@ TEXTS_2 = [
 async def test_flash_late_interaction_rejects_mm_processor_kwargs_by_default():
     from unittest.mock import MagicMock
 
-    from aphrodite.config.multimodal import MultiModalConfig
-    from aphrodite.entrypoints.pooling.base.serving import PoolingBaseServing
-    from aphrodite.entrypoints.pooling.scoring.protocol import ScoreQueriesDocumentsRequest
-    from aphrodite.entrypoints.pooling.scoring.serving import ServingScores
-    from aphrodite.exceptions import AphroditeValidationError
+    from sonar.config.multimodal import MultiModalConfig
+    from sonar.entrypoints.pooling.base.serving import PoolingBaseServing
+    from sonar.entrypoints.pooling.scoring.protocol import ScoreQueriesDocumentsRequest
+    from sonar.entrypoints.pooling.scoring.serving import ServingScores
+    from sonar.exceptions import SonarValidationError
 
     serving = MagicMock()
     serving.model_config = MagicMock(multimodal_config=MultiModalConfig())
@@ -49,7 +49,7 @@ async def test_flash_late_interaction_rejects_mm_processor_kwargs_by_default():
     )
 
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Per-request mm_processor_kwargs are disabled",
     ):
         await ServingScores.flash_late_interaction(serving, request)
@@ -94,11 +94,11 @@ async def test_score_api_queries_str_1_documents_str_1(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 1
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict([[TEXTS_1[0], TEXTS_2[0]]]).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -123,11 +123,11 @@ async def test_score_api_queries_str_1_documents_str_n(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -152,11 +152,11 @@ async def test_score_api_queries_str_n_documents_str_n(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio

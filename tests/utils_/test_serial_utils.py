@@ -7,7 +7,7 @@ import pybase64
 import pytest
 import torch
 
-from aphrodite.utils.serial_utils import (
+from sonar.utils.serial_utils import (
     EMBED_DTYPES,
     ENDIANNESS,
     MM_METADATA_DTYPES,

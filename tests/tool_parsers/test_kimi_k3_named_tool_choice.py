@@ -6,12 +6,12 @@ attached (strict tool calling), rejected otherwise."""
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import StructuredOutputsParams
 
 
 class _DummyTokenizer:
@@ -47,7 +47,7 @@ def _request(with_tag: bool) -> ChatCompletionRequest:
 
 
 def _parser():
-    from aphrodite.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
+    from sonar.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
 
     return KimiK3ToolParser(_DummyTokenizer())
 
@@ -58,7 +58,7 @@ def test_named_choice_allowed_with_structural_tag():
 
 
 def test_named_choice_rejected_without_structural_tag():
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         _parser().adjust_request(_request(with_tag=False))
 
 
@@ -79,5 +79,5 @@ def test_named_custom_choice_allowed_with_structural_tag():
 
 
 def test_named_custom_choice_rejected_without_structural_tag():
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         _parser().adjust_request(_custom_request(with_tag=False))

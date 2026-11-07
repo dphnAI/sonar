@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Structured decisions in front of a Aphrodite DiffusionGemma server.
+"""Structured decisions in front of a Sonar DiffusionGemma server.
 
 POST /v1/systemone takes Jev's request body: {"model", "state", "questions"}.
 "questions" maps an id to {"type", "instructions", "criteria"}, where "type"
@@ -23,7 +23,7 @@ POST /v1/chat/completions makes the same decision from an OpenAI-shaped
 call. The system message is the schema JSON below and the user message is
 the state. The reply's `content` is the JSON answer set.
 
-POST /v1/raw/chat/completions passes the body to Aphrodite's chat completions
+POST /v1/raw/chat/completions passes the body to Sonar's chat completions
 unchanged, for plain generation through this port.
 
 With API_KEY set in the environment, every POST needs "Authorization:
@@ -70,7 +70,7 @@ answer, so the canvas bounds it. The noise draws of a decision share one
 thought.
 
 Serve the model with a canvas that holds the answer template, for example:
-  aphrodite serve google/diffusiongemma-26B-A4B-it \
+  sonar serve google/diffusiongemma-26B-A4B-it \
       --diffusion-config '{"canvas_length": 64}' --enable-prefix-caching
 then run this in front of it:
   python structured_server.py --upstream http://127.0.0.1:8000 \
@@ -378,7 +378,7 @@ def build_canvas(template, slots, seed):
 
 def label_id_union(slots):
     ids = sorted({i for s in slots for i in s["label_ids"]})
-    return ids[:128]  # Aphrodite's cap per request. A schema needs far fewer.
+    return ids[:128]  # Sonar's cap per request. A schema needs far fewer.
 
 
 def upstream_chat(body, timeout=600):
@@ -494,7 +494,7 @@ def one_read(schema, template, slots, sys_text, state_content, seed, prefix=None
         "logprob_token_ids": label_id_union(slots),
         "return_tokens_as_token_ids": True,
         "chat_template_kwargs": {"enable_thinking": thinking},
-        "aphrodite_xargs": {
+        "sonar_xargs": {
             "diffusion_seed_canvas": build_canvas(template, slots, seed),
             "diffusion_canvas_length": canvas_width(template),
             "diffusion_max_steps": schema["steps"],
@@ -541,7 +541,7 @@ def one_read_continuation(schema, template, slots, prompt_ids, seed):
         "logprobs": TOPK,
         "logprob_token_ids": label_id_union(slots),
         "return_tokens_as_token_ids": True,
-        "aphrodite_xargs": {
+        "sonar_xargs": {
             "diffusion_seed_canvas": build_canvas(template, slots, seed),
             "diffusion_canvas_length": canvas_width(template),
             "diffusion_max_steps": schema["steps"],
@@ -802,7 +802,7 @@ def decide(schema, state_content, seed):
         },
         "prompt_tokens": max((b["diagnostics"].get("prompt_tokens") or 0) for b, _ in parts) or None,
         "questions": diag_q,
-        "engine": "aphrodite",
+        "engine": "sonar",
     }
     return {"answers": answers, "diagnostics": diagnostics}, sum(rows for _, rows in parts) + extra_rows
 
@@ -926,7 +926,7 @@ def decide_group(schema, sys_text, state_content, seed, prefix=None, lead=""):
             "thought": thought,
             "prompt_tokens": prompt_tokens,
             "questions": diag_q,
-            "engine": "aphrodite",
+            "engine": "sonar",
         },
     }, len(template) + 1 + (thought["tokens"] if thought else 0)
 
@@ -1138,7 +1138,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404, {"error": {"message": "unknown route"}})
 
     def _raw_chat(self):
-        """Pass the body and status through to Aphrodite's chat completions."""
+        """Pass the body and status through to Sonar's chat completions."""
         raw = self.rfile.read(int(self.headers.get("content-length", "0")))
         req = urllib.request.Request(
             ARGS.upstream.rstrip("/") + "/v1/chat/completions",
@@ -1195,7 +1195,7 @@ class Handler(BaseHTTPRequestHandler):
             {
                 "model": ARGS.model,
                 "answers": answers,
-                # Aphrodite's prompt count when the reads reported one, since it covers
+                # Sonar's prompt count when the reads reported one, since it covers
                 # images. Otherwise the tokenizer's count of the text prompt.
                 "usage": {
                     "input_tokens": body["diagnostics"].get("prompt_tokens")
@@ -1229,7 +1229,7 @@ class Handler(BaseHTTPRequestHandler):
                 isinstance(p, dict) and p.get("type") in ("image_url", "image") for p in content
             )
             if has_image:
-                # image parts pass through to Aphrodite unchanged, with text parts as context
+                # image parts pass through to Sonar unchanged, with text parts as context
                 state = content
             else:
                 state = message_text(msgs[1]).strip()

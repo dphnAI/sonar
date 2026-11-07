@@ -41,7 +41,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 
 /// Aligned array type
@@ -423,7 +423,7 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
       {
-        thread_max = max(thread_max, APHRODITE_SHFL_XOR_SYNC_WIDTH(thread_max, mask, THREADS_PER_ROW));
+        thread_max = max(thread_max, SONAR_SHFL_XOR_SYNC_WIDTH(thread_max, mask, THREADS_PER_ROW));
       }
 
       // From this point, thread max in all the threads have the max within the row.
@@ -440,7 +440,7 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
       {
-        row_sum += APHRODITE_SHFL_XOR_SYNC_WIDTH(row_sum, mask, THREADS_PER_ROW);
+        row_sum += SONAR_SHFL_XOR_SYNC_WIDTH(row_sum, mask, THREADS_PER_ROW);
       }
 
       // From this point, all threads have the max and the sum for their rows in the thread_max and thread_sum variables
@@ -535,9 +535,9 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
         for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
         {
-            float other_max_for_choice = APHRODITE_SHFL_XOR_SYNC_WIDTH(max_val_for_choice, mask, THREADS_PER_ROW);
-            float other_max = APHRODITE_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
-            int other_expert = APHRODITE_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
+            float other_max_for_choice = SONAR_SHFL_XOR_SYNC_WIDTH(max_val_for_choice, mask, THREADS_PER_ROW);
+            float other_max = SONAR_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
+            int other_expert = SONAR_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
 
             // We want lower indices to "win" in every thread so we break ties this way
             if (other_max_for_choice > max_val_for_choice || (other_max_for_choice == max_val_for_choice && other_expert < expert))
@@ -782,10 +782,10 @@ void topkGatingKernelLauncher(
 }
 
 } // namespace moe
-} // namespace aphrodite
+} // namespace sonar
 
 
-template<typename ComputeType, aphrodite::moe::ScoringFunc SF>
+template<typename ComputeType, sonar::moe::ScoringFunc SF>
 void dispatch_topk_launch(
     torch::stable::Tensor& gating_output,
     torch::stable::Tensor& topk_weights,
@@ -823,7 +823,7 @@ void dispatch_topk_launch(
     }
 
     if (topk_indices.scalar_type() == torch::headeronly::ScalarType::Int) {
-        aphrodite::moe::topkGatingKernelLauncher<int, ComputeType, SF>(
+        sonar::moe::topkGatingKernelLauncher<int, ComputeType, SF>(
             reinterpret_cast<const ComputeType*>(gating_output.const_data_ptr()),
             topk_weights.mutable_data_ptr<float>(),
             topk_indices.mutable_data_ptr<int>(),
@@ -832,7 +832,7 @@ void dispatch_topk_launch(
             num_tokens, num_experts, topk, renormalize,
             bias_ptr, routed_scaling_factor, stream, is_padding_ptr);
     } else if (topk_indices.scalar_type() == torch::headeronly::ScalarType::UInt32) {
-        aphrodite::moe::topkGatingKernelLauncher<uint32_t, ComputeType, SF>(
+        sonar::moe::topkGatingKernelLauncher<uint32_t, ComputeType, SF>(
             reinterpret_cast<const ComputeType*>(gating_output.const_data_ptr()),
             topk_weights.mutable_data_ptr<float>(),
             topk_indices.mutable_data_ptr<uint32_t>(),
@@ -842,7 +842,7 @@ void dispatch_topk_launch(
             bias_ptr, routed_scaling_factor, stream, is_padding_ptr);
     } else {
         STD_TORCH_CHECK(topk_indices.scalar_type() == torch::headeronly::ScalarType::Long);
-        aphrodite::moe::topkGatingKernelLauncher<int64_t, ComputeType, SF>(
+        sonar::moe::topkGatingKernelLauncher<int64_t, ComputeType, SF>(
             reinterpret_cast<const ComputeType*>(gating_output.const_data_ptr()),
             topk_weights.mutable_data_ptr<float>(),
             topk_indices.mutable_data_ptr<int64_t>(),
@@ -877,15 +877,15 @@ void topk_softmax(
         gating_output, {workspace_size}, torch::headeronly::ScalarType::Float);
 
     if (gating_output.scalar_type() == torch::headeronly::ScalarType::Float) {
-        dispatch_topk_launch<float, aphrodite::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<float, sonar::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
             token_expert_indices, softmax_workspace, num_tokens, num_experts, topk, renormalize,
             bias, 1.0, stream, is_padding);
     } else if (gating_output.scalar_type() == torch::headeronly::ScalarType::Half) {
-        dispatch_topk_launch<__half, aphrodite::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<__half, sonar::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
             token_expert_indices, softmax_workspace, num_tokens, num_experts, topk, renormalize,
             bias, 1.0, stream, is_padding);
     } else if (gating_output.scalar_type() == torch::headeronly::ScalarType::BFloat16) {
-        dispatch_topk_launch<__nv_bfloat16, aphrodite::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<__nv_bfloat16, sonar::moe::SCORING_SOFTMAX>(gating_output, topk_weights, topk_indices,
             token_expert_indices, softmax_workspace, num_tokens, num_experts, topk, renormalize,
             bias, 1.0, stream, is_padding);
     } else {
@@ -918,15 +918,15 @@ void topk_sigmoid(
         gating_output, {workspace_size}, torch::headeronly::ScalarType::Float);
 
     if (gating_output.scalar_type() == torch::headeronly::ScalarType::Float) {
-        dispatch_topk_launch<float, aphrodite::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<float, sonar::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
             token_expert_indices, workspace, num_tokens, num_experts, topk, renormalize,
             bias, routed_scaling_factor, stream, is_padding);
     } else if (gating_output.scalar_type() == torch::headeronly::ScalarType::Half) {
-        dispatch_topk_launch<__half, aphrodite::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<__half, sonar::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
             token_expert_indices, workspace, num_tokens, num_experts, topk, renormalize,
             bias, routed_scaling_factor, stream, is_padding);
     } else if (gating_output.scalar_type() == torch::headeronly::ScalarType::BFloat16) {
-        dispatch_topk_launch<__nv_bfloat16, aphrodite::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
+        dispatch_topk_launch<__nv_bfloat16, sonar::moe::SCORING_SIGMOID>(gating_output, topk_weights, topk_indices,
             token_expert_indices, workspace, num_tokens, num_experts, topk, renormalize,
             bias, routed_scaling_factor, stream, is_padding);
     } else {

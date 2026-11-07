@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import make_local_attention_virtual_batches
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import make_local_attention_virtual_batches
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 

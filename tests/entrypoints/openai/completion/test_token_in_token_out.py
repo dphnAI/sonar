@@ -6,8 +6,8 @@ import tempfile
 
 import pytest
 
-from aphrodite.model_executor.model_loader.weight_utils import download_weights_from_hf
-from aphrodite.tokenizers import get_tokenizer
+from sonar.model_executor.model_loader.weight_utils import download_weights_from_hf
+from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"

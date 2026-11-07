@@ -13,7 +13,7 @@
 #include "dispatch_utils.h"
 #include "torch_utils.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 
 __device__ __forceinline__ float warp_max(float value) {
@@ -241,16 +241,16 @@ __global__ void routing_kernel(
 }
 
 }  // namespace moe
-}  // namespace aphrodite
+}  // namespace sonar
 
 namespace {
 using Tensor = torch::stable::Tensor;
 using ScalarType = torch::headeronly::ScalarType;
 
 template <int Warps, bool PDL, typename Index>
-void launch_routing(const aphrodite::moe::RoutingParams<Index>& params,
+void launch_routing(const sonar::moe::RoutingParams<Index>& params,
                     cudaStream_t stream) {
-  using Trait = aphrodite::moe::RoutingTrait<Warps>;
+  using Trait = sonar::moe::RoutingTrait<Warps>;
   cudaLaunchConfig_t config{};
   config.gridDim = dim3((params.num_tokens + Warps - 1) / Warps);
   config.blockDim = dim3(32 * Warps);
@@ -263,7 +263,7 @@ void launch_routing(const aphrodite::moe::RoutingParams<Index>& params,
     config.numAttrs = 1;
   }
   auto err = cudaLaunchKernelEx(
-      &config, aphrodite::moe::routing_kernel<Trait, PDL, Index>, params);
+      &config, sonar::moe::routing_kernel<Trait, PDL, Index>, params);
   STD_TORCH_CHECK(err == cudaSuccess, "Muse Spark routing launch failed: ",
                   cudaGetErrorString(err));
 }
@@ -313,9 +313,9 @@ void muse_spark_routing(Tensor& topk_weights, Tensor& topk_ids,
   torch::stable::accelerator::DeviceGuard guard(logits.get_device_index());
   const cudaStream_t stream =
       get_current_cuda_stream(logits.get_device_index());
-  APHRODITE_STABLE_DISPATCH_IDX_TYPES(
+  SONAR_STABLE_DISPATCH_IDX_TYPES(
       topk_ids.scalar_type(), "muse_spark_routing", [&] {
-        aphrodite::moe::RoutingParams<idx_t> params{
+        sonar::moe::RoutingParams<idx_t> params{
             .gating_output = static_cast<const float*>(logits.data_ptr()),
             .bias = static_cast<const float*>(bias.data_ptr()),
             .topk_weights = static_cast<float*>(topk_weights.data_ptr()),

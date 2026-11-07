@@ -17,27 +17,27 @@ Run `pytest tests/kernels/quantization/test_rdna3_w4a16.py`.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("RDNA3 W4A16 kernel is ROCm-only", allow_module_level=True)
 
-from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (  # noqa: E402
     MPLinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E402
+from sonar.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (  # noqa: E402
     RDNA3W4A16LinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
+from sonar.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E402
     pack_quantized_values_into_int32,
 )
-from aphrodite.model_executor.parameter import (  # noqa: E402
+from sonar.model_executor.parameter import (  # noqa: E402
     GroupQuantScaleParameter,
-    PackedAphroditeParameter,
+    PackedSonarParameter,
 )
-from aphrodite.platforms.rocm import on_gfx1100  # noqa: E402
-from aphrodite.scalar_type import scalar_types  # noqa: E402
-from aphrodite.utils.torch_utils import set_random_seed  # noqa: E402
+from sonar.platforms.rocm import on_gfx1100  # noqa: E402
+from sonar.scalar_type import scalar_types  # noqa: E402
+from sonar.utils.torch_utils import set_random_seed  # noqa: E402
 
 device = "cuda"
 
@@ -113,7 +113,7 @@ def _build_layer(
     layer = DummyLayer()
     layer.register_parameter(
         "qweight",
-        PackedAphroditeParameter(
+        PackedSonarParameter(
             data=qweight,
             weight_loader=no_loader,
             input_dim=0,
@@ -136,7 +136,7 @@ def _build_layer(
         qzeros = pack_quantized_values_into_int32(zeros_gn, WEIGHT_TYPE, packed_dim=1)
         layer.register_parameter(
             "qzeros",
-            PackedAphroditeParameter(
+            PackedSonarParameter(
                 data=qzeros,
                 weight_loader=no_loader,
                 input_dim=0,

@@ -6,10 +6,10 @@ import json
 import pytest
 import regex as re
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.tool_parsers.hy_v4_tool_parser import HYV4ToolParser
-from aphrodite.tool_parsers.structural_tag_registry import get_model_structural_tag
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.tool_parsers.hy_v4_tool_parser import HYV4ToolParser
+from sonar.tool_parsers.structural_tag_registry import get_model_structural_tag
 
 
 class _StubTokenizer:

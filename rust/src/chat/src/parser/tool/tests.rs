@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use aphrodite_parser::tool::{Result, ToolParserOutput};
-use aphrodite_tokenizer::test_utils::TestTokenizer;
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_parser::tool::{Result, ToolParserOutput};
+use sonar_tokenizer::test_utils::TestTokenizer;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::{ToolParser, ToolParserFactory, names};
 use crate::Error;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::DecodedText;
+use sonar_tokenizer::DecodedText;
 use winnow::ascii::multispace0 as ws0;
 use winnow::combinator::{alt, eof, repeat, seq, terminated};
 use winnow::prelude::*;

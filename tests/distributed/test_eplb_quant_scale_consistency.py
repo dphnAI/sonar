@@ -15,17 +15,17 @@ indistinguishable from loading a checkpoint with permuted experts.
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
     CompressedTensorsW4A4Nvfp4MoEMethod,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 EPLB_NVFP4_BACKENDS = ["flashinfer_cutedsl", "flashinfer_trtllm"]
 
@@ -160,7 +160,7 @@ def _simulate_eplb_rearrangement(layer: torch.nn.Module, perm: torch.Tensor) -> 
 def _ensure_world1_distributed() -> None:
     """The enable_eplb config makes weight processing all-reduce activation
     scale amaxes over the EP group, so a (single-rank) EP group must exist."""
-    from aphrodite.distributed.parallel_state import (
+    from sonar.distributed.parallel_state import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
     )
@@ -184,7 +184,7 @@ def test_nvfp4_eplb_rearrangement_matches_reload(backend: str) -> None:
     torch.accelerator.set_device_index(device)
     perm = torch.tensor(EXPERT_PERMUTATION, device=device)
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         _ensure_world1_distributed()
         generator = torch.Generator(device=device).manual_seed(1234)
         raw = _make_raw_weights(device, generator)
@@ -238,7 +238,7 @@ def test_fp8_per_tensor_alphas_registered_and_aliased() -> None:
     """CPU-only: the fp8 per-tensor oracle must register the fused
     (w_scale * a_scale) products as layer Parameters aliased by the quant
     config, so EPLB rearrangement keeps kernels consistent."""
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
         Fp8MoeBackend,
         make_fp8_moe_quant_config,
     )

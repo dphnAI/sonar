@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -30,18 +30,18 @@ from aphrodite.v1.kv_offload.base import (
     ScheduleEndContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingCacheConfig,
     OffloadingConfig,
     OffloadingModelConfig,
     OffloadingParallelConfig,
 )
-from aphrodite.v1.kv_offload.tiering.base import TransferJob
-from aphrodite.v1.kv_offload.tiering.factory import SecondaryTierFactory
-from aphrodite.v1.kv_offload.tiering.fs.manager import (
+from sonar.v1.kv_offload.tiering.base import TransferJob
+from sonar.v1.kv_offload.tiering.factory import SecondaryTierFactory
+from sonar.v1.kv_offload.tiering.fs.manager import (
     FileSystemTierManager,
 )
-from aphrodite.v1.kv_offload.tiering.fs.thread_pool import DualQueueThreadPool
+from sonar.v1.kv_offload.tiering.fs.thread_pool import DualQueueThreadPool
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,15 +52,15 @@ _BLOCK_ELEMENTS = 128 * mmap.PAGESIZE  # 2MB per block for pagesize 4096.
 _DTYPE: torch.dtype = torch.float32
 _CTX = ReqContext(req_id="test")
 
-_MOCK_APHRODITE_CONFIG = MagicMock()
-_MOCK_APHRODITE_CONFIG.model_config.model = "test-model"
-_MOCK_APHRODITE_CONFIG.cache_config.block_size = 16
-_MOCK_APHRODITE_CONFIG.cache_config.cache_dtype = "torch.float32"
-_MOCK_APHRODITE_CONFIG.parallel_config.tensor_parallel_size = 1
-_MOCK_APHRODITE_CONFIG.parallel_config.pipeline_parallel_size = 1
-_MOCK_APHRODITE_CONFIG.parallel_config.prefill_context_parallel_size = 1
-_MOCK_APHRODITE_CONFIG.parallel_config.decode_context_parallel_size = 1
-_MOCK_APHRODITE_CONFIG.parallel_config.rank = 0
+_MOCK_SONAR_CONFIG = MagicMock()
+_MOCK_SONAR_CONFIG.model_config.model = "test-model"
+_MOCK_SONAR_CONFIG.cache_config.block_size = 16
+_MOCK_SONAR_CONFIG.cache_config.cache_dtype = "torch.float32"
+_MOCK_SONAR_CONFIG.parallel_config.tensor_parallel_size = 1
+_MOCK_SONAR_CONFIG.parallel_config.pipeline_parallel_size = 1
+_MOCK_SONAR_CONFIG.parallel_config.prefill_context_parallel_size = 1
+_MOCK_SONAR_CONFIG.parallel_config.decode_context_parallel_size = 1
+_MOCK_SONAR_CONFIG.parallel_config.rank = 0
 
 _MOCK_KV_CACHE_CONFIG = MagicMock()
 _MOCK_KV_CACHE_CONFIG.kv_cache_groups = []
@@ -264,7 +264,7 @@ def test_store_accepts_block_published_by_another_writer(fs_tier, monkeypatch):
     hashes, so the file already in place holds the same data and the job has
     nothing left to do.
     """
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     # Python path only: EEXIST cannot be injected into the C extension.
     monkeypatch.setattr(io_mod, "_HAS_FSIO_C", False)
@@ -437,7 +437,7 @@ def test_shutdown_discards_pending_tasks(fs_tier):
 def test_store_load_data_integrity(fs_tier, monkeypatch, use_c_ext, batch_size):
     """Data written by store must be exactly recovered by load, for batches
     of any size -- including the empty batch."""
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -475,7 +475,7 @@ def test_store_load_data_integrity(fs_tier, monkeypatch, use_c_ext, batch_size):
 @pytest.mark.parametrize("operation", ["batch_store_block", "batch_load_block"])
 @pytest.mark.parametrize("use_c_ext", [True, False])
 def test_batch_io_rejects_mismatched_paths_and_offsets(monkeypatch, tmp_path, operation, use_c_ext):
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -493,7 +493,7 @@ def test_store_load_roundtrip_without_o_direct(tmp_path, monkeypatch):
     forcing the capability probe to report it unavailable.
     """
     monkeypatch.setattr(
-        "aphrodite.v1.kv_offload.tiering.fs.manager.probe_o_direct",
+        "sonar.v1.kv_offload.tiering.fs.manager.probe_o_direct",
         lambda _dir: False,
     )
     tensor = _page_aligned_rand_tensor(4, _BLOCK_ELEMENTS)
@@ -547,7 +547,7 @@ def test_batch_lookup_c_extension(tmp_path):
     """Validates batch_lookup_C: empty, single, all-existing, all-missing,
     mixed ordering, and input type validation."""
     try:
-        from aphrodite.fs_io_C import batch_lookup as batch_lookup_C
+        from sonar.fs_io_C import batch_lookup as batch_lookup_C
     except ImportError:
         pytest.skip("fs_io_C extension not built")
 
@@ -591,7 +591,7 @@ def test_batch_lookup_c_extension(tmp_path):
 
 @pytest.mark.parametrize("use_c_ext", [True, False])
 def test_batch_lookup_dispatch(fs_tier, monkeypatch, use_c_ext):
-    import aphrodite.v1.kv_offload.tiering.fs.manager as mgr_mod
+    import sonar.v1.kv_offload.tiering.fs.manager as mgr_mod
 
     if use_c_ext and not mgr_mod._HAS_BATCH_LOOKUP_C:
         pytest.skip("fs_io_C extension not built")
@@ -610,7 +610,7 @@ def test_batch_lookup_dispatch(fs_tier, monkeypatch, use_c_ext):
 def test_out_of_bounds_block_id_smoke(fs_tier, monkeypatch, use_c_ext):
     """Smoke test: a block id beyond the primary tensor's block count must
     fail the job, for both the C extension and the Python fallback."""
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -641,7 +641,7 @@ def test_failed_load_corrects_verdict_and_removes_corrupt_file(fs_tier, monkeypa
     False. The SAME request's next lookup is then a MISS served from cache with
     NO re-probe, so the scheduler cannot re-issue the doomed promotion.
     """
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -715,7 +715,7 @@ def test_batched_partial_load_failure_keeps_loaded_blocks(fs_tier, monkeypatch, 
     fine, so the job reports successful_keys for them and marks only the failed
     tail a miss. The earlier keys stay HIT — including for the same request —
     while the corrupt block stays a MISS (its file was removed)."""
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -765,7 +765,7 @@ def test_batched_load_first_block_fails_marks_whole_batch(fs_tier, monkeypatch, 
     """When the FIRST block fails, nothing loaded before it: the job reports no
     successful_keys (None) and the whole batch is marked a miss for the
     request."""
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -796,7 +796,7 @@ def test_transient_load_failure_leaves_file(fs_tier, monkeypatch, use_c_ext):
     fails but the block file must survive untouched, on both the C and Python
     paths. Deleting on a transient error would turn a passing hiccup into
     permanent data loss."""
-    import aphrodite.v1.kv_offload.tiering.fs.io as io_mod
+    import sonar.v1.kv_offload.tiering.fs.io as io_mod
 
     if use_c_ext and not io_mod._HAS_FSIO_C:
         pytest.skip("fs_io_C extension not built")
@@ -899,7 +899,7 @@ def test_load_job_emits_no_event(fs_tier_with_events):
 def test_mixed_job_results_emit_event_only_for_successful_job(fs_tier_with_events, monkeypatch):
     """With a failed and a successful store job in flight, exactly one event
     is emitted and its keys belong to the successful job."""
-    import aphrodite.v1.kv_offload.tiering.fs.manager as mgr_mod
+    import sonar.v1.kv_offload.tiering.fs.manager as mgr_mod
 
     tier = fs_tier_with_events
     failing_path = tier.file_mapper.get_file_name(key(1))
@@ -927,7 +927,7 @@ def test_mixed_job_results_emit_event_only_for_successful_job(fs_tier_with_event
 
 def test_partially_failed_store_emits_no_event(fs_tier_with_events, monkeypatch):
     """A store job with any failed block emits no event for the whole job."""
-    import aphrodite.v1.kv_offload.tiering.fs.manager as mgr_mod
+    import sonar.v1.kv_offload.tiering.fs.manager as mgr_mod
 
     tier = fs_tier_with_events
     failing_path = tier.file_mapper.get_file_name(key(2))
@@ -984,7 +984,7 @@ def test_events_require_global_kv_events_flag(tmp_path):
 def test_cascade_store_emits_fs_event_through_tiering_manager(tmp_path):
     """A GPU->CPU->fs cascade surfaces the tier-owned FS stored event via the
     TieringOffloadingManager's aggregated take_events()."""
-    from aphrodite.v1.kv_offload.tiering.manager import (
+    from sonar.v1.kv_offload.tiering.manager import (
         CPUPrimaryTierOffloadingManager,
         TieringOffloadingManager,
     )

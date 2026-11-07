@@ -382,7 +382,7 @@ minimax_allreduce_rms_qk(torch::stable::Tensor qkv,
 #endif
 
 #ifndef USE_ROCM
-namespace aphrodite {
+namespace sonar {
 void fused_qknorm_rope_cache(
     torch::stable::Tensor& q_out, torch::stable::Tensor& k_out,
     torch::stable::Tensor& v_out, torch::stable::Tensor& qkv,
@@ -395,7 +395,7 @@ void fused_qknorm_rope_cache(
     const std::string& kv_cache_dtype,
     std::optional<torch::stable::Tensor> k_scale,
     std::optional<torch::stable::Tensor> v_scale);
-}  // namespace aphrodite
+}  // namespace sonar
 #endif
 
 void fused_muse_spark_qknorm_rope_kv_insert(
@@ -443,7 +443,7 @@ void fused_minimax_m3_dspark_context_kv(
     torch::stable::Tensor const& scale_offsets, int64_t rotary_dim, double eps,
     const std::string& kv_cache_dtype);
 
-#ifdef APHRODITE_ENABLE_FUSED_KDA_DECODE
+#ifdef SONAR_ENABLE_FUSED_KDA_DECODE
 void fused_kda_decode(
     torch::stable::Tensor const& x, torch::stable::Tensor const& weight,
     std::optional<torch::stable::Tensor> bias,
@@ -457,7 +457,7 @@ void fused_kda_decode(
 
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_GDN_DECODE
+#ifdef SONAR_ENABLE_FUSED_GDN_DECODE
 void fused_gdn_decode_post_conv_mtp(
     torch::stable::Tensor const& mixed_qkv, torch::stable::Tensor const& a,
     torch::stable::Tensor const& b, torch::stable::Tensor const& a_log,
@@ -471,7 +471,7 @@ void fused_gdn_decode_post_conv_mtp(
 
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_KDA_CHUNK
+#ifdef SONAR_ENABLE_FUSED_KDA_CHUNK
 void fused_kda_prologue(
     torch::stable::Tensor const& q, torch::stable::Tensor const& k,
     torch::stable::Tensor const& v, torch::stable::Tensor const& raw_g,
@@ -504,7 +504,7 @@ void fused_kda_chunk(
     std::optional<torch::stable::Tensor> has_initial_state);
 #endif
 
-#ifdef APHRODITE_ENABLE_BEAM_KERNELS
+#ifdef SONAR_ENABLE_BEAM_KERNELS
 void beam_allreduce_norm(
     torch::stable::Tensor const& input, torch::stable::Tensor const& residual,
     std::optional<torch::stable::Tensor> post_weight,
@@ -524,7 +524,7 @@ void beam_allreduce(torch::stable::Tensor const& input,
                     int64_t world, int64_t rank);
 #endif
 
-#ifdef APHRODITE_ENABLE_KIMI_K3_ATTN_RES
+#ifdef SONAR_ENABLE_KIMI_K3_ATTN_RES
 void kimi_k3_attn_res(torch::stable::Tensor& prefix,
                       std::optional<torch::stable::Tensor> delta,
                       torch::stable::Tensor& blocks,
@@ -559,7 +559,7 @@ void persistent_topk(const torch::stable::Tensor& logits,
                      torch::stable::Tensor& workspace, int64_t k,
                      int64_t max_seq_len);
 
-#ifdef APHRODITE_ENABLE_COOPERATIVE_TOPK
+#ifdef SONAR_ENABLE_COOPERATIVE_TOPK
 void cooperative_topk(const torch::stable::Tensor& logits,
                       const torch::stable::Tensor& lengths,
                       torch::stable::Tensor& output,
@@ -567,7 +567,7 @@ void cooperative_topk(const torch::stable::Tensor& logits,
                       int64_t max_seq_len);
 #endif
 
-#ifdef APHRODITE_ENABLE_SM89_DSA
+#ifdef SONAR_ENABLE_SM89_DSA
 // sm89 DeepSeek sparse attention kernels; impls are registered in
 // csrc/attention/sm89_dsa/.
 void sm89_fp8_paged_mqa_logits(const torch::stable::Tensor& q,

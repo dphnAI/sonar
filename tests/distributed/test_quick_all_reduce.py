@@ -12,20 +12,20 @@ import ray
 import torch
 import torch.distributed as dist
 
-import aphrodite._aiter_ops as aiter_ops
-import aphrodite.distributed as aphrodite_distributed
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
-from aphrodite.distributed.device_communicators.quick_all_reduce import (
+import sonar._aiter_ops as aiter_ops
+import sonar.distributed as sonar_distributed
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
+from sonar.distributed.device_communicators.quick_all_reduce import (
     KB,
     MB,
     QuickAllReduce,
     QuickReduceRegime,
 )
-from aphrodite.distributed.parallel_state import get_tp_group, graph_capture
-from aphrodite.envs import disable_envs_cache
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import get_tp_group, graph_capture
+from sonar.envs import disable_envs_cache
+from sonar.platforms import current_platform
 
 from ..utils import (
     ensure_model_parallel_initialized,
@@ -37,7 +37,7 @@ from ..utils import (
 
 def on_gfx942() -> bool:
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx942 as rocm_on_gfx942
+        from sonar.platforms.rocm import on_gfx942 as rocm_on_gfx942
 
         return rocm_on_gfx942()
     return False
@@ -169,7 +169,7 @@ def test_quick_allreduce_min_size_env_unset(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", raising=False)
 
     assert QuickAllReduce._get_qr_min_size(qr_max_size=16 * MB) is None
 
@@ -178,7 +178,7 @@ def test_quick_allreduce_min_size_env_converts_mb_to_bytes(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "4")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "4")
 
     assert QuickAllReduce._get_qr_min_size(qr_max_size=16 * MB) == 4 * MB
 
@@ -187,7 +187,7 @@ def test_quick_allreduce_min_size_env_rejects_negative(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "-1")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "-1")
 
     with pytest.raises(ValueError, match="must be non-negative"):
         QuickAllReduce._get_qr_min_size(qr_max_size=16 * MB)
@@ -197,7 +197,7 @@ def test_quick_allreduce_min_size_env_allows_equal_to_max(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "16")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "16")
 
     assert QuickAllReduce._get_qr_min_size(qr_max_size=16 * MB) == 16 * MB
 
@@ -206,7 +206,7 @@ def test_quick_allreduce_min_size_env_rejects_larger_than_max(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "17")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB", "17")
 
     with pytest.raises(ValueError, match="effective QuickReduce max size"):
         QuickAllReduce._get_qr_min_size(qr_max_size=16 * MB)
@@ -216,7 +216,7 @@ def test_quick_allreduce_quantization_min_size_env_unset(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.delenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", raising=False)
+    monkeypatch.delenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", raising=False)
 
     assert QuickAllReduce._get_qr_quantization_min_size() is None
 
@@ -225,7 +225,7 @@ def test_quick_allreduce_quantization_min_size_env_converts_kb_to_bytes(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", "2048")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", "2048")
 
     assert QuickAllReduce._get_qr_quantization_min_size() == 2048 * KB
 
@@ -234,7 +234,7 @@ def test_quick_allreduce_quantization_min_size_env_rejects_negative(
     monkeypatch: pytest.MonkeyPatch,
     envs_cache_disabled,
 ):
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", "-1")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB", "-1")
 
     with pytest.raises(ValueError, match="must be non-negative"):
         QuickAllReduce._get_qr_quantization_min_size()
@@ -327,7 +327,7 @@ def test_rocm_aiter_fused_rmsnorm_uses_aiter_qr_rmsnorm_for_prefill(
     qr_comm = FakeQuickReduce()
     device_comm = SimpleNamespace(cpu_group=object(), qr_comm=qr_comm)
     monkeypatch.setattr(
-        aphrodite_distributed,
+        sonar_distributed,
         "get_tp_group",
         lambda: SimpleNamespace(device_communicator=device_comm),
     )
@@ -382,10 +382,10 @@ def test_rocm_aiter_fused_rmsnorm_uses_aiter_qr_rmsnorm_for_prefill(
 
     fake_aiter.qr_all_reduce_rmsnorm = fake_qr_all_reduce_rmsnorm
     monkeypatch.setitem(sys.modules, "aiter", fake_aiter)
-    monkeypatch.setattr(envs, "APHRODITE_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", None)
-    monkeypatch.setattr(envs, "APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", True)
+    monkeypatch.setattr(envs, "SONAR_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB", None)
+    monkeypatch.setattr(envs, "SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", True)
 
-    # token_num > 80 forces Aphrodite's AITER fused AR+RMS wrapper onto its
+    # token_num > 80 forces Sonar's AITER fused AR+RMS wrapper onto its
     # non-1stage prefill path. hidden_dim=4096 bf16 gives an 8 KiB row, so four
     # independent RMSNorm rows fit in one 32 KiB QR tile.
     inp = torch.randn(81, 4096, dtype=torch.bfloat16)
@@ -564,7 +564,7 @@ def bf16_cast_quickreduce(
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         m.delenv("HIP_VISIBLE_DEVICES", raising=False)
         m.delenv("ROCR_VISIBLE_DEVICES", raising=False)
-        m.setenv("APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1")
+        m.setenv("SONAR_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1")
         device = torch.device(f"cuda:{rank}")
         torch.accelerator.set_device_index(device)
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)
@@ -596,7 +596,7 @@ def test_custom_quick_allreduce(
     if test_target is graph_quickreduce and on_gfx942():
         pytest.xfail("CUDA graph capture with quick reduce hits hipErrorStreamCaptureInvalidated on gfx942")
 
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", quant_mode)
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", quant_mode)
 
     multi_process_parallel(monkeypatch, tp_size, pipeline_parallel_size, test_target)
 
@@ -605,7 +605,7 @@ def test_custom_quick_allreduce(
 def test_custom_quick_allreduce_bf16_cast(monkeypatch: pytest.MonkeyPatch):
     if torch.accelerator.device_count() < 2:
         pytest.skip("Not enough GPUs to run the test.")
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", "FP")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", "FP")
     multi_process_parallel(monkeypatch, 2, 1, bf16_cast_quickreduce)
 
 
@@ -621,7 +621,7 @@ def qr_variable_input(rank, world_size):
     ranks = []
     for i in range(world_size):
         ranks.append(i)
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         dist.init_process_group(
             backend="cpu:gloo,cuda:nccl",
             init_method="tcp://127.0.0.1:29500",
@@ -636,7 +636,7 @@ def qr_variable_input(rank, world_size):
             rank=rank,
             world_size=world_size,
         )
-    if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+    if envs.SONAR_DISTRIBUTED_USE_SPLIT_GROUP:
         cpu_group = torch.distributed.split_group(split_ranks=[ranks], backend="cpu:gloo,cuda:nccl")
     else:
         cpu_group = torch.distributed.new_group(ranks, backend="nccl")

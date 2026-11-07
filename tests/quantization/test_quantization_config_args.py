@@ -4,19 +4,19 @@
 
 import pytest
 
-from aphrodite.config.quantization import (
+from sonar.config.quantization import (
     QUANT_KEY_NAMES,
     QuantizationConfigArgs,
     QuantOverride,
     QuantSpec,
     resolve_quantization_config,
 )
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.online.base import (
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.online.base import (
     OnlineQuantizationConfig,
     _find_matching_targets,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8DynamicTokenSym,
     kFp8Static128BlockSym,

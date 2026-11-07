@@ -10,39 +10,39 @@ import itertools
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.int8_utils import (
     per_token_quant_int8,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     get_marlin_workspace,
     marlin_make_empty,
     marlin_make_workspace_new,
     marlin_permute_bias,
     query_marlin_supported_quant_types,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     rand_marlin_weight_mxfp4_like,
     rand_marlin_weight_nvfp4_like,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     marlin_quant_fp8_torch,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
     awq_marlin_quantize,
     get_weight_perm,
     marlin_quantize,
     marlin_weights,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     awq_pack,
     gptq_pack,
     gptq_quantize_weights,
     quantize_weights,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.v1.worker.workspace import current_workspace_manager
 from tests.kernels.utils import opcheck
 from tests.quantization.utils import is_quant_method_supported
 
@@ -459,7 +459,7 @@ def test_marlin_persistent_locks_cuda_graph_streams(workspace_init):
 
     @torch.compile(backend="eager", fullgraph=True)
     def run(x):
-        return torch.ops.aphrodite.marlin_gemm(
+        return torch.ops.sonar.marlin_gemm(
             x,
             qweight,
             None,

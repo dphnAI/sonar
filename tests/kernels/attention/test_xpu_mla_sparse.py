@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
+from sonar.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_interface
 
 
 # https://github.com/deepseek-ai/FlashMLA/blob/main/tests/ref.py#L7

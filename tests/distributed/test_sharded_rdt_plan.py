@@ -23,20 +23,20 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.weight_transfer.base import layerwise_groups
-from aphrodite.distributed.weight_transfer.sharded_rdt_common import (
+from sonar.distributed.weight_transfer.base import layerwise_groups
+from sonar.distributed.weight_transfer.sharded_rdt_common import (
     ALLOWED_OPS,
     SUPPORTED_OPS,
     RdtRouter,
     assign_producer_indices,
     buffer_alloc_bytes,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_engine import (
+from sonar.distributed.weight_transfer.sharded_rdt_engine import (
     ShardedRDTWeightTransferEngine,
     ShardedRDTWeightTransferInitInfo,
     _dtype_from_name,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_fake import (
+from sonar.distributed.weight_transfer.sharded_rdt_fake import (
     BakeSink,
     FakeRDTTensor,
     _Scatter,
@@ -750,7 +750,7 @@ class TestPackedLayout:
 class TestChunkModuleScatters:
     """The chunk cut: one chunk per distinct owner class present in the copies,
     ascending by class index. Derived purely from the bake plus the ownership
-    table, so Aphrodite's expert placement needs no cases."""
+    table, so Sonar's expert placement needs no cases."""
 
     def test_unstamped_copies_form_one_chunk(self):
         layer = _FakeLayer("l")
@@ -1406,7 +1406,7 @@ BAKE_MODELS = [
     # 0.06B model does the job, as long as it has the MLA head shape the prefill
     # backends accept: (qk_nope=128, qk_rope=64, v=128).
     #
-    # Not an fp8 checkpoint: `process_weights_after_loading` swaps the Aphrodite
+    # Not an fp8 checkpoint: `process_weights_after_loading` swaps the Sonar
     # parameter subclasses out on those, and the plain second `load_weights`
     # this test compares against then cannot run.
     pytest.param("hmellor/tiny-random-DeepseekV2ForCausalLM", id="mla-moe"),
@@ -1449,7 +1449,7 @@ class TestRequiresTheRayExecutor:
         self._construct(_CustomExecutor)
 
 
-def _bake_probe(self, model_name):  # noqa: PLR0915  (runs in the Aphrodite worker)
+def _bake_probe(self, model_name):  # noqa: PLR0915  (runs in the Sonar worker)
     """Drive `_bake` against the worker's real model and check the three
     properties. Returns a small summary; every assertion fires here, in the
     worker, so a failure surfaces as the RPC's exception.
@@ -1460,12 +1460,12 @@ def _bake_probe(self, model_name):  # noqa: PLR0915  (runs in the Aphrodite work
     import torch
     from huggingface_hub import get_safetensors_metadata
 
-    from aphrodite.distributed.weight_transfer.sharded_rdt_common import ALLOWED_OPS
-    from aphrodite.distributed.weight_transfer.sharded_rdt_engine import (
+    from sonar.distributed.weight_transfer.sharded_rdt_common import ALLOWED_OPS
+    from sonar.distributed.weight_transfer.sharded_rdt_engine import (
         ShardedRDTWeightTransferEngine,
         ShardedRDTWeightTransferInitInfo,
     )
-    from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
+    from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
 
     model = self.model_runner.model
     device = next(model.parameters()).device
@@ -1574,7 +1574,7 @@ def _bake_probe(self, model_name):  # noqa: PLR0915  (runs in the Aphrodite work
     # thing that calls the LAYER's process_weights_after_loading, which is where
     # MLA derives W_UK_T/W_UV from kv_b_proj. An attention layer in the plan
     # would therefore leave those derived weights stale after a sync, silently.
-    from aphrodite.model_executor.layers.attention import is_deferred_attention_layer
+    from sonar.model_executor.layers.attention import is_deferred_attention_layer
 
     attn_in_plan = sorted(
         {type(c.layer).__name__ for plan in scatters.values() for c in plan if is_deferred_attention_layer(c.layer)}
@@ -1638,16 +1638,16 @@ def _bake_probe(self, model_name):  # noqa: PLR0915  (runs in the Aphrodite work
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="the bake drives a real model on GPU")
 class TestBakeOnARealModel:
-    """`_bake` against a real Aphrodite model, which the CPU tests above cannot reach:
+    """`_bake` against a real Sonar model, which the CPU tests above cannot reach:
     they drive the planner with hand-built scatters, so nothing there exercises
     the dry run through a real `load_weights` — the part that monkeypatches the
     model and has to put it back.
     """
 
     @pytest.mark.parametrize("model", BAKE_MODELS)
-    def test_bake_records_a_replayable_plan_and_restores_the_model(self, aphrodite_runner, monkeypatch, model):
-        monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        with aphrodite_runner(model, load_format="dummy", enforce_eager=True, max_model_len=1024) as llm:
+    def test_bake_records_a_replayable_plan_and_restores_the_model(self, sonar_runner, monkeypatch, model):
+        monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+        with sonar_runner(model, load_format="dummy", enforce_eager=True, max_model_len=1024) as llm:
             (summary,) = llm.llm.collective_rpc(_bake_probe, args=(model,))
         print(f"bake summary [{model}]: {summary}")
         # Non-vacuity: the checks above are only worth something if the plan

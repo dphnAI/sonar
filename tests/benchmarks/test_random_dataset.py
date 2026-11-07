@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import (
+from sonar.benchmarks.datasets import (
     RandomDataset,
     RandomMultiModalDataset,
     SampleRequest,

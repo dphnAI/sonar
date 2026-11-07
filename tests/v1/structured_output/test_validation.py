@@ -9,25 +9,25 @@ from unittest.mock import Mock
 import pytest
 from transformers import MistralCommonBackend, TokenizersBackend
 
-import aphrodite.v1.structured_output as structured_output
-from aphrodite.config import StructuredOutputsConfig
-from aphrodite.exceptions import AphroditeClientError, AphroditeValidationError
-from aphrodite.sampling_params import (
+import sonar.v1.structured_output as structured_output
+from sonar.config import StructuredOutputsConfig
+from sonar.exceptions import SonarClientError, SonarValidationError
+from sonar.sampling_params import (
     MAX_STRUCTURED_OUTPUT_JSON_NESTING,
     STRUCTURAL_TAG_WRAPPER_NESTING,
     SamplingParams,
     StructuredOutputsParams,
 )
-from aphrodite.tokenizers import mistral as mistral_tokenizers
-from aphrodite.v1.structured_output import StructuredOutputManager, backend_guidance
-from aphrodite.v1.structured_output.backend_lm_format_enforcer import (
+from sonar.tokenizers import mistral as mistral_tokenizers
+from sonar.v1.structured_output import StructuredOutputManager, backend_guidance
+from sonar.v1.structured_output.backend_lm_format_enforcer import (
     validate_structured_output_request_lm_format_enforcer,
 )
-from aphrodite.v1.structured_output.backend_outlines import (
+from sonar.v1.structured_output.backend_outlines import (
     validate_structured_output_request_outlines,
 )
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
@@ -122,7 +122,7 @@ def test_regex_with_nul_byte_rejected(regex):
 
     # Rejected before backend selection, so it is a 400 even in 'auto' mode
     # (which would otherwise catch the error and fall back to another backend).
-    with pytest.raises(AphroditeValidationError, match="NUL"):
+    with pytest.raises(SonarValidationError, match="NUL"):
         params._validate_structured_outputs(
             _StubModelConfig(is_diffusion=False),
             StructuredOutputsConfig(),
@@ -131,7 +131,7 @@ def test_regex_with_nul_byte_rejected(regex):
 
     # The xgrammar backend also rejects it directly (defense in depth), before
     # the pattern reaches the native from_regex call.
-    from aphrodite.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
+    from sonar.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
 
     with pytest.raises(ValueError, match="NUL"):
         validate_xgrammar_grammar(params)
@@ -179,7 +179,7 @@ def test_deeply_nested_schema_rejected(structured_outputs, backend):
     RecursionError (HTTP 500 with an empty message). Deep nesting must be a
     validation error before any backend touches the schema."""
     params = SamplingParams(structured_outputs=StructuredOutputsParams(**structured_outputs))
-    with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+    with pytest.raises(SonarValidationError, match="nested too deeply"):
         params._validate_structured_outputs(
             _StubModelConfig(is_diffusion=False),
             StructuredOutputsConfig(backend=backend),
@@ -191,12 +191,12 @@ def test_deeply_nested_schema_rejected(structured_outputs, backend):
 def test_xgrammar_validation_rejects_deeply_nested_schema(field):
     """Request parsing and tool parsers call validate_xgrammar_grammar directly,
     before _validate_structured_outputs, so it must check nesting itself."""
-    from aphrodite.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
+    from sonar.v1.structured_output.backend_xgrammar import validate_xgrammar_grammar
 
     schema = _nested_array_schema(2_000)
     value = _structural_tag(schema) if field == "structural_tag" else schema
     params = SamplingParams(structured_outputs=StructuredOutputsParams(**{field: value}))
-    with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+    with pytest.raises(SonarValidationError, match="nested too deeply"):
         validate_xgrammar_grammar(params)
 
 
@@ -237,10 +237,10 @@ STRUCTURAL_TAG = '{"type": "structural_tag", "format": {"type": "const_string", 
     ],
 )
 def test_unsupported_grammar_is_a_client_error(backend, structured_outputs):
-    """Only `AphroditeClientError` survives `AsyncLLM.generate` untouched; anything else
+    """Only `SonarClientError` survives `AsyncLLM.generate` untouched; anything else
     is wrapped in `EngineGenerateError` and served as a 500 instead of a 400."""
     params = SamplingParams(structured_outputs=structured_outputs)
-    with pytest.raises(AphroditeClientError):
+    with pytest.raises(SonarClientError):
         params._validate_structured_outputs(
             _StubModelConfig(is_diffusion=False),
             StructuredOutputsConfig(backend=backend),
@@ -286,7 +286,7 @@ def test_unhandled_spec_is_a_validation_error(validate):
     """json_object=False is rejected before backend selection, so only a direct
     validator call reaches the final branch; it must still be a 400."""
     params = SamplingParams(structured_outputs=StructuredOutputsParams(json_object=False))
-    with pytest.raises(AphroditeValidationError, match="does not support this"):
+    with pytest.raises(SonarValidationError, match="does not support this"):
         validate(params)
 
 
@@ -351,7 +351,7 @@ class TestValidateStructuredOutputs:
         class _StubSlowTokenizer:
             is_fast = False
 
-        class _StubAphroditeMistralTokenizer:
+        class _StubSonarMistralTokenizer:
             IS_MISTRAL_TOKENIZER = True
 
             def __init__(self, is_tekken: bool):
@@ -375,12 +375,12 @@ class TestValidateStructuredOutputs:
                 return object()
             if tokenizer_id == "raw-mistral-common":
                 return object.__new__(MistralCommonBackend)
-            if tokenizer_id == "aphrodite-mistral-non-tekken":
-                return self._StubAphroditeMistralTokenizer(is_tekken=False)
+            if tokenizer_id == "sonar-mistral-non-tekken":
+                return self._StubSonarMistralTokenizer(is_tekken=False)
             if tokenizer_id == "fast-hf":
                 return object.__new__(TokenizersBackend)
-            if tokenizer_id == "aphrodite-mistral-tekken":
-                return self._StubAphroditeMistralTokenizer(is_tekken=True)
+            if tokenizer_id == "sonar-mistral-tekken":
+                return self._StubSonarMistralTokenizer(is_tekken=True)
             raise ValueError(tokenizer_id)
 
         @pytest.mark.parametrize(
@@ -390,9 +390,9 @@ class TestValidateStructuredOutputs:
                 pytest.param("plain-object", False, id="plain-object"),
                 pytest.param("raw-mistral-common", False, id="raw-mistral-common"),
                 pytest.param(
-                    "aphrodite-mistral-non-tekken",
+                    "sonar-mistral-non-tekken",
                     True,
-                    id="aphrodite-mistral-non-tekken",
+                    id="sonar-mistral-non-tekken",
                 ),
             ],
         )
@@ -401,16 +401,16 @@ class TestValidateStructuredOutputs:
                 monkeypatch.setattr(
                     mistral_tokenizers,
                     "MistralTokenizer",
-                    self._StubAphroditeMistralTokenizer,
+                    self._StubSonarMistralTokenizer,
                 )
-            with pytest.raises(AphroditeValidationError):
+            with pytest.raises(SonarValidationError):
                 self._validate_guidance(self._make_tokenizer(tokenizer_id))
 
         @pytest.mark.parametrize(
             "tokenizer_id, patch_mistral",
             [
                 pytest.param("fast-hf", False, id="fast-hf"),
-                pytest.param("aphrodite-mistral-tekken", True, id="aphrodite-mistral-tekken"),
+                pytest.param("sonar-mistral-tekken", True, id="sonar-mistral-tekken"),
             ],
         )
         def test_supported_tokenizer(self, monkeypatch, tokenizer_id, patch_mistral):
@@ -418,7 +418,7 @@ class TestValidateStructuredOutputs:
                 monkeypatch.setattr(
                     mistral_tokenizers,
                     "MistralTokenizer",
-                    self._StubAphroditeMistralTokenizer,
+                    self._StubSonarMistralTokenizer,
                 )
                 monkeypatch.setattr(
                     backend_guidance,
@@ -440,7 +440,7 @@ class TestValidateStructuredOutputs:
             manager = object.__new__(StructuredOutputManager)
             manager.backend = None
             manager.backend_name = None
-            manager.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(get_vocab_size=lambda: 128))
+            manager.sonar_config = SimpleNamespace(model_config=SimpleNamespace(get_vocab_size=lambda: 128))
             manager.tokenizer = object()
             manager._use_async_grammar_compilation = False
 
@@ -459,7 +459,7 @@ class TestValidateStructuredOutputs:
 
             manager.grammar_init(make_request("xgrammar"))
 
-            with pytest.raises(AphroditeValidationError, match="already using 'xgrammar'"):
+            with pytest.raises(SonarValidationError, match="already using 'xgrammar'"):
                 manager.grammar_init(make_request("guidance"))
 
             xgrammar_factory.assert_called_once()

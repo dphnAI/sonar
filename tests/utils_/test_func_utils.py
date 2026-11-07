@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.utils.func_utils import supports_kw
+from sonar.utils.func_utils import supports_kw
 
 
 @pytest.mark.parametrize(

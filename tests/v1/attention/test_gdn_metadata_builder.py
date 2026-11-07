@@ -10,21 +10,21 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.attention.backends.gdn_attn import (
+from sonar.config import SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.attention.backends.gdn_attn import (
     GDNAttentionBackend,
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
     plan_flashinfer_checkpoints,
 )
-from aphrodite.v1.attention.backends.utils import mamba_get_block_table_tensor
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.attention.backends.utils import mamba_get_block_table_tensor
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 BLOCK_SIZE = 16
@@ -154,15 +154,15 @@ def _create_gdn_builder(
     adaptive_verification: bool = False,
 ) -> GDNAttentionMetadataBuilder:
     """Create a GDNAttentionMetadataBuilder with minimal config."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
-    aphrodite_config.compilation_config.cudagraph_mode = (
+    sonar_config.compilation_config.cudagraph_mode = (
         CUDAGraphMode.FULL_AND_PIECEWISE if full_cuda_graph else CUDAGraphMode.NONE
     )
     if num_speculative_tokens > 0:
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=num_speculative_tokens,
             enable_adaptive_verification=adaptive_verification,
@@ -175,7 +175,7 @@ def _create_gdn_builder(
     return GDNAttentionMetadataBuilder(
         kv_cache_spec=mamba_spec,
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
 
@@ -220,7 +220,7 @@ def test_update_block_table_matches_build(test_case: GDNBuildTestCase, full_cuda
     batch = BatchSpec(seq_lens=test_case.seq_lens, query_lens=test_case.query_lens)
     src, dst, ref = (_create_gdn_builder(test_case.num_speculative_tokens, full_cuda_graph) for _ in range(3))
     for builder in (src, dst, ref):
-        builder.aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
+        builder.sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
     common = create_common_attn_metadata(batch, BLOCK_SIZE, DEVICE)
     if mamba_cache_mode == "align":
         # MRV2 precomputes these for every Mamba group each step.
@@ -311,7 +311,7 @@ def test_adaptive_verification_uses_device_query_boundaries(
 
     assert GDNAttentionBackend.supports_device_cpu_query_lens_mismatch()
     assert (
-        builder.get_varlen_cudagraph_max_query_len(builder.aphrodite_config, builder.kv_cache_spec)
+        builder.get_varlen_cudagraph_max_query_len(builder.sonar_config, builder.kv_cache_spec)
         == num_speculative_tokens + 1
     )
     torch.testing.assert_close(meta.spec_query_start_loc, device_query_start_loc)
@@ -424,17 +424,17 @@ def test_cudagraph_capture_batch_stays_decode_only():
 def _create_checkpoint_builder_and_batch(
     num_spec: int, prefix_match_unit: int | None = 16
 ) -> tuple[GDNAttentionMetadataBuilder, CommonAttentionMetadata, dict]:
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
     if num_spec > 0:
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=num_spec,
         )
-    aphrodite_config.cache_config.mamba_cache_mode = "align"
-    aphrodite_config.cache_config.prefix_match_unit = prefix_match_unit
+    sonar_config.cache_config.mamba_cache_mode = "align"
+    sonar_config.cache_config.prefix_match_unit = prefix_match_unit
     mamba_spec = MambaSpec(
         block_size=64,
         shapes=((16, 64),),
@@ -447,11 +447,11 @@ def _create_checkpoint_builder_and_batch(
     builder = GDNAttentionMetadataBuilder(
         kv_cache_spec=mamba_spec,
         layer_names=["layer.0"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=DEVICE,
     )
-    aphrodite_config.cache_config.hash_block_size = prefix_match_unit or 64
-    aphrodite_config.cache_config.cache_hit_alignment_tokens = prefix_match_unit or 64
+    sonar_config.cache_config.hash_block_size = prefix_match_unit or 64
+    sonar_config.cache_config.cache_hit_alignment_tokens = prefix_match_unit or 64
     batch = BatchSpec(seq_lens=[65, 100, 100], query_lens=[3 if num_spec else 1, 100, 99])
     common = create_common_attn_metadata(batch, 64, DEVICE, arange_block_indices=True)
     table = common.block_table_tensor + 1
@@ -471,7 +471,7 @@ def _create_checkpoint_builder_and_batch(
 @pytest.mark.parametrize("prefix_match_unit, expected_offset", [(None, 64), (16, 96), (8, 96)])
 def test_checkpoint_metadata_preserves_non_spec_order(num_spec, prefix_match_unit, expected_offset):
     """Only eligible non-spec rows get a checkpoint in their reserved page."""
-    from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+    from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
 
     builder, common, kwargs = _create_checkpoint_builder_and_batch(num_spec, prefix_match_unit)
     actual = builder.build(0, common, **kwargs)

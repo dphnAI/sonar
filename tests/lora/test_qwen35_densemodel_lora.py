@@ -4,11 +4,11 @@
 import pytest
 from transformers import AutoTokenizer
 
-import aphrodite
-import aphrodite.config
-from aphrodite.assets.image import ImageAsset
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+import sonar.config
+from sonar.assets.image import ImageAsset
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test, multi_gpu_test
 
@@ -56,7 +56,7 @@ def _assert_prefix_outputs(
 
 
 def _run_text_lora_sample(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str,
     lora_id: int,
 ) -> list[str]:
@@ -80,7 +80,7 @@ def _run_text_lora_sample(
 
     outputs = llm.generate(
         input_templates,
-        aphrodite.SamplingParams(temperature=0, max_tokens=512),
+        sonar.SamplingParams(temperature=0, max_tokens=512),
         lora_request=LoRARequest(str(lora_id), lora_id, lora_path),
     )
 
@@ -93,7 +93,7 @@ def _run_text_lora_sample(
 
 
 def _run_vl_lora_sample(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str | None = None,
     lora_id: int = 0,
 ) -> list[str]:
@@ -121,7 +121,7 @@ def _run_vl_lora_sample(
     ]
     outputs = llm.generate(
         prompts,
-        aphrodite.SamplingParams(temperature=0, max_tokens=128),
+        sonar.SamplingParams(temperature=0, max_tokens=128),
         lora_request=(LoRARequest(str(lora_id), lora_id, lora_path) if lora_path is not None else None),
     )
 
@@ -180,7 +180,7 @@ def _build_vl_prompts() -> list[dict]:
 
 
 def _run_mixed_lora_sample(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     text_lora_path: str,
     vl_lora_path: str,
     text_lora_id: int,
@@ -202,7 +202,7 @@ def _run_mixed_lora_sample(
     ]
     outputs = llm.generate(
         prompts,
-        aphrodite.SamplingParams(temperature=0, max_tokens=256),
+        sonar.SamplingParams(temperature=0, max_tokens=256),
         lora_request=lora_requests,
     )
 
@@ -215,7 +215,7 @@ def _run_mixed_lora_sample(
 
 
 def _run_mixed_lora_and_base_sample(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     text_lora_path: str,
     vl_lora_path: str,
     text_lora_id: int,
@@ -237,7 +237,7 @@ def _run_mixed_lora_and_base_sample(
     ]
     outputs = llm.generate(
         prompts,
-        aphrodite.SamplingParams(temperature=0, max_tokens=256),
+        sonar.SamplingParams(temperature=0, max_tokens=256),
         lora_request=lora_requests,
     )
 
@@ -250,7 +250,7 @@ def _run_mixed_lora_and_base_sample(
 
 
 def _assert_qwen35_text_vl_and_mixed_lora(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     qwen35_text_lora_files: str,
     qwen35_vl_lora_files: str,
 ) -> None:
@@ -299,7 +299,7 @@ def _assert_qwen35_text_vl_and_mixed_lora(
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_qwen35_text_lora(qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         model=MODEL_PATH,
         max_model_len=4096,
         enable_lora=True,
@@ -322,7 +322,7 @@ def test_qwen35_text_lora(qwen35_text_lora_files, qwen35_vl_lora_files, maybe_en
 
 @multi_gpu_test(num_gpus=4)
 def test_qwen35_text_lora_tp4(qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         model=MODEL_PATH,
         max_model_len=4096,
         enable_lora=True,
@@ -335,7 +335,7 @@ def test_qwen35_text_lora_tp4(qwen35_text_lora_files, qwen35_vl_lora_files, mayb
         enable_tower_connector_lora=True,
         mm_processor_cache_gb=0,
         limit_mm_per_prompt={"image": 1},
-        compilation_config=aphrodite.config.CompilationConfig(
+        compilation_config=sonar.config.CompilationConfig(
             cudagraph_specialize_lora=False,
         ),
     )

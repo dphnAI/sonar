@@ -94,14 +94,14 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** an official nightly build containing Ling-3.0-flash-VL support
+  - **Sonar:** an official nightly build containing Ling-3.0-flash-VL support
   - **Precision:** BF16, FP8, FP4, or INT4 weights with BF16 compute
   - **Context length:** 131,072 tokens
 
   ## Launching the Server
 
   ```bash
-  NCCL_DEBUG=WARN aphrodite serve inclusionAI/Ling-3.0-flash-VL \
+  NCCL_DEBUG=WARN sonar serve inclusionAI/Ling-3.0-flash-VL \
     --trust-remote-code \
     --dtype bfloat16 \
     --tensor-parallel-size 4 \

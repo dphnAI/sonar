@@ -17,7 +17,7 @@ Record these values before you change the server:
 - GPU memory use
 - KV cache occupancy and request preemptions
 
-Use [`aphrodite bench`](/deployment/benchmarking/) to measure offline execution,
+Use [`sonar bench`](/deployment/benchmarking/) to measure offline execution,
 online serving, startup, and parameter sweeps.
 
 Warm the server before you record results. Use the same prompts, output lengths,
@@ -40,7 +40,7 @@ GPU. Sonar does not reinterpret `0.92` as 92 percent of the remaining 60 GiB.
 Use a lower value when another process shares the GPU:
 
 ```bash
-aphrodite serve MODEL --gpu-memory-utilization 0.75
+sonar serve MODEL --gpu-memory-utilization 0.75
 ```
 
 After model loading, Sonar profiles model activations and CUDA graph memory. It
@@ -58,13 +58,13 @@ limit prevents one request from reserving a context length that the service
 does not need.
 
 ```bash
-aphrodite serve MODEL --max-model-len 32768
+sonar serve MODEL --max-model-len 32768
 ```
 
 Sonar also supports automatic fitting:
 
 ```bash
-aphrodite serve MODEL --max-model-len auto
+sonar serve MODEL --max-model-len auto
 ```
 
 `auto` first reads the maximum context length from the model configuration. If
@@ -94,7 +94,7 @@ profiling uses too much memory or when active requests are frequently
 preempted.
 
 ```bash
-aphrodite serve MODEL --max-num-seqs 64
+sonar serve MODEL --max-num-seqs 64
 ```
 
 ### `--max-num-batched-tokens`
@@ -148,7 +148,7 @@ Apply these changes in order:
 Use FP8 KV cache with:
 
 ```bash
-aphrodite serve MODEL --kv-cache-dtype fp8
+sonar serve MODEL --kv-cache-dtype fp8
 ```
 
 Test output quality. Some checkpoints provide calibrated KV scales. Other
@@ -170,7 +170,7 @@ Use repeated production prompts to measure its benefit. Disable it for a
 controlled comparison:
 
 ```bash
-aphrodite serve MODEL --no-enable-prefix-caching
+sonar serve MODEL --no-enable-prefix-caching
 ```
 
 Keep it enabled unless the target platform or a specific feature requires it to
@@ -197,7 +197,7 @@ CUDA installations include the `nf12` package. To encode supported weights
 during loading:
 
 ```bash
-aphrodite run Qwen/Qwen3-0.6B --dtype bfloat16 --quantization nf12
+sonar run Qwen/Qwen3-0.6B --dtype bfloat16 --quantization nf12
 ```
 
 NF12 requires an NVIDIA GPU with compute capability 8.0 or newer. It stores
@@ -229,19 +229,19 @@ B12x supports tensor parallelism, not expert parallelism. Do not combine it with
 `--enable-expert-parallel`.
 
 MXFP4 uses MXFP8 activations by default. Set
-`APHRODITE_B12X_MOE_FP4_FORCE_A16=1` to use 16-bit activations instead.
+`SONAR_B12X_MOE_FP4_FORCE_A16=1` to use 16-bit activations instead.
 This changes activation precision. Compare output quality and performance on
 your workload before you use it in production.
 
 By default, for DeepSeek-V4.1 on SM120, Sonar uses native FP8 sparse indexers from the bundled
 DeepGEMM, including 128-row KV-cache pages. If an external DeepGEMM package lacks
 the required APIs or SM120 headers, Sonar uses the Triton indexer instead.
-`APHRODITE_USE_DEEP_GEMM=0` forces that fallback; it does not select the MoE backend.
+`SONAR_USE_DEEP_GEMM=0` forces that fallback; it does not select the MoE backend.
 General DeepGEMM GEMMs remain disabled on SM120.
 
 ### Native DeepSeek-V4.1 backend on SM120
 
-Set `APHRODITE_DSV41_SM120_NATIVE=1` and pass
+Set `SONAR_DSV41_SM120_NATIVE=1` and pass
 `--attention-backend B12X_DSV41` when you launch DeepSeek-V4.1 to select the
 experimental native B12x backend. With DSpark, also set
 `"attention_backend": "B12X_DSV41"` in `--speculative-config`.
@@ -318,8 +318,8 @@ environment variable and the B12x attention-backend overrides to return to it.
 #### Implementation boundaries
 
 Native model policy and preparation live in
-`aphrodite/models/deepseek_v41/sm120/`; B12x worker lifecycle adapters live in
-`aphrodite/v1/worker/b12x_utils.py`. V4.1 message ordering belongs to its
+`sonar/models/deepseek_v41/sm120/`; B12x worker lifecycle adapters live in
+`sonar/v1/worker/b12x_utils.py`. V4.1 message ordering belongs to its
 renderer, not the shared V4 renderer. Keep shared configuration and worker
 changes limited to dispatch and lifecycle hooks when syncing upstream.
 
@@ -336,7 +336,7 @@ divisible by 512 in the range 512–8192; other shapes retain provider kernels.
 
 ### Experimental checked PCIe collectives
 
-Set `APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to select the experimental paired
+Set `SONAR_ALLREDUCE_USE_PCIE_PULL=1` to select the experimental paired
 transport. Initial support targets the native DeepSeek-V4.1 backend on four
 SM120 GPUs in one node. The default `paired` transport requires CUDA peer reads
 and writes between all selected GPU pairs without crossing a NUMA system link.
@@ -370,8 +370,8 @@ the option disabled before you use it in a deployment.
 
 #### Host-memory transport without P2P
 
-Set `APHRODITE_ALLREDUCE_PCIE_TRANSPORT=host` together with
-`APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to use shared, pinned host memory instead
+Set `SONAR_ALLREDUCE_PCIE_TRANSPORT=host` together with
+`SONAR_ALLREDUCE_USE_PCIE_PULL=1` to use shared, pinned host memory instead
 of peer VRAM. This transport requires neither GPU peer access nor a CPU
 progress thread. It does not impose the paired transport's same-NUMA
 restriction; the TP4, native SM120, and model-runner restrictions above still
@@ -446,7 +446,7 @@ model configuration, PyTorch build, and GPU type to retain cache hits.
 Use eager mode for a short development run:
 
 ```bash
-aphrodite serve MODEL --enforce-eager
+sonar serve MODEL --enforce-eager
 ```
 
 Eager mode reduces startup work and usually lowers steady-state performance. Do

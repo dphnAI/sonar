@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import torch
 from safetensors.torch import save_file
 
-from aphrodite.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
-from aphrodite.platforms import current_platform
+from sonar.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 

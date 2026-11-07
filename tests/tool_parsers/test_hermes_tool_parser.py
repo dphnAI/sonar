@@ -5,11 +5,11 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.granite4_tool_parser import Granite4ToolParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.granite4_tool_parser import Granite4ToolParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 from tests.tool_parsers.utils import get_function_delta
 
 CONFIGS: dict[str, dict[str, type[ToolParser]]] = {
@@ -24,7 +24,7 @@ CONFIGS: dict[str, dict[str, type[ToolParser]]] = {
 
 @pytest.fixture
 def qwen_tokenizer() -> TokenizerLike:
-    from aphrodite.tokenizers import get_tokenizer
+    from sonar.tokenizers import get_tokenizer
 
     return get_tokenizer("Qwen/Qwen3-32B")
 

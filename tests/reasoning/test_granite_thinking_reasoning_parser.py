@@ -7,14 +7,14 @@ import pytest
 import regex as re
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.registered_adapters import (
     GraniteThinkingParserReasoningAdapter,
 )
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "granite_thinking_parser"

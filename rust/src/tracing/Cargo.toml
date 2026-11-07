@@ -1,8 +1,8 @@
 [package]
-name = "aphrodite-tracing"
+name = "sonar-tracing"
 version.workspace = true
 edition.workspace = true
-description = "Shared tracing subscriber and log formatting for Aphrodite Rust binaries"
+description = "Shared tracing subscriber and log formatting for Sonar Rust binaries"
 license.workspace = true
 
 [dependencies]

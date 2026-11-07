@@ -9,15 +9,15 @@ from jinja2.sandbox import ImmutableSandboxedEnvironment
 from PIL import Image
 from transformers import LlamaConfig
 
-from aphrodite.model_executor.models.openvla import (
+from sonar.model_executor.models.openvla import (
     OpenVLAForActionPrediction,
     OpenVLAMultiModalProcessor,
     OpenVLAProcessingInfo,
 )
-from aphrodite.multimodal.parse import ImageProcessorItems, MultiModalDataItems
-from aphrodite.transformers_utils.chat_templates import get_chat_template_fallback_path
-from aphrodite.transformers_utils.configs.openvla import OpenVLAConfig
-from aphrodite.transformers_utils.processors.openvla import (
+from sonar.multimodal.parse import ImageProcessorItems, MultiModalDataItems
+from sonar.transformers_utils.chat_templates import get_chat_template_fallback_path
+from sonar.transformers_utils.configs.openvla import OpenVLAConfig
+from sonar.transformers_utils.processors.openvla import (
     IMAGENET_MEAN,
     IMAGENET_STD,
     SIGLIP_MEAN,

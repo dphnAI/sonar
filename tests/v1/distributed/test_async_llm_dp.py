@@ -10,20 +10,20 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.parallel import DataParallelBackend
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.exceptions import RetryableRequestError
-from aphrodite.inputs import PromptType
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine import EngineCoreRequestType
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.core_client import DPLBAsyncMPClient
-from aphrodite.v1.metrics.loggers import StatLoggerBase
-from aphrodite.v1.metrics.stats import IterationStats, MultiModalCacheStats, SchedulerStats
+from sonar import SamplingParams
+from sonar.config import SonarConfig
+from sonar.config.parallel import DataParallelBackend
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.exceptions import RetryableRequestError
+from sonar.inputs import PromptType
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine import EngineCoreRequestType
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.core_client import DPLBAsyncMPClient
+from sonar.v1.metrics.loggers import StatLoggerBase
+from sonar.v1.metrics.stats import IterationStats, MultiModalCacheStats, SchedulerStats
 
 DP_SIZE = int(os.getenv("DP_SIZE", 2))
 
@@ -100,7 +100,7 @@ async def test_load(
         init_count: int = 0
         finished_req_count: int = 0
 
-        def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0):
+        def __init__(self, sonar_config: SonarConfig, engine_index: int = 0):
             stats_loggers[engine_index] = self
 
         def record(
@@ -816,7 +816,7 @@ async def test_dp_pause_completion_implies_device_idle(
     pause_generation() returns."""
     with ExitStack() as after:
         # The probes below ship functions through collective_rpc.
-        monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
         engine = AsyncLLM.from_engine_args(_get_dp_pause_engine_args(True))
         after.callback(engine.shutdown)
 

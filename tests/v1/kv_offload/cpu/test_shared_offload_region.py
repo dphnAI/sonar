@@ -15,11 +15,11 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from aphrodite.utils.system_utils import get_mp_context
-from aphrodite.v1.kv_offload.cpu import gpu_worker
-from aphrodite.v1.kv_offload.cpu import host_register as host_register_module
-from aphrodite.v1.kv_offload.cpu import shared_offload_region as region_module
-from aphrodite.v1.kv_offload.cpu.shared_offload_region import (
+from sonar.utils.system_utils import get_mp_context
+from sonar.v1.kv_offload.cpu import gpu_worker
+from sonar.v1.kv_offload.cpu import host_register as host_register_module
+from sonar.v1.kv_offload.cpu import shared_offload_region as region_module
+from sonar.v1.kv_offload.cpu.shared_offload_region import (
     SharedOffloadRegion,
     _wait_for_file_size,
 )
@@ -34,10 +34,10 @@ PAGE_SIZE = mmap.PAGESIZE
 
 @pytest.fixture(autouse=True)
 def _set_spawn_method(monkeypatch):
-    # On WSL, NVML is not compatible with fork so Aphrodite auto-overrides the
+    # On WSL, NVML is not compatible with fork so Sonar auto-overrides the
     # multiprocessing start method to 'spawn' with a warning. Set it explicitly
     # here so the override is a no-op and the warning is suppressed.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 def _make_region(
@@ -499,7 +499,7 @@ def test_madvise_success_selects_madvise_population(iid, monkeypatch):
     Spies on both helpers so we can verify call counts: 1 probe call +
     N populate calls, fallback 0 times.
     """
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     madvise_calls: list[tuple[int, int, int]] = []
     fallback_calls: list[tuple[int, int]] = []
@@ -536,12 +536,12 @@ def test_madvise_success_selects_madvise_population(iid, monkeypatch):
 def test_populate_shard_prefaults_only_its_share(iid, monkeypatch, shard, expected):
     """Workers that map the same bytes each pre-fault one contiguous share
     (page-rounded; a trailing share may be empty) instead of the whole region."""
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     madvise_calls: list[tuple[int, int]] = []
 
     def populate(mm, off, ln):
-        assert not os.path.exists(f"/dev/shm/aphrodite_offload_{iid}.mmap")
+        assert not os.path.exists(f"/dev/shm/sonar_offload_{iid}.mmap")
         madvise_calls.append((off, ln))
 
     monkeypatch.setattr(sor, "_madvise_populate_write", populate)
@@ -558,7 +558,7 @@ def test_populate_shard_prefaults_only_its_share(iid, monkeypatch, shard, expect
 
 def test_madvise_einval_selects_fallback_for_ranked_region(iid, monkeypatch):
     """An EINVAL probe must select fallback for every ranked chunk."""
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     fallback_calls: list[tuple[int, int]] = []
     real_fallback = sor._fallback_populate_write
@@ -583,7 +583,7 @@ def test_madvise_einval_selects_fallback_for_ranked_region(iid, monkeypatch):
 
 def test_madvise_einval_selects_fallback_for_unranked_region(iid, monkeypatch):
     """An EINVAL probe must select fallback for the whole unranked region."""
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     fallback_calls: list[tuple[int, int]] = []
     real_fallback = sor._fallback_populate_write
@@ -604,7 +604,7 @@ def test_madvise_einval_selects_fallback_for_unranked_region(iid, monkeypatch):
 
 def test_fallback_populate_write_preserves_bytes_and_faults_pages():
     """Fallback preserves existing bytes and touches every target page."""
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     size = 3 * mmap.PAGESIZE
     if not hasattr(mmap, "MADV_DONTNEED"):
@@ -636,7 +636,7 @@ def test_madvise_unexpected_oserror_propagates(iid, monkeypatch):
     """Only EINVAL triggers the fallback.  Other OSErrors (e.g. EIO) must
     propagate out of __init__, not be silently masked by the fallback branch.
     """
-    from aphrodite.v1.kv_offload.cpu import shared_offload_region as sor
+    from sonar.v1.kv_offload.cpu import shared_offload_region as sor
 
     monkeypatch.setattr(
         sor,
@@ -766,7 +766,7 @@ def test_multiprocess_race_construct_and_write(iid):
         assert r["error"] is None, f"rank {rank}: {r['error']}"
 
     # Read the raw file while all workers still hold it open.
-    mmap_path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    mmap_path = f"/dev/shm/sonar_offload_{iid}.mmap"
     with open(mmap_path, "rb") as f:
         raw = f.read()
 
@@ -1122,10 +1122,10 @@ def test_creator_memory_check_runs_only_for_creator(iid):
 
 def test_insufficient_space_raises_clear_error(monkeypatch):
     """A failed creator capacity check must clean up and give a clear error."""
-    import aphrodite.v1.kv_offload.cpu.shared_offload_region as region
+    import sonar.v1.kv_offload.cpu.shared_offload_region as region
 
     engine_id = str(uuid.uuid4())
-    mmap_path = f"/dev/shm/aphrodite_offload_{engine_id}.mmap"
+    mmap_path = f"/dev/shm/sonar_offload_{engine_id}.mmap"
     mock_open = MagicMock(return_value=9999)
     mock_unlink = MagicMock()
     mock_close = MagicMock()
@@ -1158,10 +1158,10 @@ def test_insufficient_space_raises_clear_error(monkeypatch):
 
 def test_ftruncate_failure_cleans_up_creator(monkeypatch):
     """A failed creator ftruncate must close and unlink before re-raising."""
-    import aphrodite.v1.kv_offload.cpu.shared_offload_region as region
+    import sonar.v1.kv_offload.cpu.shared_offload_region as region
 
     engine_id = str(uuid.uuid4())
-    mmap_path = f"/dev/shm/aphrodite_offload_{engine_id}.mmap"
+    mmap_path = f"/dev/shm/sonar_offload_{engine_id}.mmap"
     mock_unlink = MagicMock()
     mock_close = MagicMock()
     monkeypatch.setattr(region.os, "open", MagicMock(return_value=9999))
@@ -1211,7 +1211,7 @@ def test_cleanup_keeps_region_mapped_while_buffers_are_exported(iid):
 def test_backing_file_unlinked_after_barrier(iid):
     """The file must exist until the barrier releases (late joiners need the
     name) and be gone right after, so no exit path can leak it."""
-    path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    path = f"/dev/shm/sonar_offload_{iid}.mmap"
     seen_at_barrier = []
 
     region = _make_region(iid, barrier=lambda: seen_at_barrier.append(os.path.exists(path)))
@@ -1233,7 +1233,7 @@ def test_backing_file_unlinked_after_barrier(iid):
 def test_barrier_failure_unlinks_creator_and_raises(iid, populate_shard):
     """A failed rendezvous must remove the creator's file and re-raise, not
     leave a stub that wedges the next start in _wait_for_file_size."""
-    path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    path = f"/dev/shm/sonar_offload_{iid}.mmap"
     with pytest.raises(RuntimeError, match="peer died"):
         _make_region(
             iid,
@@ -1248,7 +1248,7 @@ def test_mp_barrier_unlinks_file_and_survives_sigkill(iid, replicated):
     """With a real cross-process barrier every worker maps one shared inode,
     the name is gone while they run, and SIGKILL leaks nothing."""
     num_workers = 2
-    path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    path = f"/dev/shm/sonar_offload_{iid}.mmap"
     ctx = get_mp_context()
     barrier = ctx.Barrier(num_workers)
     done_queue = ctx.Queue()
@@ -1302,7 +1302,7 @@ def test_setup_failure_before_barrier_releases_peers(iid, monkeypatch, failure_p
             "_get_populate_write_fn",
             failure if failure_phase == "probe" else lambda mm: populate,
         )
-    path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    path = f"/dev/shm/sonar_offload_{iid}.mmap"
     seen_at_barrier = []
     barrier = MagicMock(side_effect=lambda: seen_at_barrier.append(os.path.exists(path)))
 
@@ -1325,7 +1325,7 @@ def test_setup_failure_before_barrier_releases_peers(iid, monkeypatch, failure_p
 def test_mmap_failure_unlinks_creator_before_releasing_peers(iid, monkeypatch):
     """A creator that fails after sizing the file must drop it before arriving
     at the barrier, so the next start does not land on a stale file."""
-    path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
+    path = f"/dev/shm/sonar_offload_{iid}.mmap"
     monkeypatch.setattr("mmap.mmap", MagicMock(side_effect=OSError("mmap")))
     seen_at_barrier = []
 
@@ -1339,7 +1339,7 @@ def test_mmap_failure_unlinks_creator_before_releasing_peers(iid, monkeypatch):
 def test_barrier_release_failure_keeps_original_error(iid, monkeypatch, failure_phase):
     """When releasing the peers fails too, the setup error that explains the
     failure must be the one that propagates."""
-    import aphrodite.v1.kv_offload.cpu.shared_offload_region as region
+    import sonar.v1.kv_offload.cpu.shared_offload_region as region
 
     failure = MagicMock(side_effect=RuntimeError("setup failed"))
     if failure_phase == "shm":
@@ -1358,4 +1358,4 @@ def test_barrier_release_failure_keeps_original_error(iid, monkeypatch, failure_
         )
 
     assert barrier.call_count == (2 if failure_phase == "population" else 1)
-    assert not os.path.exists(f"/dev/shm/aphrodite_offload_{iid}.mmap")
+    assert not os.path.exists(f"/dev/shm/sonar_offload_{iid}.mmap")

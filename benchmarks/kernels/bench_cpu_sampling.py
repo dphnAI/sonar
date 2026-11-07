@@ -14,7 +14,7 @@ Usage:
 import argparse
 import time
 
-import aphrodite._C  # noqa: F401
+import sonar._C  # noqa: F401
 import torch
 from torch.profiler import ProfilerActivity, profile, record_function
 

@@ -42,7 +42,7 @@ hardware_overrides:
     # AITER is optional here but recommended for perf on MI300X/MI325X/MI355X.
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 strategy_overrides: {}
 
 guide: |
@@ -58,24 +58,24 @@ guide: |
   ## Prerequisites
 
   - Hardware: 2x T4 or 2x L4 (or any 2x GPU with ~16 GB each)
-  - Aphrodite >= 0.10.0
+  - Sonar >= 0.10.0
 
-  ### Install Aphrodite (CUDA)
+  ### Install Sonar (CUDA)
 
   ```bash
-  uv pip install aphrodite-engine
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/0.14.1/rocm700
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve jinaai/jina-reranker-m0 \
+  sonar serve jinaai/jina-reranker-m0 \
     --host 0.0.0.0 \
     --port 8000 \
     --tensor_parallel_size 2 \
@@ -86,8 +86,8 @@ guide: |
   On AMD:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve jinaai/jina-reranker-m0 \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve jinaai/jina-reranker-m0 \
     --tensor_parallel_size 2 --gpu-memory-utilization 0.75 --max-num-seqs 32
   ```
 
@@ -141,7 +141,7 @@ guide: |
   ## Offline Deployment
 
   ```python
-  from aphrodite import LLM
+  from sonar import LLM
 
   llm = LLM(
       model="jinaai/jina-reranker-m0",
@@ -165,4 +165,4 @@ guide: |
   ## References
 
   - [jina-reranker-m0 on Hugging Face](https://huggingface.co/jinaai/jina-reranker-m0)
-  - [Aphrodite Score API documentation](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#score-api)
+  - [Sonar Score API documentation](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#score-api)

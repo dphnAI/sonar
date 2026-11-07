@@ -1,8 +1,8 @@
-# Long CLI flags of the Python `aphrodite bench serve` parser
-# (aphrodite.benchmarks.serve.add_cli_args), sorted; --help excluded.
+# Long CLI flags of the Python `sonar bench serve` parser
+# (sonar.benchmarks.serve.add_cli_args), sorted; --help excluded.
 # Regenerate: .venv/bin/python tests/benchmarks/test_rust_bench_cli_parity.py
 # Consumed by rust/src/bench/tests/cli_parity.rs, which requires every flag
-# below to be a known aphrodite-bench flag/alias or a PYTHON_ONLY allowlist entry.
+# below to be a known sonar-bench flag/alias or a PYTHON_ONLY allowlist entry.
 --append-result
 --asr-max-audio-len-sec
 --asr-min-audio-len-sec

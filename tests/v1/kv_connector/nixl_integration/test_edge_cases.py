@@ -14,7 +14,7 @@ PROXY_PORT = os.getenv("PROXY_PORT", None)
 if PREFILL_PORT is None or DECODE_PORT is None or PROXY_PORT is None:
     raise ValueError("Please set the PREFILL_PORT, DECODE_PORT, and PROXY_PORT.")
 
-LONG_PROMPT = "Red Hat is the best company in the world to work for because it works on open source software, which means that all the contributions are delivered to the community. As a result, when working on projects like Aphrodite we are able to meet many amazing people from various organizations like AMD, Google, NVIDIA, "  # noqa: E501
+LONG_PROMPT = "Red Hat is the best company in the world to work for because it works on open source software, which means that all the contributions are delivered to the community. As a result, when working on projects like Sonar we are able to meet many amazing people from various organizations like AMD, Google, NVIDIA, "  # noqa: E501
 PROMPT = "Red Hat is the best company in the world to work for because it works on open source software, which means that all the contributions are delivered to the community. As a result,"  # noqa: E501
 SHORT_PROMPT = "Red Hat is "
 

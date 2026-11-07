@@ -5,40 +5,40 @@ from dataclasses import dataclass
 import torch
 
 # Fused experts and PrepareFinalize imports
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe import TritonExperts
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
     BatchedDeepGemmExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import DeepGemmExperts
-from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import DeepGemmExperts
+from sonar.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     BatchedTritonExperts,
     NaiveBatchedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize import (
     MoEPrepareAndFinalizeNoDPEPModular,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
     cutlass_fp4_supported,
 )
-from aphrodite.model_executor.layers.quantization.utils.w8a8_utils import (
+from sonar.model_executor.layers.quantization.utils.w8a8_utils import (
     cutlass_fp8_supported,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
+from sonar.utils.flashinfer import (
     has_flashinfer_cutlass_fused_moe,
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_trtllm_fused_moe,
 )
-from aphrodite.utils.import_utils import (
+from sonar.utils.import_utils import (
     has_aiter,
     has_deep_ep,
     has_deep_ep_v2,
@@ -201,10 +201,10 @@ register_experts(
 
 # Disable on blackwell for now
 if has_deep_ep() and not current_platform.has_device_capability(100):
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
         DeepEPHTPrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
         DeepEPLLPrepareAndFinalize,
     )
 
@@ -225,7 +225,7 @@ if has_deep_ep() and not current_platform.has_device_capability(100):
     )
 
 if has_deep_ep_v2() and current_platform.has_device_capability(100):
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
         DeepEPV2PrepareAndFinalize,
     )
 
@@ -238,7 +238,7 @@ if has_deep_ep_v2() and current_platform.has_device_capability(100):
     )
 
 if has_mori():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.mori import (
         MoriPrepareAndFinalize,
     )
 
@@ -251,7 +251,7 @@ if has_mori():
         supports_apply_weight_on_input=False,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
         MoriEPv2PrepareAndFinalize,
     )
 
@@ -265,10 +265,10 @@ if has_mori():
     )
 
 if has_flashinfer_cutlass_fused_moe() and current_platform.has_device_capability(100):
-    from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
         FlashInferExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_two_sided import (  # noqa: E501
         FlashInferNVLinkTwoSidedPrepareAndFinalize,
     )
 
@@ -299,7 +299,7 @@ if (
     and has_flashinfer_cutlass_fused_moe()
     and current_platform.has_device_capability(100)
 ):
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.flashinfer_nvlink_one_sided import (  # noqa: E501
         FlashInferNVLinkOneSidedPrepareAndFinalize,
     )
 
@@ -313,7 +313,7 @@ if (
     )
 
 if has_flashinfer_cutlass_fused_moe() and current_platform.has_device_capability(100):
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import (
         TrtLlmNvFp4ExpertsModular,
     )
 
@@ -325,7 +325,7 @@ if has_flashinfer_cutlass_fused_moe() and current_platform.has_device_capability
     )
 
 if has_flashinfer_trtllm_fused_moe() and current_platform.has_device_capability(100):
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
         TrtLlmFp8ExpertsModular,
     )
 
@@ -337,7 +337,7 @@ if has_flashinfer_trtllm_fused_moe() and current_platform.has_device_capability(
     )
 
 if has_aiter():
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterFp8BlockExperts,
         AiterFp8ChannelExperts,
         AiterFp8TensorExperts,
@@ -398,7 +398,7 @@ if has_deep_gemm() and is_deep_gemm_supported():
     )
 
 if cutlass_fp8_supported():
-    from aphrodite.model_executor.layers.fused_moe import (
+    from sonar.model_executor.layers.fused_moe import (
         CutlassBatchedExpertsFp8,
         CutlassExpertsFp8,
     )
@@ -421,7 +421,7 @@ else:
     CutlassExpertsFp8 = None  # type: ignore[misc]
 
 if cutlass_fp4_supported():
-    from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.cutlass_moe import (
         CutlassExpertsFp4,
     )
 

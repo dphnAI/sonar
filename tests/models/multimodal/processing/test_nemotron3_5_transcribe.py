@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.transformers_utils.configs.nemotron3_5_transcribe import (
+from sonar.transformers_utils.configs.nemotron3_5_transcribe import (
     SPEECHLM_EMBED_EXTRA_ROWS,
     Nemotron3_5TranscribeConfig,
     _checked_online,
@@ -71,7 +71,7 @@ def test_window_settings():
 
 
 def test_transcription_pieces_fit_the_context():
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         _transcription_clip_s,
     )
 
@@ -82,7 +82,7 @@ def test_transcription_pieces_fit_the_context():
 
 
 def test_audio_length_sets_the_largest_clip():
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         _max_audio_samples,
         _num_audio_embeddings,
     )
@@ -132,7 +132,7 @@ CHECKPOINT_CONFIG: dict[str, Any] = {
 
 
 def test_released_checkpoint_layout_loads(tmp_path):
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
     (tmp_path / "config.json").write_text(json.dumps(CHECKPOINT_CONFIG))
     config = ModelConfig(str(tmp_path)).hf_config
@@ -154,11 +154,11 @@ def test_released_checkpoint_layout_loads(tmp_path):
             'set "architectures": ["Nemotron3_5TranscribeForConditionalGeneration"]',
         ),
         # Another NeMo SpeechLM: no Parallel Expert Encoder.
-        ({"pe_encoder_config": None}, "NeMo Speech Aphrodite plugin"),
+        ({"pe_encoder_config": None}, "NeMo Speech Sonar plugin"),
     ],
 )
 def test_other_nemo_speechlm_architectures_are_refused(tmp_path, changes, hint):
-    from aphrodite.transformers_utils.config import get_config
+    from sonar.transformers_utils.config import get_config
 
     other = CHECKPOINT_CONFIG | changes | {"architectures": ["NeMoSpeechLMForConditionalGeneration"]}
     (tmp_path / "config.json").write_text(json.dumps(other))
@@ -232,15 +232,15 @@ TINY_AUDIO_CONFIG = {
 
 @pytest.fixture
 def tiny_tower(dist_init):
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
-    from aphrodite.model_executor.models.nemotron3_5_transcribe_audio import (
+    from sonar.model_executor.layers.linear import ReplicatedLinear
+    from sonar.model_executor.models.nemotron3_5_transcribe_audio import (
         Nemotron3_5TranscribeAudioTower,
     )
 
     torch.manual_seed(0)
     tower = Nemotron3_5TranscribeAudioTower(TINY_AUDIO_CONFIG).eval()
     with torch.no_grad():
-        # Aphrodite's linear layers allocate their weights uninitialized.
+        # Sonar's linear layers allocate their weights uninitialized.
         for module in tower.modules():
             if isinstance(module, ReplicatedLinear):
                 module.weight.normal_(0.0, module.input_size**-0.5)
@@ -265,7 +265,7 @@ def tiny_tower(dist_init):
 
 @pytest.mark.parametrize("num_samples", [160, 161, 1_281, 12_345, 12_960, 48_001])
 def test_audio_tower_returns_one_embedding_per_audio_token(tiny_tower, num_samples):
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         _num_audio_embeddings,
     )
 
@@ -277,10 +277,10 @@ def test_audio_tower_returns_one_embedding_per_audio_token(tiny_tower, num_sampl
 
 
 def test_decoder_weights_read_both_checkpoint_layouts():
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         Nemotron3_5TranscribeForConditionalGeneration as Model,
     )
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import _decoder_weights
+    from sonar.model_executor.models.nemotron3_5_transcribe import _decoder_weights
 
     nemo = {
         "llm.model.embed_tokens.weight": torch.ones(8, 4),
@@ -294,7 +294,7 @@ def test_decoder_weights_read_both_checkpoint_layouts():
         "backbone.layers.1.mixer.experts.0.up_proj.weight_scale": torch.ones(()),
         "lm_head.weight": torch.ones(8, 4),
     }
-    mapped = Model.hf_to_aphrodite_mapper.apply((nemo | hf).items())
+    mapped = Model.hf_to_sonar_mapper.apply((nemo | hf).items())
     decoder = ((name.removeprefix("language_model."), t) for name, t in mapped)
     out = dict(_decoder_weights(decoder, vocab_size=10))
     assert sorted(out) == [
@@ -319,14 +319,14 @@ def test_decoder_weights_read_both_checkpoint_layouts():
     )
     # Names outside both layouts stay unmapped, so load_weights refuses them.
     unknown = [("llm.vision.weight", torch.ones(1))]
-    assert [name for name, _ in Model.hf_to_aphrodite_mapper.apply(unknown)] == ["llm.vision.weight"]
+    assert [name for name, _ in Model.hf_to_sonar_mapper.apply(unknown)] == ["llm.vision.weight"]
 
 
 def test_only_audio_has_a_placeholder():
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         AUDIO_PLACEHOLDER,
     )
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         Nemotron3_5TranscribeForConditionalGeneration as Model,
     )
 
@@ -337,17 +337,17 @@ def test_only_audio_has_a_placeholder():
 
 
 def test_quantization_layer_names_map_onto_the_model():
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         Nemotron3_5TranscribeForConditionalGeneration as Model,
     )
 
-    mapper = Model.hf_to_aphrodite_mapper.get_rename_mapper()
+    mapper = Model.hf_to_sonar_mapper.get_rename_mapper()
     assert mapper.apply_list(
         [
             "backbone.layers.1.mixer.gate",
             "lm_head",
             "perception.encoder.asr_encoder.pre_encode",
-            # Names the NVFP4 recipe already gives in Aphrodite's form stay as they are.
+            # Names the NVFP4 recipe already gives in Sonar's form stay as they are.
             "language_model.model.layers.0.mixer.in_proj",
             "mtp.layers.1.mixer.gate",
         ]
@@ -362,12 +362,12 @@ def test_quantization_layer_names_map_onto_the_model():
 
 @pytest.mark.usefixtures("dist_init")
 def test_fp8_recipe_quantizes_the_asr_encoder_linear_layers():
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptFp8Config
-    from aphrodite.model_executor.model_loader.utils import configure_quant_config
-    from aphrodite.model_executor.models.nemotron3_5_transcribe import (
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptFp8Config
+    from sonar.model_executor.model_loader.utils import configure_quant_config
+    from sonar.model_executor.models.nemotron3_5_transcribe import (
         Nemotron3_5TranscribeForConditionalGeneration as Model,
     )
-    from aphrodite.model_executor.models.nemotron3_5_transcribe_audio import (
+    from sonar.model_executor.models.nemotron3_5_transcribe_audio import (
         Nemotron3_5TranscribeAudioTower,
     )
 
@@ -422,7 +422,7 @@ def test_fp8_recipe_quantizes_the_asr_encoder_linear_layers():
 
 
 def test_mtp_draft_config_keeps_the_quantization_recipe():
-    from aphrodite.config.speculative import SpeculativeConfig
+    from sonar.config.speculative import SpeculativeConfig
 
     recipe = {"quant_method": "modelopt", "quant_algo": "FP8", "ignore": ["lm_head"]}
     llm_config = CHECKPOINT_CONFIG["llm_config"] | {"num_nextn_predict_layers": 1}

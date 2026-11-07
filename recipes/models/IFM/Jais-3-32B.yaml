@@ -6,7 +6,7 @@ meta:
   date_added: 2026-10-05
   date_updated: 2026-10-05
   tasks: [text]
-  performance_headline: "34.78B stored parameters including embeddings, with native Aphrodite execution and up to 512K context"
+  performance_headline: "34.78B stored parameters including embeddings, with native Sonar execution and up to 512K context"
   related_recipes: ["IFM/Jais-3-7B", "IFM/Jais-3-MoVA-36B-A4B"]
   hardware:
     h200: verified
@@ -29,7 +29,7 @@ variants:
   default:
     precision: bf16
     vram_minimum_gb: 84
-    description: "BF16 serving runtime with native Aphrodite execution"
+    description: "BF16 serving runtime with native Sonar execution"
 compatible_strategies: [single_node_tp, multi_node_tp, multi_node_tp_pp]
 hardware_overrides: {}
 strategy_overrides:
@@ -52,7 +52,7 @@ guide: |
   ## Launch Commands
 
   ```bash
-  aphrodite serve IFM/Jais-3-32B \
+  sonar serve IFM/Jais-3-32B \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --chat-template-content-format string \

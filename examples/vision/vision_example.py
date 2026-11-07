@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-This example shows how to use Aphrodite for running offline inference
+This example shows how to use Sonar for running offline inference
 with the correct prompt format on vision language models.
 For most models, the prompt format should follow corresponding examples
 on HuggingFace model repository.
@@ -14,11 +14,11 @@ import numpy as np
 from PIL import Image
 from transformers import AutoTokenizer
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.video import VideoAsset
-from aphrodite.multimodal.utils import sample_frames_from_video
-from aphrodite.platforms import current_platform
-from aphrodite.utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.assets.video import VideoAsset
+from sonar.multimodal.utils import sample_frames_from_video
+from sonar.platforms import current_platform
+from sonar.utils import FlexibleArgumentParser
 
 # Input image and question
 image_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "burg.jpg")
@@ -376,7 +376,7 @@ def get_multi_modal_input(args):
 
 def main(args):
     if current_platform.is_rocm():
-        os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        os.environ["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
 
     model = args.model_type
     if model not in model_example_map:
@@ -419,9 +419,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = FlexibleArgumentParser(
-        description="Demo on using Aphrodite for offline inference with vision language models"
-    )
+    parser = FlexibleArgumentParser(description="Demo on using Sonar for offline inference with vision language models")
     parser.add_argument(
         "--model-type",
         "-m",

@@ -27,22 +27,22 @@ from kvcr.types import (
     QueryStatus,
 )
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
     OffloadingConnectorStats,
 )
-from aphrodite.v1.kv_hints import KvHintsEnvelope
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_hints import KvHintsEnvelope
+from sonar.v1.kv_offload.base import (
     LookupResult,
     Medium,
     OffloadKey,
     ReqContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.tiering.backpressure import EMABackpressureDetector
-from aphrodite.v1.kv_offload.tiering.base import JobResult, TransferJob
-from aphrodite.v1.kv_offload.tiering.factory import SecondaryTierFactory
-from aphrodite.v1.kv_offload.tiering.kvcr import manager as kvcr_manager
-from aphrodite.v1.kv_offload.tiering.kvcr.manager import KVCRSecondaryTierManager
+from sonar.v1.kv_offload.tiering.backpressure import EMABackpressureDetector
+from sonar.v1.kv_offload.tiering.base import JobResult, TransferJob
+from sonar.v1.kv_offload.tiering.factory import SecondaryTierFactory
+from sonar.v1.kv_offload.tiering.kvcr import manager as kvcr_manager
+from sonar.v1.kv_offload.tiering.kvcr.manager import KVCRSecondaryTierManager
 
 
 def _op_entries(
@@ -361,7 +361,7 @@ def test_kvcr_tier_adapts_request_and_load(monkeypatch, backpressure):
     bindings = kvcr.constructor_bindings
     assert bindings is not None
     assert bindings.key_adapter is not None
-    monkeypatch.setenv("APHRODITE_KV_EVENTS_USE_INT_BLOCK_HASHES", "0")
+    monkeypatch.setenv("SONAR_KV_EVENTS_USE_INT_BLOCK_HASHES", "0")
     decode = bindings.key_adapter.decode
     hash_123 = (123).to_bytes(8, "big")
     assert decode(BlockKey(bytes(key))) == hash_123
@@ -538,12 +538,12 @@ def test_kvcr_tier_serves_primary_pin_request(monkeypatch, job_keys, chunk_ids, 
     assert list(tier.get_finished_jobs()) == [JobResult(11, True)]
 
 
-def test_kvcr_telemetry_is_opt_in_and_namespaced_at_aphrodite_boundary(monkeypatch):
-    """Keep telemetry opt-in and namespace metrics only at the Aphrodite boundary."""
+def test_kvcr_telemetry_is_opt_in_and_namespaced_at_sonar_boundary(monkeypatch):
+    """Keep telemetry opt-in and namespace metrics only at the Sonar boundary."""
     assert KVCRSecondaryTierManager.build_metric_definitions({}) == {}
     definitions = KVCRSecondaryTierManager.build_metric_definitions({"enable_telemetry": True})
-    assert "aphrodite:kvcr_duration_seconds" in definitions
-    assert "aphrodite:kvcr_transfer_blocks" in definitions
+    assert "sonar:kvcr_duration_seconds" in definitions
+    assert "sonar:kvcr_transfer_blocks" in definitions
 
     kvcr = RecordingKVCR()
     tier = _make_tier(monkeypatch, kvcr, enable_telemetry=True)
@@ -561,7 +561,7 @@ def test_kvcr_telemetry_is_opt_in_and_namespaced_at_aphrodite_boundary(monkeypat
     returned = tier.get_stats()
 
     assert returned is stats
-    assert returned.reduce() == {"aphrodite:kvcr_transfer_blocks:('remote_deliver',)": 2}
+    assert returned.reduce() == {"sonar:kvcr_transfer_blocks:('remote_deliver',)": 2}
 
 
 @pytest.mark.parametrize(

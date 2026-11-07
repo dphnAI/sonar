@@ -7,11 +7,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops.ultraquant.format import slot_size
-from aphrodite.v1.attention.ops.ultraquant.reference import reference_ultraquant_attention
-from aphrodite.v1.attention.ops.ultraquant.triton_store import ultraquant_store
-from aphrodite.v1.attention.ops.ultraquant.triton_unified_attention import (
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops.ultraquant.format import slot_size
+from sonar.v1.attention.ops.ultraquant.reference import reference_ultraquant_attention
+from sonar.v1.attention.ops.ultraquant.triton_store import ultraquant_store
+from sonar.v1.attention.ops.ultraquant.triton_unified_attention import (
     ultraquant_unified_attention,
 )
 

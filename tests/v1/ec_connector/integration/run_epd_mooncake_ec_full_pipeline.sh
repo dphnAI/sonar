@@ -70,13 +70,13 @@ else
 fi
 
 LOG_PATH="${LOG_PATH:-/tmp}"
-BASELINE_FILE="${BASELINE_FILE:-/tmp/aphrodite_epd_mooncake_baseline.txt}"
+BASELINE_FILE="${BASELINE_FILE:-/tmp/sonar_epd_mooncake_baseline.txt}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1200}"
 PIDS=()
 
 mkdir -p "$LOG_PATH"
 
-APHRODITE_SERVE=("$PYTHON_BIN" -m aphrodite.entrypoints.cli.main serve)
+SONAR_SERVE=("$PYTHON_BIN" -m sonar.entrypoints.cli.main serve)
 
 ENC_EC_JSON=$("$PYTHON_BIN" <<PY
 import json, os
@@ -107,7 +107,7 @@ PY
 EC_MOONCAKE_RESERVATION_ADDR=$("$PYTHON_BIN" <<'PY'
 import os
 
-from aphrodite.utils.network_utils import make_zmq_path
+from sonar.utils.network_utils import make_zmq_path
 
 print(make_zmq_path(
     "tcp", os.environ["EC_MOONCAKE_RESERVATION_HOST"],
@@ -134,7 +134,7 @@ cleanup_instances() {
   if ((${#PIDS[@]} == 0)); then
     return
   fi
-  echo "Cleaning up tracked Aphrodite / proxy processes..."
+  echo "Cleaning up tracked Sonar / proxy processes..."
   for pid in "${PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
@@ -176,12 +176,12 @@ trap 'exit 143' TERM
 
 run_baseline() {
   echo "================================"
-  echo "BASELINE (single Aphrodite, MM if enabled)"
+  echo "BASELINE (single Sonar, MM if enabled)"
   echo "================================"
   cleanup_instances
   local PORT=$BASELINE_PORT
   echo "Starting baseline on GPU $GPU_SINGLE port $PORT"
-  CUDA_VISIBLE_DEVICES="$GPU_SINGLE" "${APHRODITE_SERVE[@]}" "$MODEL" \
+  CUDA_VISIBLE_DEVICES="$GPU_SINGLE" "${SONAR_SERVE[@]}" "$MODEL" \
     --port "$PORT" \
     --gpu-memory-utilization 0.75 \
     --max-num-seqs 32 \
@@ -214,7 +214,7 @@ run_epd_mooncake() {
   cleanup_instances
 
   echo "Starting ENCODER on GPU $GPU_E port $ENCODE_PORT"
-  APHRODITE_SERVER_DEV_MODE=1 CUDA_VISIBLE_DEVICES="$GPU_E" "${APHRODITE_SERVE[@]}" "$MODEL" \
+  SONAR_SERVER_DEV_MODE=1 CUDA_VISIBLE_DEVICES="$GPU_E" "${SONAR_SERVE[@]}" "$MODEL" \
     --port "$ENCODE_PORT" \
     --gpu-memory-utilization 0.35 \
     --mm-tensor-ipc torch_shm \
@@ -234,7 +234,7 @@ run_epd_mooncake() {
   PIDS+=("$ENCODER_PID")
 
   echo "Starting PD on GPU $GPU_PD port $PREFILL_DECODE_PORT"
-  CUDA_VISIBLE_DEVICES="$GPU_PD" "${APHRODITE_SERVE[@]}" "$MODEL" \
+  CUDA_VISIBLE_DEVICES="$GPU_PD" "${SONAR_SERVE[@]}" "$MODEL" \
     --port "$PREFILL_DECODE_PORT" \
     --gpu-memory-utilization 0.75 \
     --mm-tensor-ipc torch_shm \

@@ -14,23 +14,23 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.linear import (
+from sonar.config import set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import Attention
+from sonar.model_executor.layers.linear import (
     LinearBase,  # noqa: E501
     UnquantizedLinearMethod,
 )
-from aphrodite.model_executor.layers.quantization import (
+from sonar.model_executor.layers.quantization import (
     QuantizationMethods,
     get_quantization_config,
     register_quantization_config,
 )
-from aphrodite.model_executor.layers.quantization.base_config import (
+from sonar.model_executor.layers.quantization.base_config import (
     QuantizationConfig,  # noqa: E501
 )
-from aphrodite.platforms import current_platform
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from sonar.platforms import current_platform
+from tests.quantization.utils import load_model_without_sonar_runner
 
 
 class FakeQuantLinearMethod(UnquantizedLinearMethod):
@@ -103,18 +103,18 @@ class CustomQuantConfig(QuantizationConfig):
         return None
 
 
-def test_register_quantization_config(caplog_aphrodite):
+def test_register_quantization_config(caplog_sonar):
     """Test register custom quantization config."""
     # The quantization method `custom_quant` should be registered.
     assert get_quantization_config("custom_quant") == CustomQuantConfig
 
     # The quantization method `custom_quant` is already exists,
     # should raise a debug message when re-registering it.
-    with caplog_aphrodite.at_level(logging.DEBUG, logger="aphrodite"):
+    with caplog_sonar.at_level(logging.DEBUG, logger="sonar"):
         register_quantization_config("custom_quant")(CustomQuantConfig)
 
     assert any(
-        "The quantization method 'custom_quant' already exists" in message for message in caplog_aphrodite.messages
+        "The quantization method 'custom_quant' already exists" in message for message in caplog_sonar.messages
     ), "Expected a debug message when re-registering custom_quant"
 
 
@@ -126,11 +126,11 @@ def test_register_quantization_config(caplog_aphrodite):
 )
 def test_custom_quant(model, monkeypatch, dist_init, workspace_init):
     """Test infer with the custom quantization method."""
-    aphrodite_model, aphrodite_config = load_model_without_aphrodite_runner(
+    sonar_model, sonar_config = load_model_without_sonar_runner(
         model,
         quantization="custom_quant",
     )
-    layer = aphrodite_model.model.layers[0]
+    layer = sonar_model.model.layers[0]
     qkv_proj = layer.self_attn.qkv_proj
 
     # Check the quantization method is FakeQuantLinearMethod.
@@ -141,9 +141,9 @@ def test_custom_quant(model, monkeypatch, dist_init, workspace_init):
     input_ids = torch.tensor([1, 2, 3, 4], device=device_type)
     positions = torch.arange(input_ids.numel(), device=device_type)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(None, aphrodite_config, num_tokens=input_ids.numel()),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(None, sonar_config, num_tokens=input_ids.numel()),
     ):
-        hidden_states = aphrodite_model(input_ids, positions, None)
-        logits = aphrodite_model.compute_logits(hidden_states)
+        hidden_states = sonar_model(input_ids, positions, None)
+        logits = sonar_model.compute_logits(hidden_states)
     assert torch.isfinite(logits).all()

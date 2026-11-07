@@ -7,8 +7,8 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.multimodal.utils import encode_audio_base64, encode_audio_url, fetch_audio
+from sonar.assets.audio import AudioAsset
+from sonar.multimodal.utils import encode_audio_base64, encode_audio_url, fetch_audio
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "fixie-ai/ultravox-v0_5-llama-3_2-1b"

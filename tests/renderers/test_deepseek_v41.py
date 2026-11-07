@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 import json
 
-from aphrodite.tokenizers.deepseek_v41_encoding import encode_messages
+from sonar.tokenizers.deepseek_v41_encoding import encode_messages
 
 
 def _call(call_id: str) -> dict:

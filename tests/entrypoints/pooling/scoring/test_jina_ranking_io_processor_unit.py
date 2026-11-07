@@ -8,11 +8,11 @@ import pytest
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import TokenizersBackend
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.pooling.scoring.io_processor import JinaRankingIOProcessor
-from aphrodite.entrypoints.pooling.scoring.typing import ScoringData
-from aphrodite.entrypoints.pooling.typing import OfflineScoringInputsContext
-from aphrodite.renderers import TokenizeParams
+from sonar import PoolingParams
+from sonar.entrypoints.pooling.scoring.io_processor import JinaRankingIOProcessor
+from sonar.entrypoints.pooling.scoring.typing import ScoringData
+from sonar.entrypoints.pooling.typing import OfflineScoringInputsContext
+from sonar.renderers import TokenizeParams
 
 pytestmark = pytest.mark.skip_global_cleanup
 

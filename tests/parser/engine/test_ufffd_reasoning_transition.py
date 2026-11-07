@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from aphrodite.parser.abstract_parser import DelegatingParser
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.abstract_parser import DelegatingParser
+from sonar.parser.engine.registered_adapters import (
     Glm47MoeParserReasoningAdapter,
     Glm47MoeParserToolAdapter,
     Qwen3ParserReasoningAdapter,

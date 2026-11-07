@@ -17,7 +17,7 @@
 
 #include "cutlass_gemm_caller.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 using namespace cute;
 
@@ -278,4 +278,4 @@ void cutlass_gemm_blockwise_sm120_fp8_dispatch(torch::stable::Tensor& out,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

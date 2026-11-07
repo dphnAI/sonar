@@ -19,11 +19,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
 )
-from aphrodite.parser import plamo3
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser import plamo3
+from sonar.parser.engine.registered_adapters import (
     DeepSeekV4Parser,
     DeepSeekV32Parser,
     DeepSeekV41Parser,
@@ -80,7 +80,7 @@ _WEATHER_TOOL = ToolCallSpec(
 _COMPLEX_TOOL = ToolCallSpec(
     "search",
     {
-        "query": "aphrodite parser",
+        "query": "sonar parser",
         "filters": {"language": "python", "min_stars": 100},
         "tags": ["ml", "inference"],
         "limit": 10,

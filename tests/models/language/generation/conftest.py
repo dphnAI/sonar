@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Pytest configuration for Aphrodite language generation tests."""
+"""Pytest configuration for Sonar language generation tests."""
 
 import pytest
 
-from aphrodite.model_executor.model_loader.weight_utils import drop_checkpoint_cache
-from aphrodite.platforms import current_platform
+from sonar.model_executor.model_loader.weight_utils import drop_checkpoint_cache
+from sonar.platforms import current_platform
 
 _previous_model: str | None = None
 

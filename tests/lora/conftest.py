@@ -10,21 +10,21 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.models.interfaces import SupportsLoRA
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from sonar.model_executor.models.interfaces import SupportsLoRA
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
 
 
 @pytest.fixture()
@@ -46,24 +46,24 @@ def cleanup_fixture(should_do_global_cleanup_after_test: bool):
 @pytest.fixture
 def maybe_enable_lora_dual_stream(monkeypatch: pytest.MonkeyPatch):
     if current_platform.is_cuda():
-        monkeypatch.setenv("APHRODITE_LORA_ENABLE_DUAL_STREAM", "1")
-        import aphrodite.lora.layers.base_linear
+        monkeypatch.setenv("SONAR_LORA_ENABLE_DUAL_STREAM", "1")
+        import sonar.lora.layers.base_linear
 
-        if not hasattr(aphrodite.lora.layers.base_linear, "lora_linear_async"):
+        if not hasattr(sonar.lora.layers.base_linear, "lora_linear_async"):
             # Reload the module to ensure the environment variable takes effect.
-            reload(aphrodite.lora.layers.base_linear)
+            reload(sonar.lora.layers.base_linear)
     yield
 
 
 @pytest.fixture
 def dist_init():
-    from tests.utils import ensure_current_aphrodite_config
+    from tests.utils import ensure_current_sonar_config
 
     temp_file = tempfile.mkstemp()[1]
 
     backend = "gloo" if current_platform.is_tpu() else current_platform.dist_backend
 
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -81,7 +81,7 @@ class DummyLoRAModel(nn.Sequential, SupportsLoRA):
 
 
 @pytest.fixture
-def dummy_model(default_aphrodite_config) -> nn.Module:
+def dummy_model(default_sonar_config) -> nn.Module:
     model = DummyLoRAModel(
         OrderedDict(
             [
@@ -113,7 +113,7 @@ def dummy_model(default_aphrodite_config) -> nn.Module:
 
 
 @pytest.fixture
-def dummy_model_gate_up(default_aphrodite_config) -> nn.Module:
+def dummy_model_gate_up(default_sonar_config) -> nn.Module:
     model = DummyLoRAModel(
         OrderedDict(
             [

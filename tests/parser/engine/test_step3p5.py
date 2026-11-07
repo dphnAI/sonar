@@ -12,13 +12,13 @@ import json
 
 import pytest
 
-from aphrodite.parser.engine.registered_adapters import (
+from sonar.parser.engine.registered_adapters import (
     Step3p5ParserReasoningAdapter,
     Step3p5ParserToolAdapter,
 )
-from aphrodite.parser.step3p5 import Step3p5Parser
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tool_parsers import ToolParserManager
+from sonar.parser.step3p5 import Step3p5Parser
+from sonar.reasoning import ReasoningParserManager
+from sonar.tool_parsers import ToolParserManager
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import simulate_reasoning_streaming
 

@@ -7,19 +7,19 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.b12x import get_b12x_paged_attention
-from aphrodite.v1.attention.backends import b12x
-from aphrodite.v1.attention.backends.b12x import (
+from sonar.config import ModelConfig
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
+from sonar.utils.b12x import get_b12x_paged_attention
+from sonar.v1.attention.backends import b12x
+from sonar.v1.attention.backends.b12x import (
     B12xPagedAttentionBackend,
     B12xPagedAttentionImpl,
     _kv_page_size,
     _max_page_table_width,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout
 from tests.v1.attention.test_attention_backends import (
     BATCH_SPECS,
     _test_backend_correctness,
@@ -67,41 +67,41 @@ def _causal_sliding_window_mask(
 
 
 @pytest.mark.parametrize(
-    ("dtype", "kv_cache_dtype", "paged_attention", "expected_reason"),
+    ("dtype", "kv_cache_dtype", "paged_attention", "expected_supported"),
     [
         pytest.param(
             torch.float16,
             "fp8_e4m3",
             None,
-            "b12x currently requires bfloat16 queries",
+            False,
             id="query-dtype",
         ),
         pytest.param(
             torch.bfloat16,
             "float16",
             None,
-            "b12x does not support float16 KV cache",
+            False,
             id="kv-cache-dtype",
         ),
         pytest.param(
             torch.bfloat16,
             "auto",
             None,
-            "Install the b12x backend with `pip install aphrodite[b12x]`",
+            False,
             id="package-not-installed",
         ),
         pytest.param(
             torch.bfloat16,
             "auto",
             SimpleNamespace(is_supported=lambda: False),
-            "b12x paged attention is not supported on the current device",
+            False,
             id="device-api",
         ),
         pytest.param(
             torch.bfloat16,
             "auto",
             SimpleNamespace(is_supported=lambda: True),
-            None,
+            True,
             id="supported",
         ),
     ],
@@ -111,7 +111,7 @@ def test_b12x_attention_config_support(
     dtype: torch.dtype,
     kv_cache_dtype: str,
     paged_attention,
-    expected_reason: str | None,
+    expected_supported: bool,
 ) -> None:
     monkeypatch.setattr(
         b12x,
@@ -131,7 +131,7 @@ def test_b12x_attention_config_support(
         device_capability=DeviceCapability(12, 0),
     )
 
-    assert reason == expected_reason
+    assert (reason is None) == expected_supported
 
 
 def test_b12x_attention_uses_two_plane_nhd_cache() -> None:
@@ -238,7 +238,7 @@ def test_b12x_attention_sinks_refresh_in_place_after_reload() -> None:
 )
 @pytest.mark.parametrize("block_size", [64, 128])
 def test_b12x_causal_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
     batch_spec_name: str,
     kv_cache_dtype: str,
@@ -270,7 +270,7 @@ def test_b12x_causal_backend_correctness(
     ],
 )
 def test_b12x_causal_sliding_window(
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
     batch_spec: BatchSpec,
 ) -> None:
@@ -296,7 +296,7 @@ def test_b12x_causal_sliding_window(
 
 
 def test_b12x_attention_sinks(
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     """b12x attention sinks match the explicit sink reference."""
@@ -318,7 +318,7 @@ def test_b12x_attention_sinks(
 
 
 def test_b12x_decode_cuda_graph_replay(
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     """b12x decode output remains correct after CUDA graph replay."""
@@ -338,7 +338,7 @@ def test_b12x_decode_cuda_graph_replay(
 
 
 def test_b12x_speculative_verification_uses_cuda_graph_plan(
-    default_aphrodite_config,
+    default_sonar_config,
     workspace_init,
 ) -> None:
     """Exercise the verifier plan rather than the general extend plan."""

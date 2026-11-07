@@ -280,7 +280,7 @@ void run_fp4_blockwise_scaled_group_mm_sm100(
           cutlass::gemm::kernel::detail::PersistentTileSchedulerSm100Group<
               ProblemShape, Gemm::GemmKernel::SchedulerPipelineStageCount>>,
       "SM100 NVFP4 grouped GEMM must use PersistentTileSchedulerSm100Group "
-      "for batch invariance (APHRODITE_BATCH_INVARIANT=1). "
+      "for batch invariance (SONAR_BATCH_INVARIANT=1). "
       "If you want to change this, add a dedicated config/code path "
       "for batch invariant mode, instead of relaxing this check.");
   using StrideA = typename Gemm::GemmKernel::InternalStrideA;
@@ -488,7 +488,7 @@ void run_fp4_blockwise_scaled_group_mm_sm120(
           typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy::
               Schedule>,
       "SM120 NVFP4 grouped GEMM must use a cooperative ptr-array mainloop "
-      "schedule for batch invariance (APHRODITE_BATCH_INVARIANT=1). "
+      "schedule for batch invariance (SONAR_BATCH_INVARIANT=1). "
       "If you want to change this, add a dedicated config/code path "
       "for batch invariant mode, instead of relaxing this check.");
   using StrideA = typename Gemm::GemmKernel::InternalStrideA;
@@ -736,7 +736,7 @@ void cutlass_fp4_group_mm(torch::stable::Tensor& output,
 #else
   STD_TORCH_CHECK_NOT_IMPLEMENTED(
       false,
-      "No compiled cutlass_fp4_group_mm kernel, Aphrodite must "
+      "No compiled cutlass_fp4_group_mm kernel, Sonar must "
       "be compiled with ENABLE_NVFP4_SM100 or ENABLE_NVFP4_SM120 for SM100/120 "
       "and CUDA 12.8 or above.");
 #endif

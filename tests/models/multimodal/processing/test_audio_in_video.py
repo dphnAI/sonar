@@ -25,14 +25,14 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import LruKeyReplicatedSenderCache
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import LruKeyReplicatedSenderCache
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
 
 from ....multimodal.utils import random_audio, random_video
 from ...utils import build_model_context
@@ -138,7 +138,7 @@ def test_use_audio_in_video_without_audio_track(model_id: str) -> None:
     # No "audio" key at all in this request's data: this is the "video has
     # no audio track" case. (The audio limit above is 1, not 0, so that
     # `mm_counts["audio"]` is still declared for this request; a 0 limit
-    # would make Aphrodite omit the "audio" key from `mm_counts` entirely, which
+    # would make Sonar omit the "audio" key from `mm_counts` entirely, which
     # trips an unrelated assertion in `_apply_hf_processor_main`.)
     mm_data = {"video": [video]}
 
@@ -156,10 +156,10 @@ def test_use_audio_in_video_without_audio_track(model_id: str) -> None:
 @pytest.mark.parametrize("has_image", [False, True])
 def test_audio_in_video_metadata_only(model_id, num_videos, is_async, has_image, monkeypatch):
     """Published metadata preserves interleaved placeholders without preprocessing."""
-    from aphrodite.model_executor.models.qwen2_5_omni_thinker import (
+    from sonar.model_executor.models.qwen2_5_omni_thinker import (
         Qwen2_5OmniThinkerForConditionalGeneration,
     )
-    from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+    from sonar.model_executor.models.qwen3_omni_moe_thinker import (
         Qwen3OmniMoeThinkerForConditionalGeneration,
     )
 

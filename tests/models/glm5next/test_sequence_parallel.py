@@ -17,9 +17,9 @@ import torch
 from torch import nn
 from transformers import Glm5NextTextConfig
 
-from aphrodite.model_executor import parameter
-from aphrodite.model_executor.layers import linear
-from aphrodite.models.glm5next.common import model as glm_model
+from sonar.model_executor import parameter
+from sonar.model_executor.layers import linear
+from sonar.models.glm5next.common import model as glm_model
 
 HIDDEN, INTERMEDIATE, TP_SIZE = 8, 16, 2
 
@@ -60,7 +60,7 @@ def _assert_runs_locally_on_shard(mlp: glm_model.Glm5NextMLP) -> None:
     torch.testing.assert_close(mlp(shard), _reference_mlp(mlp, shard))
 
 
-def test_dense_mlp_runs_locally_on_the_sequence_parallel_shard(monkeypatch, default_aphrodite_config):
+def test_dense_mlp_runs_locally_on_the_sequence_parallel_shard(monkeypatch, default_sonar_config):
     _fake_tensor_parallel_world(monkeypatch)
 
     sharded = glm_model.Glm5NextMLP(HIDDEN, INTERMEDIATE, "silu")
@@ -72,7 +72,7 @@ def test_dense_mlp_runs_locally_on_the_sequence_parallel_shard(monkeypatch, defa
 
 @pytest.mark.parametrize("use_sequence_parallel_moe", [True, False])
 def test_dense_layer_mlp_follows_the_sequence_parallel_layout(
-    monkeypatch, default_aphrodite_config, use_sequence_parallel_moe: bool
+    monkeypatch, default_sonar_config, use_sequence_parallel_moe: bool
 ):
     _fake_tensor_parallel_world(monkeypatch)
     monkeypatch.setattr(glm_model, "Glm5NextLinearAttention", _Attention)
@@ -87,14 +87,14 @@ def test_dense_layer_mlp_follows_the_sequence_parallel_layout(
         layer_types=["linear_attention", "deepseek_sparse_attention"],
         mhc=False,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         cache_config=None,
         quant_config=None,
         parallel_config=SimpleNamespace(use_sequence_parallel_moe=use_sequence_parallel_moe),
         kernel_config=SimpleNamespace(enable_jit_warmup=False),
     )
 
-    layer = glm_model.Glm5NextDecoderLayer(aphrodite_config, config, layer_idx=0)
+    layer = glm_model.Glm5NextDecoderLayer(sonar_config, config, layer_idx=0)
 
     assert isinstance(layer.mlp, glm_model.Glm5NextMLP)
     assert layer.self_attn.o_proj.reduce_results is not use_sequence_parallel_moe

@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.gemma4 import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.gemma4 import (
     TOOL_CALL_END,
     TOOL_CALL_START,
     _parse_gemma4_args,
     _parse_gemma4_array,
 )
-from aphrodite.tool_parsers.gemma4_engine_tool_parser import Gemma4EngineToolParser
+from sonar.tool_parsers.gemma4_engine_tool_parser import Gemma4EngineToolParser
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -31,7 +31,7 @@ CHANNEL_END_ID = 51
 
 
 def _make_tool(name, properties):
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionToolsParam,
     )
 
@@ -419,7 +419,7 @@ class TestExtractToolCalls:
 class TestStreamingExtraction:
     """Tests for the streaming tool call extraction.
 
-    These simulate the token-by-token streaming that Aphrodite performs,
+    These simulate the token-by-token streaming that Sonar performs,
     feeding incremental text to extract_tool_calls_streaming() and
     verifying that the accumulated argument deltas form valid JSON.
     """

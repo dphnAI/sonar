@@ -10,12 +10,12 @@ import prometheus_client
 import pytest
 import torch
 
-from aphrodite import PoolingParams
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.exceptions import AphroditeValidationError, RetryableRequestError
-from aphrodite.logprobs import FlatLogprobs, Logprob, PromptLogprobs, SampleLogprobs
-from aphrodite.lora.request import LoRARequest
-from aphrodite.outputs import (
+from sonar import PoolingParams
+from sonar.config.watermarking import WatermarkConfig
+from sonar.exceptions import RetryableRequestError, SonarValidationError
+from sonar.logprobs import FlatLogprobs, Logprob, PromptLogprobs, SampleLogprobs
+from sonar.lora.request import LoRARequest
+from sonar.outputs import (
     CompletionOutput,
     PoolingRequestOutput,
     RequestError,
@@ -23,9 +23,9 @@ from aphrodite.outputs import (
     SamplingMask,
     WeightVersionSpan,
 )
-from aphrodite.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.v1.engine import (
+from sonar.sampling_params import RequestOutputKind, SamplingParams
+from sonar.tokenizers import TokenizerLike
+from sonar.v1.engine import (
     EngineCoreEvent,
     EngineCoreEventType,
     EngineCoreOutput,
@@ -33,17 +33,17 @@ from aphrodite.v1.engine import (
     EngineCoreRequest,
     FinishReason,
 )
-from aphrodite.v1.engine.output_processor import (
+from sonar.v1.engine.output_processor import (
     OutputProcessor,
     RequestOutputCollector,
     RequestState,
     StreamingInputOutputCollector,
 )
-from aphrodite.v1.engine.parallel_sampling import ParentRequest
-from aphrodite.v1.metrics.loggers import PrometheusStatLogger
-from aphrodite.v1.metrics.prometheus import unregister_aphrodite_metrics
-from aphrodite.v1.metrics.stats import IterationStats, PrefillStats, SchedulerStats
-from aphrodite.v1.outputs import SamplingMaskLists
+from sonar.v1.engine.parallel_sampling import ParentRequest
+from sonar.v1.metrics.loggers import PrometheusStatLogger
+from sonar.v1.metrics.prometheus import unregister_sonar_metrics
+from sonar.v1.metrics.stats import IterationStats, PrefillStats, SchedulerStats
+from sonar.v1.outputs import SamplingMaskLists
 from tests.v1.engine.utils import (
     NUM_PROMPT_LOGPROBS_UNDER_TEST,
     NUM_SAMPLE_LOGPROBS_UNDER_TEST,
@@ -1163,26 +1163,26 @@ def test_watermark_status_partitions_finished_requests(dummy_test_vectors):
     iteration_stats = IterationStats()
     output_processor.process_outputs(outputs, time.monotonic(), iteration_stats)
 
-    aphrodite_config = dummy_test_vectors.aphrodite_config
-    aphrodite_config.watermark_config = WatermarkConfig(key=42)
+    sonar_config = dummy_test_vectors.sonar_config
+    sonar_config.watermark_config = WatermarkConfig(key=42)
     try:
-        PrometheusStatLogger(aphrodite_config).record(scheduler_stats=None, iteration_stats=iteration_stats)
+        PrometheusStatLogger(sonar_config).record(scheduler_stats=None, iteration_stats=iteration_stats)
         totals: dict[str, dict[str, float]] = {}
         for metric in prometheus_client.REGISTRY.collect():
             for sample in metric.samples:
                 if sample.name in (
-                    "aphrodite:watermark_requests_total",
-                    "aphrodite:request_success_total",
+                    "sonar:watermark_requests_total",
+                    "sonar:request_success_total",
                 ):
                     label = sample.labels.get("status", "all")
                     by_label = totals.setdefault(sample.name, {})
                     by_label[label] = by_label.get(label, 0) + sample.value
     finally:
-        unregister_aphrodite_metrics()
+        unregister_sonar_metrics()
 
-    status = totals["aphrodite:watermark_requests_total"]
+    status = totals["sonar:watermark_requests_total"]
     assert status == {"watermarked": 4, "skipped": 1, "not_watermarked": 2}
-    assert sum(status.values()) == totals["aphrodite:request_success_total"]["all"]
+    assert sum(status.values()) == totals["sonar:request_success_total"]["all"]
 
 
 @pytest.mark.parametrize("log_stats", [True, False])
@@ -1694,7 +1694,7 @@ def test_abort_requests(runner: str, abort_by: str, dummy_test_vectors):
         ),
         (
             RequestError(code="validation_error", message="incompatible backend"),
-            AphroditeValidationError,
+            SonarValidationError,
         ),
     ],
 )

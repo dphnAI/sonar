@@ -9,7 +9,7 @@ Run with: pytest tests/multimodal/test_embedding_shape_validation_unit.py -v
 import pytest
 import torch
 
-from aphrodite.multimodal.parse import (
+from sonar.multimodal.parse import (
     AudioEmbeddingItems,
     ImageEmbeddingItems,
 )

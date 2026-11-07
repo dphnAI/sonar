@@ -4,15 +4,15 @@
 import pytest
 import torch
 
-import aphrodite.models.muse_spark.common.ops.fused_rmsnorm as fused_rmsnorm_ops
-import aphrodite.models.muse_spark.nvidia.model as model_ops
-from aphrodite.models.muse_spark.nvidia.model import (
+import sonar.models.muse_spark.common.ops.fused_rmsnorm as fused_rmsnorm_ops
+import sonar.models.muse_spark.nvidia.model as model_ops
+from sonar.models.muse_spark.nvidia.model import (
     MuseSpark1xNormPreservingResidualConnection,
     MuseSpark1xResidualStream,
     MuseSpark1xRMSNorm,
     MuseSpark1xRMSNormWithInputScale,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 HIDDEN, EPS = 8192, 1e-5
 
@@ -28,7 +28,7 @@ requires_b300_dual_norm = pytest.mark.skipif(
 
 @pytest.fixture(autouse=True)
 def bf16_default_dtype():
-    """Build the norms the way the model does: under Aphrodite's dtype context."""
+    """Build the norms the way the model does: under Sonar's dtype context."""
     previous = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)
     yield

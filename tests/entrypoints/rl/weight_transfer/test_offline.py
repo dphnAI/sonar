@@ -15,8 +15,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import WeightTransferConfig
-from aphrodite.distributed.weight_transfer.base import (
+from sonar.config import WeightTransferConfig
+from sonar.distributed.weight_transfer.base import (
     WeightTransferEngine,
     WeightTransferInitInfo,
     WeightTransferInitRequest,
@@ -63,8 +63,8 @@ class MockWeightTransferEngine(WeightTransferEngine[MockInitInfo, MockUpdateInfo
     last_init_info: MockInitInfo | None = None
     last_update_info: MockUpdateInfo | None = None
 
-    def __init__(self, config, aphrodite_config, device, model):
-        super().__init__(config, aphrodite_config, device, model)
+    def __init__(self, config, sonar_config, device, model):
+        super().__init__(config, sonar_config, device, model)
         # Reset tracking on init
         MockWeightTransferEngine.init_transfer_engine_called = False
         MockWeightTransferEngine.start_called = False
@@ -92,49 +92,49 @@ class MockWeightTransferEngine(WeightTransferEngine[MockInitInfo, MockUpdateInfo
         MockWeightTransferEngine.shutdown_called = True
 
 
-def mock_create_engine(config, aphrodite_config, device, model):
+def mock_create_engine(config, sonar_config, device, model):
     """Mock factory function that returns our mock engine."""
-    return MockWeightTransferEngine(config, aphrodite_config, device, model)
+    return MockWeightTransferEngine(config, sonar_config, device, model)
 
 
 # --- Tests ---
 
 
 @create_new_process_for_each_test()
-def test_get_world_size_tp1(aphrodite_runner):
+def test_get_world_size_tp1(sonar_runner):
     """Test world_size is correctly configured for TP=1."""
     if torch.accelerator.device_count() < 1:
         pytest.skip("Need at least 1 GPU for this test")
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL_NAME,
         enforce_eager=True,
         load_format="dummy",
         tensor_parallel_size=1,
         weight_transfer_config=WeightTransferConfig(backend="nccl"),
     ) as runner:
-        world_size = runner.llm.llm_engine.aphrodite_config.parallel_config.world_size
+        world_size = runner.llm.llm_engine.sonar_config.parallel_config.world_size
         assert world_size == 1
 
 
 @create_new_process_for_each_test()
-def test_init_weight_transfer_engine_calls_engine(aphrodite_runner):
+def test_init_weight_transfer_engine_calls_engine(sonar_runner):
     """Test that init_weight_transfer_engine calls the engine's
     init_transfer_engine method."""
     if torch.accelerator.device_count() < 1:
         pytest.skip("Need at least 1 GPU for this test")
 
     # Run in-process so mock.patch works (spawn won't inherit the mock)
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
     # Enable insecure serialization to allow pickling functions for collective_rpc
-    os.environ["APHRODITE_ALLOW_INSECURE_SERIALIZATION"] = "1"
+    os.environ["SONAR_ALLOW_INSECURE_SERIALIZATION"] = "1"
 
     with (
         patch(
-            "aphrodite.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
+            "sonar.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
             mock_create_engine,
         ),
-        aphrodite_runner(
+        sonar_runner(
             MODEL_NAME,
             enforce_eager=True,
             load_format="dummy",
@@ -172,22 +172,22 @@ def test_init_weight_transfer_engine_calls_engine(aphrodite_runner):
 
 
 @create_new_process_for_each_test()
-def test_update_weights_calls_engine(aphrodite_runner):
+def test_update_weights_calls_engine(sonar_runner):
     """Test that update_weights calls the engine's receive_weights method."""
     if torch.accelerator.device_count() < 1:
         pytest.skip("Need at least 1 GPU for this test")
 
     # Run in-process so mock.patch works (spawn won't inherit the mock)
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
     # Enable insecure serialization to allow pickling functions for collective_rpc
-    os.environ["APHRODITE_ALLOW_INSECURE_SERIALIZATION"] = "1"
+    os.environ["SONAR_ALLOW_INSECURE_SERIALIZATION"] = "1"
 
     with (
         patch(
-            "aphrodite.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
+            "sonar.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
             mock_create_engine,
         ),
-        aphrodite_runner(
+        sonar_runner(
             MODEL_NAME,
             enforce_eager=True,
             load_format="dummy",
@@ -236,22 +236,22 @@ def test_update_weights_calls_engine(aphrodite_runner):
 
 
 @create_new_process_for_each_test()
-def test_full_weight_transfer_flow(aphrodite_runner):
+def test_full_weight_transfer_flow(sonar_runner):
     """Test the complete weight transfer flow: init -> start -> update -> finish."""
     if torch.accelerator.device_count() < 1:
         pytest.skip("Need at least 1 GPU for this test")
 
     # Run in-process so mock.patch works (spawn won't inherit the mock)
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
     # Enable insecure serialization to allow pickling functions for collective_rpc
-    os.environ["APHRODITE_ALLOW_INSECURE_SERIALIZATION"] = "1"
+    os.environ["SONAR_ALLOW_INSECURE_SERIALIZATION"] = "1"
 
     with (
         patch(
-            "aphrodite.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
+            "sonar.v1.worker.gpu_worker.WeightTransferEngineFactory.create_engine",
             mock_create_engine,
         ),
-        aphrodite_runner(
+        sonar_runner(
             MODEL_NAME,
             enforce_eager=True,
             load_format="dummy",
@@ -309,19 +309,19 @@ def test_full_weight_transfer_flow(aphrodite_runner):
 
 
 @create_new_process_for_each_test()
-def test_weight_transfer_config_backend(aphrodite_runner):
+def test_weight_transfer_config_backend(sonar_runner):
     """Test that WeightTransferConfig backend is properly configured."""
     if torch.accelerator.device_count() < 1:
         pytest.skip("Need at least 1 GPU for this test")
 
     # Test with nccl backend
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL_NAME,
         enforce_eager=True,
         load_format="dummy",
         tensor_parallel_size=1,
         weight_transfer_config=WeightTransferConfig(backend="nccl"),
     ) as runner:
-        config = runner.llm.llm_engine.aphrodite_config.weight_transfer_config
+        config = runner.llm.llm_engine.sonar_config.weight_transfer_config
         assert config is not None
         assert config.backend == "nccl"

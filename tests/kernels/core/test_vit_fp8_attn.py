@@ -7,11 +7,11 @@ import contextlib
 import pytest
 import torch
 
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.flashinfer import (
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.flashinfer import (
     is_flashinfer_cudnn_fp8_prefill_attn_supported,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 
 def _has_flashinfer_cudnn() -> bool:
@@ -36,19 +36,19 @@ def _fp8_attention():
     """Create FP8-enabled MMEncoderAttention via config."""
     from unittest.mock import MagicMock, patch
 
-    from aphrodite.config import (
-        AphroditeConfig,
+    from sonar.config import (
         ModelConfig,
-        set_current_aphrodite_config,
+        SonarConfig,
+        set_current_sonar_config,
     )
-    from aphrodite.config.multimodal import MultiModalConfig
+    from sonar.config.multimodal import MultiModalConfig
 
     if not is_flashinfer_cudnn_fp8_prefill_attn_supported():
         pytest.skip("FlashInfer cuDNN FP8 prefill attention not supported")
 
     mm_config = MultiModalConfig(mm_encoder_attn_dtype="fp8")
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
+    sonar_config = SonarConfig()
+    sonar_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
 
     # MMEncoderAttention reads torch.get_default_dtype() during init
     # to determine the output dtype. In real model loading this is bf16.
@@ -56,9 +56,9 @@ def _fp8_attention():
     torch.set_default_dtype(torch.bfloat16)
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
+            "sonar.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=AttentionBackendEnum.FLASHINFER,
         ),
     ):
@@ -76,7 +76,7 @@ def _build_cu_seqlens_and_meta(
     """Build cu_seqlens, max_seqlen, sequence_lengths for a single sequence."""
     import numpy as np
 
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
 
@@ -119,10 +119,10 @@ def test_fp8_attn_output_shape(
     _fp8_attention,
 ) -> None:
     """Verify FP8 attention produces correct output shape after un-padding."""
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
-    from aphrodite.utils.math_utils import round_up
+    from sonar.utils.math_utils import round_up
 
     attn = None
     with contextlib.suppress(ValueError, ImportError):
@@ -169,10 +169,10 @@ def test_fp8_attn_output_shape(
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 def test_fp8_vs_bf16_close(head_dim: int, seq_len: int, num_heads: int, _fp8_attention) -> None:
     """FP8 attention output should be reasonably close to BF16 baseline."""
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
-    from aphrodite.utils.math_utils import round_up
+    from sonar.utils.math_utils import round_up
 
     torch.manual_seed(42)
     q = torch.randn(
@@ -218,10 +218,10 @@ def test_fp8_vs_bf16_close(head_dim: int, seq_len: int, num_heads: int, _fp8_att
 
     # BF16 baseline (create non-FP8 attention by using scale=attn_fp8.scale
     # and calling the wrapper directly without FP8 quantization)
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         _get_flashinfer_workspace_buffer,
     )
-    from aphrodite.v1.attention.ops.vit_attn_wrappers import (
+    from sonar.v1.attention.ops.vit_attn_wrappers import (
         vit_flashinfer_wrapper,
     )
 

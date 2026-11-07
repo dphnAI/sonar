@@ -24,7 +24,7 @@ The degenerate stride manifests at different positions in different backends:
 
 import torch
 
-from aphrodite.utils.torch_utils import canonicalize_singleton_dim_strides
+from sonar.utils.torch_utils import canonicalize_singleton_dim_strides
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -22,7 +22,7 @@
 #include "b12x_moe_fused_sm120.h"
 #include "torch_utils.h"
 
-#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
+#if defined(SONAR_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
 
   #include <cuda_bf16.h>
   #include <cuda_runtime.h>

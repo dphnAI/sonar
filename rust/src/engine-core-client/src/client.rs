@@ -557,13 +557,13 @@ impl EngineCoreClient {
             .dtype
     }
 
-    /// Return the engine-reported Python Aphrodite version.
-    pub fn aphrodite_version(&self) -> &str {
+    /// Return the engine-reported Python Sonar version.
+    pub fn sonar_version(&self) -> &str {
         self.engines
             .first()
             .expect("engine core client requires at least one engine")
             .ready_response
-            .aphrodite_version
+            .sonar_version
             .as_str()
     }
 

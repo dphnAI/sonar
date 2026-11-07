@@ -25,9 +25,9 @@ from typing import Any
 
 from openai.types.responses.tool_param import FunctionToolParam
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.tool_parsers.poolside_v1_tool_parser import PoolsideV1ToolParser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.tool_parsers.poolside_v1_tool_parser import PoolsideV1ToolParser
 
 
 def _write_file_tool() -> dict[str, Any]:

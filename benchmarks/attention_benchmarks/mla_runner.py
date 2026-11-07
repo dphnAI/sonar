@@ -4,7 +4,7 @@
 """MLA benchmark runner - shared utilities for MLA benchmarks.
 
 This module provides helpers for running MLA backends without
-needing full AphroditeConfig integration.
+needing full SonarConfig integration.
 """
 
 import statistics
@@ -24,17 +24,17 @@ from common import (
     setup_mla_dims,
 )
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
 
 
 def _safe_profile_name(value: str) -> str:
@@ -61,7 +61,7 @@ def _create_kv_b_proj(
 def _ensure_single_rank_model_parallel() -> None:
     import torch.distributed as dist
 
-    from aphrodite.distributed import (
+    from sonar.distributed import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
         model_parallel_is_initialized,
@@ -70,7 +70,7 @@ def _ensure_single_rank_model_parallel() -> None:
     if not dist.is_available():
         return
     if not dist.is_initialized():
-        with tempfile.NamedTemporaryFile(prefix="aphrodite_bench_dist_", delete=False) as init_file:
+        with tempfile.NamedTemporaryFile(prefix="sonar_bench_dist_", delete=False) as init_file:
             distributed_init_method = f"file://{init_file.name}"
         init_distributed_environment(
             world_size=1,
@@ -84,7 +84,7 @@ def _ensure_single_rank_model_parallel() -> None:
 
 
 # ============================================================================
-# AphroditeConfig Creation
+# SonarConfig Creation
 # ============================================================================
 
 
@@ -104,7 +104,7 @@ def _add_mock_methods_to_model_config(model_config: ModelConfig) -> None:
     )
 
 
-def create_minimal_aphrodite_config(
+def create_minimal_sonar_config(
     model_name: str = "deepseek-v3",
     block_size: int = 128,
     max_num_seqs: int = 256,
@@ -115,8 +115,8 @@ def create_minimal_aphrodite_config(
     prefill_backend: str | None = None,
     kv_cache_dtype: str = "auto",
     sparse_mla_force_mqa: bool = False,
-) -> AphroditeConfig:
-    """Create minimal AphroditeConfig for MLA benchmarks.
+) -> SonarConfig:
+    """Create minimal SonarConfig for MLA benchmarks.
 
     Args:
         model_name: Model name (deepseek-v2, deepseek-v3, etc.) - used if mla_dims not
@@ -137,7 +137,7 @@ def create_minimal_aphrodite_config(
                     forward_mqa (even prefill tokens).
 
     Returns:
-        AphroditeConfig for benchmarking
+        SonarConfig for benchmarking
 
     """
     # Get MLA dimensions - use provided or load from model name
@@ -167,7 +167,7 @@ def create_minimal_aphrodite_config(
     }
 
     # Create temporary directory with config.json
-    temp_dir = tempfile.mkdtemp(prefix="aphrodite_bench_")
+    temp_dir = tempfile.mkdtemp(prefix="sonar_bench_")
     config_path = os.path.join(temp_dir, "config.json")
     with open(config_path, "w") as f:
         json.dump(minimal_config, f)
@@ -224,7 +224,7 @@ def create_minimal_aphrodite_config(
 
     compilation_config = CompilationConfig()
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=cache_config,
         parallel_config=parallel_config,
@@ -234,14 +234,14 @@ def create_minimal_aphrodite_config(
 
     if prefill_backend is not None:
         prefill_cfg = get_prefill_backend_config(prefill_backend)
-        aphrodite_config.attention_config.mla_prefill_backend = prefill_cfg["mla_prefill_backend"]
+        sonar_config.attention_config.mla_prefill_backend = prefill_cfg["mla_prefill_backend"]
         if prefill_cfg["flash_attn_version"] is not None:
-            aphrodite_config.attention_config.flash_attn_version = prefill_cfg["flash_attn_version"]
+            sonar_config.attention_config.flash_attn_version = prefill_cfg["flash_attn_version"]
 
     if sparse_mla_force_mqa:
-        aphrodite_config.attention_config.sparse_mla_force_mqa = True
+        sonar_config.attention_config.sparse_mla_force_mqa = True
 
-    return aphrodite_config
+    return sonar_config
 
 
 # ============================================================================
@@ -322,8 +322,8 @@ def _get_backend_config(backend: str) -> dict:
         Dict with backend configuration
 
     """
-    from aphrodite.v1.attention.backend import MultipleOf
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backend import MultipleOf
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     try:
         backend_enum = AttentionBackendEnum[backend]
@@ -425,7 +425,7 @@ def _build_attention_metadata(
     slot_mapping = torch.tensor(slot_mapping_list, dtype=torch.int64, device=device)
 
     # Create CommonAttentionMetadata
-    from aphrodite.v1.attention.backends.utils import CommonAttentionMetadata
+    from sonar.v1.attention.backends.utils import CommonAttentionMetadata
 
     common_attn_metadata = CommonAttentionMetadata(
         num_reqs=len(requests),
@@ -563,7 +563,7 @@ def _create_input_tensors(
 def _create_backend_impl(
     backend_cfg: dict,
     mla_dims: dict,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     device: torch.device,
     max_num_tokens: int = 8192,
     index_topk: int | None = None,
@@ -574,7 +574,7 @@ def _create_backend_impl(
     Args:
         backend_cfg: Backend configuration dict from _get_backend_config()
         mla_dims: MLA dimension configuration
-        aphrodite_config: AphroditeConfig instance
+        sonar_config: SonarConfig instance
         device: Target device
         max_num_tokens: Maximum number of tokens for sparse indexer buffer
         index_topk: Topk value for sparse MLA backends
@@ -638,10 +638,10 @@ def _create_backend_impl(
         impl.dcp_rank = 0
 
     # Create KV cache spec for MockLayer
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     kv_cache_spec = FullAttentionSpec(
-        block_size=backend_cfg["block_size"] or aphrodite_config.cache_config.block_size,
+        block_size=backend_cfg["block_size"] or sonar_config.cache_config.block_size,
         num_kv_heads=1,  # MLA uses 1 KV head
         head_size=576,  # MLA head dim
         dtype=torch.bfloat16,
@@ -652,9 +652,9 @@ def _create_backend_impl(
 
     # Attach a prefill backend (MLAAttention does this in __init__; the metadata
     # builder reads layer.prefill_backend from static_forward_context).
-    from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+    from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
 
-    prefill_backend_cls = get_mla_prefill_backend(aphrodite_config)
+    prefill_backend_cls = get_mla_prefill_backend(sonar_config)
     layer.prefill_backend = prefill_backend_cls(
         num_heads=mla_dims["num_q_heads"],
         scale=(mla_dims["qk_nope_head_dim"] + mla_dims["qk_rope_head_dim"]) ** -0.5,
@@ -662,7 +662,7 @@ def _create_backend_impl(
         qk_nope_head_dim=mla_dims["qk_nope_head_dim"],
         qk_rope_head_dim=mla_dims["qk_rope_head_dim"],
         v_head_dim=mla_dims["v_head_dim"],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
 
     # Create builder instance if needed
@@ -670,12 +670,12 @@ def _create_backend_impl(
     if builder_class:
         # Populate static_forward_context so builder can find the layer
         # MockLayer inherits from AttentionLayerBase, so isinstance checks pass
-        aphrodite_config.compilation_config.static_forward_context = {"placeholder": layer}
+        sonar_config.compilation_config.static_forward_context = {"placeholder": layer}
 
         builder_instance = builder_class(
             kv_cache_spec=kv_cache_spec,
             layer_names=["placeholder"],
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
         )
 
@@ -801,7 +801,7 @@ def _run_single_benchmark(
             dtype=torch.uint8,
         )
     elif kv_cache_dtype == "fp8":
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         kv_cache = torch.zeros(
             num_blocks,
@@ -867,7 +867,7 @@ def _run_single_benchmark(
         decode_inputs, _ = _create_input_tensors(num_decode, mla_dims, query_fmt, device, torch.bfloat16)
         # Cast decode query to fp8 if the backend supports it
         if quantize_query:
-            from aphrodite.platforms import current_platform
+            from sonar.platforms import current_platform
 
             if isinstance(decode_inputs, tuple):
                 decode_inputs = torch.cat(list(decode_inputs), dim=-1)
@@ -882,16 +882,16 @@ def _run_single_benchmark(
     prefill_output_scale = None
     prefill_quant_op = None
     if has_prefill and output_scale is not None:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         prefill_output_scale = torch.tensor([output_scale], device=device, dtype=torch.float32)
         if fuse_quant_op:
             prefill_fp8_output = torch.empty_like(prefill_inputs["output"], dtype=current_platform.fp8_dtype())
         else:
-            from aphrodite.model_executor.layers.quantization.input_quant_fp8 import (
+            from sonar.model_executor.layers.quantization.input_quant_fp8 import (
                 QuantFP8,
             )
-            from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+            from sonar.model_executor.layers.quantization.utils.quant_utils import (
                 GroupShape,
             )
 
@@ -1075,8 +1075,8 @@ def _run_mla_benchmark_batched(
         max(getattr(cfg, "max_model_len", None) or 32768 for cfg, *_ in configs_with_params),
     )
 
-    # Create and set Aphrodite config for MLA (reused across all benchmarks)
-    aphrodite_config = create_minimal_aphrodite_config(
+    # Create and set Sonar config for MLA (reused across all benchmarks)
+    sonar_config = create_minimal_sonar_config(
         model_name="deepseek-v3",  # Used only for model path
         block_size=block_size,
         max_num_batched_tokens=max_total_q,
@@ -1091,7 +1091,7 @@ def _run_mla_benchmark_batched(
     results = []
 
     # Initialize workspace manager (needed by metadata builders)
-    from aphrodite.v1.worker.workspace import (
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         is_workspace_manager_initialized,
     )
@@ -1099,14 +1099,14 @@ def _run_mla_benchmark_batched(
     if not is_workspace_manager_initialized():
         init_workspace_manager(device)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         _ensure_single_rank_model_parallel()
 
         # Create backend impl, layer, builder, and indexer (reused across benchmarks)
         impl, layer, builder_instance, indexer = _create_backend_impl(
             backend_cfg,
             mla_dims,
-            aphrodite_config,
+            sonar_config,
             device,
             max_num_tokens=max_total_q,
             index_topk=index_topk if is_sparse else None,
@@ -1146,7 +1146,7 @@ def _run_mla_benchmark_batched(
             force_masked_mha = is_sparse and getattr(config, "sparse_mla_mha_mode", "auto") == "masked"
             if force_masked_mha:
                 impl.masked_mha_available = True
-                from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+                from sonar.model_executor.layers.attention.sparse_mla_attention import (
                     GLOBAL_TOPK_MASK_MAX_BYTES,
                     _topk_mask_shape,
                 )

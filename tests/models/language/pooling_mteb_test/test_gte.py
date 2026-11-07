@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.models.language.pooling.embed_utils import correctness_test_embed_models
 from tests.models.utils import (
     EmbedModelInfo,
@@ -134,19 +134,19 @@ RERANK_MODELS = [
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
-    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info)
+def test_embed_models_mteb(hf_runner, sonar_runner, model_info: EmbedModelInfo) -> None:
+    mteb_test_embed_models(hf_runner, sonar_runner, model_info)
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
-    correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)
+def test_embed_models_correctness(hf_runner, sonar_runner, model_info: EmbedModelInfo, example_prompts) -> None:
+    correctness_test_embed_models(hf_runner, sonar_runner, model_info, example_prompts)
 
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
-    aphrodite_extra_kwargs = {}
+def test_rerank_models_mteb(sonar_runner, model_info: RerankModelInfo) -> None:
+    sonar_extra_kwargs = {}
     if current_platform.is_rocm():
-        aphrodite_extra_kwargs["attention_backend"] = "TRITON_ATTN"
-    mteb_test_rerank_models(aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs)
+        sonar_extra_kwargs["attention_backend"] = "TRITON_ATTN"
+    mteb_test_rerank_models(sonar_runner, model_info, sonar_extra_kwargs=sonar_extra_kwargs)

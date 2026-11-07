@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall, ToolCall
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
+from sonar.entrypoints.generate.base.protocol import FunctionCall, ToolCall
+from sonar.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,

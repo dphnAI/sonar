@@ -12,9 +12,9 @@ from pytest import MarkDecorator
 from transformers import AutoModelForCausalLM
 from transformers.models.auto.auto_factory import _BaseAutoModelClass
 
-from aphrodite.config.model import RunnerOption
-from aphrodite.logprobs import SampleLogprobs
-from aphrodite.tokenizers import TokenizerLike
+from sonar.config.model import RunnerOption
+from sonar.logprobs import SampleLogprobs
+from sonar.tokenizers import TokenizerLike
 
 from .....conftest import (
     AUDIO_ASSETS,
@@ -115,15 +115,15 @@ class VLMTestInfo(NamedTuple):
     # We need to define this explicitly for embedding tests
     convert_assets_to_embeddings: Callable[[ImageTestAssets], list[torch.Tensor]] | None = None
 
-    # Exposed options for Aphrodite runner; we change these in a several tests,
-    # but the defaults are derived from AphroditeRunner & the engine defaults
+    # Exposed options for Sonar runner; we change these in a several tests,
+    # but the defaults are derived from SonarRunner & the engine defaults
     # These settings are chosen to avoid OOMs when running in the CI
     enforce_eager: bool = True
     max_model_len: int = 1024
     max_num_seqs: int = 256
     runner: RunnerOption = "auto"
     tensor_parallel_size: int = 1
-    aphrodite_runner_kwargs: dict[str, Any] | None = None
+    sonar_runner_kwargs: dict[str, Any] | None = None
 
     # Optional callable which gets a list of token IDs from the model tokenizer
     get_stop_token_ids: Callable[[TokenizerLike], list[int]] | None = None
@@ -140,8 +140,8 @@ class VLMTestInfo(NamedTuple):
     patch_hf_runner: Callable[[HfRunner], HfRunner] | None = None
 
     # Post processors that if defined, will run oun the outputs of the
-    # Aphrodite and HF runner, respectively (useful for sanitization, etc).
-    aphrodite_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
+    # Sonar and HF runner, respectively (useful for sanitization, etc).
+    sonar_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
     hf_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
 
     # Consumes the output of the callables above and checks if they're equal
@@ -185,9 +185,9 @@ class VLMTestInfo(NamedTuple):
             "max_num_seqs": self.max_num_seqs,
             "runner": self.runner,
             "tensor_parallel_size": self.tensor_parallel_size,
-            "aphrodite_runner_kwargs": self.aphrodite_runner_kwargs,
+            "sonar_runner_kwargs": self.sonar_runner_kwargs,
             "hf_output_post_proc": self.hf_output_post_proc,
-            "aphrodite_output_post_proc": self.aphrodite_output_post_proc,
+            "sonar_output_post_proc": self.sonar_output_post_proc,
             "auto_cls": self.auto_cls,
             "use_tokenizer_eos": self.use_tokenizer_eos,
             "comparator": self.comparator,

@@ -12,22 +12,22 @@ Part 2: INT4 W4A8 GEMM tests
 Part 3: create_weights shapes
 
 cmd:
-    APHRODITE_CPU_INT4_W4A8=1 python -m pytest tests/kernels/test_awq_int4_to_int8.py -v -s
+    SONAR_CPU_INT4_W4A8=1 python -m pytest tests/kernels/test_awq_int4_to_int8.py -v -s
 """
 
 import numpy as np
 import pytest
 import torch
 
-from aphrodite._custom_ops import (
+from sonar._custom_ops import (
     CPUQuantAlgo,
     convert_weight_packed_scale_zp,
     int4_scaled_mm_cpu,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_cols,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)

@@ -6,10 +6,10 @@ import operator
 import pytest
 import torch
 
-import aphrodite
-from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode, PassConfig
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.compilation.passes.utility.split_coalescing import SplitCoalescingPass
+from sonar.config import CompilationConfig, CompilationMode, PassConfig, SonarConfig
+from sonar.platforms import current_platform
 from tests.compile.backend import TestBackend
 
 DEVICE_TYPE = current_platform.device_type
@@ -49,10 +49,10 @@ class SliceCoalescingModel(torch.nn.Module):
         return q + 1, k + 2, v + 3
 
 
-def make_aphrodite_config() -> AphroditeConfig:
-    return AphroditeConfig(
+def make_sonar_config() -> SonarConfig:
+    return SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(),
         )
     )
@@ -66,9 +66,9 @@ def test_split_coalescing(dtype):
 
     q_size, kv_size = 2048, 512
 
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        coalesce_pass = SplitCoalescingPass(aphrodite_config)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        coalesce_pass = SplitCoalescingPass(sonar_config)
         backend = TestBackend(coalesce_pass)
 
         model = SplitCoalescingModel(q_size, kv_size)
@@ -96,9 +96,9 @@ def test_slice_partition_canonicalization(dtype):
     torch.manual_seed(0)
 
     q_size, kv_size = 2048, 512
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        coalesce_pass = SplitCoalescingPass(aphrodite_config)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        coalesce_pass = SplitCoalescingPass(sonar_config)
         backend = TestBackend(coalesce_pass)
         model = SliceCoalescingModel(q_size, kv_size)
 
@@ -149,9 +149,9 @@ def make_slice_graph(
 
 def test_slice_partition_accepts_safe_group():
     graph = make_slice_graph([(0, 4, 1), (4, 8, 1)])
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        SplitCoalescingPass(aphrodite_config)(graph)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        SplitCoalescingPass(sonar_config)(graph)
 
     graph.lint()
     assert sum(node.target == torch.ops.aten.slice.Tensor for node in graph.nodes) == 0
@@ -171,9 +171,9 @@ def test_slice_partition_accepts_safe_group():
 )
 def test_slice_partition_rejects_unsafe_groups(ranges):
     graph = make_slice_graph(ranges)
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        SplitCoalescingPass(aphrodite_config)(graph)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        SplitCoalescingPass(sonar_config)(graph)
 
     slice_count = sum(node.target == torch.ops.aten.slice.Tensor for node in graph.nodes)
     split_count = sum(node.target == torch.ops.aten.split_with_sizes.default for node in graph.nodes)
@@ -197,9 +197,9 @@ def test_nested_slice_partitions_use_live_source():
     inner_right.meta["val"] = torch.empty((2, 2), device="meta")
     graph.output((inner_left, inner_right, outer_right))
 
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        SplitCoalescingPass(aphrodite_config)(graph)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        SplitCoalescingPass(sonar_config)(graph)
 
     graph.lint()
     assert sum(node.target == torch.ops.aten.slice.Tensor for node in graph.nodes) == 0
@@ -229,9 +229,9 @@ def test_split_coalescing_preserves_different_dimensions():
             outputs.append(graph.call_function(operator.getitem, args=(split, index)))
     graph.output(tuple(outputs))
 
-    aphrodite_config = make_aphrodite_config()
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        SplitCoalescingPass(aphrodite_config)(graph)
+    sonar_config = make_sonar_config()
+    with sonar.config.set_current_sonar_config(sonar_config):
+        SplitCoalescingPass(sonar_config)(graph)
 
     splits = [node for node in graph.nodes if node.target == torch.ops.aten.split_with_sizes.default]
     assert len(splits) == 2

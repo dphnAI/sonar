@@ -7,7 +7,7 @@ Pins the coupled parsing path (`/v1/chat/completions` on a normal GPU
 server which parses generated tokens incrementally as they stream out)
 against the disaggregated path (``OnlineDerenderer.derender_chat`` via
 ``/v1/chat/completions/derender`` which parses the same tokens all at once,
-out of process). A standard ``aphrodite run`` server mounts both, so one
+out of process). A standard ``sonar run`` server mounts both, so one
 real generation lets both parsers run on identical input.
 
 Both paths consume the same generated token IDs (extracted from the coupled

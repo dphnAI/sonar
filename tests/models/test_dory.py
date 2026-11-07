@@ -10,17 +10,17 @@ import torch
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     DeviceConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed import parallel_state
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.models import dory
-from aphrodite.model_executor.models.utils import extract_layer_index
-from aphrodite.transformers_utils.configs.dory import DoryConfig
+from sonar.distributed import parallel_state
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.models import dory
+from sonar.model_executor.models.utils import extract_layer_index
+from sonar.transformers_utils.configs.dory import DoryConfig
 
 
 class ReferenceAttention(nn.Module):
@@ -54,10 +54,10 @@ class ReferenceAttention(nn.Module):
 
 @pytest.fixture
 def model_factory(monkeypatch):
-    # Keep the actual Aphrodite linear/embedding modules and their weight loaders.
+    # Keep the actual Sonar linear/embedding modules and their weight loaders.
     monkeypatch.setattr(parallel_state, "_TP", SimpleNamespace(world_size=1, rank_in_group=0))
     monkeypatch.setattr(dory, "Attention", ReferenceAttention)
-    vc = AphroditeConfig(
+    vc = SonarConfig(
         device_config=DeviceConfig(device="cpu"),
         compilation_config=CompilationConfig(mode=0, custom_ops=["none"]),
     )
@@ -95,8 +95,8 @@ def model_factory(monkeypatch):
         cfg.update(hf_overrides or {})
         vc.model_config = SimpleNamespace(hf_config=cfg, head_dtype=None, dtype=torch.float32)
         vc.quant_config = quant_config
-        with set_current_aphrodite_config(vc):
-            model = dory.DoryForCausalLM(aphrodite_config=vc)
+        with set_current_sonar_config(vc):
+            model = dory.DoryForCausalLM(sonar_config=vc)
 
         def set_cache_positions(module, args):
             # Emulate the runner's slot mapping for contiguous request tokens.
@@ -107,7 +107,7 @@ def model_factory(monkeypatch):
         model.register_forward_pre_hook(set_cache_positions)
         return model
 
-    with set_current_aphrodite_config(vc):
+    with set_current_sonar_config(vc):
         yield build
 
 
@@ -271,11 +271,11 @@ def test_weight_loader_rejects_silent_truncation(model_factory, name, shape):
 
 @pytest.fixture(params=["mxfp8", "nvfp4"])
 def quantized_model(request, monkeypatch, model_factory):
-    from aphrodite.model_executor.layers.quantization import modelopt
-    from aphrodite.model_executor.layers.quantization.compressed_tensors import (
+    from sonar.model_executor.layers.quantization import modelopt
+    from sonar.model_executor.layers.quantization.compressed_tensors import (
         compressed_tensors,
     )
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.schemes import (
+    from sonar.model_executor.layers.quantization.compressed_tensors.schemes import (
         compressed_tensors_w8a8_mxfp8,
     )
 

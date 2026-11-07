@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The gfx942 top-512 helpers of the DeepSeek-V4.1 sparse indexer
-(aphrodite/models/deepseek_v41/amd/ops/topk.py) against Aphrodite's ops.
+(sonar/models/deepseek_v41/amd/ops/topk.py) against Sonar's ops.
 
-Each helper must choose the columns or blocks that Aphrodite's op chooses. Equal
+Each helper must choose the columns or blocks that Sonar's op chooses. Equal
 values at the cut may be chosen differently, and then the chosen values must
 be the same multiset. The steps are one request with its 5 DSpark drafts,
 3 such requests, and 8 requests without drafts. The logits rows are as wide
@@ -16,13 +16,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _on_gfx942() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -41,7 +41,7 @@ def gfx942_decode(monkeypatch):
     """Turns on the gfx942 decode helpers for one test. The model records
     --monokernel when it is created, and this test has no model, so it sets
     the recorded flag itself."""
-    from aphrodite.models.deepseek_v41.amd import ops
+    from sonar.models.deepseek_v41.amd import ops
 
     monkeypatch.setattr(ops, "_monokernel", True)
     ops.enabled.cache_clear()
@@ -58,7 +58,7 @@ def _lengths(length: int, reqs: int) -> list[int]:
 
 def _seq_lens(lengths: list[int], next_n: int, layout: str) -> torch.Tensor:
     """The lengths per row (2d) or per request (1d), the two forms that
-    Aphrodite's decode indexer uses."""
+    Sonar's decode indexer uses."""
     if layout == "2d":
         ends = [max(0, n - next_n + 1 + j) for n in lengths for j in range(next_n)]
         return torch.tensor(ends, dtype=torch.int32, device="cuda").view(-1, next_n)
@@ -66,7 +66,7 @@ def _seq_lens(lengths: list[int], next_n: int, layout: str) -> torch.Tensor:
 
 
 def _row_ends(seq_lens: torch.Tensor, next_n: int, rows: int) -> list[int]:
-    """Each row's end, the way Aphrodite's top_k_per_row_decode computes it."""
+    """Each row's end, the way Sonar's top_k_per_row_decode computes it."""
     lens = seq_lens.reshape(-1).tolist()
     if seq_lens.dim() == 2:
         return [max(0, v) for v in lens[:rows]]
@@ -74,7 +74,7 @@ def _row_ends(seq_lens: torch.Tensor, next_n: int, rows: int) -> list[int]:
 
 
 def _visible(seq_lens: torch.Tensor, next_n: int, rows: int) -> torch.Tensor:
-    """The int64 row ends that Aphrodite's decode indexer passes to its candidate
+    """The int64 row ends that Sonar's decode indexer passes to its candidate
     kernels."""
     visible = seq_lens.reshape(-1)
     if visible.numel() != rows:
@@ -94,7 +94,7 @@ def _row_sets(indices: torch.Tensor, ends: list[int]) -> list[set[int]]:
 
 
 def _assert_same_top512(x, ref, got, ends, name):
-    """Got must hold Aphrodite's columns, or other columns with the same values
+    """Got must hold Sonar's columns, or other columns with the same values
     where values at the cut are equal, and -1 past a short row's end."""
     want, have = _row_sets(ref, ends), _row_sets(got, ends)
     for r, e in enumerate(ends):
@@ -128,9 +128,9 @@ def _logits(ends: list[int], masked: bool, gen) -> torch.Tensor:
 @pytest.mark.parametrize("masked", [False, True])
 @pytest.mark.parametrize("length", [100, 517, 16384, 131072, 300000])
 @pytest.mark.parametrize("reqs,next_n", STEPS, ids=STEP_IDS)
-def test_decode_top_k_matches_aphrodite(reqs, next_n, length, masked, register_select):
-    from aphrodite import _custom_ops as ops
-    from aphrodite.models.deepseek_v41.amd.ops import topk
+def test_decode_top_k_matches_sonar(reqs, next_n, length, masked, register_select):
+    from sonar import _custom_ops as ops
+    from sonar.models.deepseek_v41.amd.ops import topk
 
     gen = torch.Generator(device="cuda").manual_seed(length + reqs)
     rows = reqs * next_n
@@ -169,9 +169,9 @@ def _compact_rows(kind: str, rows: int, length: int, gen) -> torch.Tensor:
 @pytest.mark.parametrize("kind", ["normal", "wide", "few values", "all equal", "near max", "with -inf"])
 def test_compact_register_select_matches_radix_job(kind):
     """compact_top_k_512_regs (selectFromRegisters) against
-    compact_top_k_512 (Aphrodite's topKPerRowJob) on compact candidate rows of 16384
+    compact_top_k_512 (Sonar's topKPerRowJob) on compact candidate rows of 16384
     logits, whose ids are their positions."""
-    from aphrodite.models.deepseek_v41.amd.ops import topk
+    from sonar.models.deepseek_v41.amd.ops import topk
 
     ext = topk._load()
     rows, length = 6, TOPK_BLOCKS * BLOCK
@@ -201,16 +201,16 @@ def test_compact_register_select_matches_radix_job(kind):
 @pytest.mark.parametrize("length", [100, 512, 517, 16390, 131072, 300000])
 @pytest.mark.parametrize("reqs,next_n", STEPS, ids=STEP_IDS)
 def test_candidate_top_k_matches_mask_and_top_k(gfx942_decode, reqs, next_n, length, layout):
-    """topk.candidate_top_k against Aphrodite's decode path on layers 24 to 36:
+    """topk.candidate_top_k against Sonar's decode path on layers 24 to 36:
     the candidate mask, then top_k_per_row_decode on the masked rows. The
-    candidate lists come from Aphrodite's own block selection over another row,
+    candidate lists come from Sonar's own block selection over another row,
     as layer 20 writes them."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.sparse_attn_indexer import (
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.sparse_attn_indexer import (
         _select_candidate_blocks,
     )
-    from aphrodite.models.deepseek_v41.amd.ops import topk
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.models.deepseek_v41.amd.ops import topk
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _apply_candidate_mask_strided,
     )
 
@@ -244,7 +244,7 @@ def test_candidate_top_k_matches_mask_and_top_k(gfx942_decode, reqs, next_n, len
 
 
 def _block_scores(row: torch.Tensor, end: int) -> torch.Tensor:
-    """APHRODITE's block scores of one row before its end: the largest logit of a
+    """SONAR's block scores of one row before its end: the largest logit of a
     block (NaN when the block holds a NaN), and +inf for the newest block."""
     nblocks = math.ceil(end / BLOCK)
     padded = torch.full((nblocks * BLOCK,), -math.inf, device=row.device)
@@ -256,7 +256,7 @@ def _block_scores(row: torch.Tensor, end: int) -> torch.Tensor:
 
 
 def _sort_key(v: float):
-    # NaN sorts above +inf, as torch.topk and Aphrodite's topKPerRowJob pick it.
+    # NaN sorts above +inf, as torch.topk and Sonar's topKPerRowJob pick it.
     return (1, 0.0) if v != v else (0, v)
 
 
@@ -264,15 +264,15 @@ def _sort_key(v: float):
 @pytest.mark.parametrize("layout", ["2d", "1d"])
 @pytest.mark.parametrize("length", [0, 5, 100, 16390, 131072, 300000])
 @pytest.mark.parametrize("reqs,next_n", STEPS, ids=STEP_IDS)
-def test_select_candidates_matches_aphrodite(gfx942_decode, reqs, next_n, length, layout, case):
-    """topk.select_candidates (layer 20) against Aphrodite's
+def test_select_candidates_matches_sonar(gfx942_decode, reqs, next_n, length, layout, case):
+    """topk.select_candidates (layer 20) against Sonar's
     select_candidate_blocks. The block ids are the same, in no particular
     order. "ties" rounds the logits so that many block scores are equal, and
     "special" puts NaN and whole blocks of -inf inside the rows."""
-    from aphrodite.model_executor.layers.sparse_attn_indexer import (
+    from sonar.model_executor.layers.sparse_attn_indexer import (
         _select_candidate_blocks,
     )
-    from aphrodite.models.deepseek_v41.amd.ops import topk
+    from sonar.models.deepseek_v41.amd.ops import topk
 
     gen = torch.Generator(device="cuda").manual_seed(length + reqs + 7 * len(case))
     rows = reqs * next_n
@@ -305,11 +305,11 @@ def test_select_candidates_matches_aphrodite(gfx942_decode, reqs, next_n, length
             assert all((a != a and b != b) or a == b for a, b in zip(vw, vg)), f"row {r}: different chosen block scores"
 
 
-def test_failed_build_leaves_the_top_k_to_aphrodite(monkeypatch):
+def test_failed_build_leaves_the_top_k_to_sonar(monkeypatch):
     """A failed build of topk512_gfx942.cu, for example without hipcc, must not
     fail a decode step. build returns False, every hook returns False, and the
-    indexer keeps its -1 fill, so Aphrodite runs its own top-k ops."""
-    from aphrodite.models.deepseek_v41.amd.ops import topk
+    indexer keeps its -1 fill, so Sonar runs its own top-k ops."""
+    from sonar.models.deepseek_v41.amd.ops import topk
 
     def fail():
         raise RuntimeError("hipcc not found")

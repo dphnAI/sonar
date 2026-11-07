@@ -12,9 +12,9 @@ from unittest import mock
 
 import pytest
 
-import aphrodite.triton_utils as triton_utils
-from aphrodite.platforms import current_platform
-from aphrodite.utils import jit_monitor
+import sonar.triton_utils as triton_utils
+from sonar.platforms import current_platform
+from sonar.utils import jit_monitor
 
 pytestmark = pytest.mark.cpu_test
 

@@ -14,9 +14,9 @@ from unittest.mock import Mock, call, patch
 import pytest
 import torch
 
-import aphrodite.model_executor.warmup.kernel_warmup as warmup
-import aphrodite.utils.flashinfer as fi_utils
-from aphrodite.model_executor.warmup.kernel_warmup import (
+import sonar.model_executor.warmup.kernel_warmup as warmup
+import sonar.utils.flashinfer as fi_utils
+from sonar.model_executor.warmup.kernel_warmup import (
     _flashinfer_autotune_token_counts,
     _run_flashinfer_autotune_dummy_runs,
     flashinfer_autotune,
@@ -45,7 +45,7 @@ def _make_runner(modules, *, max_tokens: int = 8192):
     """Create a runner carrying only the state used by FlashInfer warmup."""
     return SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=max_tokens),
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             attention_config=SimpleNamespace(hisparse_config=None),
             parallel_config=SimpleNamespace(
                 enable_elastic_ep=False,
@@ -70,7 +70,7 @@ def test_flashinfer_autotune_token_counts_include_deferred_moe_limits():
         ]
     )
 
-    with patch("aphrodite.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
+    with patch("sonar.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
         token_counts = _flashinfer_autotune_token_counts(runner)
 
     assert token_counts == (8192, 128)
@@ -82,7 +82,7 @@ def test_flashinfer_autotune_token_counts_are_bounded_and_deduplicated():
         max_tokens=32,
     )
 
-    with patch("aphrodite.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
+    with patch("sonar.model_executor.layers.fused_moe.MoERunner", _FakeMoERunner):
         token_counts = _flashinfer_autotune_token_counts(runner)
 
     assert token_counts == (32,)
@@ -90,8 +90,8 @@ def test_flashinfer_autotune_token_counts_are_bounded_and_deduplicated():
 
 @pytest.mark.parametrize("skip_attn", [False, True])
 def test_flashinfer_autotune_uses_token_buckets_for_each_dummy_run(skip_attn):
-    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as V2Runner
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner as V1Runner
+    from sonar.v1.worker.gpu.model_runner import GPUModelRunner as V2Runner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner as V1Runner
 
     runner = _make_runner([])
     dummy_run_signature = signature((V2Runner if skip_attn else V1Runner)._dummy_run)
@@ -101,14 +101,14 @@ def test_flashinfer_autotune_uses_token_buckets_for_each_dummy_run(skip_attn):
 
     with (
         patch(
-            "aphrodite.model_executor.warmup.kernel_warmup._flashinfer_autotune_token_counts",
+            "sonar.model_executor.warmup.kernel_warmup._flashinfer_autotune_token_counts",
             return_value=(8192, 128),
         ),
         patch(
-            "aphrodite.utils.flashinfer.flashinfer_get_hybrid_num_tokens_buckets",
+            "sonar.utils.flashinfer.flashinfer_get_hybrid_num_tokens_buckets",
             side_effect=(max_buckets, deferred_buckets),
         ) as get_buckets,
-        patch("aphrodite.utils.flashinfer.autotune") as autotune,
+        patch("sonar.utils.flashinfer.autotune") as autotune,
     ):
         _run_flashinfer_autotune_dummy_runs(runner, skip_attn=skip_attn)
 
@@ -166,8 +166,8 @@ def test_flashinfer_autotune_lifecycle(
 ):
     use_v2 = has_v2 and not elastic_ep and node_count == 1 and world_size == 1
     runner = _make_runner([])
-    runner.aphrodite_config.parallel_config.enable_elastic_ep = elastic_ep
-    runner.aphrodite_config.attention_config.hisparse_config = object() if hisparse else None
+    runner.sonar_config.parallel_config.enable_elastic_ep = elastic_ep
+    runner.sonar_config.attention_config.hisparse_config = object() if hisparse else None
     model = runner.get_model()
     cache_path = tmp_path / "autotune.json"
     rank_cache_path = cache_path.with_name(f"autotune_dp0_rank{rank}.json")
@@ -212,15 +212,15 @@ def test_flashinfer_autotune_lifecycle(
         "flashinfer",
         SimpleNamespace(autotune_v2=events.autotune, autotune_v2_reload=events.reload),
     )
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.get_world_group", lambda: world)
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.get_node_count", lambda: node_count)
+    monkeypatch.setattr("sonar.distributed.parallel_state.get_world_group", lambda: world)
+    monkeypatch.setattr("sonar.distributed.parallel_state.get_node_count", lambda: node_count)
     monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_pp_group",
+        "sonar.distributed.parallel_state.get_pp_group",
         lambda: SimpleNamespace(world_size=1),
     )
     monkeypatch.setattr(fi_utils, "has_flashinfer_autotune_v2", lambda: has_v2)
     monkeypatch.setattr(fi_utils, "autotune", events.autotune)
-    monkeypatch.setattr(warmup.envs, "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS", skip_ops)
+    monkeypatch.setattr(warmup.envs, "SONAR_FLASHINFER_AUTOTUNE_SKIP_OPS", skip_ops)
     resolve_file = Mock(return_value=rank_cache_path)
     resolve_root = Mock(return_value=str(tmp_path))
     monkeypatch.setattr(warmup, "resolve_rank_flashinfer_autotune_file", resolve_file)
@@ -295,17 +295,17 @@ def test_sparse_autotune_respects_cache_selection(
     model_runner_v2,
     max_reqs,
 ):
-    import aphrodite.model_executor.warmup.flashinfer_sparse_mla_warmup as sparse
+    import sonar.model_executor.warmup.flashinfer_sparse_mla_warmup as sparse
 
     runner = _make_runner([])
     runner.max_num_reqs = max_reqs
-    runner.aphrodite_config.use_v2_model_runner = model_runner_v2
-    runner.aphrodite_config.kernel_config = SimpleNamespace(enable_flashinfer_autotune=True)
-    runner.aphrodite_config.parallel_config.enable_elastic_ep = elastic_ep
-    runner.aphrodite_config.parallel_config.pipeline_parallel_size = pp_size
+    runner.sonar_config.use_v2_model_runner = model_runner_v2
+    runner.sonar_config.kernel_config = SimpleNamespace(enable_flashinfer_autotune=True)
+    runner.sonar_config.parallel_config.enable_elastic_ep = elastic_ep
+    runner.sonar_config.parallel_config.pipeline_parallel_size = pp_size
     worker = SimpleNamespace(
         model_runner=runner,
-        aphrodite_config=runner.aphrodite_config,
+        sonar_config=runner.sonar_config,
         execute_model=Mock(),
         sample_tokens=Mock(),
     )
@@ -329,8 +329,8 @@ def test_sparse_autotune_respects_cache_selection(
         "flashinfer.autotuner",
         SimpleNamespace(AutoTuner=SimpleNamespace(get=lambda: tuner)),
     )
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.get_world_group", lambda: world)
-    monkeypatch.setattr("aphrodite.distributed.parallel_state.get_node_count", lambda: node_count)
+    monkeypatch.setattr("sonar.distributed.parallel_state.get_world_group", lambda: world)
+    monkeypatch.setattr("sonar.distributed.parallel_state.get_node_count", lambda: node_count)
     monkeypatch.setattr(fi_utils, "has_flashinfer_autotune_v2", lambda: True)
     monkeypatch.setattr(sparse, "has_flashinfer", lambda: True)
     monkeypatch.setattr(sparse.current_platform, "is_device_capability_family", lambda _: True)
@@ -377,11 +377,11 @@ def test_flashinfer_autotune_buckets_cover_drafter_tokens():
 
     with (
         patch(
-            "aphrodite.model_executor.warmup.kernel_warmup._flashinfer_autotune_token_counts",
+            "sonar.model_executor.warmup.kernel_warmup._flashinfer_autotune_token_counts",
             return_value=(8192, 128),
         ),
-        patch("aphrodite.utils.flashinfer.flashinfer_get_hybrid_num_tokens_buckets") as get_buckets,
-        patch("aphrodite.utils.flashinfer.autotune"),
+        patch("sonar.utils.flashinfer.flashinfer_get_hybrid_num_tokens_buckets") as get_buckets,
+        patch("sonar.utils.flashinfer.autotune"),
     ):
         _run_flashinfer_autotune_dummy_runs(runner)
 
@@ -494,7 +494,7 @@ class _AutotuneRun:
             self.rank = rank
             self.tuners[rank] = _AutotuneTuner(self)
             runner = _make_runner([])
-            runner.aphrodite_config.parallel_config.pipeline_parallel_size = self.pp
+            runner.sonar_config.parallel_config.pipeline_parallel_size = self.pp
             flashinfer_autotune(runner)
         return self
 
@@ -507,8 +507,8 @@ class _AutotuneRun:
 
 @pytest.fixture
 def autotune_run(monkeypatch, tmp_path):
-    import aphrodite.utils.flashinfer as fi_utils
-    from aphrodite.distributed import parallel_state
+    import sonar.utils.flashinfer as fi_utils
+    from sonar.distributed import parallel_state
 
     def make_run(*, pp=2, tp=4):
         run = _AutotuneRun(pp, tp, tmp_path)
@@ -613,8 +613,8 @@ def test_autotune_cache_key_normalizes_kv_init_fields():
     before startup (the daemon tunes before any KV init). block_size must
     stay in the key: the daemon replays the engine's block-size resolution
     before tuning, and different block sizes may select different ops."""
-    from aphrodite.config.cache import CacheConfig
-    from aphrodite.model_executor.warmup.flashinfer_autotune_cache import (
+    from sonar.config.cache import CacheConfig
+    from sonar.model_executor.warmup.flashinfer_autotune_cache import (
         _normalize_cache_config_for_hash,
     )
 

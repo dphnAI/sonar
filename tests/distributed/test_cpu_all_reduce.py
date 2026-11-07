@@ -10,12 +10,12 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from aphrodite.distributed.parallel_state import GroupCoordinator
-from aphrodite.distributed.utils import (
+from sonar.distributed.parallel_state import GroupCoordinator
+from sonar.distributed.utils import (
     cpu_all_reduce_,
     stateless_init_torch_distributed_process_group,
 )
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.network_utils import get_open_port
 
 pytestmark = pytest.mark.cpu_test
 

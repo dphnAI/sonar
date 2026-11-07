@@ -7,7 +7,7 @@ import openai  # use the official client for correctness check
 import pytest
 import pytest_asyncio
 
-from aphrodite.config import ModelConfig
+from sonar.config import ModelConfig
 from tests.utils import RemoteOpenAIServer
 
 # # any model with a chat template should work here

@@ -7,39 +7,39 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite import logger as aphrodite_logger
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.watermarking import WatermarkConfig
-from aphrodite.platforms import current_platform
-from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p_pytorch
-from aphrodite.v1.watermarking import (
+from sonar import SamplingParams
+from sonar import logger as sonar_logger
+from sonar.config import SonarConfig
+from sonar.config.watermarking import WatermarkConfig
+from sonar.platforms import current_platform
+from sonar.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p_pytorch
+from sonar.v1.watermarking import (
     DualKeyGumbelWatermarker,
     SupportsSpeculativeDecoding,
     create_watermarker,
     derive_watermark_key,
 )
-from aphrodite.v1.watermarking.gpu_sampler import GPUWatermarkSampler
-from aphrodite.v1.watermarking.gumbel import GumbelWatermarker
-from aphrodite.v1.watermarking.spec_decode import (
+from sonar.v1.watermarking.gpu_sampler import GPUWatermarkSampler
+from sonar.v1.watermarking.gumbel import GumbelWatermarker
+from sonar.v1.watermarking.spec_decode import (
     DraftWatermarker,
     _resolve_watermark_key,
     create_speculative_draft_watermarker,
     create_speculative_target_watermarker,
     speculative_target_watermark_key,
 )
-from aphrodite.v1.watermarking.watermarker import Watermarker, WatermarkSample
-from aphrodite.v1.worker.gpu import buffer_utils
-from aphrodite.v1.worker.gpu.buffer_utils import UvaBackedTensor
-from aphrodite.v1.worker.gpu.sample.watermark import (
+from sonar.v1.watermarking.watermarker import Watermarker, WatermarkSample
+from sonar.v1.worker.gpu import buffer_utils
+from sonar.v1.worker.gpu.buffer_utils import UvaBackedTensor
+from sonar.v1.worker.gpu.sample.watermark import (
     draft_watermarking_mask,
     philox_gumbel_sample,
     repeated_context_mask,
 )
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
-from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
 
 
 class StubWatermarker(Watermarker):
@@ -80,7 +80,7 @@ def make_gpu_watermark_sampler(monkeypatch):
         )
         return GPUWatermarkSampler(
             watermarker,
-            aphrodite_config=AphroditeConfig(),
+            sonar_config=SonarConfig(),
             max_num_reqs=max_num_reqs,
             vocab_size=vocab_size,
             device=torch.device("cpu"),
@@ -116,7 +116,7 @@ def test_watermarker_contract(algorithm: str):
 def test_gumbel_config_warns_when_context_deduplication_is_weak(monkeypatch, algorithm, config_overrides):
     messages: list[str] = []
     monkeypatch.setattr(
-        "aphrodite.config.watermarking.logger.warning_once",
+        "sonar.config.watermarking.logger.warning_once",
         lambda message, *, scope: messages.append(message),
     )
 
@@ -307,11 +307,11 @@ def test_sampling_params_can_disable_watermarking():
 
 
 def test_gpu_sampler_warns_about_unexpected_greedy_watermarking(monkeypatch, make_gpu_watermark_sampler):
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
     sampler = make_gpu_watermark_sampler(StubWatermarker(), max_num_reqs=1)
     messages: list[str] = []
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.gpu_sampler.logger.warning",
+        "sonar.v1.watermarking.gpu_sampler.logger.warning",
         lambda message, *_args, **_kwargs: messages.append(message),
     )
 
@@ -328,7 +328,7 @@ def test_gpu_sampler_warns_about_unexpected_greedy_watermarking(monkeypatch, mak
             "ordinary greedy sampling."
         )
     ]
-    aphrodite_logger._print_warning_once.cache_clear()
+    sonar_logger._print_warning_once.cache_clear()
 
 
 def test_gpu_sampler_respects_mixed_request_watermarking(monkeypatch, make_gpu_watermark_sampler):
@@ -338,7 +338,7 @@ def test_gpu_sampler_respects_mixed_request_watermarking(monkeypatch, make_gpu_w
     sampler.apply_staged_writes()
     sampler._get_contexts = lambda expanded_idx_mapping: torch.zeros(2, 1, dtype=torch.int64)
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([3, 4]),
     )
     logits = torch.zeros(2, 8)
@@ -370,7 +370,7 @@ def test_gpu_sampler_uses_argmax_only_for_greedy_rows(monkeypatch, make_gpu_wate
     sampler.apply_staged_writes()
     sampler._get_contexts = lambda expanded_idx_mapping: torch.zeros(2, 1, dtype=torch.int64)
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([3, 4]),
     )
     logits = torch.zeros(2, 8)
@@ -396,7 +396,7 @@ def test_gpu_sampler_filters_top_k_top_p_before_watermarking(monkeypatch, make_g
     # installed, which cannot read this test's CPU tensors. Force the torch
     # reference path; the assertion is about the call order, not the kernel.
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.gpu_sampler.apply_top_k_top_p",
+        "sonar.v1.watermarking.gpu_sampler.apply_top_k_top_p",
         lambda logits, k, p, **kwargs: apply_top_k_top_p_pytorch(logits, k, p, allow_cpu_sync=True),
     )
 
@@ -473,7 +473,7 @@ def test_gpu_sampler_skips_watermarking_for_repeated_contexts(monkeypatch):
     sampler._get_contexts = lambda expanded_idx_mapping: torch.zeros(2, 1, dtype=torch.int64)
     sampler._get_repeated_contexts = lambda expanded_idx_mapping, contexts: (torch.tensor([True, False]))
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([3, 4]),
     )
     logits = torch.zeros(2, 8)
@@ -933,7 +933,7 @@ def test_gpu_sampler_skips_watermarking_for_greedy_batch(monkeypatch):
     )
     expected = (torch.tensor([3, 4]), torch.zeros(2, 8))
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.gpu_sampler.Sampler._sample_random",
+        "sonar.v1.watermarking.gpu_sampler.Sampler._sample_random",
         lambda *args, **kwargs: expected,
     )
 
@@ -1257,7 +1257,7 @@ def test_draft_sampler_uses_draft_key_and_advances_context(monkeypatch):
     draft_watermarker.state.enabled = torch.tensor([True, False])
     speculator.draft_watermarker = draft_watermarker
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([3, 4]),
     )
 
@@ -1305,7 +1305,7 @@ def test_draft_sampler_uses_ordinary_samples_for_repeated_contexts(monkeypatch):
     temperature = torch.tensor([1.0])
     ordinary_samples = iter((torch.tensor([5]), torch.tensor([6]), torch.tensor([4])))
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: next(ordinary_samples),
     )
     seeds = torch.tensor([0])
@@ -1416,7 +1416,7 @@ def test_draft_sampler_deduplicates_against_committed_history(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "aphrodite.v1.watermarking.watermarker.gumbel_sample",
+        "sonar.v1.watermarking.watermarker.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([4]),
     )
     sampled = draft_watermarker.sample(
@@ -1478,7 +1478,7 @@ def test_draft_watermarker_deduplicates_across_a_block_on_cuda(monkeypatch, idx_
         skip_masks.append(kwargs["skip_mask"].cpu())
         return original(*args, **kwargs)
 
-    monkeypatch.setattr("aphrodite.v1.worker.gpu.sample.watermark.philox_gumbel_sample", spy)
+    monkeypatch.setattr("sonar.v1.worker.gpu.sample.watermark.philox_gumbel_sample", spy)
 
     draft_logits = torch.zeros(num_reqs, num_steps, vocab_size + 1).cuda()
     step_logits = []
@@ -1584,7 +1584,7 @@ def test_dflash_draft_sampler_watermarks_drafts_in_step_order(monkeypatch):
         cache[idx_mapping, col] = kwargs["logits_cache_source"]
         return seed[idx_mapping] + pos
 
-    monkeypatch.setattr("aphrodite.v1.watermarking.watermarker.gumbel_sample", ordinary_sample)
+    monkeypatch.setattr("sonar.v1.watermarking.watermarker.gumbel_sample", ordinary_sample)
     num_reqs, num_steps, vocab_size = 3, 2, 4
     draft_watermarker = DraftWatermarker(
         NextTokenWatermarker(),
@@ -1758,7 +1758,7 @@ def test_dspark_target_only_watermarking_leaves_drafts_unwatermarked(monkeypatch
     speculator.acceptance_estimator = None
     speculator.draft_watermarker = None
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.spec_decode.dspark.speculator.gumbel_sample",
+        "sonar.v1.worker.gpu.spec_decode.dspark.speculator.gumbel_sample",
         lambda *args, **kwargs: torch.tensor([3, 4]),
     )
 

@@ -6,7 +6,7 @@
 #include "layernorm_utils.cuh"
 #include "quant_conversions.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename scalar_t, typename scalar_out_t, bool has_residual = false>
 __device__ void rms_norm_dynamic_per_token_quant_vec(
@@ -20,28 +20,28 @@ __device__ void rms_norm_dynamic_per_token_quant_vec(
   float token_scale = 0.0f;
 
   // Compute rms
-  aphrodite::vectorized::compute_rms<scalar_t, has_residual>(
+  sonar::vectorized::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
 
   // Compute scale
-  aphrodite::vectorized::compute_dynamic_per_token_scales<
-      scalar_t, scalar_out_t, has_residual>(&token_scale, scales, input, weight,
-                                            rms, scale_ub, hidden_size,
-                                            input_stride, residual);
+  sonar::vectorized::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
+                                                      has_residual>(
+      &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
+      input_stride, residual);
 
   // RMS Norm + Quant
   if constexpr (std::is_same_v<scalar_out_t, int8_t>) {
     token_scale = 1.0f / token_scale;
-    aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, true,
-                                          has_residual>(
-        out, input, weight, rms, &token_scale, hidden_size, input_stride,
-        residual);
+    sonar::vectorized::norm_and_quant<scalar_t, scalar_out_t, true,
+                                      has_residual>(out, input, weight, rms,
+                                                    &token_scale, hidden_size,
+                                                    input_stride, residual);
   } else {
     // FP8 - Do not invert token_scale for exact match with FBGemm
-    aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, false,
-                                          has_residual>(
-        out, input, weight, rms, &token_scale, hidden_size, input_stride,
-        residual);
+    sonar::vectorized::norm_and_quant<scalar_t, scalar_out_t, false,
+                                      has_residual>(out, input, weight, rms,
+                                                    &token_scale, hidden_size,
+                                                    input_stride, residual);
   }
 }
 
@@ -69,23 +69,22 @@ __global__ void rms_norm_dynamic_per_token_quant_kernel(
   float token_scale = 0.0f;
 
   // Compute RMS
-  aphrodite::compute_rms<scalar_t, has_residual>(
+  sonar::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
   // Compute Scale
-  aphrodite::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
-                                              has_residual>(
+  sonar::compute_dynamic_per_token_scales<scalar_t, scalar_out_t, has_residual>(
       &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
       input_stride, residual);
 
   // RMS Norm + Quant
   if constexpr (std::is_same_v<scalar_out_t, int8_t>) {
     token_scale = 1.0f / token_scale;
-    aphrodite::norm_and_quant<scalar_t, scalar_out_t, true, has_residual>(
+    sonar::norm_and_quant<scalar_t, scalar_out_t, true, has_residual>(
         out, input, weight, rms, &token_scale, hidden_size, input_stride,
         residual);
   } else {
     // FP8 - Do not invert s_token_scale for exact match with FBGemm
-    aphrodite::norm_and_quant<scalar_t, scalar_out_t, false, has_residual>(
+    sonar::norm_and_quant<scalar_t, scalar_out_t, false, has_residual>(
         out, input, weight, rms, &token_scale, hidden_size, input_stride,
         residual);
   }
@@ -107,12 +106,12 @@ __global__ void rms_norm_per_block_quant_kernel(
   float rms;
   // Compute RMS
   // Always able to vectorize due to constraints on hidden_size
-  aphrodite::vectorized::compute_rms<scalar_t, has_residual>(
+  sonar::vectorized::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
 
   // Compute Scale
   // Always able to vectorize due to constraints on hidden_size and group_size
-  aphrodite::vectorized::compute_dynamic_per_token_scales<
+  sonar::vectorized::compute_dynamic_per_token_scales<
       scalar_t, scalar_out_t, has_residual, is_scale_transposed, group_size>(
       nullptr, scales, input, weight, rms, scale_ub, hidden_size, input_stride,
       residual, outer_scale_stride);
@@ -123,14 +122,14 @@ __global__ void rms_norm_per_block_quant_kernel(
   // kernel. We do it because particular elements of token_scale can be shared
   // between multiple threads, so this way, we avoid extra synchronization
   // overhead.
-  aphrodite::vectorized::norm_and_quant<
+  sonar::vectorized::norm_and_quant<
       scalar_t, scalar_out_t, std::is_same_v<scalar_out_t, int8_t>,
       has_residual, is_scale_transposed, group_size>(
       out, input, weight, rms, scales, hidden_size, input_stride, residual,
       outer_scale_stride);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Residual add + RMS norm + dynamic per token
 template <typename scalar_in_t>
@@ -153,20 +152,21 @@ void rms_norm_dynamic_per_token_quant_dispatch(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
-    APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
+  SONAR_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
+    SONAR_STABLE_DISPATCH_QUANT_TYPES(
         out.scalar_type(), "rms_norm_dynamic_per_token_quant_kernel", [&] {
-          aphrodite::rms_norm_dynamic_per_token_quant_kernel<
-              scalar_in_t, scalar_t, has_residual><<<grid, block, 0, stream>>>(
-              out.mutable_data_ptr<scalar_t>(),
-              scales.mutable_data_ptr<float>(),
-              input.const_data_ptr<scalar_in_t>(),
-              weight.const_data_ptr<scalar_in_t>(),
-              scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
-                                   : nullptr,
-              var_epsilon, hidden_size, input_stride,
-              has_residual ? residual->mutable_data_ptr<scalar_in_t>()
-                           : nullptr);
+          sonar::rms_norm_dynamic_per_token_quant_kernel<scalar_in_t, scalar_t,
+                                                         has_residual>
+              <<<grid, block, 0, stream>>>(
+                  out.mutable_data_ptr<scalar_t>(),
+                  scales.mutable_data_ptr<float>(),
+                  input.const_data_ptr<scalar_in_t>(),
+                  weight.const_data_ptr<scalar_in_t>(),
+                  scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
+                                       : nullptr,
+                  var_epsilon, hidden_size, input_stride,
+                  has_residual ? residual->mutable_data_ptr<scalar_in_t>()
+                               : nullptr);
         });
   });
 }
@@ -198,7 +198,7 @@ void rms_norm_dynamic_per_token_quant(
     STD_TORCH_CHECK(residual->is_contiguous());
   }
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_dynamic_per_token_quant_dispatch", [&] {
         rms_norm_dynamic_per_token_quant_dispatch<scalar_t>(
             out, input, weight, scales, var_epsilon, scale_ub, residual);
@@ -232,7 +232,7 @@ void rms_norm_per_block_quant_dispatch(
   auto num_tokens = input.numel() / hidden_size;
 
   dim3 grid(num_tokens);
-  const bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
+  const bool batch_invariant_launch = sonar::sonar_is_batch_invariant();
   const int max_block_size =
       batch_invariant_launch ? 512 : ((num_tokens <= 256) ? 512 : 256);
   dim3 block(std::min(hidden_size, max_block_size));
@@ -240,37 +240,34 @@ void rms_norm_per_block_quant_dispatch(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_per_block_quant_fp_dispatch", [&] {
         using scalar_in_t = scalar_t;
-        APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
-          APHRODITE_STABLE_DISPATCH_BOOL(
-              residual.has_value(), has_residual, [&] {
-                APHRODITE_STABLE_DISPATCH_BOOL(
-                    is_scale_transposed, transpose_scale, [&] {
-                      APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
-                          out.scalar_type(), "rms_norm_per_block_quant_kernel",
-                          [&] {
-                            aphrodite::rms_norm_per_block_quant_kernel<
-                                scalar_in_t, scalar_t, has_residual,
-                                transpose_scale, gs>
-                                <<<grid, block, 0, stream>>>(
-                                    out.mutable_data_ptr<scalar_t>(),
-                                    scales.mutable_data_ptr<float>(),
-                                    input.const_data_ptr<scalar_in_t>(),
-                                    weight.const_data_ptr<scalar_in_t>(),
-                                    scale_ub.has_value()
-                                        ? scale_ub->const_data_ptr<float>()
-                                        : nullptr,
-                                    var_epsilon, hidden_size, input_stride,
-                                    has_residual
-                                        ? residual
-                                              ->mutable_data_ptr<scalar_in_t>()
-                                        : nullptr,
-                                    scales.stride(1));
-                          });
-                    });
-              });
+        SONAR_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
+          SONAR_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
+            SONAR_STABLE_DISPATCH_BOOL(
+                is_scale_transposed, transpose_scale, [&] {
+                  SONAR_STABLE_DISPATCH_QUANT_TYPES(
+                      out.scalar_type(), "rms_norm_per_block_quant_kernel",
+                      [&] {
+                        sonar::rms_norm_per_block_quant_kernel<
+                            scalar_in_t, scalar_t, has_residual,
+                            transpose_scale, gs><<<grid, block, 0, stream>>>(
+                            out.mutable_data_ptr<scalar_t>(),
+                            scales.mutable_data_ptr<float>(),
+                            input.const_data_ptr<scalar_in_t>(),
+                            weight.const_data_ptr<scalar_in_t>(),
+                            scale_ub.has_value()
+                                ? scale_ub->const_data_ptr<float>()
+                                : nullptr,
+                            var_epsilon, hidden_size, input_stride,
+                            has_residual
+                                ? residual->mutable_data_ptr<scalar_in_t>()
+                                : nullptr,
+                            scales.stride(1));
+                      });
+                });
+          });
         });
       });
 }

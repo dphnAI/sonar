@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.base import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.data.base import (
     DataTransport,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import (
     serialize_mem_descriptor,
 )
 
-_NIXL_PATH = "aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl"
+_NIXL_PATH = "sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ def _make_nixl_mock(prep_side_effect=None) -> MagicMock:
 
 
 def _make_transport(nixl_mock=None):
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
+    from sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
         NixlDataTransport,
     )
 
@@ -69,7 +69,7 @@ def test_nixl_data_transport_unwinds_registration_if_init_fails():
     __init__ propagates, so the caller never gets a transport to deregister.
     """
     nixl = _make_nixl_mock(prep_side_effect=RuntimeError("no dlist"))
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
+    from sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
         NixlDataTransport,
     )
 
@@ -84,7 +84,7 @@ def test_nixl_data_transport_unwinds_registration_if_init_fails():
 
 
 def test_nixl_data_transport_raises_if_nixl_unavailable():
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
+    from sonar.distributed.ec_transfer.ec_connector.cpu.data.nixl import (
         NixlDataTransport,
     )
 

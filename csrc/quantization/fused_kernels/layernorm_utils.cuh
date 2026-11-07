@@ -11,7 +11,7 @@
 #include "../../cub_helpers.h"
 #include "core/cuda_compat.h"
 
-namespace aphrodite {
+namespace sonar {
 
 // has_residual must be true, if residual is not a nullptr
 template <typename scalar_t, bool has_residual = false>
@@ -51,7 +51,7 @@ __device__ float warpReduceMax(float val) {
   static_assert(WARP_SIZE == 32 || WARP_SIZE == 64);
 #pragma unroll
   for (int offset = WARP_SIZE / 2; offset > 0; offset /= 2) {
-    val = fmaxf(val, APHRODITE_SHFL_DOWN_SYNC(val, offset));
+    val = fmaxf(val, SONAR_SHFL_DOWN_SYNC(val, offset));
   }
   return val;
 }
@@ -277,7 +277,7 @@ __device__ void compute_rms(float* rms, scalar_t const* __restrict__ input,
   *rms = s_rms;
 }
 
-// Vectorized version of aphrodite::compute_dynamic_per_token_scales
+// Vectorized version of sonar::compute_dynamic_per_token_scales
 // hidden_size must be a multiple of 4
 template <typename scalar_t, typename scalar_out_t, bool has_residual = false,
           bool is_scale_transposed = false, int32_t group_size = 0>
@@ -548,4 +548,4 @@ __device__ void norm_and_quant(
 
 }  // namespace vectorized
 
-}  // namespace aphrodite
+}  // namespace sonar

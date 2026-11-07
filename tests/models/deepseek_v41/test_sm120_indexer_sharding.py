@@ -11,7 +11,7 @@ pytest.importorskip("b12x.attention.dsa_indexer")
 
 import b12x.preparation  # noqa: E402
 
-from aphrodite.models.deepseek_v41.sm120 import attention  # noqa: E402
+from sonar.models.deepseek_v41.sm120 import attention  # noqa: E402
 
 
 class IndexingComplete(Exception):

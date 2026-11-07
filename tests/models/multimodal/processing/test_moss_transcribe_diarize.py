@@ -4,8 +4,8 @@
 import numpy as np
 import pytest
 
-from aphrodite.config.speech_to_text import SpeechToTextConfig, SpeechToTextParams
-from aphrodite.model_executor.models.moss_transcribe_diarize import (
+from sonar.config.speech_to_text import SpeechToTextConfig, SpeechToTextParams
+from sonar.model_executor.models.moss_transcribe_diarize import (
     DEFAULT_MOSS_TRANSCRIBE_DIARIZE_PROMPT,
     MossTranscribeDiarizeForConditionalGeneration,
 )
@@ -40,7 +40,7 @@ def _question(request_prompt: str = "", hotwords: str | None = None) -> str:
             "魔搭, 达摩院",
             DEFAULT_MOSS_TRANSCRIBE_DIARIZE_PROMPT + "热词提示：魔搭, 达摩院",
         ),
-        ("转录为文本。", " Aphrodite ", "转录为文本。热词提示：Aphrodite"),
+        ("转录为文本。", " Sonar ", "转录为文本。热词提示：Sonar"),
     ],
     ids=[
         "default",

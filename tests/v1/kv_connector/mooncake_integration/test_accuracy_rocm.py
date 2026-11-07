@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import spawn_new_process_for_each_test
 from tests.v1.kv_connector.rocm_pd_accuracy_utils import (
     QWEN_MODEL,

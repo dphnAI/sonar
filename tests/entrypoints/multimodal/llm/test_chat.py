@@ -8,8 +8,8 @@ from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 
 
 @pytest.fixture(scope="function")
-def vision_llm(aphrodite_runner):
-    with aphrodite_runner(
+def vision_llm(sonar_runner):
+    with sonar_runner(
         "microsoft/Phi-3.5-vision-instruct",
         max_model_len=4096,
         max_num_seqs=5,
@@ -19,7 +19,7 @@ def vision_llm(aphrodite_runner):
         seed=0,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

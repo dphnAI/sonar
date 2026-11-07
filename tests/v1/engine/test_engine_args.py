@@ -6,42 +6,42 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.hashing import _xxhash
+from sonar.config import ModelConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.hashing import _xxhash
 
 
 def test_prefix_caching_from_cli():
     parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
     args = parser.parse_args([])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.enable_prefix_caching, "V1 turns on prefix caching by default."
-    assert aphrodite_config.cache_config.prefix_cache_retention_interval == 0
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.enable_prefix_caching, "V1 turns on prefix caching by default."
+    assert sonar_config.cache_config.prefix_cache_retention_interval == 0
 
     # Turn it off possible with flag.
     args = parser.parse_args(["--no-enable-prefix-caching"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert not aphrodite_config.cache_config.enable_prefix_caching
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert not sonar_config.cache_config.enable_prefix_caching
 
     # Turn it on with flag.
     args = parser.parse_args(["--enable-prefix-caching"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.enable_prefix_caching
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.enable_prefix_caching
 
     # default hash algorithm is "builtin"
-    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256"
+    assert sonar_config.cache_config.prefix_caching_hash_algo == "sha256"
 
     # set hash algorithm to sha256_cbor
     args = parser.parse_args(["--prefix-caching-hash-algo", "sha256_cbor"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256_cbor"
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.prefix_caching_hash_algo == "sha256_cbor"
 
     # set hash algorithm to sha256
     args = parser.parse_args(["--prefix-caching-hash-algo", "sha256"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256"
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.prefix_caching_hash_algo == "sha256"
 
     # an invalid hash algorithm raises an error
     parser.exit_on_error = False
@@ -49,8 +49,8 @@ def test_prefix_caching_from_cli():
         args = parser.parse_args(["--prefix-caching-hash-algo", "invalid"])
 
     args = parser.parse_args(["--prefix-cache-retention-interval", "64"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.prefix_cache_retention_interval == 64
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.prefix_cache_retention_interval == 64
 
 
 @pytest.mark.skipif(_xxhash is None, reason="xxhash not installed")
@@ -59,13 +59,13 @@ def test_prefix_caching_xxhash_from_cli():
 
     # set hash algorithm to xxhash (pickle)
     args = parser.parse_args(["--prefix-caching-hash-algo", "xxhash"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "xxhash"
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.prefix_caching_hash_algo == "xxhash"
 
     # set hash algorithm to xxhash_cbor
     args = parser.parse_args(["--prefix-caching-hash-algo", "xxhash_cbor"])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "xxhash_cbor"
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.cache_config.prefix_caching_hash_algo == "xxhash_cbor"
 
 
 def test_mm_prefix_lm_raises_batched_tokens_floor():
@@ -93,17 +93,17 @@ def test_mm_prefix_lm_raises_batched_tokens_floor():
             staticmethod(lambda _mc: fake_mm_min),
         ),
         patch(
-            "aphrodite.config.ModelConfig.is_multimodal_model",
+            "sonar.config.ModelConfig.is_multimodal_model",
             new_callable=lambda: property(lambda self: True),
         ),
         patch(
-            "aphrodite.config.ModelConfig.is_mm_prefix_lm",
+            "sonar.config.ModelConfig.is_mm_prefix_lm",
             new_callable=lambda: property(lambda self: True),
         ),
     ):
-        aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+        sonar_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert aphrodite_config.scheduler_config.max_num_batched_tokens >= 2496
+    assert sonar_config.scheduler_config.max_num_batched_tokens >= 2496
 
 
 def test_custom_histogram_buckets_from_cli():
@@ -111,8 +111,8 @@ def test_custom_histogram_buckets_from_cli():
 
     # Unset: byte-identical default behavior.
     args = parser.parse_args([])
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.observability_config.custom_histogram_buckets is None
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.observability_config.custom_histogram_buckets is None
 
     # A JSON mapping round-trips into the config verbatim.
     args = parser.parse_args(
@@ -121,8 +121,8 @@ def test_custom_histogram_buckets_from_cli():
             '{"request_latency": [0.01, 0.05, 0.1, 0.5]}',
         ]
     )
-    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.observability_config.custom_histogram_buckets == {"request_latency": [0.01, 0.05, 0.1, 0.5]}
+    sonar_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert sonar_config.observability_config.custom_histogram_buckets == {"request_latency": [0.01, 0.05, 0.1, 0.5]}
 
     # Malformed JSON is rejected at argument-parsing time.
     parser.exit_on_error = False
@@ -146,10 +146,10 @@ def test_data_parallel_start_rank_zero_infers_hybrid_lb():
         data_parallel_size_local=2,
         data_parallel_start_rank=0,
     )
-    aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+    sonar_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert aphrodite_config.parallel_config.data_parallel_hybrid_lb is True
-    assert aphrodite_config.parallel_config.data_parallel_rank == 0
+    assert sonar_config.parallel_config.data_parallel_hybrid_lb is True
+    assert sonar_config.parallel_config.data_parallel_rank == 0
 
 
 def test_external_lb_preserves_explicit_rank_when_dp_exceeds_nodes():
@@ -163,9 +163,9 @@ def test_external_lb_preserves_explicit_rank_when_dp_exceeds_nodes():
     )
 
     with patch.object(ModelConfig, "is_moe", new=property(lambda self: True)):
-        aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+        sonar_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert aphrodite_config.parallel_config.data_parallel_rank == 3
+    assert sonar_config.parallel_config.data_parallel_rank == 3
 
 
 @pytest.mark.parametrize(
@@ -204,9 +204,9 @@ def test_external_lb_infers_rank_when_dp_does_not_exceed_nodes():
     )
 
     with patch.object(ModelConfig, "is_moe", new=property(lambda self: True)):
-        aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+        sonar_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert aphrodite_config.parallel_config.data_parallel_rank == 1
+    assert sonar_config.parallel_config.data_parallel_rank == 1
 
 
 def test_external_lb_infers_rank_for_multinode_replicas():
@@ -220,6 +220,6 @@ def test_external_lb_infers_rank_for_multinode_replicas():
     )
 
     with patch.object(ModelConfig, "is_moe", new=property(lambda self: True)):
-        aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+        sonar_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert aphrodite_config.parallel_config.data_parallel_rank == 0
+    assert sonar_config.parallel_config.data_parallel_rank == 0

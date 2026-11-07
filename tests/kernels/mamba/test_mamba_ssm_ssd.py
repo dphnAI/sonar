@@ -6,20 +6,20 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
-from aphrodite.model_executor.layers.mamba.ops.ssd_chunk_scan import (
+from sonar.model_executor.layers.mamba.ops.ssd_chunk_scan import (
     _chunk_scan_fwd,
     _chunk_scan_fwd_kernel,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssd_combined import (
+from sonar.model_executor.layers.mamba.ops.ssd_combined import (
     mamba_chunk_scan_combined_varlen,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.mamba2_attn import compute_varlen_chunk_metadata
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.mamba2_attn import compute_varlen_chunk_metadata
 
 # All kernels exercised here are pure Triton, so they run on any backend
-# that the Aphrodite platform layer treats as a CUDA-alike device or as XPU.
+# that the Sonar platform layer treats as a CUDA-alike device or as XPU.
 DEVICE = current_platform.device_type
 
 pytestmark = pytest.mark.skipif(

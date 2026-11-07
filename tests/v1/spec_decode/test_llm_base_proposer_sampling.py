@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.sample.logits_processor import LogitsProcessors
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.spec_decode.llm_base_proposer import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.sample.logits_processor import LogitsProcessors
+from sonar.v1.sample.metadata import SamplingMetadata
+from sonar.v1.spec_decode.llm_base_proposer import (
     SpecDecodeBaseProposer,
     compute_probs_and_sample_next_token,
 )

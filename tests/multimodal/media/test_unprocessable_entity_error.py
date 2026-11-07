@@ -9,25 +9,25 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from aphrodite.connections import (
+from sonar.connections import (
     MediaDownloadSizeExceededError,
     MediaRequestDownloadSizeExceededError,
 )
-from aphrodite.entrypoints.serve import create_error_response
-from aphrodite.exceptions import AphroditeUnprocessableEntityError
-from aphrodite.multimodal.media import MediaConnector
+from sonar.entrypoints.serve import create_error_response
+from sonar.exceptions import SonarUnprocessableEntityError
+from sonar.multimodal.media import MediaConnector
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
 
-class TestAphroditeUnprocessableEntityError:
+class TestSonarUnprocessableEntityError:
     def test_creation(self):
-        exc = AphroditeUnprocessableEntityError("Test error")
+        exc = SonarUnprocessableEntityError("Test error")
         assert str(exc) == "Test error"
         assert exc.parameter is None
 
     def test_creation_with_parameter_and_value(self):
-        exc = AphroditeUnprocessableEntityError(
+        exc = SonarUnprocessableEntityError(
             "Test error",
             parameter="image_url",
             value="https://example.com/image.jpg",
@@ -36,7 +36,7 @@ class TestAphroditeUnprocessableEntityError:
         assert "value=https://example.com/image.jpg" in str(exc)
 
     def test_is_value_error_subclass(self):
-        exc = AphroditeUnprocessableEntityError("Test")
+        exc = SonarUnprocessableEntityError("Test")
         assert isinstance(exc, ValueError)
 
 
@@ -57,7 +57,7 @@ class TestMediaConnectorErrorHandling:
                 message="Not Found",
             )
 
-            with pytest.raises(AphroditeUnprocessableEntityError) as exc_info:
+            with pytest.raises(SonarUnprocessableEntityError) as exc_info:
                 await connector.fetch_image_async("https://example.com/missing.jpg")
 
             assert exc_info.value.parameter == "image_url"
@@ -114,7 +114,7 @@ class TestMediaConnectorErrorHandling:
                 message="Not Found",
             )
 
-            with pytest.raises(AphroditeUnprocessableEntityError) as exc_info:
+            with pytest.raises(SonarUnprocessableEntityError) as exc_info:
                 connector.fetch_image("https://example.com/missing.jpg")
 
             assert exc_info.value.parameter == "image_url"
@@ -140,28 +140,26 @@ class TestMediaConnectorErrorHandling:
         with patch.object(connector.connection, "get_bytes", new_callable=MagicMock) as mock_get:
             mock_get.side_effect = MediaDownloadSizeExceededError(256 * 1024 * 1024)
 
-            with pytest.raises(AphroditeUnprocessableEntityError) as exc_info:
+            with pytest.raises(SonarUnprocessableEntityError) as exc_info:
                 connector.fetch_image("https://example.com/image.jpg")
 
-            assert "APHRODITE_MAX_MEDIA_DOWNLOAD_SIZE_MB=256" in str(exc_info.value)
+            assert "SONAR_MAX_MEDIA_DOWNLOAD_SIZE_MB=256" in str(exc_info.value)
 
     def test_fetch_image_request_download_size_limit_error(self):
         connector = MediaConnector()
 
         with patch.object(connector.connection, "get_bytes", new_callable=MagicMock) as mock_get:
-            mock_get.side_effect = MediaRequestDownloadSizeExceededError(
-                "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB=256"
-            )
+            mock_get.side_effect = MediaRequestDownloadSizeExceededError("SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB=256")
 
-            with pytest.raises(AphroditeUnprocessableEntityError) as exc_info:
+            with pytest.raises(SonarUnprocessableEntityError) as exc_info:
                 connector.fetch_image("https://example.com/image.jpg")
 
-            assert "APHRODITE_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB=256" in str(exc_info.value)
+            assert "SONAR_MAX_MEDIA_REQUEST_DOWNLOAD_SIZE_MB=256" in str(exc_info.value)
 
 
 class TestErrorResponse:
     def test_unprocessable_entity_returns_422(self):
-        exc = AphroditeUnprocessableEntityError(
+        exc = SonarUnprocessableEntityError(
             "Failed to fetch media from URL: Cannot connect",
             parameter="image_url",
             value="https://example.com/image.jpg",
@@ -174,7 +172,7 @@ class TestErrorResponse:
         assert response.error.param == "image_url"
 
     def test_unprocessable_entity_message(self):
-        exc = AphroditeUnprocessableEntityError("Test error message")
+        exc = SonarUnprocessableEntityError("Test error message")
         response = create_error_response(exc)
 
         assert response.error.message == "Test error message"

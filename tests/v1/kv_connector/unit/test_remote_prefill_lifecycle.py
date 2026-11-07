@@ -6,21 +6,21 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.v1.kv_cache_interface import MambaSpec, SlidingWindowSpec
-from aphrodite.v1.metrics.stats import KV_FETCH_STAGES
-from aphrodite.v1.outputs import (
+from sonar.v1.kv_cache_interface import MambaSpec, SlidingWindowSpec
+from sonar.v1.metrics.stats import KV_FETCH_STAGES
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     KVConnectorOutput,
     ModelRunnerOutput,
 )
-from aphrodite.v1.request import FinishReason, RequestStatus
+from sonar.v1.request import FinishReason, RequestStatus
 
 from .utils import (
     assert_scheduler_empty,
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
     make_kv_cache_config,
 )
 
@@ -38,11 +38,11 @@ def _kv_fetch_stages(scheduler) -> tuple[int, ...]:
 
 def test_basic_lifecycle():
     """Test lifecycle of a remote prefill."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
     START_FREE_BLOCK_QUEUE_SIZE = scheduler.kv_cache_manager.block_pool.free_block_queue.num_free_blocks
@@ -149,11 +149,11 @@ def test_basic_lifecycle():
 
 def test_interleaved_lifecycle():
     """Test Remote Prefills Work Well With Other Requests."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -247,14 +247,14 @@ def test_no_spurious_prefix_caching():
     not accidentally have cache hits against uncomputed
     blocks.
     """
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 and a half full external blocks.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -311,11 +311,11 @@ def test_no_spurious_prefix_caching():
 
 def test_full_block_prompt():
     """Test that we handle a prompt that is the full block size."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * NUM_EXTERNAL_FULL_BLOCKS)
 
@@ -378,12 +378,12 @@ def test_cannot_schedule_after_recv():
     # NOTE: the KVCacheManager will use 1 null block.
     # So there are 5 total working blocks.
     TOTAL_NUM_BLOCKS = 6
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config, num_blocks=TOTAL_NUM_BLOCKS)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config, num_blocks=TOTAL_NUM_BLOCKS)
 
     # Prime the KVCache.
     NUM_PROMPT_BLOCKS = 2
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     # Prompt will use 2 blocks + 1 block after we schedule.
     NUM_TOKENS_LOCAL = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
     NUM_TOKENS_REMOTE = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
@@ -475,12 +475,12 @@ def test_cannot_recv():
     # NOTE: the KVCacheManager will use 1 null block.
     # So there are 5 total working blocks.
     TOTAL_NUM_BLOCKS = 6
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config, num_blocks=TOTAL_NUM_BLOCKS)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config, num_blocks=TOTAL_NUM_BLOCKS)
 
     # Prime the KVCache.
     NUM_PROMPT_BLOCKS = 2
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     # Prompt will use 2 blocks + 1 block after we schedule.
     NUM_TOKENS_LOCAL = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
     NUM_TOKENS_REMOTE = int(BLOCK_SIZE * (NUM_PROMPT_BLOCKS + 0.5))
@@ -550,9 +550,9 @@ def test_cannot_recv():
 
 
 def test_kv_fetch_stages_cleared_on_abort():
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     request = create_request(
         request_id=1,
         block_size=BLOCK_SIZE,
@@ -567,7 +567,7 @@ def test_kv_fetch_stages_cleared_on_abort():
     assert _kv_fetch_stages(scheduler) == (0, 0, 0)
 
 
-@patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
+@patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
 def test_p_side_chunked_prefill_mamba(mock_platform):
     """P-side integration: Mamba N-1 truncation + chunked prefill completes.
 
@@ -581,13 +581,13 @@ def test_p_side_chunked_prefill_mamba(mock_platform):
     NUM_TOKENS = 64
     BLOCK_SIZE = 16
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         max_num_batched_tokens=BATCH_SIZE,
         block_size=BLOCK_SIZE,
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     # mamba_cache_mode "none" only runs without prefix caching.
-    aphrodite_config.cache_config.enable_prefix_caching = False
+    sonar_config.cache_config.enable_prefix_caching = False
 
     kv_cache_config = make_kv_cache_config(
         block_size=BLOCK_SIZE,
@@ -595,7 +595,7 @@ def test_p_side_chunked_prefill_mamba(mock_platform):
         num_blocks=10000,
     )
 
-    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
+    scheduler = create_scheduler(sonar_config, kv_cache_config=kv_cache_config)
 
     request = create_request(
         num_tokens=NUM_TOKENS,
@@ -649,9 +649,9 @@ def test_async_load_reserves_blocks_for_inflight():
     (free - req_a's 3-block reservation) = 3 blocks are available to it, so it is
     held back in WAITING (holding no blocks) rather than wedging req_a.
     """
-    aphrodite_config = create_aphrodite_config()
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
-    scheduler = create_scheduler(aphrodite_config, num_blocks=8)  # usable = 7
+    sonar_config = create_sonar_config()
+    BLOCK_SIZE = sonar_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config, num_blocks=8)  # usable = 7
 
     req_a = create_request(
         request_id=1,
@@ -689,9 +689,9 @@ def test_async_load_reserves_blocks_for_inflight():
 def test_async_loads_both_admitted_when_pool_fits():
     """Sanity: with a pool large enough, the reservation gate admits both async
     loads (it is not over-conservative)."""
-    aphrodite_config = create_aphrodite_config()
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
-    scheduler = create_scheduler(aphrodite_config, num_blocks=64)
+    sonar_config = create_sonar_config()
+    BLOCK_SIZE = sonar_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config, num_blocks=64)
 
     reqs = [
         create_request(
@@ -728,7 +728,7 @@ def test_async_load_reserves_blocks_for_promotion_margin(swa_enabled, block_size
     Otherwise two loads can fill the pool and prevent the head from being
     promoted, with nothing running to free blocks and break the deadlock.
     """
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         num_speculative_tokens=num_spec_tokens,
         disable_hybrid_kv_cache_manager=False,
@@ -748,7 +748,7 @@ def test_async_load_reserves_blocks_for_promotion_margin(swa_enabled, block_size
             page_size_padded=full_group.kv_cache_spec.page_size_bytes,
         )
     scheduler = create_scheduler(
-        aphrodite_config,
+        sonar_config,
         num_blocks=num_blocks,
         kv_cache_config=kv_cache_config,
         hash_block_size=hash_block_size,
@@ -801,14 +801,14 @@ def test_async_load_does_not_double_reserve_mamba_spec_blocks(mamba_cache_mode, 
     """Two hybrid loads fit when Mamba's speculative states are counted once."""
     block_size = 16
     num_spec_tokens = 3
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=mamba_block_size,
         max_model_len=128,
         num_speculative_tokens=num_spec_tokens,
         disable_hybrid_kv_cache_manager=False,
     )
-    aphrodite_config.cache_config.mamba_cache_mode = mamba_cache_mode
-    aphrodite_config.cache_config.enable_prefix_caching = mamba_cache_mode == "align"
+    sonar_config.cache_config.mamba_cache_mode = mamba_cache_mode
+    sonar_config.cache_config.enable_prefix_caching = mamba_cache_mode == "align"
     kv_cache_config = make_kv_cache_config(
         block_size,
         mamba_enabled=True,
@@ -824,7 +824,7 @@ def test_async_load_does_not_double_reserve_mamba_spec_blocks(mamba_cache_mode, 
         num_speculative_blocks=num_spec_tokens,
     )
     scheduler = create_scheduler(
-        aphrodite_config,
+        sonar_config,
         num_blocks=num_blocks,
         kv_cache_config=kv_cache_config,
         hash_block_size=block_size,
@@ -872,9 +872,9 @@ def test_deferred_lookup_does_not_block_parked_load():
     that is drained first, so it runs, finishes, and frees its blocks for
     req_a.
     """
-    aphrodite_config = create_aphrodite_config()
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
-    scheduler = create_scheduler(aphrodite_config, num_blocks=8)  # usable = 7
+    sonar_config = create_sonar_config()
+    BLOCK_SIZE = sonar_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config, num_blocks=8)  # usable = 7
 
     req_a = create_request(request_id=1, block_size=BLOCK_SIZE, num_tokens=BLOCK_SIZE * 4, max_tokens=1)
     req_b = create_request(

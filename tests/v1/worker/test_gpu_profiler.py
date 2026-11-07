@@ -12,26 +12,26 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CUDAGraphMode,
     ProfilerConfig,
+    SonarConfig,
 )
-from aphrodite.config.profiler import _is_uri_path
-from aphrodite.platforms import current_platform
-from aphrodite.profiler.wrapper import (
+from sonar.config.profiler import _is_uri_path
+from sonar.platforms import current_platform
+from sonar.profiler.wrapper import (
     ProtonProfilerWrapper,
     TorchProfilerWrapper,
     WorkerProfiler,
     create_worker_profiler,
     validate_worker_profiler_config,
 )
-from aphrodite.v1.core.sched.output import CachedRequestData
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
-from aphrodite.v1.worker.gpu_worker import Worker
-from aphrodite.v1.worker.xpu_worker import XPUWorker
+from sonar.v1.core.sched.output import CachedRequestData
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.v1.worker.gpu_worker import Worker
+from sonar.v1.worker.xpu_worker import XPUWorker
 
 
 class ConcreteWorkerProfiler(WorkerProfiler):
@@ -74,7 +74,7 @@ def test_torch_profiler_rebuilds_one_shot_profiler_each_round(tmp_path):
     for profiler in profilers:
         profiler.profiler = MagicMock()
 
-    with patch("aphrodite.profiler.wrapper.torch.profiler.profile", side_effect=profilers) as profile:
+    with patch("sonar.profiler.wrapper.torch.profiler.profile", side_effect=profilers) as profile:
         wrapper = TorchProfilerWrapper(config, worker_name="worker", local_rank=0, activities=["CUDA"])
         profile.assert_not_called()
 
@@ -140,7 +140,7 @@ def test_torch_profiler_device_summary(tmp_path, capsys, activities, dump_device
         torch_profiler_dir=str(tmp_path),
         torch_profiler_dump_cuda_time_total=dump_device_time,
     )
-    with patch("aphrodite.profiler.wrapper.torch.profiler.profile") as profile:
+    with patch("sonar.profiler.wrapper.torch.profiler.profile") as profile:
         profile.return_value.key_averages.return_value.table.return_value = "device times"
         wrapper = TorchProfilerWrapper(config, worker_name="worker", local_rank=0, activities=activities)
         wrapper.start()
@@ -158,7 +158,7 @@ def test_torch_profiler_summary_follows_output_name(tmp_path):
         profiler="torch",
         torch_profiler_dir=str(tmp_path),
     )
-    with patch("aphrodite.profiler.wrapper.torch.profiler.profile") as profile:
+    with patch("sonar.profiler.wrapper.torch.profiler.profile") as profile:
         table = profile.return_value.key_averages.return_value.table
         table.side_effect = ["first run", "second run"]
         wrapper = TorchProfilerWrapper(config, worker_name="initial", local_rank=1, activities=["CUDA"])
@@ -265,7 +265,7 @@ def test_worker_creates_platform_torch_profiler(device_type, activities, expecte
 
     with (
         patch.object(current_platform, "device_type", device_type),
-        patch("aphrodite.profiler.wrapper.TorchProfilerWrapper") as wrapper,
+        patch("sonar.profiler.wrapper.TorchProfilerWrapper") as wrapper,
     ):
         validate_worker_profiler_config(config)
         profiler = create_worker_profiler(
@@ -293,8 +293,8 @@ def test_worker_reuses_torch_wrapper_across_profile_rounds(worker_type):
     worker.profiler_config = ProfilerConfig(profiler="torch", torch_profiler_dir="/tmp/mock")
 
     with (
-        patch("aphrodite.distributed.utils.get_worker_rank_suffix", return_value="rank0"),
-        patch("aphrodite.profiler.wrapper.TorchProfilerWrapper") as wrapper,
+        patch("sonar.distributed.utils.get_worker_rank_suffix", return_value="rank0"),
+        patch("sonar.profiler.wrapper.TorchProfilerWrapper") as wrapper,
     ):
         worker.profile(
             profile_prefix="first",
@@ -324,7 +324,7 @@ def test_worker_reuses_torch_wrapper_across_profile_rounds(worker_type):
 
 def test_executor_profile_only_forwards_supplied_override_kwargs():
     executor = MagicMock()
-    executor.aphrodite_config.parallel_config.worker_cls = "aphrodite.v1.worker.gpu_worker.Worker"
+    executor.sonar_config.parallel_config.worker_cls = "sonar.v1.worker.gpu_worker.Worker"
 
     Executor.profile(executor, True, "default")
     Executor.profile(
@@ -359,7 +359,7 @@ def test_executor_rejects_overrides_unsupported_by_worker():
     """Out-of-tree workers with the old ``profile`` signature are rejected
     before dispatch, so a failed collective_rpc cannot leave replies queued."""
     executor = MagicMock()
-    executor.aphrodite_config.parallel_config.worker_cls = f"{__name__}._LegacyProfileWorker"
+    executor.sonar_config.parallel_config.worker_cls = f"{__name__}._LegacyProfileWorker"
 
     with pytest.raises(ValueError, match="max_iterations"):
         Executor.profile(executor, True, None, max_iterations=2)
@@ -656,7 +656,7 @@ class TestAnnotateProfile:
 
     def _annotate(self, detailed: bool) -> str:
         worker = MagicMock()
-        worker.aphrodite_config.profiler_config.detailed_trace_annotation = detailed
+        worker.sonar_config.profiler_config.detailed_trace_annotation = detailed
         worker.profiler = MagicMock()
 
         ctx_req = MagicMock(req_id="ctx1", num_computed_tokens=0)
@@ -690,7 +690,7 @@ class TestAnnotateProfile:
         worker = MagicMock()
         worker.profiler.should_annotate = False
 
-        with patch("aphrodite.v1.worker.gpu_worker.compute_iteration_details") as compute_iteration_details:
+        with patch("sonar.v1.worker.gpu_worker.compute_iteration_details") as compute_iteration_details:
             context = Worker.annotate_profile(worker, scheduler_output=None)
 
         worker.profiler.step.assert_called_once_with()
@@ -747,7 +747,7 @@ def make_proton_wrapper(tmp_path, proton=None, triton_version="3.7.0", **config_
         assert name == "triton"
         return SimpleNamespace(__version__=triton_version)
 
-    with patch("aphrodite.profiler.wrapper.importlib.import_module", side_effect=import_module):
+    with patch("sonar.profiler.wrapper.importlib.import_module", side_effect=import_module):
         wrapper = ProtonProfilerWrapper(config, worker_name="rank_3")
     return wrapper, proton
 
@@ -843,7 +843,7 @@ class TestProtonConfig:
             ProfilerConfig(**{field: value})
 
     def test_allows_proton_when_cuda_graphs_are_disabled(self, tmp_path):
-        config = AphroditeConfig(
+        config = SonarConfig(
             profiler_config=ProfilerConfig(profiler="proton", proton_profiler_dir=str(tmp_path)),
             compilation_config=CompilationConfig(cudagraph_mode=CUDAGraphMode.NONE),
         )
@@ -852,10 +852,10 @@ class TestProtonConfig:
 
     def test_rejects_proton_on_non_cuda_platforms(self, tmp_path):
         with (
-            patch("aphrodite.platforms.current_platform.is_cuda", return_value=False),
+            patch("sonar.platforms.current_platform.is_cuda", return_value=False),
             pytest.raises(ValueError, match="supports NVIDIA CUDA only"),
         ):
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(profiler="proton", proton_profiler_dir=str(tmp_path)),
                 compilation_config=CompilationConfig(cudagraph_mode=CUDAGraphMode.NONE),
             )
@@ -868,7 +868,7 @@ class TestProtonConfig:
             nullcontext() if attribution else pytest.raises(ValueError, match="requires proton_graph_attribution=True")
         )
         with expected:
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(
                     profiler="proton",
                     proton_profiler_dir=str(tmp_path),
@@ -882,7 +882,7 @@ class TestProtonConfig:
 
     def test_validates_default_cuda_graph_mode_after_resolution(self, tmp_path):
         with pytest.raises(ValueError, match="requires proton_graph_attribution=True"):
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(profiler="proton", proton_profiler_dir=str(tmp_path)),
             )
 
@@ -909,7 +909,7 @@ class TestProtonConfig:
     @pytest.mark.parametrize("encoder_only", [False, True])
     def test_pcsampling_requires_graphs_disabled(self, tmp_path, attribution, mode, encoder_only):
         with pytest.raises(ValueError, match="PC sampling requires CUDA graphs"):
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(
                     profiler="proton",
                     proton_profiler_dir=str(tmp_path),
@@ -923,17 +923,17 @@ class TestProtonConfig:
             )
 
     def test_ordinary_proton_keeps_mrv1_graph_restriction(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+        monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
         with pytest.raises(ValueError, match="requires proton_graph_attribution=True"):
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(profiler="proton", proton_profiler_dir=str(tmp_path)),
                 compilation_config=CompilationConfig(cudagraph_mode=CUDAGraphMode.FULL),
             )
 
     def test_graph_attribution_rejects_mrv1(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+        monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
         with pytest.raises(ValueError, match="requires the V2 model runner"):
-            AphroditeConfig(
+            SonarConfig(
                 profiler_config=ProfilerConfig(
                     profiler="proton",
                     proton_profiler_dir=str(tmp_path),
@@ -992,7 +992,7 @@ class TestProtonProfilerWrapper:
 
     def test_output_names_are_unique_across_worker_restarts(self, tmp_path):
         with patch(
-            "aphrodite.profiler.wrapper.uuid4",
+            "sonar.profiler.wrapper.uuid4",
             side_effect=[UUID(int=1), UUID(int=2)],
         ):
             first, first_proton = make_proton_wrapper(tmp_path)
@@ -1167,7 +1167,7 @@ class TestProtonProfilerWrapper:
         config = ProfilerConfig(profiler="proton", proton_profiler_dir=str(tmp_path))
         with (
             patch(
-                "aphrodite.profiler.wrapper.importlib.import_module",
+                "sonar.profiler.wrapper.importlib.import_module",
                 side_effect=ImportError,
             ),
             pytest.raises(RuntimeError, match="requires a Triton installation"),
@@ -1194,10 +1194,10 @@ def test_gpu_worker_creates_proton_profiler():
 
     with (
         patch(
-            "aphrodite.distributed.utils.get_worker_rank_suffix",
+            "sonar.distributed.utils.get_worker_rank_suffix",
             return_value="rank1",
         ),
-        patch("aphrodite.profiler.wrapper.ProtonProfilerWrapper") as wrapper,
+        patch("sonar.profiler.wrapper.ProtonProfilerWrapper") as wrapper,
     ):
         Worker.profile(worker)
 
@@ -1218,10 +1218,10 @@ def test_gpu_worker_recreates_proton_profiler_for_each_run():
 
     with (
         patch(
-            "aphrodite.distributed.utils.get_worker_rank_suffix",
+            "sonar.distributed.utils.get_worker_rank_suffix",
             return_value="rank1",
         ),
-        patch("aphrodite.profiler.wrapper.ProtonProfilerWrapper") as wrapper,
+        patch("sonar.profiler.wrapper.ProtonProfilerWrapper") as wrapper,
     ):
         wrapper.return_value.has_cuda_graph_session = False
         Worker.profile(worker, profile_prefix="first")
@@ -1244,7 +1244,7 @@ def test_gpu_worker_reuses_cuda_graph_proton_session():
     worker.profiler_config.profiler = "proton"
 
     with patch(
-        "aphrodite.distributed.utils.get_worker_rank_suffix",
+        "sonar.distributed.utils.get_worker_rank_suffix",
         return_value="rank1",
     ):
         Worker.profile(worker, profile_prefix="first")
@@ -1293,11 +1293,11 @@ def test_proton_initializes_before_cuda_graph_capture():
 
     with (
         patch(
-            "aphrodite.distributed.utils.get_worker_rank_suffix",
+            "sonar.distributed.utils.get_worker_rank_suffix",
             return_value="rank2",
         ),
         patch(
-            "aphrodite.profiler.wrapper.ProtonProfilerWrapper",
+            "sonar.profiler.wrapper.ProtonProfilerWrapper",
             FakeProtonProfiler,
         ),
     ):
@@ -1319,7 +1319,7 @@ def test_proton_cuda_graph_replay_attribution_on_gpu(tmp_path, context, output_f
     import torch
     from packaging.version import Version
 
-    from aphrodite.triton_utils import triton
+    from sonar.triton_utils import triton
 
     if Version(triton.__version__) < Version("3.7"):
         pytest.skip("Graph attribution requires Triton >= 3.7")

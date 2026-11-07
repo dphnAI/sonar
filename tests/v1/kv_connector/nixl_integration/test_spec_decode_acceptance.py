@@ -11,7 +11,7 @@ Supports EAGLE3 (default) and MTP, selected via SD_METHOD env var.
 
 Environment variables (set by spec_decode_acceptance_test.sh):
     TEST_MODEL   - target model name
-    DECODE_PORT  - port of the decode Aphrodite server (for /metrics)
+    DECODE_PORT  - port of the decode Sonar server (for /metrics)
     SD_METHOD    - "eagle3" (default) or "mtp"
 """
 
@@ -24,8 +24,8 @@ from urllib.request import urlopen
 import openai
 import regex as re
 
-from aphrodite.benchmarks.datasets import get_samples
-from aphrodite.tokenizers import get_tokenizer
+from sonar.benchmarks.datasets import get_samples
+from sonar.tokenizers import get_tokenizer
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
 PROXY_BASE_URL = f"http://{SERVER_HOST}:8192/v1"
@@ -82,7 +82,7 @@ def _get_model_config() -> ModelConfig:
 
 
 def _get_mt_bench_prompts() -> list[str]:
-    """Load MT-Bench prompts via aphrodite.benchmarks.datasets.get_samples."""
+    """Load MT-Bench prompts via sonar.benchmarks.datasets.get_samples."""
     tokenizer = get_tokenizer(MODEL_NAME)
     args = SimpleNamespace(
         dataset_name="hf",
@@ -164,8 +164,8 @@ def test_spec_decode_acceptance_length():
             print(f"  [{i}] {prompt[:60]}... -> {text}...")
 
     # ── Extract metrics from decode server ────────────────────────────
-    n_drafts = _fetch_metric("aphrodite:spec_decode_num_drafts_total")
-    n_accepted = _fetch_metric("aphrodite:spec_decode_num_accepted_tokens_total")
+    n_drafts = _fetch_metric("sonar:spec_decode_num_drafts_total")
+    n_accepted = _fetch_metric("sonar:spec_decode_num_accepted_tokens_total")
 
     assert n_drafts > 0, "No spec-decode drafts were generated"
 
@@ -202,7 +202,7 @@ def test_spec_decode_acceptance_length():
 
     # ── Assert acceptance rate (MTP) ──────────────────────────────────
     if config.expected_acceptance_rate is not None:
-        n_draft_tokens = _fetch_metric("aphrodite:spec_decode_num_draft_tokens_total")
+        n_draft_tokens = _fetch_metric("sonar:spec_decode_num_draft_tokens_total")
         acceptance_rate = n_accepted / n_draft_tokens if n_draft_tokens > 0 else 0.0
         print(f"  Acceptance rate: {acceptance_rate:.3f} (expected: {config.expected_acceptance_rate:.3f})")
         rate_err = abs(acceptance_rate - config.expected_acceptance_rate) / config.expected_acceptance_rate

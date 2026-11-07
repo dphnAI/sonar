@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import openai
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.tool_use.utils import (
     MESSAGES_ASKING_FOR_PARALLEL_TOOLS,
     MESSAGES_ASKING_FOR_TOOLS,

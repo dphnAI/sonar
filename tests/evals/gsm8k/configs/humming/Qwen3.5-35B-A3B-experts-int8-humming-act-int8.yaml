@@ -9,4 +9,4 @@ server_args: >-
   --moe-backend humming
   --quantization experts_int8
 env:
-  APHRODITE_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"int8"}'
+  SONAR_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"int8"}'

@@ -3,13 +3,13 @@
 
 //! Applies parser-built xgrammar structural-tag constraints.
 
-use aphrodite_engine_core_client::protocol::structured_outputs::{
-    StructuredOutputConstraint, StructuredOutputsParams,
-};
-use aphrodite_parser::output_grammar::{BuiltOutputGrammar, GrammarCoverage};
-use aphrodite_text::TextRequest;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sonar_engine_core_client::protocol::structured_outputs::{
+    StructuredOutputConstraint, StructuredOutputsParams,
+};
+use sonar_parser::output_grammar::{BuiltOutputGrammar, GrammarCoverage};
+use sonar_text::TextRequest;
 use xgrammar_structural_tag::StructuralTag;
 use xgrammar_structural_tag::format::{Format, GrammarFormat, TagFormat};
 
@@ -127,8 +127,8 @@ pub(crate) fn apply_output_grammar(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputOptions;
     use serde_json::json;
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputOptions;
 
     use super::*;
 

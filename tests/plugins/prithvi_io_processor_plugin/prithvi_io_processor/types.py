@@ -39,7 +39,7 @@ class ImagePrompt(BaseModel):
 
 
 class ImageRequestOutput(BaseModel):
-    """The output data of an image request to Aphrodite.
+    """The output data of an image request to Sonar.
 
     Args:
         type (str): The data content type [path, object]

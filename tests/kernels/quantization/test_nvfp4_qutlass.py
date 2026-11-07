@@ -21,11 +21,11 @@ import pytest
 import torch
 from compressed_tensors.transform.utils.hadamard import deterministic_hadamard_matrix
 
-from aphrodite import _custom_ops as ops  # use existing nvfp4 gemm in aphrodite
-from aphrodite._custom_ops import fusedQuantizeNv
-from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops  # use existing nvfp4 gemm in sonar
+from sonar._custom_ops import fusedQuantizeNv
+from sonar.model_executor.layers.quantization.qutlass_utils import to_blocked
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for these tests.", allow_module_level=True)

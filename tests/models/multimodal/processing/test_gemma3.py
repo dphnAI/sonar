@@ -4,11 +4,11 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.gemma3_mm import Gemma3ProcessingInfo
-from aphrodite.model_executor.models.gemma3n_audio_utils import (
+from sonar.model_executor.models.gemma3_mm import Gemma3ProcessingInfo
+from sonar.model_executor.models.gemma3n_audio_utils import (
     adjust_audio_features_to_expected_length,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context

@@ -14,19 +14,19 @@ import pytest
 import ray
 import torch
 
-from aphrodite.distributed import (
+from sonar.distributed import (
     broadcast_tensor_dict,
     get_pp_group,
     tensor_model_parallel_all_gather,
     tensor_model_parallel_all_reduce,
     tensor_model_parallel_reduce_scatter,
 )
-from aphrodite.distributed.device_communicators import flashinfer_all_reduce
-from aphrodite.distributed.device_communicators.cuda_communicator import (
+from sonar.distributed.device_communicators import flashinfer_all_reduce
+from sonar.distributed.device_communicators.cuda_communicator import (
     CudaCommunicator,
 )
-from aphrodite.distributed.parallel_state import GroupCoordinator, TensorMetadata
-from aphrodite.v1.worker.gpu_worker import AsyncIntermediateTensors
+from sonar.distributed.parallel_state import GroupCoordinator, TensorMetadata
+from sonar.v1.worker.gpu_worker import AsyncIntermediateTensors
 
 from ..utils import (
     init_test_distributed_environment,
@@ -416,7 +416,7 @@ def test_flashinfer_standalone_workspace_size(
     monkeypatch: pytest.MonkeyPatch, enabled: bool, hidden_dim: int, expected: int
 ) -> None:
     create_workspace = Mock(return_value=Mock(backend="mnnvl"))
-    monkeypatch.setattr(flashinfer_all_reduce.envs, "APHRODITE_ALLREDUCE_USE_FLASHINFER", enabled)
+    monkeypatch.setattr(flashinfer_all_reduce.envs, "SONAR_ALLREDUCE_USE_FLASHINFER", enabled)
     monkeypatch.setattr(flashinfer_all_reduce, "_fi_ar_workspace", None)
     monkeypatch.setattr(flashinfer_all_reduce, "_fi_ar_quant_workspace", None)
     monkeypatch.setattr(
@@ -451,7 +451,7 @@ def test_flashinfer_auto_backend_uses_group_topology(
     is_blackwell: bool,
     expected: tuple[str | None, bool],
 ) -> None:
-    monkeypatch.setattr(flashinfer_all_reduce.envs, "APHRODITE_FLASHINFER_ALLREDUCE_BACKEND", "auto")
+    monkeypatch.setattr(flashinfer_all_reduce.envs, "SONAR_FLASHINFER_ALLREDUCE_BACKEND", "auto")
     monkeypatch.setattr(flashinfer_all_reduce, "_node_count", lambda _: node_count)
     monkeypatch.setattr(
         flashinfer_all_reduce.current_platform,
@@ -502,7 +502,7 @@ def test_flashinfer_all_reduce_precedes_nccl(monkeypatch: pytest.MonkeyPatch) ->
     communicator.qr_comm = None
     nccl_selector = Mock(return_value=True)
     monkeypatch.setattr(
-        "aphrodite.distributed.device_communicators.cuda_communicator.should_nccl_symm_mem_allreduce",
+        "sonar.distributed.device_communicators.cuda_communicator.should_nccl_symm_mem_allreduce",
         nccl_selector,
     )
 

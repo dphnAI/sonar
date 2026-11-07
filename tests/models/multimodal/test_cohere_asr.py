@@ -7,13 +7,13 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.config import SpeechToTextConfig
-from aphrodite.model_executor.models.cohere_asr import (
+from sonar.config import SpeechToTextConfig
+from sonar.model_executor.models.cohere_asr import (
     CohereAsrForConditionalGeneration,
     CohereASRModel,
     RelPositionMultiHeadAttention,
 )
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 
 class _ReferenceRelPositionMultiHeadAttention(RelPositionMultiHeadAttention):

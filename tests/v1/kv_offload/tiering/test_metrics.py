@@ -7,15 +7,15 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from aphrodite.v1.kv_offload.base import LookupResult, ReqContext, make_offload_key
-from aphrodite.v1.kv_offload.tiering import metrics as tiering_metrics
-from aphrodite.v1.kv_offload.tiering.base import (
+from sonar.v1.kv_offload.base import LookupResult, ReqContext, make_offload_key
+from sonar.v1.kv_offload.tiering import metrics as tiering_metrics
+from sonar.v1.kv_offload.tiering.base import (
     JobResult,
     TieringOffloadingMetrics,
     TransferJob,
 )
-from aphrodite.v1.kv_offload.tiering.manager import JobMetadata
-from aphrodite.v1.kv_offload.tiering.metrics import TieringMetricsTracker
+from sonar.v1.kv_offload.tiering.manager import JobMetadata
+from sonar.v1.kv_offload.tiering.metrics import TieringMetricsTracker
 
 _CTX = ReqContext(req_id="test")
 

@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
+from sonar.sampling_params import SamplingParams
+from sonar.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
 
 pytestmark = pytest.mark.cpu_test
 

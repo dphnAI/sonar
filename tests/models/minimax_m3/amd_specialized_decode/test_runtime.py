@@ -9,29 +9,29 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config import CompilationMode, CUDAGraphMode
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+from sonar.config import CompilationMode, CUDAGraphMode
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     AiterMxfp4Experts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime import decode as runtime
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.caches import CacheBinding
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.executor import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.models.minimax_m3.amd.specialized_decode.runtime import decode as runtime
+from sonar.models.minimax_m3.amd.specialized_decode.runtime.caches import CacheBinding
+from sonar.models.minimax_m3.amd.specialized_decode.runtime.executor import (
     FfnExecutor,
 )
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.routing import decide_step
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.spec import (
+from sonar.models.minimax_m3.amd.specialized_decode.runtime.routing import decide_step
+from sonar.models.minimax_m3.amd.specialized_decode.runtime.spec import (
     DECODE_CONFIG,
     DecodeConfig,
     specialized_decode_config,
 )
-from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.weights import (
+from sonar.models.minimax_m3.amd.specialized_decode.runtime.weights import (
     EXPERTS,
     HIDDEN,
     INTER,
     MonoLayerWeights,
 )
-from aphrodite.models.minimax_m3.common.sparse_attention import (
+from sonar.models.minimax_m3.common.sparse_attention import (
     MiniMaxM3SparseDecodeMetadata,
     MiniMaxM3SparseMetadata,
 )
@@ -92,7 +92,7 @@ def test_step_routing(rows, mode, metadata, mono):
     assert decide_step(DECODE_CONFIG, rows, mode, metadata).use_mono is mono
 
 
-def _aphrodite_config(layers=60, **parallel):
+def _sonar_config(layers=60, **parallel):
     values = dict(
         tensor_parallel_size=4,
         pipeline_parallel_size=1,
@@ -137,15 +137,15 @@ def _aphrodite_config(layers=60, **parallel):
 
 
 def test_config_refusals_report_every_reason():
-    full_config = specialized_decode_config(_aphrodite_config())
+    full_config = specialized_decode_config(_sonar_config())
     assert full_config is not None
     assert full_config.last_layer == 59
     # a truncated checkpoint: the sparse layers end at its last layer
-    truncated_config = specialized_decode_config(_aphrodite_config(layers=5))
+    truncated_config = specialized_decode_config(_sonar_config(layers=5))
     assert truncated_config is not None
     assert truncated_config.last_layer == 4
 
-    config = _aphrodite_config(tensor_parallel_size=2, enable_expert_parallel=True)
+    config = _sonar_config(tensor_parallel_size=2, enable_expert_parallel=True)
     config.cache_config.block_size = 64
     config.aux_output_config.enable_return_routed_experts = True
     config.model_config.hf_text_config.sparse_attention_config["sparse_attention_freq"][2] = 1
@@ -160,12 +160,12 @@ def test_config_refusals_report_every_reason():
     ):
         assert reason in str(error.value)
     with pytest.raises(ValueError, match="sparse attention on layers 3"):
-        specialized_decode_config(_aphrodite_config(layers=3))
+        specialized_decode_config(_sonar_config(layers=3))
 
 
 @pytest.mark.parametrize("method", ["eagle3", "ngram", "mtp", "draft_model"])
 def test_only_eagle3_speculation_is_accepted(method):
-    config = _aphrodite_config()
+    config = _sonar_config()
     config.speculative_config = SimpleNamespace(method=method)
     if method == "eagle3":
         assert specialized_decode_config(config) is not None

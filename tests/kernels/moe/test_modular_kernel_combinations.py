@@ -12,11 +12,11 @@ from unittest import mock
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     AiterExperts,
     AiterFp8BlockExperts,
     AiterFp8ChannelExperts,
@@ -24,15 +24,15 @@ from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
     AiterMxfp4Experts,
     AiterUnquantizedExperts,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8DynamicTensorSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_cutlass_fused_moe
-from aphrodite.utils.import_utils import has_aiter, has_deep_ep, has_deep_gemm
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_cutlass_fused_moe
+from sonar.utils.import_utils import has_aiter, has_deep_ep, has_deep_gemm
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import init_workspace_manager
 
 from .modular_kernel_tools.common import (
     Config,
@@ -121,7 +121,7 @@ def assert_aiter_activation_case(config: Config) -> None:
 
 def rank_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     base_config: Config,
     weights: WeightTensors,
@@ -200,9 +200,9 @@ def rank_worker(
             assert_aiter_activation_case(config)
 
             # modular kernel out
-            mk_out = run_modular_kernel(pgi, aphrodite_config, config, weights, rank_tensors)
+            mk_out = run_modular_kernel(pgi, sonar_config, config, weights, rank_tensors)
 
-            with set_current_aphrodite_config(aphrodite_config):
+            with set_current_sonar_config(sonar_config):
                 ref_out = reference_moe_impl(config, weights, rank_tensors)
 
             if config.quant_dtype == "nvfp4" or config.weight_dtype == "mxfp4":
@@ -218,7 +218,7 @@ def rank_worker(
             # boundaries. Allow a small percentage of elements to
             # exceed the base tolerance by a bounded margin.
             # https://github.com/ROCm/aiter/issues/2421
-            from aphrodite.platforms import current_platform as _cp
+            from sonar.platforms import current_platform as _cp
 
             is_aiter_fp8 = (
                 _cp.is_rocm()
@@ -271,8 +271,8 @@ def run(config: Config, verbose: bool):
 
     weights: WeightTensors = WeightTensors.make(config)
 
-    aphrodite_config, env_dict = config.make_env_data()
-    parallel_launch_with_config(config.world_size, rank_worker, aphrodite_config, env_dict, config, weights, verbose)
+    sonar_config, env_dict = config.make_env_data()
+    parallel_launch_with_config(config.world_size, rank_worker, sonar_config, env_dict, config, weights, verbose)
 
 
 Ms = [32, 64]
@@ -492,7 +492,7 @@ def test_modular_kernel_combinations_singlegpu(
 # parallel_launch_with_config) rather than in-process monkeypatching.
 #
 # AITER_MOE_SORT_BACKEND is covered separately below (3b): it only matters
-# when output_aux=True, which Aphrodite only sets on the MXFP4 DSV4 path.
+# when output_aux=True, which Sonar only sets on the MXFP4 DSV4 path.
 
 
 def _aiter_sort_backend_hooks_available() -> bool:
@@ -522,7 +522,7 @@ require_aiter_moe = pytest.mark.skipif(
     not (current_platform.is_rocm() and has_aiter() and rocm_aiter_ops.is_fused_moe_enabled()),
     reason=(
         "AITER MoE sorting-backend dispatch needs ROCm + AITER, with "
-        "APHRODITE_ROCM_USE_AITER=1 and APHRODITE_ROCM_USE_AITER_MOE=1 set before "
+        "SONAR_ROCM_USE_AITER=1 and SONAR_ROCM_USE_AITER_MOE=1 set before "
         "the test process starts."
     ),
 )
@@ -538,7 +538,7 @@ AITER_SORTING_BACKEND_ENV_CASES = [
 
 def _aiter_sorting_backend_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -583,7 +583,7 @@ def _aiter_sorting_backend_worker(
     ):
         # Reuses the real correctness/accuracy checking rank_worker already
         # does for every other AiterExperts combo, instead of duplicating it.
-        rank_worker(pgi, aphrodite_config, cpu_group, config, weights, verbose)
+        rank_worker(pgi, sonar_config, cpu_group, config, weights, verbose)
 
         if expected_backend == "flydsl":
             assert flydsl_mock.call_count > 0, "Expected FlyDSL sorting to fire."
@@ -618,7 +618,7 @@ def test_aiter_moe_sorting_backend_dispatch_env_matrix(ck: int, flydsl: int, exp
             "_USE_FLYDSL_MOE_SORTING)."
         )
 
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -637,7 +637,7 @@ def test_aiter_moe_sorting_backend_dispatch_env_matrix(ck: int, flydsl: int, exp
     assert config.is_valid()[0]
 
     weights = WeightTensors.make(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
     env_dict = {
         **env_dict,
         "AITER_USE_CK_MOE_SORTING": str(ck),
@@ -647,7 +647,7 @@ def test_aiter_moe_sorting_backend_dispatch_env_matrix(ck: int, flydsl: int, exp
     parallel_launch_with_config(
         config.world_size,
         _aiter_sorting_backend_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -660,7 +660,7 @@ def test_aiter_moe_sorting_backend_dispatch_env_matrix(ck: int, flydsl: int, exp
 
 def _aiter_dispatch_policy_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -672,14 +672,14 @@ def _aiter_dispatch_policy_worker(
     # own forwarding (unlike test_rocm_aiter_moe.py's version, which supplies
     # the policy value directly to rocm_aiter_fused_experts()).
     with mock.patch.object(rocm_aiter_ops, "fused_moe", wraps=rocm_aiter_ops.fused_moe) as fused_moe_mock:
-        rank_worker(pgi, aphrodite_config, cpu_group, config, weights, verbose)
+        rank_worker(pgi, sonar_config, cpu_group, config, weights, verbose)
 
     assert fused_moe_mock.call_count > 0, "Expected AiterExperts.apply() to call rocm_aiter_ops.fused_moe."
     for call in fused_moe_mock.call_args_list:
         forwarded = call.kwargs["moe_sorting_dispatch_policy"]
         assert forwarded == dispatch_policy, (
             f"AiterExperts.apply() forwarded moe_sorting_dispatch_policy="
-            f"{forwarded}, but APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY="
+            f"{forwarded}, but SONAR_ROCM_AITER_MOE_DISPATCH_POLICY="
             f"{dispatch_policy} was set before this process started."
         )
 
@@ -694,7 +694,7 @@ def test_aiter_moe_dispatch_policy_forwarded_through_apply(dispatch_policy: int)
     test_rocm_aiter_moe.py by driving the real AiterExperts.apply() call
     instead of supplying moe_sorting_dispatch_policy directly.
     """
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -713,16 +713,16 @@ def test_aiter_moe_dispatch_policy_forwarded_through_apply(dispatch_policy: int)
     assert config.is_valid()[0]
 
     weights = WeightTensors.make(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
     env_dict = {
         **env_dict,
-        "APHRODITE_ROCM_AITER_MOE_DISPATCH_POLICY": str(dispatch_policy),
+        "SONAR_ROCM_AITER_MOE_DISPATCH_POLICY": str(dispatch_policy),
     }
 
     parallel_launch_with_config(
         config.world_size,
         _aiter_dispatch_policy_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -739,13 +739,13 @@ def test_aiter_moe_dispatch_policy_forwarded_through_apply(dispatch_policy: int)
 # aiter's own adaptive/Opus crossover heuristic is tuned against -- see
 # `_aux_uses_opus()`'s docstring in the installed aiter). DSV4 is just the
 # only one of these this test file can currently drive end-to-end: it's
-# wired to a Aphrodite flag (APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4=1,
+# wired to a Sonar flag (SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4=1,
 # FusedMoEConfig.__post_init__) and the modular-kernel harness already
 # converts weights for it. Kimi-K3's SiTU activation is real and
-# default-enabled in production (APHRODITE_ROCM_USE_AITER_MOE_SITUV2="auto") but
+# default-enabled in production (SONAR_ROCM_USE_AITER_MOE_SITUV2="auto") but
 # is blanket-marked NYI by `is_nyi_config()` below pending harness support
 # for its weight-shuffle conversion -- a separate, tracked follow-up, not
-# this PR's scope. Despite the "a4w4" name, DSV4 runs through Aphrodite's W4A16
+# this PR's scope. Despite the "a4w4" name, DSV4 runs through Sonar's W4A16
 # quant pair: activations aren't pre-quantized here, AITER quantizes them to
 # 4-bit internally.
 #
@@ -758,7 +758,7 @@ MXFP4_SORT_BACKEND_ENV_CASES = ["opus", "ck", "adaptive", "auto"]
 
 def _aiter_mxfp4_sort_backend_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -786,7 +786,7 @@ def _aiter_mxfp4_sort_backend_worker(
     ):
         # Reuses the real correctness/accuracy checking rank_worker already
         # does for every other AiterExperts combo, instead of duplicating it.
-        rank_worker(pgi, aphrodite_config, cpu_group, config, weights, verbose)
+        rank_worker(pgi, sonar_config, cpu_group, config, weights, verbose)
 
     assert sorting_impl_mock.call_count > 0, "Expected AiterMxfp4Experts.apply() to reach aiter's _moe_sorting_impl."
     call = sorting_impl_mock.call_args_list[0]
@@ -846,7 +846,7 @@ def test_aiter_moe_sort_backend_dispatch_env_matrix_mxfp4(backend: str):
     if not hasattr(aiter_fused_moe, "_adaptive_moe_sort") or not hasattr(aiter_fused_moe, "_aux_uses_opus"):
         pytest.skip("Installed aiter build lacks the MXFP4 adaptive-sort hooks (_adaptive_moe_sort, _aux_uses_opus).")
 
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -879,13 +879,13 @@ def test_aiter_moe_sort_backend_dispatch_env_matrix_mxfp4(backend: str):
         pytest.skip(reason)
 
     weights = WeightTensors.make(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
     env_dict = {**env_dict, "AITER_MOE_SORT_BACKEND": backend}
 
     parallel_launch_with_config(
         config.world_size,
         _aiter_mxfp4_sort_backend_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -1085,7 +1085,7 @@ def _check_mxfp4_accuracy(ref_out: torch.Tensor, mk_out: torch.Tensor, fe_name: 
 
 def _aiter_padding_matrix_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     padded_config: Config,
     padded_weights: WeightTensors,
@@ -1103,7 +1103,7 @@ def _aiter_padding_matrix_worker(
     rank_tensors = RankTensors.make(padded_config, pgi)
 
     with mock.patch.object(rocm_aiter_ops, "fused_moe", wraps=rocm_aiter_ops.fused_moe) as fused_moe_mock:
-        mk_out = run_modular_kernel(pgi, aphrodite_config, padded_config, weights, rank_tensors)
+        mk_out = run_modular_kernel(pgi, sonar_config, padded_config, weights, rank_tensors)
 
     fe_name = padded_config.fused_experts_type.__name__
     assert fused_moe_mock.call_count > 0, f"Expected {fe_name}.apply() to call rocm_aiter_ops.fused_moe."
@@ -1138,7 +1138,7 @@ def _aiter_padding_matrix_worker(
         unpadded_weights = _slice_unpadded_weights(weights, padded_config.quant_config, k_unpadded, n_unpadded)
     unpadded_rank_tensors = _slice_unpadded_rank_tensors(rank_tensors, k_unpadded)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_out = reference_moe_impl(padded_config, unpadded_weights, unpadded_rank_tensors)
 
     if padded_config.is_w4a16_mxfp4 and padded_config.activation == MoEActivation.SWIGLUOAI:
@@ -1181,7 +1181,7 @@ def test_aiter_moe_padding_matrix(mode: str, quant_config: TestMoEQuantConfig | 
     unpadded reference and verifies the hidden_pad/intermediate_pad
     AiterExperts.apply() forwards to rocm_aiter_ops.fused_moe.
     """
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -1231,7 +1231,7 @@ def test_aiter_moe_padding_matrix(mode: str, quant_config: TestMoEQuantConfig | 
     assert config.fe_supports_quant_scheme(), f"AiterExperts does not support quant scheme {quant_config}."
 
     weights = _make_padding_matrix_weights(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
 
     hidden_pad_expected = _PADDING_HIDDEN_PAD_EXPECTED if pad_hidden else 0
     intermediate_pad_expected = _PADDING_INTERMEDIATE_PAD_EXPECTED if pad_intermediate else 0
@@ -1239,7 +1239,7 @@ def test_aiter_moe_padding_matrix(mode: str, quant_config: TestMoEQuantConfig | 
     parallel_launch_with_config(
         config.world_size,
         _aiter_padding_matrix_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -1295,7 +1295,7 @@ def test_aiter_moe_padding_matrix_mxfp4(mode: str, quant_config: TestMoEQuantCon
     W4A4 (SILU) -- only possible since #62907 taught the shared
     reference/NYI infra to treat SWIGLUOAI_UNINTERLEAVE this way.
     """
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -1327,7 +1327,7 @@ def test_aiter_moe_padding_matrix_mxfp4(mode: str, quant_config: TestMoEQuantCon
     assert config.is_valid()[0]
 
     weights = _make_padding_matrix_weights(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
 
     hidden_pad_expected = _PADDING_HIDDEN_PAD_EXPECTED_MXFP4 if pad_hidden else 0
     if not pad_intermediate:
@@ -1340,7 +1340,7 @@ def test_aiter_moe_padding_matrix_mxfp4(mode: str, quant_config: TestMoEQuantCon
     parallel_launch_with_config(
         config.world_size,
         _aiter_padding_matrix_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -1386,7 +1386,7 @@ def _apply_token_padding_garbage_rows(rank_tensors: RankTensors, garbage_rows: d
 
 def _aiter_token_padding_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -1403,8 +1403,8 @@ def _aiter_token_padding_worker(
     rank_tensors = RankTensors.make(config, pgi)
     _apply_token_padding_garbage_rows(rank_tensors, garbage_rows)
 
-    with set_current_aphrodite_config(aphrodite_config):
-        mk_out = run_modular_kernel(pgi, aphrodite_config, config, weights, rank_tensors)
+    with set_current_sonar_config(sonar_config):
+        mk_out = run_modular_kernel(pgi, sonar_config, config, weights, rank_tensors)
         ref_out = reference_moe_impl(config, weights, rank_tensors)
 
     real_rows = [i for i in range(rank_tensors.hidden_states.shape[0]) if i not in garbage_rows]
@@ -1454,7 +1454,7 @@ def test_aiter_moe_token_padding_garbage_rows(garbage_mode: str, quant_config: T
     and both inf and nan fill values, for unquantized + the 4 fp8 quant
     schemes AiterExperts supports.
     """
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -1504,12 +1504,12 @@ def test_aiter_moe_token_padding_garbage_rows(garbage_mode: str, quant_config: T
         )
 
     weights = WeightTensors.make(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
 
     parallel_launch_with_config(
         config.world_size,
         _aiter_token_padding_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,
@@ -1528,7 +1528,7 @@ def test_aiter_moe_token_padding_garbage_rows_mxfp4(garbage_mode: str, quant_con
     SWIGLUOAI_UNINTERLEAVE for W4A16 for the same reason as
     test_aiter_moe_padding_matrix_mxfp4.
     """
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize import (
         MoEPrepareAndFinalizeNoDPEPModular,
     )
 
@@ -1558,12 +1558,12 @@ def test_aiter_moe_token_padding_garbage_rows_mxfp4(garbage_mode: str, quant_con
     assert config.is_valid()[0]
 
     weights = WeightTensors.make(config)
-    aphrodite_config, env_dict = config.make_env_data()
+    sonar_config, env_dict = config.make_env_data()
 
     parallel_launch_with_config(
         config.world_size,
         _aiter_token_padding_worker,
-        aphrodite_config,
+        sonar_config,
         env_dict,
         config,
         weights,

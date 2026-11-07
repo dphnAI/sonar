@@ -143,19 +143,19 @@ trait-set = "0.3.0"
 url = "2.5.7"
 uuid = { version = "1.22.0", features = ["v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
-aphrodite-build-info = { path = "src/build-info" }
-aphrodite-chat = { path = "src/chat" }
-aphrodite-bench = { path = "src/bench" }
-aphrodite-engine-core-client = { path = "src/engine-core-client" }
-aphrodite-llm = { path = "src/llm" }
-aphrodite-managed-engine = { path = "src/managed-engine" }
-aphrodite-metrics = { path = "src/metrics" }
-aphrodite-parser = { path = "src/parser" }
-aphrodite-proto = { path = "proto" }
-aphrodite-server = { path = "src/server" }
-aphrodite-text = { path = "src/text" }
-aphrodite-tokenizer = { path = "src/tokenizer" }
-aphrodite-tracing = { path = "src/tracing" }
+sonar-build-info = { path = "src/build-info" }
+sonar-chat = { path = "src/chat" }
+sonar-bench = { path = "src/bench" }
+sonar-engine-core-client = { path = "src/engine-core-client" }
+sonar-llm = { path = "src/llm" }
+sonar-managed-engine = { path = "src/managed-engine" }
+sonar-metrics = { path = "src/metrics" }
+sonar-parser = { path = "src/parser" }
+sonar-proto = { path = "proto" }
+sonar-server = { path = "src/server" }
+sonar-text = { path = "src/text" }
+sonar-tokenizer = { path = "src/tokenizer" }
+sonar-tracing = { path = "src/tracing" }
 winnow = { version = "1.0.2", features = ["simd"] }
 xgrammar-structural-tag = "0.4.1"
 zeromq = { git = "https://github.com/zeromq/zmq.rs", rev = "67dcba97559ebe8e8206dab753710d8b9cb07591", default-features = false, features = [

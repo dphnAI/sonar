@@ -5,10 +5,10 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.processing.context import TimingContext
-from aphrodite.multimodal.processing.inputs import ProcessorInputs
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.processing.context import TimingContext
+from sonar.multimodal.processing.inputs import ProcessorInputs
 
 
 @pytest.fixture

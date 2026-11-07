@@ -1,5 +1,5 @@
-// Aphrodite-native: DeepSeek-V4 sparse indexer Q-side RoPE + FP8 quant kernel.
-// Ports the math of Aphrodite's own GPU/Triton reference
+// Sonar-native: DeepSeek-V4 sparse indexer Q-side RoPE + FP8 quant kernel.
+// Ports the math of Sonar's own GPU/Triton reference
 // (`_fused_indexer_q_rope_quant_kernel`, common/ops/fused_indexer_q.py) --
 // not a port of SGLang's own indexer-Q kernel, since that applies RoPE plus
 // a 128-point Hadamard rotation the real DeepSeek-V4-Flash checkpoint
@@ -35,7 +35,7 @@
 static_assert(
     false,
     "indexer.cpp is only ever compiled into the AVX512+AMX-flagged "
-    "_C target (see cmake/cpu_extension.cmake's APHRODITE_EXT_SRC_SGL) and "
+    "_C target (see cmake/cpu_extension.cmake's SONAR_EXT_SRC_SGL) and "
     "relies on that unconditionally -- CPU_CAPABILITY_AVX512 must be "
     "defined here.");
 #endif

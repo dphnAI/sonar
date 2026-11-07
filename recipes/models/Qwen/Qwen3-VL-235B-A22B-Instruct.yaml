@@ -54,7 +54,7 @@ features:
       - "--max-model-len"
       - "1000000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - text_only
@@ -142,11 +142,11 @@ hardware_overrides:
       - "--async-scheduling"
       - "--enable-chunked-prefill"
     extra_env:
-      APHRODITE_WORKER_MULTIPROC_METHOD: "spawn"
+      SONAR_WORKER_MULTIPROC_METHOD: "spawn"
       HIP_FORCE_DEV_KERNARG: "1"
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MHA: "1"
-      APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MHA: "1"
+      SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -162,8 +162,8 @@ guide: |
   uv venv
   source .venv/bin/activate
 
-  # Install Aphrodite >= 0.11.0
-  uv pip install -U aphrodite-engine
+  # Install Sonar >= 0.11.0
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
 
   # Install Qwen-VL utility library (recommended for offline inference)
   uv pip install qwen-vl-utils==0.0.14
@@ -173,7 +173,7 @@ guide: |
 
   ### H100 (Image + Video, FP8)
   ```bash
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
@@ -182,7 +182,7 @@ guide: |
 
   ### H100 (Image-Only, FP8, TP4)
   ```bash
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 4 \
     --limit-mm-per-prompt.video 0 \
     --async-scheduling \
@@ -192,7 +192,7 @@ guide: |
 
   ### A100 & H100 (Image-Only, BF16)
   ```bash
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --limit-mm-per-prompt.video 0 \
     --async-scheduling
@@ -200,7 +200,7 @@ guide: |
 
   ### A100 & H100 (Image + Video, BF16)
   ```bash
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --max-model-len 128000 \
     --async-scheduling
@@ -208,7 +208,7 @@ guide: |
 
   ### H200 & B200
   ```bash
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --async-scheduling
@@ -219,11 +219,11 @@ guide: |
   export SAFETENSORS_FAST_GPU="1"
   export HIP_FORCE_DEV_KERNARG="1"
   export HIP_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
-  export APHRODITE_WORKER_MULTIPROC_METHOD="spawn"
-  export APHRODITE_ROCM_USE_AITER="1"
-  export APHRODITE_ROCM_USE_AITER_MHA="1"
-  export APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct \
+  export SONAR_WORKER_MULTIPROC_METHOD="spawn"
+  export SONAR_ROCM_USE_AITER="1"
+  export SONAR_ROCM_USE_AITER_MHA="1"
+  export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
@@ -240,11 +240,11 @@ guide: |
   export SAFETENSORS_FAST_GPU="1"
   export HIP_FORCE_DEV_KERNARG="1"
   export HIP_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
-  export APHRODITE_WORKER_MULTIPROC_METHOD="spawn"
-  export APHRODITE_ROCM_USE_AITER="1"
-  export APHRODITE_ROCM_USE_AITER_MHA="1"
-  export APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  export SONAR_WORKER_MULTIPROC_METHOD="spawn"
+  export SONAR_ROCM_USE_AITER="1"
+  export SONAR_ROCM_USE_AITER_MHA="1"
+  export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="1"
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
     --mm-encoder-tp-mode data \
     --enable-expert-parallel \
@@ -264,19 +264,19 @@ guide: |
 
   ### MI300X / MI355X (FP8, EAGLE3 Speculative Decoding)
 
-  Adds EAGLE3 speculative decoding (`RedHatAI/Qwen3-VL-235B-A22B-Instruct-speculator.eagle3`) on top of the FP8 target. **`--attention-backend ROCM_AITER_FA` is mandatory** — the default `ROCM_ATTN` path makes SD slower than baseline on ROCm. Keep `APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0` and omit `--async-scheduling` (incompatible with SD).
+  Adds EAGLE3 speculative decoding (`RedHatAI/Qwen3-VL-235B-A22B-Instruct-speculator.eagle3`) on top of the FP8 target. **`--attention-backend ROCM_AITER_FA` is mandatory** — the default `ROCM_ATTN` path makes SD slower than baseline on ROCm. Keep `SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0` and omit `--async-scheduling` (incompatible with SD).
 
   ```bash
   export SAFETENSORS_FAST_GPU="1"
   export HIP_FORCE_DEV_KERNARG="1"
   export HIP_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
-  export APHRODITE_WORKER_MULTIPROC_METHOD="spawn"
-  export APHRODITE_ROCM_USE_AITER="1"
-  export APHRODITE_ROCM_USE_AITER_MHA="1"
-  export APHRODITE_ROCM_USE_AITER_RMSNORM="0"
-  export APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT="0"
+  export SONAR_WORKER_MULTIPROC_METHOD="spawn"
+  export SONAR_ROCM_USE_AITER="1"
+  export SONAR_ROCM_USE_AITER_MHA="1"
+  export SONAR_ROCM_USE_AITER_RMSNORM="0"
+  export SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT="0"
 
-  aphrodite serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  sonar serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
     --tensor-parallel-size 8 \
     --gpu-memory-utilization 0.94 \
     --distributed-executor-backend mp \
@@ -340,4 +340,4 @@ guide: |
   - [Model card](https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct)
   - [FP8 checkpoint](https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8)
   - [Qwen3-VL GitHub](https://github.com/QwenLM/Qwen3-VL)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

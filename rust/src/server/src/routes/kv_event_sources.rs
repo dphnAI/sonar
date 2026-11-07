@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::handshake::KvEventsConfig;
 use axum::Json;
 use axum::extract::State;
+use sonar_engine_core_client::protocol::handshake::KvEventsConfig;
 
 use crate::state::AppState;
 

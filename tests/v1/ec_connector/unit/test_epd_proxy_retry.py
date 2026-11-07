@@ -161,7 +161,7 @@ def test_partial_audio_metadata_falls_back_with_all_transfers(proxy, monkeypatch
 @pytest.mark.parametrize("batch_size, expected_sizes", [(0, [3, 3]), (1, [1] * 6), (2, [2, 2, 1, 1])])
 def test_image_batches_preserve_item_identity(proxy, monkeypatch, no_rewrite, batch_size, expected_sizes):
     """Rehashed and repeated images retain metadata and per-occurrence transfers."""
-    from aphrodite.distributed.ec_transfer.ec_connector.mooncake.scheduler import (
+    from sonar.distributed.ec_transfer.ec_connector.mooncake.scheduler import (
         ECMooncakeScheduler,
     )
 
@@ -520,13 +520,13 @@ async def test_http_roundtrip_preserves_payload_and_response_bytes(
 def test_pooled_connections_are_retired_before_the_server_closes_them(proxy, monkeypatch, server_keep_alive):
     """The proxy must not hand a request a connection the server has dropped.
 
-    Aphrodite closes idle keep-alive connections at `APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE`
+    Sonar closes idle keep-alive connections at `SONAR_HTTP_TIMEOUT_KEEP_ALIVE`
     seconds while aiohttp pools them for 15, so a slow hop leaves a dead
     connection in the pool. The next request fails with
     ServerDisconnectedError and the server logs nothing, because it closed the
     socket before the request arrived.
     """
-    monkeypatch.setenv("APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE", server_keep_alive)
+    monkeypatch.setenv("SONAR_HTTP_TIMEOUT_KEEP_ALIVE", server_keep_alive)
     monkeypatch.setattr(proxy.app.state, "p_urls", [], raising=False)
 
     asyncio.run(proxy.on_startup())
@@ -554,8 +554,8 @@ def test_video_audio_rewrite(proxy, monkeypatch, no_rewrite, transfer, has_metad
     """One video publishes two features; forward both even on raw fallback."""
     import copy
 
-    from aphrodite.distributed.ec_transfer.ec_connector.utils import collect_ec_item_metadata
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+    from sonar.distributed.ec_transfer.ec_connector.utils import collect_ec_item_metadata
+    from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
 
     video = {"type": "video_url", "video_url": {"url": "video-with-audio"}}
     images = [{"type": "image_url", "image_url": {"url": key}} for key in ("A", "B")]

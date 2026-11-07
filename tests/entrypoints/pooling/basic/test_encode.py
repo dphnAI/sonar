@@ -5,8 +5,8 @@ import weakref
 
 import pytest
 
-from aphrodite import LLM, PoolingParams
-from aphrodite.exceptions import AphroditeValidationError
+from sonar import LLM, PoolingParams
+from sonar.exceptions import SonarValidationError
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 
@@ -28,8 +28,8 @@ TOKEN_IDS = [
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_batched_tokens=32768,
@@ -40,7 +40,7 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -58,7 +58,7 @@ def test_multiple_pooling_params(llm: LLM):
     assert len(PROMPTS) == len(outputs)
 
     # Exception raised, if the size of params does not match the size of prompts
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         outputs = llm.encode(PROMPTS, pooling_params=pooling_params[:3], pooling_task="embed")
 
     # Single PoolingParams should be applied to every prompt

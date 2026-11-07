@@ -16,7 +16,7 @@ meta:
 
 model:
   model_id: "autotrust/JEV-27B-VL"
-  # Model author: this checkpoint only works on Aphrodite >= 0.32.0.
+  # Model author: this checkpoint only works on Sonar >= 0.32.0.
   # Qwen3_5ForConditionalGeneration is registered in that release.
   min_vllm_version: "0.32.0"
   architecture: dense
@@ -48,7 +48,7 @@ model:
     - "--trust-request-chat-template"
   base_env: {}
 
-# Host checkout for the LoRA. Aphrodite serve still pulls weights by model_id;
+# Host checkout for the LoRA. Sonar serve still pulls weights by model_id;
 # --lora-modules needs adapter_vllm on disk. Same subdirectory on the
 # ModelScope checkout. install_modes includes docker because the image
 # cannot fetch this relative path for you.
@@ -111,7 +111,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** >= 0.32.0. Earlier releases are not supported for this
+  - **Sonar:** >= 0.32.0. Earlier releases are not supported for this
     checkpoint.
   - **Weights:** `hf download autotrust/JEV-27B-VL --local-dir JEV-27B-VL`
     so the LoRA path below exists. The same `adapter_vllm` directory is in
@@ -129,7 +129,7 @@ guide: |
 
   ## Decision LoRA and serve flags
 
-  These flags are the model card's validated `aphrodite serve` line. They are
+  These flags are the model card's validated `sonar serve` line. They are
   base arguments, not optional toggles.
 
   - **`jev-decision`** — `--enable-lora`, `--max-lora-rank 32`, and
@@ -143,7 +143,7 @@ guide: |
   - **`--limit-mm-per-prompt '{"image": 8}'`** — at most 8 images per
     request.
   - **`--max-num-seqs 8`** — required. The card says that with more than 8
-    sequences in one batch, Aphrodite's LoRA path for this multimodal class
+    sequences in one batch, Sonar's LoRA path for this multimodal class
     returns wrong System 1 probabilities. Extra requests queue.
   - **`--logprobs-mode processed_logprobs`** — System 1 reads post-processor
     logprobs. On `/v1/chat/completions` or `/v1/completions` for
@@ -156,9 +156,9 @@ guide: |
   - **`--served-model-name autotrust/JEV-27B-VL`** — public name for
     System 2. `--enable-prefix-caching` matches the card's serve line.
 
-  `POST /v1/decide` is not part of stock `aphrodite serve`. The checkpoint ships
+  `POST /v1/decide` is not part of stock `sonar serve`. The checkpoint ships
   `serve_decide.py`, which starts the OpenAI server with these same flags
-  and adds that route. Stock `aphrodite serve` still exposes System 2 as
+  and adds that route. Stock `sonar serve` still exposes System 2 as
   `autotrust/JEV-27B-VL` and System 1 as the LoRA model `jev-decision`.
 
   ## Client usage

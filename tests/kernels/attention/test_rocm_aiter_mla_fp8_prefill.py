@@ -23,13 +23,13 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _fp8_prefill_available() -> bool:
     if not (current_platform.is_rocm() and torch.cuda.is_available()):
         return False
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
         _fp8_mla_prefill_supported,
     )
 
@@ -81,7 +81,7 @@ def _workspace_manager():
     manager, which ``GPUModelRunner.__init__`` normally initializes. Set it up
     for the test and tear it down so no global state leaks to other tests.
     """
-    from aphrodite.v1.worker.workspace import (
+    from sonar.v1.worker.workspace import (
         init_workspace_manager,
         reset_workspace_manager,
     )
@@ -95,7 +95,7 @@ def _make_impl(num_heads: int):
     """Minimal AiterMLAImpl exposing only what _mla_fp8_prefill_attn reads."""
     from aiter import mla_prefill_ps_asm_fwd, mla_reduce_v1
 
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAImpl
 
     impl = object.__new__(AiterMLAImpl)
     impl.num_heads = num_heads
@@ -114,7 +114,7 @@ def _build_prefill_metadata(
     attn_out_dtype: torch.dtype = ATTN_OUT_DTYPE,
 ):
     """Build metadata with the production builder and output dtype."""
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAMetadataBuilder
 
     qo_indptr_cpu = torch.zeros(len(seq_lens) + 1, dtype=torch.int32)
     qo_indptr_cpu[1:] = torch.tensor(seq_lens, dtype=torch.int32).cumsum(0)
@@ -172,7 +172,7 @@ def test_fp8_prefill_matches_reference(seq_len: int, num_heads: int) -> None:
     # Note this does not catch the reverse -- a builder wider than the forward
     # merely over-reserves -- so it would not have flagged the pre-PR
     # max(16, num_heads) sizing, which over-reserves 2.8x at 24 heads.
-    from aphrodite.v1.worker.workspace import lock_workspace
+    from sonar.v1.worker.workspace import lock_workspace
 
     lock_workspace()
 
@@ -209,7 +209,7 @@ def test_fp8_prefill_metadata_width_matches_forward(num_heads: int) -> None:
     reservation, while wider ones under-reserve the forward's scratch. Pin the
     two to one helper rather than to independent expressions.
     """
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper
 
     width = AiterMLAHelper.get_fp8_prefill_num_heads(num_heads)
     assert width % AiterMLAHelper._AITER_MIN_MLA_HEADS == 0
@@ -231,7 +231,7 @@ def test_fp8_prefill_metadata_width_matches_forward(num_heads: int) -> None:
     # together.
     from aiter import get_ps_metadata_info_v1
 
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import _FP8_PREFILL_TILE_Q
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla import _FP8_PREFILL_TILE_Q
 
     def _tiles(nhk: int) -> int:
         return get_ps_metadata_info_v1(

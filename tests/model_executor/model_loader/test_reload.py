@@ -15,28 +15,28 @@ import pytest
 import torch
 from torch.nn.parameter import UninitializedParameter
 
-import aphrodite.model_executor.model_loader.reload.layerwise as reload_layerwise
-import aphrodite.model_executor.model_loader.reload.meta as reload_meta
-from aphrodite.config import ModelConfig
-from aphrodite.distributed.weight_transfer.sparse_nccl_engine import (
+import sonar.model_executor.model_loader.reload.layerwise as reload_layerwise
+import sonar.model_executor.model_loader.reload.meta as reload_meta
+from sonar.config import ModelConfig
+from sonar.distributed.weight_transfer.sparse_nccl_engine import (
     SparseNCCLWeightTransferEngine,
 )
-from aphrodite.lora.request import LoRARequest
-from aphrodite.model_executor.layers.attention import MMEncoderAttention
-from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.model_executor.layers.linear import QKVParallelLinear
-from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.model_loader.checkpoint_weight_patch import (
+from sonar.lora.request import LoRARequest
+from sonar.model_executor.layers.attention import MMEncoderAttention
+from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+from sonar.model_executor.layers.linear import QKVParallelLinear
+from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+from sonar.model_executor.model_loader.checkpoint_weight_patch import (
     CheckpointWeightPatch,
     load_checkpoint_weight_patches,
 )
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader.reload.layerwise import (
     finalize_layerwise_reload,
     initialize_layerwise_reload,
     initialize_online_processing,
     record_metadata_for_reloading,
 )
-from aphrodite.model_executor.model_loader.reload.meta import (
+from sonar.model_executor.model_loader.reload.meta import (
     capture_layer_to_meta,
     get_numel_loaded,
     materialize_layer,
@@ -44,16 +44,16 @@ from aphrodite.model_executor.model_loader.reload.meta import (
     restore_layer_on_meta,
     to_meta_tensor,
 )
-from aphrodite.model_executor.model_loader.reload.types import LayerReloadingInfo
-from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.reload.types import LayerReloadingInfo
+from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
+from sonar.model_executor.model_loader.weight_utils import (
     composed_weight_loader,
     default_weight_loader,
     load_attention_sink,
     safetensors_weights_iterator,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
 
 
 def test_preserve_placement_remapping_until_checkpoint_iteration_finishes():
@@ -85,9 +85,9 @@ def test_preserve_placement_remapping_until_checkpoint_iteration_finishes():
 )
 def test_attention_sink_model_loading_shards_once(monkeypatch, tp_rank, module_name, class_name, sink_name):
     """Model loading must pass global sinks to the loader on cold load and reload."""
-    module = import_module(f"aphrodite.model_executor.models.{module_name}")
-    from aphrodite.model_executor.model_loader import weight_utils
-    from aphrodite.model_executor.models.utils import WeightsMapper
+    module = import_module(f"sonar.model_executor.models.{module_name}")
+    from sonar.model_executor.model_loader import weight_utils
+    from sonar.model_executor.models.utils import WeightsMapper
 
     for target in (module, weight_utils):
         monkeypatch.setattr(target, "get_tensor_model_parallel_rank", lambda: tp_rank, raising=False)
@@ -95,7 +95,7 @@ def test_attention_sink_model_loading_shards_once(monkeypatch, tp_rank, module_n
     cls = getattr(module, class_name)
     model = cls.__new__(cls)
     torch.nn.Module.__init__(model)
-    model.hf_to_aphrodite_mapper = WeightsMapper()
+    model.hf_to_sonar_mapper = WeightsMapper()
     model._context_kv_proj = None  # set by DFlashQwen3Model.__init__
     model.model = torch.nn.Module()
     model.model.mtp = torch.nn.Module()
@@ -132,8 +132,8 @@ def test_attention_sink_deepseek_hy_loading_uses_parameter_loader(
     monkeypatch, tp_rank, module_name, class_name, attention_name, sink_name
 ):
     """DeepSeek and HY-V4 pass global sinks to the parameter's current loader."""
-    module = import_module(f"aphrodite.models.{module_name}.nvidia.model")
-    from aphrodite.model_executor.model_loader import weight_utils
+    module = import_module(f"sonar.models.{module_name}.nvidia.model")
+    from sonar.model_executor.model_loader import weight_utils
 
     monkeypatch.setattr(weight_utils, "get_tensor_model_parallel_world_size", lambda: 2)
     monkeypatch.setattr(weight_utils, "get_tensor_model_parallel_rank", lambda: tp_rank)
@@ -163,7 +163,7 @@ def test_attention_sink_deepseek_hy_loading_uses_parameter_loader(
 
 def _gpt_oss_container(monkeypatch, quant_method=None):
     """A minimal GptOssModel whose loading paths can be driven directly."""
-    from aphrodite.model_executor.models import gpt_oss
+    from sonar.model_executor.models import gpt_oss
 
     group = SimpleNamespace(world_size=1, rank_in_group=0)
     for name in ("get_dp_group", "get_ep_group", "get_pcp_group"):
@@ -200,7 +200,7 @@ def test_gpt_oss_attention_sink_uses_parameter_loader(monkeypatch, quant_method)
 
 def test_gpt_oss_attention_sink_skips_missing_parameter(monkeypatch):
     """A sink owned by another pipeline stage is skipped, not a KeyError."""
-    from aphrodite.model_executor.models import gpt_oss
+    from sonar.model_executor.models import gpt_oss
 
     model = _gpt_oss_container(monkeypatch)
     monkeypatch.setattr(gpt_oss, "is_pp_missing_parameter", lambda *args: True)
@@ -214,11 +214,11 @@ def test_gpt_oss_attention_sink_skips_missing_parameter(monkeypatch):
 def test_attention_sink_layerwise_reload(monkeypatch, tp_rank, padding):
     """Reload must update the sink's kernel storage and restore its padding."""
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.weight_utils.get_tensor_model_parallel_rank",
+        "sonar.model_executor.model_loader.weight_utils.get_tensor_model_parallel_rank",
         lambda: tp_rank,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.weight_utils.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.model_loader.weight_utils.get_tensor_model_parallel_world_size",
         lambda: 2,
     )
 
@@ -272,7 +272,7 @@ def _fp8_reload_unsupported() -> bool:
     if not current_platform.supports_fp8():
         return True
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import on_gfx11, on_gfx90a
+        from sonar.platforms.rocm import on_gfx11, on_gfx90a
 
         return on_gfx90a() or on_gfx11()
     return False
@@ -343,7 +343,7 @@ class _ReloadableAttentionLayer(
     def get_attn_backend(self):
         raise NotImplementedError
 
-    def get_kv_cache_spec(self, aphrodite_config):
+    def get_kv_cache_spec(self, sonar_config):
         return None
 
     def process_weights_after_loading(self, act_dtype: torch.dtype) -> None:
@@ -368,8 +368,8 @@ def test_move_metatensors():
     "layer_cls",
     [_ReloadableMMEncoderAttention, _ReloadableAttentionLayer],
 )
-def test_attention_reload_defers_post_load(default_aphrodite_config, layer_cls):
-    default_aphrodite_config.model_config = ModelConfig()
+def test_attention_reload_defers_post_load(default_sonar_config, layer_cls):
+    default_sonar_config.model_config = ModelConfig()
     layer = layer_cls()
     model = torch.nn.Sequential(layer)
     loaded_weight = torch.full_like(layer.weight, 7.0)
@@ -380,7 +380,7 @@ def test_attention_reload_defers_post_load(default_aphrodite_config, layer_cls):
 
     assert not layer.post_load_called
 
-    finalize_layerwise_reload(model, default_aphrodite_config.model_config)
+    finalize_layerwise_reload(model, default_sonar_config.model_config)
 
     assert layer.post_load_called
     assert torch.equal(layer.weight, loaded_weight)
@@ -390,8 +390,8 @@ def test_attention_reload_defers_post_load(default_aphrodite_config, layer_cls):
     "layer_cls",
     [_ReloadableMMEncoderAttention, _ReloadableAttentionLayer],
 )
-def test_attention_first_load_processes_weights(default_aphrodite_config, layer_cls):
-    default_aphrodite_config.model_config = ModelConfig()
+def test_attention_first_load_processes_weights(default_sonar_config, layer_cls):
+    default_sonar_config.model_config = ModelConfig()
     layer = layer_cls()
     model = torch.nn.Sequential(layer)
     loaded_weight = torch.full_like(layer.weight, 7.0)
@@ -399,7 +399,7 @@ def test_attention_first_load_processes_weights(default_aphrodite_config, layer_
     initialize_online_processing(layer)
     layer.weight.weight_loader(layer.weight, loaded_weight)
 
-    finalize_layerwise_reload(model, default_aphrodite_config.model_config)
+    finalize_layerwise_reload(model, default_sonar_config.model_config)
 
     assert layer.post_load_called
     assert torch.equal(layer.weight, loaded_weight)
@@ -476,8 +476,8 @@ _MARLIN_SIZE_K, _MARLIN_SIZE_N, _MARLIN_GROUP_SIZE = 128, 64, 64
 
 
 def _stub_marlin_ops(monkeypatch):
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.quantization.utils import marlin_utils
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.quantization.utils import marlin_utils
 
     monkeypatch.setattr(marlin_utils, "num_compute_units", lambda _: 4)
     monkeypatch.setattr(
@@ -488,13 +488,13 @@ def _stub_marlin_ops(monkeypatch):
 
 
 def _make_marlin_kernel():
-    from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
+    from sonar.model_executor.kernels.linear.mixed_precision.marlin import (
         MarlinLinearKernel,
     )
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     kernel = object.__new__(MarlinLinearKernel)
     kernel.config = MPLinearLayerConfig(
@@ -512,12 +512,12 @@ def _make_marlin_kernel():
 
 
 def _load_marlin_checkpoint_format_weights(layer):
-    from aphrodite.model_executor.parameter import (
+    from sonar.model_executor.parameter import (
         GroupQuantScaleParameter,
-        PackedAphroditeParameter,
+        PackedSonarParameter,
     )
 
-    layer.qweight = PackedAphroditeParameter(
+    layer.qweight = PackedSonarParameter(
         data=torch.zeros(_MARLIN_SIZE_K // 8, _MARLIN_SIZE_N, dtype=torch.int32),
         input_dim=0,
         output_dim=1,
@@ -552,8 +552,8 @@ def test_marlin_post_load_does_not_own_workspace(monkeypatch, dist_init):
 @pytest.mark.parametrize("variant", ["fp8", "mxfp8", "nvfp4"])
 def test_marlin_prepare_layer_does_not_own_workspace(monkeypatch, variant):
     """Weight preparation must not attach runtime workspace to model layers."""
-    from aphrodite import _custom_ops as ops
-    from aphrodite.model_executor.layers.quantization.utils import (
+    from sonar import _custom_ops as ops
+    from sonar.model_executor.layers.quantization.utils import (
         marlin_utils,
         marlin_utils_fp4,
         marlin_utils_fp8,
@@ -624,9 +624,9 @@ def test_marlin_prepare_layer_does_not_own_workspace(monkeypatch, variant):
 
 def test_marlin_workspace_uses_persistent_workspace_manager(monkeypatch):
     """Calls reuse initialized locks; independent streams get separate storage."""
-    from aphrodite.model_executor.layers.quantization.utils import marlin_utils
-    from aphrodite.utils import torch_utils
-    from aphrodite.v1.worker import workspace as workspace_module
+    from sonar.model_executor.layers.quantization.utils import marlin_utils
+    from sonar.utils import torch_utils
+    from sonar.v1.worker import workspace as workspace_module
 
     monkeypatch.setattr(marlin_utils, "num_compute_units", lambda _: 4)
     device = torch.device("cpu")
@@ -654,8 +654,8 @@ def test_marlin_workspace_uses_persistent_workspace_manager(monkeypatch):
 
 
 def test_marlin_workspace_without_manager(monkeypatch):
-    from aphrodite.model_executor.layers.quantization.utils import marlin_utils
-    from aphrodite.v1.worker import workspace as workspace_module
+    from sonar.model_executor.layers.quantization.utils import marlin_utils
+    from sonar.v1.worker import workspace as workspace_module
 
     monkeypatch.setattr(workspace_module, "_manager", None)
     monkeypatch.setattr(marlin_utils, "num_compute_units", lambda _: 4)
@@ -666,7 +666,7 @@ def test_marlin_workspace_without_manager(monkeypatch):
     assert torch.count_nonzero(first) == 0
 
 
-def test_model_cleanup(dist_init, default_aphrodite_config):
+def test_model_cleanup(dist_init, default_sonar_config):
     layer = QKVParallelLinear(2, 3, 4)
     assert layer.weight.weight_loader.__self__ is layer
     info = LayerReloadingInfo(
@@ -691,8 +691,8 @@ def test_model_cleanup(dist_init, default_aphrodite_config):
 @pytest.mark.parametrize("padded", [False, True])
 def test_padded_moe_reload_releases_each_layer(monkeypatch, is_gated, has_bias, tp_rank, padded):
     """Checkpoint-sized copies finish each layer without global finalization."""
-    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-    from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+    from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
         UnquantizedFusedMoEMethod,
     )
 
@@ -1110,7 +1110,7 @@ def test_layerwise_reload_updates_loaded_non_persistent_buffers(monkeypatch):
 
 
 @pytest.fixture
-def hpc_rope_norm(monkeypatch, default_aphrodite_config):
+def hpc_rope_norm(monkeypatch, default_sonar_config):
     """Import HpcRopeNorm with the external ``hpc`` package stubbed out."""
     if "hpc" not in sys.modules:
         stub = types.ModuleType("hpc")
@@ -1119,7 +1119,7 @@ def hpc_rope_norm(monkeypatch, default_aphrodite_config):
             QPERTOKEN_PERHEAD_KPERTENSOR_VPERTENSOR=types.SimpleNamespace(value=0)
         )
         monkeypatch.setitem(sys.modules, "hpc", stub)
-    from aphrodite.model_executor.layers.hpc import rope_norm
+    from sonar.model_executor.layers.hpc import rope_norm
 
     monkeypatch.setattr(rope_norm, "_hpc_rope_norm_instances", {})
     return rope_norm
@@ -1134,7 +1134,7 @@ def test_hpc_rope_norm_kernel_sees_refit_norm_weights(monkeypatch, hpc_rope_norm
     the kernel sees. Previously the kernel read separate mirrors that no
     reload path refreshed.
     """
-    from aphrodite.model_executor.layers.layernorm import RMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm
 
     head_dim, num_heads, num_kv_heads, block_size = 128, 8, 1, 4
     layer = torch.nn.Module()
@@ -1276,18 +1276,18 @@ def _moved_tensors(llm, ptrs: list[dict[str, int]]) -> list[list[str]]:
         ),
     ],
 )
-def test_reload_weights(base_model, mul_model, add_model, tp_size, use_aiter, aphrodite_runner, monkeypatch):
+def test_reload_weights(base_model, mul_model, add_model, tp_size, use_aiter, sonar_runner, monkeypatch):
     if current_platform.device_count() < tp_size:
         pytest.skip(reason="Not enough CUDA devices")
 
     if "FP8" in base_model and _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
 
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     if use_aiter:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=base_model,
         tensor_parallel_size=tp_size,
         enable_expert_parallel=(tp_size > 1 and "DeepSeek" in base_model),
@@ -1319,17 +1319,17 @@ def _reload_with_lora_expert_names(worker) -> None:
             parts.insert(parts.index("experts") + 3, "base_layer")
         return ".".join(parts)
 
-    path = Path(hf_api().snapshot_download(worker.aphrodite_config.model_config.model))
+    path = Path(hf_api().snapshot_download(worker.sonar_config.model_config.model))
     files = sorted(str(f) for f in path.glob("*.safetensors"))
     weights = safetensors_weights_iterator(files, use_tqdm_on_load=False)
     worker.reload_weights(weights_iterator=((lora_name(name), weight) for name, weight in weights))
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="LoRA on quantized MoE requires CUDA")
-def test_reload_weights_with_lora_moe(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+def test_reload_weights_with_lora_moe(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     lora_path = hf_api().snapshot_download(repo_id="jeeejeee/qwen3-moe-text2sql-spider")
     prompts = [
         "<|im_start|>user\nCount the rows of table candidate.<|im_end|>\n"
@@ -1347,7 +1347,7 @@ def test_reload_weights_with_lora_moe(aphrodite_runner, monkeypatch):
         )[0]
         return [next(iter(token.values())).logprob for token in output[3][1:]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name="RedHatAI/Qwen3-30B-A3B-quantized.w4a16",
         enable_lora=True,
         max_lora_rank=8,
@@ -1364,7 +1364,7 @@ def test_reload_weights_with_lora_moe(aphrodite_runner, monkeypatch):
     assert after == before
 
 
-def test_kv_scale_reload(aphrodite_runner):
+def test_kv_scale_reload(sonar_runner):
     """Test reloading a checkpoint that contains k_scale/v_scale weights."""
     if _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
@@ -1372,7 +1372,7 @@ def test_kv_scale_reload(aphrodite_runner):
     model = "nm-testing/Llama-3.2-1B-Instruct-FP8-KV"
 
     # Load dummy weights, then reload real checkpoint
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model,
         load_format="dummy",
         enable_prefix_caching=False,
@@ -1428,14 +1428,14 @@ def test_kv_scale_reload(aphrodite_runner):
         ),
     ],
 )
-def test_online_quantize_reload(base_model, mul_model, add_model, quantization, tp_size, aphrodite_runner):
+def test_online_quantize_reload(base_model, mul_model, add_model, quantization, tp_size, sonar_runner):
     if current_platform.device_count() < tp_size:
         pytest.skip(reason="Not enough GPU devices")
 
     if quantization == "fp8_per_tensor" and _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=base_model,
         quantization=quantization,
         tensor_parallel_size=tp_size,

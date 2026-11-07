@@ -5,11 +5,11 @@ import warnings
 import pytest
 import torch
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
-from aphrodite.utils.serial_utils import tensor2base64
+from sonar.assets.image import ImageAsset
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
+from sonar.utils.serial_utils import tensor2base64
 
 from .utils import (
     assert_mm_data_is_image_input,
@@ -1090,7 +1090,7 @@ def test_parse_chat_messages_rejects_too_many_images_in_one_message(
             "ignore",
             message="coroutine 'async_get_and_parse_image' was never awaited",
         )
-        with pytest.raises(AphroditeValidationError, match="At most"):
+        with pytest.raises(SonarValidationError, match="At most"):
             parse_chat_messages(
                 [
                     {
@@ -1126,7 +1126,7 @@ def test_parse_chat_messages_rejects_too_many_images_across_messages(
             "ignore",
             message="coroutine 'async_get_and_parse_image' was never awaited",
         )
-        with pytest.raises(AphroditeValidationError, match="At most"):
+        with pytest.raises(SonarValidationError, match="At most"):
             parse_chat_messages(
                 [
                     {
@@ -1232,7 +1232,7 @@ def test_parse_chat_messages_interleave_placeholder_overcount_raises(
     # image sentinel, so the interleaved prompt references more image
     # placeholders than actual images. This must surface as a clear validation
     # error rather than an IndexError from popping an empty list.
-    with pytest.raises(AphroditeValidationError, match="placeholders in input prompt"):
+    with pytest.raises(SonarValidationError, match="placeholders in input prompt"):
         parse_chat_messages(
             [
                 {
@@ -1421,7 +1421,7 @@ def test_parse_chat_messages_multiple_images_interleave_with_placeholders(
     image_url,
 ):
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match=r"Found more '<|image_1|>' placeholders in input prompt "
         "than actual multimodal data items.",
     ):

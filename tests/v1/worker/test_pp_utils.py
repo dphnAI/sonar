@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from aphrodite.v1.worker.gpu import pp_utils
+from sonar.v1.worker.gpu import pp_utils
 
 
 def _batch(

@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The fused q/k norm + RoPE + cache-write kernel must reproduce the unfused
-Aphrodite ops (rms_norm, rotary_embedding, reshape_and_cache_flash) it replaces."""
+Sonar ops (rms_norm, rotary_embedding, reshape_and_cache_flash) it replaces."""
 
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.models.flint.ops.qk_norm_rope import qk_norm_rope_cache
-from aphrodite.platforms import current_platform
+from sonar import _custom_ops as ops
+from sonar.models.flint.ops.qk_norm_rope import qk_norm_rope_cache
+from sonar.platforms import current_platform
 
 HQ, HKV, D = 32, 4, 128
 BLOCK_SIZE, NUM_BLOCKS = 16, 64

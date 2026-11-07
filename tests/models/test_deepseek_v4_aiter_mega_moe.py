@@ -6,22 +6,22 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.model_executor.layers.fused_moe import (
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     is_shared_expert_quant_fse_compatible,
 )
-from aphrodite.models.deepseek_v4.amd import mega_moe as mega_moe_module
-from aphrodite.models.deepseek_v4.amd.mega_moe import (
+from sonar.models.deepseek_v4.amd import mega_moe as mega_moe_module
+from sonar.models.deepseek_v4.amd.mega_moe import (
     DeepseekV4AiterMegaMoEExperts,
 )
-from aphrodite.models.deepseek_v4.amd.model import DeepseekV4MoE
-from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import aux_stream
+from sonar.models.deepseek_v4.amd.model import DeepseekV4MoE
+from sonar.models.deepseek_v41.quant_config import DeepseekV4FP8Config
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import aux_stream
 
 HIDDEN = 64
 INTER = 64
@@ -43,9 +43,9 @@ def _make_experts(
         "get_ep_group",
         lambda: SimpleNamespace(rank_in_group=ep_rank, world_size=ep_size, cpu_group="ep"),
     )
-    aphrodite_config = SimpleNamespace(scheduler_config=SimpleNamespace(max_num_batched_tokens=max_num_batched_tokens))
+    sonar_config = SimpleNamespace(scheduler_config=SimpleNamespace(max_num_batched_tokens=max_num_batched_tokens))
     return DeepseekV4AiterMegaMoEExperts(
-        aphrodite_config,
+        sonar_config,
         num_experts=num_experts,
         top_k=2,
         hidden_size=HIDDEN,

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from aphrodite.entrypoints.speech_to_text.base.serving import SpeechToTextBaseServing
-from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionResponse
+from sonar.entrypoints.speech_to_text.base.serving import SpeechToTextBaseServing
+from sonar.entrypoints.speech_to_text.transcription.protocol import TranscriptionResponse
 
 
 async def _never_finishes():

@@ -24,10 +24,10 @@ import psutil
 import pytest
 import regex as re
 
-from aphrodite import SamplingParams
-from aphrodite.assets.image import ImageAsset
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar import SamplingParams
+from sonar.assets.image import ImageAsset
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.utils import create_new_process_for_each_test
 
 
@@ -43,12 +43,12 @@ class WeightCacheDaemon:
         log_file: str | None = None,
     ):
         # Short base path: Unix socket paths are limited to ~107 characters.
-        self.socket_dir = tempfile.mkdtemp(prefix="aphrodite_ipc_")
+        self.socket_dir = tempfile.mkdtemp(prefix="sonar_ipc_")
         self.health_port = get_open_port()
         self._cmd = [
             sys.executable,
             "-m",
-            "aphrodite.entrypoints.cli.main",
+            "sonar.entrypoints.cli.main",
             "preload",
             "--model",
             model,
@@ -119,7 +119,7 @@ class WeightCacheDaemon:
                 if time.monotonic() > deadline:
                     raise
                 if self._proc is not None and self._proc.poll() is not None:
-                    raise AssertionError("aphrodite preload exited before ready") from None
+                    raise AssertionError("sonar preload exited before ready") from None
                 time.sleep(2)
 
     def _stop(self) -> None:
@@ -194,13 +194,13 @@ class ModelCase:
 
 
 def generate(
-    aphrodite_runner,
+    sonar_runner,
     case: ModelCase,
     socket_dir: str | None,
     fallback: bool,
 ):
     extra_config = {} if socket_dir is None else {"socket_dir": socket_dir, "fallback": fallback}
-    with aphrodite_runner(
+    with sonar_runner(
         case.model,
         load_format="auto" if socket_dir is None else "ipc_cache",
         model_loader_extra_config=extra_config,
@@ -294,7 +294,7 @@ DSV2_EP_CASE = ModelCase(
     [QWEN_CASE, K3_CASE, QWEN_MTP_CASE],
     ids=["qwen3.5", "kimi-k3", "qwen3.5-mtp"],
 )
-def test_ipc_cache_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase, tmp_path, monkeypatch, capfd):
+def test_ipc_cache_cold_start_and_warm_restart(sonar_runner, case: ModelCase, tmp_path, monkeypatch, capfd):
     """Cold start falls back to disk; warm restarts load weights via CUDA IPC.
 
     All runs must produce outputs identical to a default-loader baseline. The
@@ -316,36 +316,36 @@ def test_ipc_cache_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase
     if case is K3_CASE and not current_platform.is_device_capability_family(100):
         pytest.skip("Kimi K3 IPC weight cache requires an SM100 MXFP4 backend")
     if case.check_flashinfer_cache:
-        from aphrodite.utils.flashinfer import has_flashinfer
+        from sonar.utils.flashinfer import has_flashinfer
 
         if not (has_flashinfer() and current_platform.has_device_capability(90)):
             pytest.skip("FlashInfer autotune requires FlashInfer and SM90+")
         # Isolate the on-disk autotune cache. The engines are in-process
         # (envs read lazily); the daemon subprocesses spawn later and
         # inherit it.
-        monkeypatch.setenv("APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
-    run_cold_start_and_warm_restart(aphrodite_runner, case, tmp_path, capfd)
+        monkeypatch.setenv("SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
+    run_cold_start_and_warm_restart(sonar_runner, case, tmp_path, capfd)
 
 
 @create_new_process_for_each_test()
 @pytest.mark.distributed(num_gpus=2)
-def test_ipc_cache_cold_start_and_warm_restart_tp2_ep(aphrodite_runner, tmp_path):
+def test_ipc_cache_cold_start_and_warm_restart_tp2_ep(sonar_runner, tmp_path):
     """Same as above, with expert parallelism enabled at tp=2."""
     # No capfd: a CaptureFixture does not survive the cloudpickle into the
     # child, and this case never reaches the check_flashinfer_cache branch.
-    run_cold_start_and_warm_restart(aphrodite_runner, DSV2_EP_CASE, tmp_path)
+    run_cold_start_and_warm_restart(sonar_runner, DSV2_EP_CASE, tmp_path)
 
 
 @create_new_process_for_each_test()
 @pytest.mark.distributed(num_gpus=2)
-def test_d2d_warmup_cache_seeding(aphrodite_runner, tmp_path):
+def test_d2d_warmup_cache_seeding(sonar_runner, tmp_path):
     """A mirror daemon adopts the source's autotune cache over D2D, skips
     re-tuning, and serves outputs identical to the default-loader baseline."""
     if not current_platform.is_cuda_alike():
         pytest.skip("Weight cache IPC sharing requires CUDA or ROCm")
     if not current_platform.is_device_capability_family(100):
         pytest.skip("Kimi K3 IPC weight cache requires an SM100 MXFP4 backend")
-    from aphrodite.utils.flashinfer import has_flashinfer
+    from sonar.utils.flashinfer import has_flashinfer
 
     if not (has_flashinfer() and current_platform.has_device_capability(90)):
         pytest.skip("FlashInfer autotune requires FlashInfer and SM90+")
@@ -354,7 +354,7 @@ def test_d2d_warmup_cache_seeding(aphrodite_runner, tmp_path):
         K3_CASE,
         llm_kwargs={**K3_CASE.llm_kwargs, "tensor_parallel_size": 2},
     )
-    baseline_outputs = generate(aphrodite_runner, case, None, fallback=True)
+    baseline_outputs = generate(sonar_runner, case, None, fallback=True)
     assert all(text for _, texts in baseline_outputs for text in texts)
 
     token = "d2d-test-token"
@@ -375,7 +375,7 @@ def test_d2d_warmup_cache_seeding(aphrodite_runner, tmp_path):
             "--seed-token",
             token,
         ],
-        env_extra={"APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR": str(tmp_path / "source")},
+        env_extra={"SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR": str(tmp_path / "source")},
         log_file=log_file("source.log"),
     ) as source:
         source.wait_until_ready()
@@ -394,7 +394,7 @@ def test_d2d_warmup_cache_seeding(aphrodite_runner, tmp_path):
                 "--seed-token",
                 token,
             ],
-            env_extra={"APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR": str(tmp_path / "mirror")},
+            env_extra={"SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR": str(tmp_path / "mirror")},
             log_file=log_file("mirror.log"),
         ) as mirror:
             mirror.wait_until_ready()
@@ -404,15 +404,15 @@ def test_d2d_warmup_cache_seeding(aphrodite_runner, tmp_path):
             mirror_tables = sorted((tmp_path / "mirror").rglob("autotune_configs_dp0_rank*.json"))
             assert len(mirror_tables) == 2
 
-            mirror_outputs = generate(aphrodite_runner, case, mirror.socket_dir, fallback=False)
+            mirror_outputs = generate(sonar_runner, case, mirror.socket_dir, fallback=False)
 
     assert mirror_outputs == baseline_outputs
 
 
-def run_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase, tmp_path, capfd=None):
+def run_cold_start_and_warm_restart(sonar_runner, case: ModelCase, tmp_path, capfd=None):
     # Baseline: plain disk loading with the default loader.
     baseline_outputs = generate(
-        aphrodite_runner,
+        sonar_runner,
         case,
         None,
         fallback=True,
@@ -420,8 +420,8 @@ def run_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase, tmp_path,
     assert all(text for _, texts in baseline_outputs for text in texts)
 
     # Cold start: no daemon is serving, so the loader falls back to disk.
-    with tempfile.TemporaryDirectory(prefix="aphrodite_ipc_empty_") as empty_socket_dir:
-        cold_outputs = generate(aphrodite_runner, case, empty_socket_dir, fallback=True)
+    with tempfile.TemporaryDirectory(prefix="sonar_ipc_empty_") as empty_socket_dir:
+        cold_outputs = generate(sonar_runner, case, empty_socket_dir, fallback=True)
 
     if case.check_flashinfer_cache:
         # The baseline engine already wrote its own (LLM_CLASS-keyed) table.
@@ -432,7 +432,7 @@ def run_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase, tmp_path,
         tp_size=case.llm_kwargs.get("tensor_parallel_size", 1),
         extra_args=case.daemon_args,
     ) as d:
-        warm_outputs = generate(aphrodite_runner, case, d.socket_dir, fallback=False)
+        warm_outputs = generate(sonar_runner, case, d.socket_dir, fallback=False)
         d.wait_until_ready()
         if case.check_flashinfer_cache:
             # Each daemon tunes before its ready report; exactly one new file
@@ -443,7 +443,7 @@ def run_cold_start_and_warm_restart(aphrodite_runner, case: ModelCase, tmp_path,
         # Warm restart: a second engine lifetime against the same daemon.
         if case.check_flashinfer_cache:
             capfd.readouterr()  # drain: the assertion reads the increment
-        restart_outputs = generate(aphrodite_runner, case, d.socket_dir, fallback=False)
+        restart_outputs = generate(sonar_runner, case, d.socket_dir, fallback=False)
         if case.check_flashinfer_cache:
             # The restart's EngineCore subprocess inherits pytest's fds; the
             # flashinfer autotuner logs "[Autotuner]: Loaded N configs from
@@ -477,7 +477,7 @@ def test_daemon_places_tp_and_dp_ranks_on_local_gpus():
     """Each node serves a contiguous global-rank block (DP-major), so without
     DP local GPU i is TP rank r*local+i, and single-node DP launchers offset
     by --data-parallel-start-rank."""
-    from aphrodite.model_executor.model_loader.weight_cache.daemon import plan_local_ranks
+    from sonar.model_executor.model_loader.weight_cache.daemon import plan_local_ranks
 
     tp_second_node = _parallel(tensor_parallel_size=8, nnodes=2, node_rank=1)
     assert plan_local_ranks(tp_second_node) == [(i, 0, 0, 4 + i) for i in range(4)]
@@ -525,7 +525,7 @@ def test_daemon_places_tp_and_dp_ranks_on_local_gpus():
 
 
 def test_daemon_rejects_unmappable_parallelism():
-    from aphrodite.model_executor.model_loader.weight_cache.daemon import (
+    from sonar.model_executor.model_loader.weight_cache.daemon import (
         _reject_unsupported_parallelism,
     )
 
@@ -548,8 +548,8 @@ def test_daemon_keys_dense_dp_ranks_like_the_engine():
     daemon must fingerprint them the same way or no engine can map them."""
     from types import SimpleNamespace
 
-    from aphrodite.config import ParallelConfig
-    from aphrodite.model_executor.model_loader.weight_cache.daemon import (
+    from sonar.config import ParallelConfig
+    from sonar.model_executor.model_loader.weight_cache.daemon import (
         get_engine_dp_placement,
     )
 
@@ -575,11 +575,11 @@ def test_daemon_sets_its_rank_like_engine_workers(monkeypatch):
     compiled artifact and run every rank's kernels on rank 0's device."""
     from types import SimpleNamespace
 
-    from aphrodite.model_executor.model_loader.weight_cache import daemon
+    from sonar.model_executor.model_loader.weight_cache import daemon
 
     monkeypatch.setattr(daemon.WeightCacheKey, "from_model_config", lambda *args, **kwargs: None)
     for global_rank in range(4):
-        aphrodite_config = SimpleNamespace(
+        sonar_config = SimpleNamespace(
             parallel_config=_parallel(
                 tensor_parallel_size=2,
                 pipeline_parallel_size=2,
@@ -592,14 +592,14 @@ def test_daemon_sets_its_rank_like_engine_workers(monkeypatch):
             cache_config=None,
             kernel_config=None,
         )
-        server = daemon.WeightCacheDaemon(aphrodite_config, global_rank, global_rank, "tcp://127.0.0.1:0")
-        assert server.aphrodite_config.parallel_config.rank == global_rank
+        server = daemon.WeightCacheDaemon(sonar_config, global_rank, global_rank, "tcp://127.0.0.1:0")
+        assert server.sonar_config.parallel_config.rank == global_rank
 
 
 def test_weight_cache_key_distinguishes_dp_ranks():
     from dataclasses import replace
 
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import WeightCacheKey
+    from sonar.model_executor.model_loader.weight_cache.protocol import WeightCacheKey
 
     key = WeightCacheKey(
         checkpoint="ckpt",
@@ -613,7 +613,7 @@ def test_weight_cache_key_distinguishes_dp_ranks():
         kv_cache_dtype="auto",
         kv_cache_dtype_skip_layers=(),
         revision=None,
-        aphrodite_version="v",
+        sonar_version="v",
         dp_size=16,
         dp_rank=3,
         pp_size=2,
@@ -633,10 +633,10 @@ def test_weight_cache_key_distinguishes_nvfp4_activation_override(tmp_path, hf_q
 
     import torch
 
-    from aphrodite.config import CacheConfig
-    from aphrodite.config.quantization import QuantizationConfigArgs
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import WeightCacheKey
-    from aphrodite.utils.hashing import safe_hash
+    from sonar.config import CacheConfig
+    from sonar.config.quantization import QuantizationConfigArgs
+    from sonar.model_executor.model_loader.weight_cache.protocol import WeightCacheKey
+    from sonar.utils.hashing import safe_hash
 
     model_config = SimpleNamespace(
         model=str(tmp_path),
@@ -682,7 +682,7 @@ def test_weight_cache_key_distinguishes_nvfp4_activation_override(tmp_path, hf_q
         (True, "deepseek_yarn", 10000, 2, 1024, 0, "rope_parameters_hash"),
     ],
 )
-def test_ipc_rope_matching(tmp_path, monkeypatch, default_aphrodite_config, fallback, nested, case):
+def test_ipc_rope_matching(tmp_path, monkeypatch, default_sonar_config, fallback, nested, case):
     """Reloads accept constructor-normalized RoPE without weakening other checks."""
     import socket
     from concurrent.futures import ThreadPoolExecutor
@@ -692,9 +692,9 @@ def test_ipc_rope_matching(tmp_path, monkeypatch, default_aphrodite_config, fall
     import torch
     from transformers import DeepseekV2Config, Qwen3VLConfig
 
-    from aphrodite.config import LoadConfig, ModelConfig
-    from aphrodite.model_executor.model_loader.weight_cache import daemon, ipc_loader
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.config import LoadConfig, ModelConfig
+    from sonar.model_executor.model_loader.weight_cache import daemon, ipc_loader
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         CacheConfigMismatchError,
         WeightCacheKey,
         hash_rope_parameters,
@@ -713,7 +713,7 @@ def test_ipc_rope_matching(tmp_path, monkeypatch, default_aphrodite_config, fall
     model_config.hf_text_config.max_position_embeddings = 512
     server = object.__new__(daemon.WeightCacheDaemon)
     server.cache_key = WeightCacheKey.from_model_config(
-        model_config, 1, 0, cache_config=default_aphrodite_config.cache_config
+        model_config, 1, 0, cache_config=default_sonar_config.cache_config
     )
     rope = model_config.hf_text_config.rope_parameters
     # DeepseekV2 construction normalizes yarn to deepseek_yarn.
@@ -749,9 +749,9 @@ def test_ipc_rope_matching(tmp_path, monkeypatch, default_aphrodite_config, fall
                 else:
                     loader._fetch_entries(
                         model_config,
-                        default_aphrodite_config.cache_config,
-                        default_aphrodite_config.parallel_config,
-                        default_aphrodite_config.kernel_config,
+                        default_sonar_config.cache_config,
+                        default_sonar_config.parallel_config,
+                        default_sonar_config.kernel_config,
                     )
             if is_reload:
                 expected = torch.zeros(2) if mismatch else server.model.rotary_cache
@@ -762,9 +762,9 @@ def test_ipc_rope_matching(tmp_path, monkeypatch, default_aphrodite_config, fall
 
 def test_ipc_loader_copy_mode_reports_no_external_weight_memory():
     """Copy mode clones the weights into the engine, so nothing is external
-    (aphrodite_config is never touched)."""
-    from aphrodite.config import LoadConfig
-    from aphrodite.model_executor.model_loader.weight_cache.ipc_loader import (
+    (sonar_config is never touched)."""
+    from sonar.config import LoadConfig
+    from sonar.model_executor.model_loader.weight_cache.ipc_loader import (
         IpcModelLoader,
     )
 
@@ -803,8 +803,8 @@ def test_ipc_loader_detects_daemon_exit(monkeypatch):
     that served it exits; watches of exited engines are pruned."""
     import socket
 
-    from aphrodite.config import LoadConfig
-    from aphrodite.model_executor.model_loader.weight_cache import daemon, ipc_loader
+    from sonar.config import LoadConfig
+    from sonar.model_executor.model_loader.weight_cache import daemon, ipc_loader
 
     server = object.__new__(daemon.WeightCacheDaemon)
     server._watchers = []
@@ -847,9 +847,9 @@ def test_ipc_loader_detects_daemon_exit(monkeypatch):
 
 def test_ipc_loader_skips_watch_on_old_daemon(monkeypatch):
     """Daemons predating the watch command reject it; loading still works."""
-    from aphrodite.config import LoadConfig
-    from aphrodite.model_executor.model_loader.weight_cache import ipc_loader
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.config import LoadConfig
+    from sonar.model_executor.model_loader.weight_cache import ipc_loader
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         recv_msg,
         send_msg,
     )
@@ -877,13 +877,13 @@ def test_daemon_releases_cublas_workspaces():
 
     import torch
 
-    from aphrodite.config import AphroditeConfig, ModelConfig
-    from aphrodite.distributed import init_distributed_environment
-    from aphrodite.model_executor.model_loader.weight_cache.daemon import WeightCacheDaemon
+    from sonar.config import ModelConfig, SonarConfig
+    from sonar.distributed import init_distributed_environment
+    from sonar.model_executor.model_loader.weight_cache.daemon import WeightCacheDaemon
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:2"
     os.environ["TORCH_CUBLAS_WORKSPACE_CACHE"] = "1"
-    config = AphroditeConfig(model_config=ModelConfig(model=QWEN_CASE.model))
+    config = SonarConfig(model_config=ModelConfig(model=QWEN_CASE.model))
     address = f"tcp://127.0.0.1:{get_open_port()}"
     server = WeightCacheDaemon(config, 0, 0, address)
     torch.accelerator.set_device_index(0)
@@ -911,8 +911,8 @@ def test_daemon_reports_exported_weight_bytes():
 
     import torch
 
-    from aphrodite.model_executor.model_loader.weight_cache import daemon
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.model_executor.model_loader.weight_cache import daemon
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         recv_msg,
         send_msg,
     )
@@ -960,9 +960,9 @@ def test_ipc_cache_key_tracks_kv_quantization(tmp_path, monkeypatch, cache_dtype
 
     import torch
 
-    from aphrodite.config import CacheConfig, KernelConfig, LoadConfig, ParallelConfig
-    from aphrodite.model_executor.model_loader.weight_cache import daemon, ipc_loader
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.config import CacheConfig, KernelConfig, LoadConfig, ParallelConfig
+    from sonar.model_executor.model_loader.weight_cache import daemon, ipc_loader
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         WeightCacheKey,
         WeightCacheState,
     )
@@ -1037,9 +1037,9 @@ def test_ipc_cache_key_tracks_kernel_backends(tmp_path, monkeypatch, engine_kern
 
     import torch
 
-    from aphrodite.config import CacheConfig, KernelConfig, LoadConfig, ParallelConfig
-    from aphrodite.model_executor.model_loader.weight_cache import daemon, ipc_loader
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    from sonar.config import CacheConfig, KernelConfig, LoadConfig, ParallelConfig
+    from sonar.model_executor.model_loader.weight_cache import daemon, ipc_loader
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         WeightCacheKey,
         WeightCacheState,
     )
@@ -1067,7 +1067,7 @@ def test_ipc_cache_key_tracks_kernel_backends(tmp_path, monkeypatch, engine_kern
         monkeypatch.setattr(ipc_loader, name, lambda: SimpleNamespace(world_size=1, rank_in_group=0))
     monkeypatch.setattr(ipc_loader, "get_tensor_model_parallel_world_size", lambda: 1)
     monkeypatch.setattr(ipc_loader, "get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr(ipc_loader, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(ipc_loader, "get_current_sonar_config", lambda: config)
     monkeypatch.setattr(ipc_loader, "check_ipc_platform_support", lambda: None)
     monkeypatch.setattr(torch.accelerator, "current_device_index", lambda: 0)
     requested_keys: list[WeightCacheKey] = []
@@ -1103,9 +1103,9 @@ def _warmup_cache_request(config_hash: str = "a" * 64, **overrides) -> dict:
 
 def test_warmup_cache_request_validation_and_miss(tmp_path, monkeypatch):
     """The source validates the wire key before touching the filesystem."""
-    monkeypatch.setenv("APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
-    from aphrodite.model_executor.model_loader.weight_cache.seed import SeedTransport
-    from aphrodite.model_executor.model_loader.weight_cache.warmup_cache import (
+    monkeypatch.setenv("SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
+    from sonar.model_executor.model_loader.weight_cache.seed import SeedTransport
+    from sonar.model_executor.model_loader.weight_cache.warmup_cache import (
         FlashInferWarmupCache,
     )
 
@@ -1130,7 +1130,7 @@ def test_warmup_cache_metadata_gate():
     pytest.importorskip("flashinfer")
     from flashinfer.autotuner.autotuner import _collect_metadata
 
-    from aphrodite.model_executor.model_loader.weight_cache.warmup_cache import (
+    from sonar.model_executor.model_loader.weight_cache.warmup_cache import (
         FlashInferWarmupCache,
     )
 
@@ -1158,16 +1158,16 @@ def test_remote_warmup_cache_listener(tmp_path, monkeypatch):
     import json
     import socket
 
-    monkeypatch.setenv("APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    monkeypatch.setenv("SONAR_FLASHINFER_AUTOTUNE_CACHE_DIR", str(tmp_path))
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         recv_json,
         send_json,
     )
-    from aphrodite.model_executor.model_loader.weight_cache.seed import (
+    from sonar.model_executor.model_loader.weight_cache.seed import (
         SeedConfig,
         SeedTransport,
     )
-    from aphrodite.model_executor.model_loader.weight_cache.warmup_cache import (
+    from sonar.model_executor.model_loader.weight_cache.warmup_cache import (
         FlashInferWarmupCache,
     )
 
@@ -1209,12 +1209,12 @@ def test_transport_cuts_off_trickling_peer(monkeypatch):
     import socket
     import time
 
-    import aphrodite.model_executor.model_loader.weight_cache.seed as seed_mod
-    from aphrodite.model_executor.model_loader.weight_cache.protocol import (
+    import sonar.model_executor.model_loader.weight_cache.seed as seed_mod
+    from sonar.model_executor.model_loader.weight_cache.protocol import (
         recv_json,
         send_json,
     )
-    from aphrodite.model_executor.model_loader.weight_cache.seed import (
+    from sonar.model_executor.model_loader.weight_cache.seed import (
         SeedConfig,
         SeedTransport,
     )
@@ -1241,10 +1241,10 @@ def test_warmup_cache_install_writes_table(tmp_path, monkeypatch):
     """Install writes the fetched table to the rank's on-disk cache path."""
     import json
 
-    from aphrodite.model_executor.model_loader.weight_cache.warmup_cache import (
+    from sonar.model_executor.model_loader.weight_cache.warmup_cache import (
         FlashInferWarmupCache,
     )
-    from aphrodite.model_executor.warmup import flashinfer_autotune_cache as fi_cache
+    from sonar.model_executor.warmup import flashinfer_autotune_cache as fi_cache
 
     target = tmp_path / "autotune_configs_dp0_rank0.json"
     monkeypatch.setattr(fi_cache, "resolve_rank_flashinfer_autotune_file", lambda _: target)

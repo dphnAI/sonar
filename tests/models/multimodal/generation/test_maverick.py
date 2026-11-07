@@ -6,7 +6,7 @@ This script creates a new model with fewer layers by:
 1. Loading the original Maverick model configuration
 2. Creating a reduced configuration
 3. Generating compatible safetensors files with appropriate weights
-4. Creating the necessary index files for Aphrodite compatibility
+4. Creating the necessary index files for Sonar compatibility
 """
 
 import json
@@ -19,9 +19,9 @@ import torch
 from safetensors.torch import save_file
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer, GenerationConfig
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.kv_cache_interface import ChunkedLocalAttentionSpec, FullAttentionSpec
+from sonar import LLM, SamplingParams
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.kv_cache_interface import ChunkedLocalAttentionSpec, FullAttentionSpec
 
 from ....utils import multi_gpu_test
 
@@ -35,7 +35,7 @@ PROMPTS: list[str] = [
 
 
 def run_maverick_serving(model: str):
-    """Test Llama-4-Maverick model with Aphrodite LLM class using CLI equivalent
+    """Test Llama-4-Maverick model with Sonar LLM class using CLI equivalent
     options with reduced layers.
     """
     try:
@@ -497,7 +497,7 @@ def check_attention_spec_interleaved_rope(
 
 
 def run_reduced_model(llm: LLM, should_profile: bool = False) -> None:
-    """Test the created reduced model with Aphrodite."""
+    """Test the created reduced model with Sonar."""
     sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=50)
 
     if should_profile:
@@ -535,9 +535,9 @@ def test_dummy_maverick(
     profile: bool = False,
 ) -> None:
     # Disable multiprocessing allows us to access model executor from LLM engine
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     # The forked test process may inherit CUDA state from test collection.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
     model_path = create_reduced_maverick_model(
         original_model_name=original_model_name,
@@ -601,12 +601,12 @@ def main():
         action="store_true",
         help="Force recreation if output directory exists",
     )
-    parser.add_argument("--test", action="store_true", help="Test the created model with Aphrodite")
-    parser.add_argument("--profile", action="store_true", help="Profile the created model with Aphrodite")
+    parser.add_argument("--test", action="store_true", help="Test the created model with Sonar")
+    parser.add_argument("--profile", action="store_true", help="Profile the created model with Sonar")
     parser.add_argument(
         "--test-original",
         action="store_true",
-        help="Test the original model with Aphrodite",
+        help="Test the original model with Sonar",
     )
     parser.add_argument(
         "--original-model",

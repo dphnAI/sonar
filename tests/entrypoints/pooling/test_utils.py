@@ -9,13 +9,13 @@ import pybase64
 import pytest
 import torch
 
-from aphrodite.entrypoints.pooling.embed.protocol import CohereEmbedRequest
-from aphrodite.entrypoints.pooling.embed.serving import ServingEmbedding
-from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
-from aphrodite.entrypoints.pooling.pooling.serving import ServingPooling
-from aphrodite.entrypoints.pooling.utils import encode_pooling_output_float_or_ndarray
-from aphrodite.entrypoints.serve.utils.api_utils import create_json_response
-from aphrodite.outputs import PoolingOutput, PoolingRequestOutput
+from sonar.entrypoints.pooling.embed.protocol import CohereEmbedRequest
+from sonar.entrypoints.pooling.embed.serving import ServingEmbedding
+from sonar.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+from sonar.entrypoints.pooling.pooling.serving import ServingPooling
+from sonar.entrypoints.pooling.utils import encode_pooling_output_float_or_ndarray
+from sonar.entrypoints.serve.utils.api_utils import create_json_response
+from sonar.outputs import PoolingOutput, PoolingRequestOutput
 
 pytestmark = pytest.mark.skip_global_cleanup
 

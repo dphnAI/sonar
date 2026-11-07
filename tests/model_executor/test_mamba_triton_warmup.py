@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.warmup.mamba_triton_warmup import _warm_batch_memcpy_kernel
-from aphrodite.platforms import current_platform
+from sonar.model_executor.warmup.mamba_triton_warmup import _warm_batch_memcpy_kernel
+from sonar.platforms import current_platform
 
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="CUDA is required")

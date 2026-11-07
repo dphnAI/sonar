@@ -23,7 +23,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import (
     _CONFIGS_DIR,
     _canonical_cache_dtype,
     _get_default_ssm_launch_config,
@@ -32,8 +32,8 @@ from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
     override_ssm_config,
     selective_state_update,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 from tests.kernels.mamba.utils import selective_state_update_ref
 
 # bf16 shares configs with fp16 - same bit width.

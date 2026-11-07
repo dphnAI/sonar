@@ -14,32 +14,32 @@ import torch
 from torch import nn
 from transformers import Qwen3_5MoeTextConfig
 
-import aphrodite.config as aphrodite_config_module
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.logger import _print_warning_once
-from aphrodite.model_executor.layers.fused_moe import utils as fused_moe_utils
-from aphrodite.model_executor.layers.fused_moe.layer import determine_expert_counts
-from aphrodite.model_executor.layers.quantization.experts_int8 import ExpertsInt8Config
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+import sonar.config as sonar_config_module
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.logger import _print_warning_once
+from sonar.model_executor.layers.fused_moe import utils as fused_moe_utils
+from sonar.model_executor.layers.fused_moe.layer import determine_expert_counts
+from sonar.model_executor.layers.quantization.experts_int8 import ExpertsInt8Config
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.quantization.utils.config_utils import (
     get_quark_ocp_mx_group_size,
     is_shared_expert_quant_fse_compatible,
 )
-from aphrodite.model_executor.models.qwen3_next import (
+from sonar.model_executor.models.qwen3_next import (
     _should_replicate_misaligned_shared_expert,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     get_fused_shared_expert_layers,
     maybe_fuse_shared_experts,
 )
-from aphrodite.models.deepseek_v4 import quant_config as deepseek_v4_quant_config
-from aphrodite.models.minimax_m3.amd import model as minimax_m3_model
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
+from sonar.models.deepseek_v4 import quant_config as deepseek_v4_quant_config
+from sonar.models.minimax_m3.amd import model as minimax_m3_model
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
 
 pytestmark = pytest.mark.skipif(
     current_platform.is_xpu(),
@@ -178,9 +178,9 @@ def get_fse_test_model_config(
         return config, minimax_m3_model.MiniMaxM3Model
     if model_type in ("deepseek_v4", "deepseek_v4_cpu"):
         if model_type == "deepseek_v4":
-            from aphrodite.models.deepseek_v4.amd.model import DeepseekV4Model
+            from sonar.models.deepseek_v4.amd.model import DeepseekV4Model
         else:
-            from aphrodite.models.deepseek_v4.cpu.model import DeepseekV4Model
+            from sonar.models.deepseek_v4.cpu.model import DeepseekV4Model
 
         config = SimpleNamespace(
             model_type="deepseek_v4",
@@ -245,14 +245,14 @@ def get_fse_test_model_config(
             quantization_config=quantization_config,
         )
         if model_type == "qwen3_next":
-            from aphrodite.model_executor.models.qwen3_next import Qwen3NextModel
+            from sonar.model_executor.models.qwen3_next import Qwen3NextModel
 
             return Qwen3NextConfig(**common), Qwen3NextModel
         if model_type == "qwen3_5":
-            from aphrodite.model_executor.models.qwen3_5 import Qwen3_5Model
+            from sonar.model_executor.models.qwen3_5 import Qwen3_5Model
 
             return Qwen3_5MoeTextConfig(**common), Qwen3_5Model
-        from aphrodite.model_executor.models.alice_ai import AliceAIModel
+        from sonar.model_executor.models.alice_ai import AliceAIModel
 
         config = Qwen3NextConfig(**common, linear_conv_kernel_dim=4)
         # AliceAI requires the AttnRes grouping metadata.
@@ -283,13 +283,13 @@ def get_fse_test_model_config(
             ple_layer_ids=[],
             quantization_config=quantization_config,
         )
-        from aphrodite.models.qwen4_exp.amd.model import Qwen4ExpModel
+        from sonar.models.qwen4_exp.amd.model import Qwen4ExpModel
 
         return config, Qwen4ExpModel
     if model_type == "AXK1":
         from transformers import AXK1Config
 
-        from aphrodite.model_executor.models.AXK1 import AXK1Model
+        from sonar.model_executor.models.AXK1 import AXK1Model
 
         config = AXK1Config(
             vocab_size=256,
@@ -316,7 +316,7 @@ def get_fse_test_model_config(
     if model_type == "glm4_moe_lite":
         from transformers.models.glm4_moe_lite import Glm4MoeLiteConfig
 
-        from aphrodite.model_executor.models.glm4_moe_lite import Glm4MoeLiteModel
+        from sonar.model_executor.models.glm4_moe_lite import Glm4MoeLiteModel
 
         config = Glm4MoeLiteConfig(
             vocab_size=256,
@@ -367,12 +367,12 @@ def get_fse_test_model_config(
         )
         config = DeepseekV2Config(**common)
         if model_type == "deepseek_v2":
-            from aphrodite.model_executor.models.deepseek_v2 import DeepseekV2Model
+            from sonar.model_executor.models.deepseek_v2 import DeepseekV2Model
 
             # Needed to build the DeepSeek-V2 MTP draft model in this test.
             config.num_nextn_predict_layers = 1
             return config, DeepseekV2Model
-        from aphrodite.models.deepseek_v32.amd.model import DeepseekV32Model
+        from sonar.models.deepseek_v32.amd.model import DeepseekV32Model
 
         config.index_topk = 1
         config.num_nextn_predict_layers = 1
@@ -380,7 +380,7 @@ def get_fse_test_model_config(
     if model_type == "glm4_moe":
         from transformers.models.glm4_moe import Glm4MoeConfig
 
-        from aphrodite.model_executor.models.glm4_moe import Glm4MoeModel
+        from sonar.model_executor.models.glm4_moe import Glm4MoeModel
 
         config = Glm4MoeConfig(
             vocab_size=256,
@@ -401,7 +401,7 @@ def get_fse_test_model_config(
     if model_type == "glm5_next":
         from transformers import Glm5NextTextConfig
 
-        from aphrodite.models.glm5next.common.model import Glm5NextModel
+        from sonar.models.glm5next.common.model import Glm5NextModel
 
         config = Glm5NextTextConfig(
             vocab_size=256,
@@ -530,7 +530,7 @@ def test_resolve_layer_fused_shared_expert_logs_skip_reason(
         lambda *_, **__: (False, reason),
     )
     monkeypatch.setattr(
-        "aphrodite.config.get_current_aphrodite_config_or_none",
+        "sonar.config.get_current_sonar_config_or_none",
         lambda: SimpleNamespace(parallel_config=SimpleNamespace(enable_expert_parallel=enable_ep)),
     )
     _print_warning_once.cache_clear()
@@ -560,8 +560,8 @@ def test_deepseek_v4_shared_expert_fse_uses_mtp_quantization_config_prefix(
     )
     monkeypatch.setattr(deepseek_v4_quant_config, "DeepseekV4FP8Config", DeepseekV4Config)
     monkeypatch.setattr(
-        aphrodite_config_module,
-        "get_current_aphrodite_config",
+        sonar_config_module,
+        "get_current_sonar_config",
         lambda: SimpleNamespace(model_config=SimpleNamespace(hf_config=hf_config)),
     )
 
@@ -578,7 +578,7 @@ def test_deepseek_v4_shared_expert_fse_uses_mtp_quantization_config_prefix(
 def test_deepseek_v41_quant_config_rejects_fp8_mtp_shared_expert_fse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.models.deepseek_v41 import quant_config as deepseek_v41_quant_config
+    from sonar.models.deepseek_v41 import quant_config as deepseek_v41_quant_config
 
     hf_config = SimpleNamespace(
         num_hidden_layers=2,
@@ -590,12 +590,12 @@ def test_deepseek_v41_quant_config_rejects_fp8_mtp_shared_expert_fse(
             "exclude": [],
         },
     )
-    current_aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(hf_config=hf_config))
-    monkeypatch.setattr(aphrodite_config_module, "get_current_aphrodite_config", lambda: current_aphrodite_config)
+    current_sonar_config = SimpleNamespace(model_config=SimpleNamespace(hf_config=hf_config))
+    monkeypatch.setattr(sonar_config_module, "get_current_sonar_config", lambda: current_sonar_config)
     monkeypatch.setattr(
         deepseek_v41_quant_config,
-        "get_current_aphrodite_config",
-        lambda: current_aphrodite_config,
+        "get_current_sonar_config",
+        lambda: current_sonar_config,
     )
     quant_config = deepseek_v41_quant_config.DeepseekV4FP8Config(
         is_checkpoint_fp8_serialized=True,
@@ -615,7 +615,7 @@ def test_deepseek_v41_quant_config_rejects_fp8_mtp_shared_expert_fse(
 def test_deepseek_v41_fp8_experts_keep_fp8_fse_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.models.deepseek_v41 import quant_config as deepseek_v41_quant_config
+    from sonar.models.deepseek_v41 import quant_config as deepseek_v41_quant_config
 
     hf_config = SimpleNamespace(
         num_hidden_layers=2,
@@ -627,12 +627,12 @@ def test_deepseek_v41_fp8_experts_keep_fp8_fse_check(
             "weight_block_size": [128, 128],
         },
     )
-    current_aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(hf_config=hf_config))
-    monkeypatch.setattr(aphrodite_config_module, "get_current_aphrodite_config", lambda: current_aphrodite_config)
+    current_sonar_config = SimpleNamespace(model_config=SimpleNamespace(hf_config=hf_config))
+    monkeypatch.setattr(sonar_config_module, "get_current_sonar_config", lambda: current_sonar_config)
     monkeypatch.setattr(
         deepseek_v41_quant_config,
-        "get_current_aphrodite_config",
-        lambda: current_aphrodite_config,
+        "get_current_sonar_config",
+        lambda: current_sonar_config,
     )
     quant_config = deepseek_v41_quant_config.DeepseekV4FP8Config(
         is_checkpoint_fp8_serialized=True,
@@ -647,7 +647,7 @@ def test_deepseek_v41_fp8_experts_keep_fp8_fse_check(
 
 
 def test_deepseek_v4_heterogeneous_fhmoe_keeps_native_intermediate_width() -> None:
-    from aphrodite.models.deepseek_v4.amd.model import _prepare_native_fp8_shared_expert
+    from sonar.models.deepseek_v4.amd.model import _prepare_native_fp8_shared_expert
 
     hidden_size = 7168
     intermediate_size = 384
@@ -690,7 +690,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_token_policy(
     supported_through: int,
     expected: bool,
 ) -> None:
-    from aphrodite.models.deepseek_v4.amd import model as deepseek_v4_model
+    from sonar.models.deepseek_v4.amd import model as deepseek_v4_model
 
     checked_tokens: list[int] = []
 
@@ -790,7 +790,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_aiter_capability(
     fused_moe: object,
     expected: bool,
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _install_fake_aiter_fhmoe(monkeypatch, capability, fused_moe)
 
@@ -800,7 +800,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_aiter_capability(
 def test_deepseek_v4_heterogeneous_fhmoe_aiter_capability_catches_import_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     fake_aiter = ModuleType("aiter")
     fake_aiter.__path__ = []
@@ -815,7 +815,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_aiter_capability_catches_signature_erro
     monkeypatch: pytest.MonkeyPatch,
     error: type[Exception],
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _install_fake_aiter_fhmoe(monkeypatch, _supports_fhmoe_through_2048, _supported_fhmoe_signature)
 
@@ -843,7 +843,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_compatibility_gates(
     value: object,
     expected: bool,
 ) -> None:
-    from aphrodite.models.deepseek_v4.amd import model as deepseek_v4_model
+    from sonar.models.deepseek_v4.amd import model as deepseek_v4_model
 
     hf_config = SimpleNamespace(
         n_routed_experts=384,
@@ -875,7 +875,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_compatibility_gates(
         is_scale_e8m0=True,
         ignored_layers=None,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=hf_config, dtype=torch.bfloat16),
         quant_config=quant_config,
         parallel_config=parallel_config,
@@ -885,7 +885,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_compatibility_gates(
     monkeypatch.setattr(deepseek_v4_model.current_platform, "is_rocm", lambda: True)
     monkeypatch.setattr(
         deepseek_v4_model.envs,
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
         True,
     )
     monkeypatch.setattr(deepseek_v4_model, "on_gfx950", lambda: True)
@@ -907,7 +907,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_compatibility_gates(
         supports,
     )
 
-    assert deepseek_v4_model._heterogeneous_shared_expert_enabled(cast(AphroditeConfig, aphrodite_config)) is expected
+    assert deepseek_v4_model._heterogeneous_shared_expert_enabled(cast(SonarConfig, sonar_config)) is expected
     assert checked_tokens == [1]
 
 
@@ -925,7 +925,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_rejects_invalid_routes(
     ids_shape: tuple[int, ...],
     message: str,
 ) -> None:
-    from aphrodite.models.deepseek_v4.amd.model import _validate_heterogeneous_routes
+    from sonar.models.deepseek_v4.amd.model import _validate_heterogeneous_routes
 
     with pytest.raises(ValueError, match=message):
         _validate_heterogeneous_routes(
@@ -936,7 +936,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_rejects_invalid_routes(
 
 
 def test_deepseek_v4_heterogeneous_fhmoe_accepts_appended_shared_route() -> None:
-    from aphrodite.models.deepseek_v4.amd.model import _validate_heterogeneous_routes
+    from sonar.models.deepseek_v4.amd.model import _validate_heterogeneous_routes
 
     _validate_heterogeneous_routes(
         torch.empty((2, 7)),
@@ -946,7 +946,7 @@ def test_deepseek_v4_heterogeneous_fhmoe_accepts_appended_shared_route() -> None
 
 
 def test_aiter_fused_moe_validates_shared_expert_arguments() -> None:
-    from aphrodite._aiter_ops import (
+    from sonar._aiter_ops import (
         _validate_rocm_aiter_fused_moe_shared_expert_args,
     )
 
@@ -965,7 +965,7 @@ def test_aiter_fused_moe_validates_shared_expert_arguments() -> None:
 
 def test_deepseek_v4_shared_expert_mapper_fallback() -> None:
     """Mixed and all-excluded DSV4 checkpoints map shared experts correctly."""
-    from aphrodite.models.deepseek_v4.amd.model import (
+    from sonar.models.deepseek_v4.amd.model import (
         _make_deepseek_v4_weights_mapper,
         _redirect_shared_expert_name,
     )
@@ -1087,13 +1087,13 @@ def test_mixed_fused_shared_experts_rejected_with_ep_or_nixl_ep(enable_expert_pa
     """
     model = _make_fake_moe_model(["0", "1"], [True, False], use_dict=False)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.enable_expert_parallel = enable_expert_parallel
-    aphrodite_config.parallel_config.data_parallel_size = 2
-    aphrodite_config.parallel_config.all2all_backend = "nixl_ep"
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.enable_expert_parallel = enable_expert_parallel
+    sonar_config.parallel_config.data_parallel_size = 2
+    sonar_config.parallel_config.all2all_backend = "nixl_ep"
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         pytest.raises(NotImplementedError, match=match),
     ):
         get_fused_shared_expert_layers(model, _FakeMoE)
@@ -1186,7 +1186,7 @@ def _make_deepseek_v4_shared_expert_checkpoint(
 
 def _build_mtp_model(
     mtp_cls: Any,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     config: object,
     *,
     with_text_config: bool = False,
@@ -1205,45 +1205,45 @@ def _build_mtp_model(
         "use_multi_module_mtp": lambda: False,
     }
     if with_target_model:
-        speculative_config["target_model_config"] = aphrodite_config.model_config
-    aphrodite_config.speculative_config = SimpleNamespace(**speculative_config)
-    return mtp_cls(aphrodite_config=aphrodite_config)
+        speculative_config["target_model_config"] = sonar_config.model_config
+    sonar_config.speculative_config = SimpleNamespace(**speculative_config)
+    return mtp_cls(sonar_config=sonar_config)
 
 
 _MTP_FACTORIES: dict[str, tuple[str, str, dict[str, bool]]] = {
-    "deepseek_v4": ("aphrodite.models.deepseek_v4.amd.mtp", "DeepSeekV4MTP", {}),
+    "deepseek_v4": ("sonar.models.deepseek_v4.amd.mtp", "DeepSeekV4MTP", {}),
     "glm4_moe": (
-        "aphrodite.model_executor.models.glm4_moe_mtp",
+        "sonar.model_executor.models.glm4_moe_mtp",
         "Glm4MoeMTP",
         {},
     ),
     "glm4_moe_lite": (
-        "aphrodite.model_executor.models.glm4_moe_lite_mtp",
+        "sonar.model_executor.models.glm4_moe_lite_mtp",
         "Glm4MoeLiteMTP",
         {},
     ),
     "deepseek_v32": (
-        "aphrodite.models.deepseek_v32.amd.mtp",
+        "sonar.models.deepseek_v32.amd.mtp",
         "DeepseekV32MTP",
         {},
     ),
     "glm5_next": (
-        "aphrodite.models.glm5next.common.mtp",
+        "sonar.models.glm5next.common.mtp",
         "Glm5NextMTP",
         {"with_text_config": True},
     ),
     "deepseek_v2": (
-        "aphrodite.model_executor.models.deepseek_mtp",
+        "sonar.model_executor.models.deepseek_mtp",
         "DeepSeekMTP",
         {},
     ),
     "qwen3_next": (
-        "aphrodite.model_executor.models.qwen3_next_mtp",
+        "sonar.model_executor.models.qwen3_next_mtp",
         "Qwen3NextMTP",
         {"with_text_config": True, "with_target_model": True},
     ),
     "qwen3_5": (
-        "aphrodite.model_executor.models.qwen3_5_mtp",
+        "sonar.model_executor.models.qwen3_5_mtp",
         "Qwen3_5MoeMTP",
         {"with_text_config": True, "with_target_model": True},
     ),
@@ -1252,7 +1252,7 @@ _MTP_FACTORIES: dict[str, tuple[str, str, dict[str, bool]]] = {
 
 def _build_mtp_for_model(
     model_type: str,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     config: object,
     enabled: bool,
 ) -> nn.Module | None:
@@ -1261,7 +1261,7 @@ def _build_mtp_for_model(
         return None
     module_name, class_name, kwargs = factory
     module = importlib.import_module(module_name)
-    return _build_mtp_model(getattr(module, class_name), aphrodite_config, config, **kwargs)
+    return _build_mtp_model(getattr(module, class_name), sonar_config, config, **kwargs)
 
 
 # TODO: move to conftest.py.
@@ -1330,9 +1330,9 @@ def single_rank_parallel_state(monkeypatch: pytest.MonkeyPatch):
     This is faster than the `dist_init` fixture.
     """
     for name in ("_WORLD", "_TP", "_ETP", "_DCP", "_PP", "_DP", "_EP", "_PCP"):
-        monkeypatch.setattr(f"aphrodite.distributed.parallel_state.{name}", _SingleRankGroup())
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
+        monkeypatch.setattr(f"sonar.distributed.parallel_state.{name}", _SingleRankGroup())
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
 
 
 @pytest.mark.parametrize(
@@ -1436,8 +1436,8 @@ def test_models_fse_init(
             )
 
     config, model_constructor = get_fse_test_model_config(model_type, quantization_config)
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = SimpleNamespace(
+    sonar_config = SonarConfig()
+    sonar_config.model_config = SimpleNamespace(
         hf_config=config,
         hf_text_config=config,
         dtype=torch.bfloat16,
@@ -1453,68 +1453,68 @@ def test_models_fse_init(
         logits_processors=None,
         rswa_window=None,
     )
-    aphrodite_config.parallel_config.enable_expert_parallel = False
+    sonar_config.parallel_config.enable_expert_parallel = False
     if model_type in ("deepseek_v4", "deepseek_v4_cpu"):
-        from aphrodite.models.deepseek_v4.quant_config import DeepseekV4FP8Config
+        from sonar.models.deepseek_v4.quant_config import DeepseekV4FP8Config
 
-        aphrodite_config.cache_config.cache_dtype = "fp8_ds_mla"
-        aphrodite_config.quant_config = DeepseekV4FP8Config(
+        sonar_config.cache_config.cache_dtype = "fp8_ds_mla"
+        sonar_config.quant_config = DeepseekV4FP8Config(
             is_checkpoint_fp8_serialized=True,
             weight_block_size=[128, 128],
         )
     else:
-        aphrodite_config.quant_config = QuarkConfig(quantization_config)
+        sonar_config.quant_config = QuarkConfig(quantization_config)
         if per_layer_fse:
-            aphrodite_config.quant_config.packed_modules_mapping = {"gate_up_proj": ["gate_proj", "up_proj"]}
+            sonar_config.quant_config.packed_modules_mapping = {"gate_up_proj": ["gate_proj", "up_proj"]}
     if model_type == "glm5_next":
-        from aphrodite.models.glm5next.common import model as glm5_next_model
+        from sonar.models.glm5next.common import model as glm5_next_model
 
         for attention in ("Glm5NextLinearAttention", "Glm5NextMLAAttention"):
             monkeypatch.setattr(glm5_next_model, attention, _StubGlm5NextAttention)
         # The gate allows fusion only at TP4/TP8 on gfx950, and this test
         # runs at TP1; the gate has its own test.
         monkeypatch.setattr(glm5_next_model, "_fused_shared_experts_tuned", lambda _: True)
-        from aphrodite.models.glm5next.common import mtp as glm5_next_mtp_model
+        from sonar.models.glm5next.common import mtp as glm5_next_mtp_model
 
         # The MTP predictor asserts on the concrete MLA attention class and
         # reads ``mla_attn``, so patch its imported name to the same stub.
         monkeypatch.setattr(glm5_next_mtp_model, "Glm5NextMLAAttention", _StubGlm5NextAttention)
     if model_type == "glm4_moe_lite":
-        from aphrodite.model_executor.models import glm4_moe_lite as glm4_moe_lite_model
+        from sonar.model_executor.models import glm4_moe_lite as glm4_moe_lite_model
 
         # Only the MoE/shared-expert wiring is under test here; the MLA backend
         # does not accept this test's default dtype.
         for attention in ("Glm4MoeLiteAttention", "Glm4MoeLiteMLAAttention"):
             monkeypatch.setattr(glm4_moe_lite_model, attention, _StubGlm5NextAttention)
     if model_type == "deepseek_v32":
-        from aphrodite.models.deepseek_v32.amd import model as deepseek_v32_model
+        from sonar.models.deepseek_v32.amd import model as deepseek_v32_model
 
         # The sparse-MLA attention needs a real MLA backend; only the MoE
         # wiring is under test here.
         monkeypatch.setattr(deepseek_v32_model, "DeepseekV32MLAAttention", _StubGlm5NextAttention)
     if model_type == "qwen4_exp":
-        from aphrodite.models.qwen4_exp.amd import model as qwen4_exp_model
+        from sonar.models.qwen4_exp.amd import model as qwen4_exp_model
 
         # Only the MoE/shared-expert wiring is under test here.
         monkeypatch.setattr(qwen4_exp_model, "Qwen3NextAttention", _StubGlm5NextAttention)
 
-    import aphrodite.envs as envs
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    import sonar.envs as envs
+    from sonar._aiter_ops import rocm_aiter_ops
 
     warning_logger = fused_moe_utils.logger
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", str(use_fse))
-        mp.setenv("APHRODITE_ROCM_USE_AITER_MOE", str(use_fse))
-        mp.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", str(use_fse))
+        mp.setenv("SONAR_ROCM_USE_AITER", str(use_fse))
+        mp.setenv("SONAR_ROCM_USE_AITER_MOE", str(use_fse))
+        mp.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", str(use_fse))
         mp.setattr(
-            "aphrodite.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe.has_quark",
+            "sonar.model_executor.layers.fused_moe.experts.ocp_mx_emulation_moe.has_quark",
             lambda: True,
         )
         importlib.reload(envs)
-        mp.setattr(envs, "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", use_fse)
+        mp.setattr(envs, "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", use_fse)
         rocm_aiter_ops.refresh_env_variables()
-        from aphrodite.model_executor.layers.fused_moe.experts import rocm_aiter_moe
+        from sonar.model_executor.layers.fused_moe.experts import rocm_aiter_moe
 
         mp.setattr(rocm_aiter_moe, "aiter_topK_meta_data", None)
         rocm_aiter_moe.init_aiter_topK_meta_data.cache_clear()
@@ -1523,13 +1523,13 @@ def test_models_fse_init(
 
         with (
             patch.object(warning_logger, "warning") as warning,
-            set_current_aphrodite_config(aphrodite_config),
+            set_current_sonar_config(sonar_config),
         ):
             model = model_constructor(
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 **({"prefix": "model"} if per_layer_fse else {}),
             )
-            mtps = {model_type: _build_mtp_for_model(model_type, aphrodite_config, config, use_fse and not exclude)}
+            mtps = {model_type: _build_mtp_for_model(model_type, sonar_config, config, use_fse and not exclude)}
             mtp = mtps.get("deepseek_v4")
         if per_layer_fse:
             expected_policy = {
@@ -1606,7 +1606,7 @@ def test_models_fse_init(
                             torch.full((1, 128), idx + 1, dtype=torch.bfloat16),
                         )
                     )
-            with set_current_aphrodite_config(aphrodite_config):
+            with set_current_sonar_config(sonar_config):
                 loaded = model.load_weights(checkpoint)
                 base = config.num_hidden_layers
                 mtp_cases = [
@@ -1701,7 +1701,7 @@ def test_models_fse_init(
                 warning.assert_not_called()
             else:
                 assert warning.call_count == 1
-                assert "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled" in (warning.call_args.args[0])
+                assert "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled" in (warning.call_args.args[0])
                 assert "excludes shared experts" in warning.call_args.args[1]
 
     rocm_aiter_moe.init_aiter_topK_meta_data.cache_clear()
@@ -1710,7 +1710,7 @@ def test_models_fse_init(
 
 
 def _modelopt_mxfp8_config(exclude_modules=(), moe_quant_algo="NVFP4"):
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
 
     return ModelOptMxFp8Config(
         is_checkpoint_mxfp8_serialized=True,
@@ -1762,7 +1762,7 @@ def test_glm5_next_fuses_shared_experts_only_in_tuned_setups(
     value: object,
     reason: str | None,
 ) -> None:
-    from aphrodite.models.glm5next.common import model as glm5_next_model
+    from sonar.models.glm5next.common import model as glm5_next_model
 
     parallel_config = SimpleNamespace(
         tensor_parallel_size=4,
@@ -1773,7 +1773,7 @@ def test_glm5_next_fuses_shared_experts_only_in_tuned_setups(
     on_gfx950 = value if setting == "on_gfx950" else True
     if setting != "on_gfx950":
         setattr(parallel_config, setting, value)
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx950", lambda: on_gfx950)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx950", lambda: on_gfx950)
 
     with patch.object(glm5_next_model.logger, "warning_once") as warning:
         tuned = glm5_next_model._fused_shared_experts_tuned(cast(ParallelConfig, parallel_config))
@@ -1787,7 +1787,7 @@ def test_glm5_next_fuses_shared_experts_only_in_tuned_setups(
 
 
 def test_glm5_next_fused_shared_expert_loads_into_the_shared_slot() -> None:
-    from aphrodite.models.glm5next.common import model as glm5_next_model
+    from sonar.models.glm5next.common import model as glm5_next_model
 
     assert glm5_next_model._num_fused_shared_experts(1, True) == 1
     assert glm5_next_model._num_fused_shared_experts(1, False) == 0

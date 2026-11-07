@@ -1,6 +1,6 @@
-# Aphrodite Mock Engine
+# Sonar Mock Engine
 
-`aphrodite-mock-engine` is a small engine-side process for frontend stress testing. It
+`sonar-mock-engine` is a small engine-side process for frontend stress testing. It
 joins a frontend-owned startup handshake, reports a large ready response, treats
 prefill as instant, and emits random decode tokens until each request reaches
 its `max_tokens`.
@@ -11,7 +11,7 @@ the mock engine with the same handshake address.
 ## Start the mock engine
 
 ```bash
-cargo run -p aphrodite-mock-engine -- \
+cargo run -p sonar-mock-engine -- \
   --handshake-address tcp://127.0.0.1:29550 \
   --engine-count 1 \
   --output-token-chunk-size 1 \
@@ -37,7 +37,7 @@ Stop it with Ctrl-C.
 Terminal 1:
 
 ```bash
-cargo run --bin aphrodite-rs -- serve Qwen/Qwen3-0.6B \
+cargo run --bin sonar-rs -- serve Qwen/Qwen3-0.6B \
   --data-parallel-size 1 \
   --data-parallel-size-local 0 \
   --handshake-port 29550
@@ -46,33 +46,33 @@ cargo run --bin aphrodite-rs -- serve Qwen/Qwen3-0.6B \
 Terminal 2:
 
 ```bash
-cargo run -p aphrodite-mock-engine -- \
+cargo run -p sonar-mock-engine -- \
   --handshake-address tcp://127.0.0.1:29550
 ```
 
 For multiple mock engines, set both sides to the same count:
 
 ```bash
-cargo run --bin aphrodite-rs -- serve Qwen/Qwen3-0.6B \
+cargo run --bin sonar-rs -- serve Qwen/Qwen3-0.6B \
   --data-parallel-size 4 \
   --data-parallel-size-local 0 \
   --handshake-port 29550
 
-cargo run -p aphrodite-mock-engine -- \
+cargo run -p sonar-mock-engine -- \
   --handshake-address tcp://127.0.0.1:29550 \
   --engine-count 4
 ```
 
 ## Python Frontend
 
-Use `aphrodite serve` with `--data-parallel-size-local 0` so the Python process runs
+Use `sonar serve` with `--data-parallel-size-local 0` so the Python process runs
 as a frontend/API server and waits for external engines on
 `--data-parallel-rpc-port`.
 
 Terminal 1:
 
 ```bash
-aphrodite serve Qwen/Qwen3-0.6B \
+sonar serve Qwen/Qwen3-0.6B \
   --data-parallel-address 127.0.0.1 \
   --data-parallel-rpc-port 29550 \
   --data-parallel-size 1 \
@@ -82,7 +82,7 @@ aphrodite serve Qwen/Qwen3-0.6B \
 Terminal 2:
 
 ```bash
-cargo run -p aphrodite-mock-engine -- \
+cargo run -p sonar-mock-engine -- \
   --handshake-address tcp://127.0.0.1:29550
 ```
 

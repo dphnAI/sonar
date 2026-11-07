@@ -5,8 +5,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.models.kimi_k3.amd.ops.attn_res import attn_res
-from aphrodite.platforms import current_platform
+from sonar.models.kimi_k3.amd.ops.attn_res import attn_res
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm(),
@@ -189,10 +189,10 @@ def test_amd_attn_res_fp8_preserves_prefix_and_quantized_output(
     num_blocks,
     has_delta,
     write_block,
-    default_aphrodite_config,
+    default_sonar_config,
 ):
-    from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
+    from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+    from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
 
     torch.manual_seed(41)
     hidden_size = 7168
@@ -249,13 +249,13 @@ def test_mla_input_quant_requires_all_consumers(matching, requires_unquantized):
 
     from torch import nn
 
-    from aphrodite.model_executor.layers.fusion.quant_activation import (
+    from sonar.model_executor.layers.fusion.quant_activation import (
         expose_input_quant_key,
     )
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         kFp8DynamicTokenSym,
     )
-    from aphrodite.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
+    from sonar.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
 
     attention = object.__new__(KimiK3MultiHeadLatentAttentionWrapper)
     nn.Module.__init__(attention)

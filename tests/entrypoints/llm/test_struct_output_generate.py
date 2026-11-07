@@ -11,12 +11,12 @@ import pytest
 import regex as re
 from pydantic import BaseModel
 
-from aphrodite.config import StructuredOutputsConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParserManager
-from aphrodite.sampling_params import (
+from sonar.config import StructuredOutputsConfig
+from sonar.exceptions import SonarValidationError
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.reasoning.abs_reasoning_parsers import ReasoningParserManager
+from sonar.sampling_params import (
     SamplingParams,
     StructuredOutputsParams,
 )
@@ -214,7 +214,7 @@ def test_structured_output(
     tokenizer_mode: str,
     model_name: str,
     speculative_config: dict[str, Any],
-    aphrodite_runner,
+    sonar_runner,
 ):
     sample_json_schema = SAMPLE_JSON_SCHEMA
     unsupported_json_schema = UNSUPPORTED_JSON_SCHEMA
@@ -227,7 +227,7 @@ def test_structured_output(
 
     # Use a single LLM instance for several scenarios to
     # speed up the test suite.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         enforce_eager=True,
         max_model_len=1024,
@@ -324,7 +324,7 @@ def test_structured_output(
         )
         if backend.startswith("xgrammar"):
             with pytest.raises(
-                AphroditeValidationError,
+                SonarValidationError,
                 match="The provided JSON schema contains features not supported by xgrammar.",
             ):
                 prompt = (
@@ -446,7 +446,7 @@ def test_structured_output(
                 max_tokens=1000,
                 structured_outputs=StructuredOutputsParams(grammar="not a grammar"),
             )
-            with pytest.raises(AphroditeValidationError, match="Invalid grammar specification"):
+            with pytest.raises(SonarValidationError, match="Invalid grammar specification"):
                 runner.llm.generate(
                     (
                         "Generate a sql statement that selects col_1 from "
@@ -713,14 +713,14 @@ def test_structured_output_with_reasoning_matrices(
     model_name: str,
     speculative_config: dict[str, Any] | None,
     async_scheduling: bool,
-    aphrodite_runner,
+    sonar_runner,
 ):
     if current_platform.is_tpu() and speculative_config:
         pytest.skip("TPU does not support speculative decoding")
 
     # Use a single LLM instance for several scenarios to
     # speed up the test suite.
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         # Don't use eager execution on TPUs because we want to test for no
         # recompilation at runtime
@@ -782,10 +782,10 @@ def test_structured_output_with_reasoning_matrices(
 def test_structured_output_auto_mode(
     model_name: str,
     tokenizer_mode: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     unsupported_json_schema = UNSUPPORTED_JSON_SCHEMA
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         max_model_len=1024,
         structured_outputs_config=dict(backend="auto"),
@@ -824,8 +824,8 @@ def test_structured_output_auto_mode(
             assert isinstance(parsed_json, dict)
 
 
-def test_guidance_no_additional_properties(aphrodite_runner):
-    with aphrodite_runner(
+def test_guidance_no_additional_properties(sonar_runner):
+    with sonar_runner(
         "Qwen/Qwen2.5-1.5B-Instruct",
         max_model_len=1024,
         structured_outputs_config=dict(
@@ -885,14 +885,14 @@ def test_guidance_no_additional_properties(aphrodite_runner):
 @pytest.mark.parametrize("backend", ["guidance", "xgrammar", "outlines"])
 def test_structured_output_batched_with_non_structured_outputs_requests(
     backend: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     sample_json_schema = SAMPLE_JSON_SCHEMA
     # Don't use eager execution on TPUs because we want to test for no
     # recompilation at runtime
     enforce_eager = bool(not current_platform.is_tpu())
 
-    with aphrodite_runner(
+    with sonar_runner(
         "meta-llama/Meta-Llama-3.1-8B-Instruct",
         enforce_eager=enforce_eager,
         max_model_len=1024,
@@ -953,8 +953,8 @@ def test_structured_output_batched_with_non_structured_outputs_requests(
 
 
 @pytest.mark.parametrize("backend", ["xgrammar"])
-def test_structured_output_with_structural_tag(backend: str, aphrodite_runner):
-    with aphrodite_runner(
+def test_structured_output_with_structural_tag(backend: str, sonar_runner):
+    with sonar_runner(
         "Qwen/Qwen2.5-1.5B-Instruct",
         structured_outputs_config=StructuredOutputsConfig(backend=backend),
     ) as runner:

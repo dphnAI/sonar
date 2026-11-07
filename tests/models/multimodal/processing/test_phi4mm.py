@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context
@@ -32,7 +32,7 @@ def test_processor_override(
 ):
     """Ensure Phi4MMMultiModalProcessor handles dynamic_hd properly."""
     # Avoid initializing CUDA early
-    from aphrodite.model_executor.models.phi4mm import _IMAGE_PLACEHOLDER_TOKEN_ID
+    from sonar.model_executor.models.phi4mm import _IMAGE_PLACEHOLDER_TOKEN_ID
 
     ctx = build_model_context(
         model_id,

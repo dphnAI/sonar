@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
+from sonar import _custom_ops as ops
 
 NUM_TOKENS = [1, 4, 16, 64, 128]
 NUM_HEADS = [128]
@@ -146,13 +146,13 @@ def test_concat_mla_q_values_preserved(num_tokens):
 @pytest.mark.parametrize("enabled", [False, True])
 def test_concat_mla_q_fp8_nope_and_rope(rope_dim, transposed, enabled):
     """FP8 query packing preserves values with empty RoPE and strided BMM output."""
-    from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.attention.mla_attention import _DecodeConcatQuantFP8
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.config import CompilationConfig, SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.attention.mla_attention import _DecodeConcatQuantFP8
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         GroupShape,
         get_fp8_min_max,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     torch.manual_seed(42)
     shape = (8, 17, 512) if transposed else (17, 8, 512)
@@ -166,8 +166,8 @@ def test_concat_mla_q_fp8_nope_and_rope(rope_dim, transposed, enabled):
     expected = (joined.float() * scale.reciprocal()).clamp(fp8_min, fp8_max)
     expected = expected.to(current_platform.fp8_dtype())
     custom_ops = ["none"] + (["+mla_decode_concat_quant_fp8"] if enabled else [])
-    config = AphroditeConfig(compilation_config=CompilationConfig(mode=0, custom_ops=custom_ops))
-    with set_current_aphrodite_config(config):
+    config = SonarConfig(compilation_config=CompilationConfig(mode=0, custom_ops=custom_ops))
+    with set_current_sonar_config(config):
         quant = _DecodeConcatQuantFP8(static=True, group_shape=GroupShape.PER_TENSOR)
         actual = quant(ql, qp, scale)
     assert actual.dtype == current_platform.fp8_dtype()

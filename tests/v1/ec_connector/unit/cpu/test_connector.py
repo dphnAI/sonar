@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorRole
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.connector import ECCPUConnector
-from aphrodite.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
+from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorRole
+from sonar.distributed.ec_transfer.ec_connector.cpu.connector import ECCPUConnector
+from sonar.distributed.ec_transfer.ec_connector.factory import ECConnectorFactory
 
 
 def _cfg():
@@ -56,9 +56,9 @@ def test_factory_registered():
 def test_request_finished_forwards_to_scheduler(monkeypatch):
     from unittest.mock import MagicMock
 
-    import aphrodite.distributed.ec_transfer.ec_connector.cpu.connector as conn_mod  # noqa: F401
-    from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorRole
-    from aphrodite.distributed.ec_transfer.ec_connector.cpu.connector import ECCPUConnector
+    import sonar.distributed.ec_transfer.ec_connector.cpu.connector as conn_mod  # noqa: F401
+    from sonar.distributed.ec_transfer.ec_connector.base import ECConnectorRole
+    from sonar.distributed.ec_transfer.ec_connector.cpu.connector import ECCPUConnector
 
     fake_sched = MagicMock()
     fake_sched.request_finished.return_value = (False, {"h1": {"peer_port": 1}})

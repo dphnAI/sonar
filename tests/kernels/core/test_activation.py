@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.activation import (
+from sonar.model_executor.layers.activation import (
     FastGELU,
     FatreluAndMul,
     GeluAndMul,
@@ -21,14 +21,14 @@ from aphrodite.model_executor.layers.activation import (
     SwigluStepAndMul,
     swiglustep_and_mul_triton,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import (
+from sonar.model_executor.layers.fused_moe.activation import (
     ApplyMoEActivationConfig,
     MoEActivation,
     apply_moe_activation,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import swiglu_limit_func
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.utils import swiglu_limit_func
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from tests.kernels.utils import opcheck
 
@@ -53,7 +53,7 @@ def test_masked_moe_activation_rejects_unsupported_activation() -> None:
         )
 
 
-def test_moe_silu_clamp_uses_native_xpu_fallback(default_aphrodite_config, monkeypatch) -> None:
+def test_moe_silu_clamp_uses_native_xpu_fallback(default_sonar_config, monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     clamp_limit = 3.0
     input = torch.tensor([[12.0, -12.0, 8.0, -8.0], [-2.0, 2.0, -4.0, 4.0]])
@@ -142,7 +142,7 @@ def _assert_masked_moe_activation(
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_act_and_mul(
-    default_aphrodite_config,
+    default_sonar_config,
     activation: str,
     num_tokens: int,
     d: int,
@@ -233,7 +233,7 @@ def test_swiglu_limit_func_without_routing_uses_output_buffer() -> None:
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_silu_and_mul_with_clamp(
-    default_aphrodite_config,
+    default_sonar_config,
     alpha: float,
     beta: float,
     swiglu_limit: float,
@@ -249,7 +249,7 @@ def test_silu_and_mul_with_clamp(
     # Use large values to ensure clamping is exercised.
     x = torch.randn(num_tokens, 2 * d, dtype=dtype) * swiglu_limit * 2
 
-    default_aphrodite_config.compilation_config.custom_ops = [
+    default_sonar_config.compilation_config.custom_ops = [
         "none",
         "+silu_and_mul_with_clamp",
     ]
@@ -361,7 +361,7 @@ MOE_ACTIVATION_CASES = [
 @pytest.mark.parametrize(("activation", "activation_config"), MOE_ACTIVATION_CASES)
 @torch.inference_mode()
 def test_masked_moe_activation_dispatch(
-    default_aphrodite_config,
+    default_sonar_config,
     activation: MoEActivation,
     activation_config: ApplyMoEActivationConfig,
 ) -> None:
@@ -397,7 +397,7 @@ def test_masked_moe_activation_dispatch(
 )
 @torch.inference_mode()
 def test_masked_moe_activation_grid_stride(
-    default_aphrodite_config,
+    default_sonar_config,
     activation: MoEActivation,
     activation_config: ApplyMoEActivationConfig,
     mask_layout: str,
@@ -413,7 +413,7 @@ def test_masked_moe_activation_grid_stride(
 
 
 @torch.inference_mode()
-def test_masked_moe_activation_opcheck(default_aphrodite_config) -> None:
+def test_masked_moe_activation_opcheck(default_sonar_config) -> None:
     device = CUDA_DEVICES[0]
     input = torch.randn(2, 3, 64, dtype=torch.half, device=device)
     output = torch.empty(2, 3, 32, dtype=torch.half, device=device)
@@ -440,7 +440,7 @@ def test_masked_moe_activation_opcheck(default_aphrodite_config) -> None:
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_activation(
-    default_aphrodite_config,
+    default_sonar_config,
     activation: type[torch.nn.Module],
     num_tokens: int,
     d: int,
@@ -493,7 +493,7 @@ def test_humming_activation_matches_framework(
     pytest.importorskip("humming")
     from humming.ops import process_input
 
-    from aphrodite.model_executor.layers.quantization.utils.humming.activation import (
+    from sonar.model_executor.layers.quantization.utils.humming.activation import (
         get_humming_activation,
     )
 

@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.layernorm import RMSNorm
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import opcheck
 
 DTYPES = [torch.bfloat16, torch.float16]
@@ -59,7 +59,7 @@ def _apply_qk_norm_rope(
 @pytest.mark.parametrize("rotary_ratio", [1.0, 0.5, 0.25])
 @torch.inference_mode()
 def test_fused_qk_norm_rope_matches_reference(
-    default_aphrodite_config,
+    default_sonar_config,
     device: str,
     dtype: torch.dtype,
     is_neox: bool,

@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.tool_parsers.apertus_tool_parser import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.tool_parsers.apertus_tool_parser import (
     TOOL_CALLS_PREFIX,
     TOOL_CALLS_SUFFIX,
     ApertusToolParser,
@@ -318,7 +318,7 @@ class TestStreamingExtraction:
         assert json.loads(tc[0]["arguments"]) == {"a": 1}
 
     # ---------------------------------------------------------------------------
-    # Edge Cases: Multi-Token Prediction (MTP) & Aphrodite Chunking Anomalies
+    # Edge Cases: Multi-Token Prediction (MTP) & Sonar Chunking Anomalies
     # ---------------------------------------------------------------------------
 
     def test_mtp_streaming_massive_chunk(self, parser, mock_request):
@@ -370,8 +370,8 @@ class TestStreamingExtraction:
         assert tc[2]["name"] == "t3"
         assert json.loads(tc[2]["arguments"]) == {"c": 3}
 
-    def test_aphrodite_streaming_character_by_character(self, parser, mock_request):
-        """Simulates worst-case Aphrodite fragmentation where
+    def test_sonar_streaming_character_by_character(self, parser, mock_request):
+        """Simulates worst-case Sonar fragmentation where
         chunks arrive character-by-character."""
         text = 'Hi <|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|> '
         chunks = list(text)
@@ -385,8 +385,8 @@ class TestStreamingExtraction:
         assert tc[0]["name"] == "get_weather"
         assert json.loads(tc[0]["arguments"]) == {"location": "London"}
 
-    def test_aphrodite_streaming_empty_deltas(self, parser, mock_request):
-        """Simulates Aphrodite stream producing empty string chunks
+    def test_sonar_streaming_empty_deltas(self, parser, mock_request):
+        """Simulates Sonar stream producing empty string chunks
         (e.g., hidden tokens or artifacts)."""
         chunks = [
             "Wait",

@@ -5,12 +5,12 @@ import itertools
 
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+import sonar._custom_ops as ops
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
 
 
 def get_topk_ids(num_tokens: int, num_experts: int, topk: int) -> torch.Tensor:
@@ -31,8 +31,8 @@ configs = list(itertools.product(num_tokens_range, num_experts_range, topk_range
         x_names=["num_tokens", "num_experts", "topk"],
         x_vals=configs,
         line_arg="provider",
-        line_vals=["aphrodite"],
-        line_names=["Aphrodite"],
+        line_vals=["sonar"],
+        line_names=["Sonar"],
         plot_name="moe-align-block-size-performance",
         args={},
     )
@@ -44,7 +44,7 @@ def benchmark(num_tokens, num_experts, topk, provider):
 
     quantiles = [0.5, 0.2, 0.8]
 
-    if provider == "aphrodite":
+    if provider == "sonar":
         ms, min_ms, max_ms = triton.testing.do_bench(
             lambda: moe_align_block_size(topk_ids, block_size, num_experts),
             quantiles=quantiles,
@@ -73,8 +73,8 @@ batched_configs = list(
         ],
         x_vals=batched_configs,
         line_arg="provider",
-        line_vals=["aphrodite"],
-        line_names=["Aphrodite"],
+        line_vals=["sonar"],
+        line_names=["Sonar"],
         plot_name="batched-moe-align-block-size-performance",
         args={},
     )
@@ -107,7 +107,7 @@ def benchmark_batched(
     num_tokens_post_pad = torch.empty((1,), dtype=torch.int32, device="cuda")
 
     quantiles = [0.5, 0.2, 0.8]
-    if provider == "aphrodite":
+    if provider == "sonar":
         ms, min_ms, max_ms = triton.testing.do_bench(
             lambda: ops.batched_moe_align_block_size(
                 max_tokens_per_batch,

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 syntax = "proto3";
-package aphrodite;
+package sonar;
 
 service Control {
   // Server and model discovery.

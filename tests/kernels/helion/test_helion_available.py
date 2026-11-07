@@ -8,12 +8,12 @@ Tests in this directory will be skipped if Helion is not installed.
 
 import pytest
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 # Skip entire module if helion is not available
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 

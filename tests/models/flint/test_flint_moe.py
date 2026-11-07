@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Flint's fused NVFP4 W4A16 MoE (aphrodite/models/flint/ops/moe.py) must follow the
+"""Flint's fused NVFP4 W4A16 MoE (sonar/models/flint/ops/moe.py) must follow the
 reference rounding rule on both the decode (GEMV) and the grouped-GEMM paths
 and route exactly like sigmoid top-k."""
 
 import pytest
 import torch
 
-from aphrodite.models.flint.gguf_nvfp4 import dequantize_nvfp4
-from aphrodite.models.flint.ops import moe
-from aphrodite.platforms import current_platform
+from sonar.models.flint.gguf_nvfp4 import dequantize_nvfp4
+from sonar.models.flint.ops import moe
+from sonar.platforms import current_platform
 
 E, H, INTER, TOPK = 256, 2048, 512, 6
 
@@ -255,10 +255,10 @@ def test_shared_expert_on_aux_stream(weights, flint_weights, num_tokens: int):
 
 @pytest.fixture(scope="module")
 def bf16_weights():
-    """BF16 experts as stored by Aphrodite's FlashInfer TRTLLM BF16 MoE backend,
+    """BF16 experts as stored by Sonar's FlashInfer TRTLLM BF16 MoE backend,
     plus the checkpoint-order originals."""
-    import aphrodite.model_executor.layers.fused_moe  # noqa: F401  (import order)
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    import sonar.model_executor.layers.fused_moe  # noqa: F401  (import order)
+    from sonar.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
 
@@ -274,7 +274,7 @@ def _trtllm_bf16(x, ids, tw, w13, w2):
     import flashinfer
     from flashinfer.fused_moe import WeightLayout
 
-    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.trtllm_bf16_moe import (
         view_as_block_major_k,
     )
 
@@ -331,7 +331,7 @@ def test_bf16_decode_matches_trtllm(weights, bf16_weights, num_tokens: int):
 
 
 def _shared_nvfp4(gen):
-    from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.nvfp4_utils import (
         swizzle_blockscale,
     )
 
@@ -364,7 +364,7 @@ def _ll_weights(weights, flint_weights, sh):
 def test_ll_moe_block(weights, flint_weights, num_tokens):
     """The fused decode MoE block equals Flint's fused_add_rms_norm followed by
     the shared expert and the regular Flint decode MoE path."""
-    from aphrodite.models.flint.ops import norm
+    from sonar.models.flint.ops import norm
 
     gen = torch.Generator(device="cuda").manual_seed(5)
     bf = torch.bfloat16

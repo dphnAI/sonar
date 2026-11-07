@@ -1,16 +1,16 @@
-## Aphrodite Engine Code of Conduct
+## Sonar Code of Conduct
 
 Inspired by the [SQLite CoE](https://sqlite.org/codeofethics.html).
 
 ### Purpose
 
-The maintainer of Aphrodite Engine, at the time of writing this document, has pledged to govern his actions with other contributors, with his clients, and with the larger Aphrodite Engine community in accordance with the "instruments of good works" from chapter 4 of [The Rule of St. Benedict](https://en.wikipedia.org/wiki/Rule_of_Saint_Benedict) (hereafter referred to as "The Rule"). This code of ethics has proven its mettle in thousands of diverse communities for over 1,500 years, and has served as a baseline for many civil law codes since the time of Charlemagne.
+The maintainer of Sonar, at the time of writing this document, has pledged to govern his actions with other contributors, with his clients, and with the larger Sonar community in accordance with the "instruments of good works" from chapter 4 of [The Rule of St. Benedict](https://en.wikipedia.org/wiki/Rule_of_Saint_Benedict) (hereafter referred to as "The Rule"). This code of ethics has proven its mettle in thousands of diverse communities for over 1,500 years, and has served as a baseline for many civil law codes since the time of Charlemagne.
 
 #### Scope of Application
 
-No one is required to follow The Rule, to know The Rule, or even to think that The Rule is a good idea. The maintainer of Aphrodite Engine believes that anyone who follows The Rule will live a happier and more productive life, but individuals are free to dispute or ignore the advice if they wish.
+No one is required to follow The Rule, to know The Rule, or even to think that The Rule is a good idea. The maintainer of Sonar believes that anyone who follows The Rule will live a happier and more productive life, but individuals are free to dispute or ignore the advice if they wish.
 
-The maintainer of Aphrodite Engine has pledged to follow the spirit of The Rule to the best of his ability. He views The Rule as his promise to all Aphrodite Engine users of how developers are expected to behave. This is a one-way promise, or covenant. In other words, he is saying: "I will treat you this way regardless of how you treat me."
+The maintainer of Sonar has pledged to follow the spirit of The Rule to the best of his ability. He views The Rule as his promise to all Sonar users of how developers are expected to behave. This is a one-way promise, or covenant. In other words, he is saying: "I will treat you this way regardless of how you treat me."
 
 ### The Rule
 

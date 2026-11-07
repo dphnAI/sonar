@@ -4,8 +4,8 @@
 use std::fmt::Write;
 use std::time::{Duration, Instant};
 
-use aphrodite_engine_core_client::protocol::stats::KvFetchReqsByStage;
-use aphrodite_metrics::{
+use sonar_engine_core_client::protocol::stats::KvFetchReqsByStage;
+use sonar_metrics::{
     EngineLabels, F64Gauge, KvFetchStageLabels, METRICS, PromptTokenSourceLabels,
     SchedulerLogStatsAccumulator, SchedulerLogStatsInterval, U64Counter, U64Gauge,
     WaitingReasonLabels,
@@ -80,7 +80,7 @@ struct MfuLogStats {
     gbps_per_gpu: f64,
 }
 
-/// Periodic stats logger that mirrors Python Aphrodite's `LoggingStatLogger`.
+/// Periodic stats logger that mirrors Python Sonar's `LoggingStatLogger`.
 ///
 /// Spawns a background task that logs throughput and scheduler state at a fixed
 /// interval. When idle (both current and previous throughputs are zero), logs
@@ -182,7 +182,7 @@ fn resolve_engine_metrics(model_name: &str, engine_indices: &[u32]) -> Vec<Engin
 }
 
 async fn run_stats_logger(model_name: String, engine_indices: Vec<u32>, interval: Duration) {
-    // Aphrodite-specific: when per-request metrics logging is enabled (the
+    // Sonar-specific: when per-request metrics logging is enabled (the
     // default), suppress the periodic aggregated stats log — the per-request
     // completion lines in `request_metrics` take its place. Aggregate prometheus
     // metrics remain available on the /metrics endpoint regardless.

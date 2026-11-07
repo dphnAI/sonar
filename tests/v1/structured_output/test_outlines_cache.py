@@ -6,7 +6,7 @@ import tempfile
 import outlines_core as oc
 import pytest
 
-from aphrodite.v1.structured_output.utils import OutlinesDiskCache
+from sonar.v1.structured_output.utils import OutlinesDiskCache
 
 pytestmark = pytest.mark.cpu_test
 

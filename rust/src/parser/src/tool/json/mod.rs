@@ -19,7 +19,7 @@ mod mistral;
 mod phi4mini;
 mod qwen;
 
-use aphrodite_tokenizer::DecodedText;
+use sonar_tokenizer::DecodedText;
 use winnow::ascii::multispace0 as ws0;
 use winnow::combinator::{alt, seq};
 use winnow::error::{AddContext, ModalResult, StrContext, StrContextValue};
@@ -395,8 +395,8 @@ fn safe_text_event(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_tokenizer::DecodedText;
     use expect_test::expect;
+    use sonar_tokenizer::DecodedText;
 
     use super::{JsonToolCallConfig, JsonToolCallParser, JsonToolCallWhitespace};
     use crate::tool::ToolParserOutput;

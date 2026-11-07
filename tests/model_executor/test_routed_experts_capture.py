@@ -7,31 +7,31 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.forward_context import (
+from sonar.config import CUDAGraphMode, SonarConfig
+from sonar.config.compilation import CompilationMode
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.forward_context import (
     BatchDescriptor,
     DPMetadata,
     ForwardContext,
     get_forward_context,
     set_forward_context,
 )
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.experts.cpu_int4_moe import CPUExpertsInt4
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.experts.cpu_int4_moe import CPUExpertsInt4
+from sonar.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEKernelMonolithicImpl,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize.no_dp_ep import (
     MoEPrepareAndFinalizeNoDPEPMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
+from sonar.model_executor.layers.fused_moe.routed_experts_capturer import (
     RoutedExpertsCapturer,
     RoutedExpertsSink,
     bind_routed_experts_capturer,
 )
-from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
-from aphrodite.v1.kv_cache_interface import (
+from sonar.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheGroupSpec,
     MLAAttentionSpec,
@@ -40,7 +40,7 @@ from aphrodite.v1.kv_cache_interface import (
 
 pytestmark = pytest.mark.cpu_test
 
-_REC_MODULE = "aphrodite.model_executor.layers.fused_moe.routed_experts_capturer"
+_REC_MODULE = "sonar.model_executor.layers.fused_moe.routed_experts_capturer"
 
 
 def _forward_context(**kwargs):
@@ -57,7 +57,7 @@ def _capturer_with_buffer(
     dtype: torch.dtype = torch.int32,
 ) -> RoutedExpertsCapturer:
     # Bypass __init__ so the test can use a CPU buffer and skip the
-    # AphroditeConfig dependency. The CUDA device-tensor allocation in the
+    # SonarConfig dependency. The CUDA device-tensor allocation in the
     # real constructor is not what we are exercising here.
     c = RoutedExpertsCapturer.__new__(RoutedExpertsCapturer)
     c.dp_rank = dp_rank
@@ -156,7 +156,7 @@ def test_public_binding_binds_target_model_router(monkeypatch):
 
     target_module = DummyFusedMoE(layer_id=7)
 
-    import aphrodite.model_executor.layers.fused_moe.layer as fused_moe_layer
+    import sonar.model_executor.layers.fused_moe.layer as fused_moe_layer
 
     monkeypatch.setattr(fused_moe_layer, "MoERunner", DummyFusedMoE)
     calls = []
@@ -237,7 +237,7 @@ class _MonolithicMoE:
 
 
 def _bind_monolithic(monkeypatch, experts: _ToyMonolithicExperts, capture) -> _MonolithicMoE:
-    import aphrodite.model_executor.layers.fused_moe.layer as fused_moe_layer
+    import sonar.model_executor.layers.fused_moe.layer as fused_moe_layer
 
     monkeypatch.setattr(fused_moe_layer, "MoERunner", _MonolithicMoE)
     layer = _MonolithicMoE(experts)
@@ -394,7 +394,7 @@ def test_single_dp_tp_capture_rejects_unexpected_batch_without_writing(num_token
 @pytest.mark.parametrize("tp_rank", [0, 1])
 def test_capture_uses_pre_sp_size_after_model_shards_padding_mask(tp_rank):
     """Model-level SP shortens the mask; capture still needs all three rows."""
-    from aphrodite.models.common.ops import sequence_parallel as sp
+    from sonar.models.common.ops import sequence_parallel as sp
 
     capturer = _capturer_with_buffer(tp_size=2)
     expected = torch.arange(8, dtype=torch.int32).reshape(4, 2)
@@ -425,7 +425,7 @@ def test_capture_uses_pre_sp_size_after_model_shards_padding_mask(tp_rank):
     [(256, "uint8", torch.uint8), (257, "uint16", torch.uint16)],
 )
 def test_routed_experts_capturer_exposes_output_profile(monkeypatch, num_experts, dtype_name, torch_dtype):
-    import aphrodite.model_executor.layers.fused_moe.routed_experts_capturer as module
+    import sonar.model_executor.layers.fused_moe.routed_experts_capturer as module
 
     monkeypatch.setattr(module, "current_platform", SimpleNamespace(device_type="cpu"))
     config = SimpleNamespace(
@@ -607,7 +607,7 @@ def test_routed_experts_capturer_dp_unexpected_batch_raises():
 
 
 def test_get_aux_output_connector_passes_config(monkeypatch):
-    import aphrodite.distributed.aux_output_connector.worker as aux_output_worker
+    import sonar.distributed.aux_output_connector.worker as aux_output_worker
 
     connector = Mock()
     constructor = Mock(return_value=connector)
@@ -617,12 +617,12 @@ def test_get_aux_output_connector_passes_config(monkeypatch):
 
     result = aux_output_worker.get_aux_output_connector(model, config)
 
-    constructor.assert_called_once_with(model=model, aphrodite_config=config)
+    constructor.assert_called_once_with(model=model, sonar_config=config)
     assert result is connector
 
 
 def test_aux_output_worker_connector_binds_capture_on_non_output_rank(monkeypatch):
-    import aphrodite.distributed.aux_output_connector.worker as aux_output_worker
+    import sonar.distributed.aux_output_connector.worker as aux_output_worker
 
     capturer = Mock()
     constructor = Mock(return_value=capturer)
@@ -642,13 +642,13 @@ def test_aux_output_worker_connector_binds_capture_on_non_output_rank(monkeypatc
         scheduler_config=SimpleNamespace(max_num_batched_tokens=32),
     )
     model = Mock()
-    connector = aux_output_worker.AuxOutputWorkerConnector(aphrodite_config=config, model=model)
+    connector = aux_output_worker.AuxOutputWorkerConnector(sonar_config=config, model=model)
     connector.initialize_output_storage(SimpleNamespace(kv_cache_groups=[_full_attention_kv_group()]))
 
     assert connector._store is None and connector._buffer is None
     constructor.assert_called_once_with(
         max_num_batched_tokens=32,
-        aphrodite_config=config,
+        sonar_config=config,
     )
     bind.assert_called_once_with(model, capturer)
     connector.begin_step(Mock())
@@ -657,7 +657,7 @@ def test_aux_output_worker_connector_binds_capture_on_non_output_rank(monkeypatc
 
 
 def test_aux_output_worker_connector_default_capacity(monkeypatch):
-    import aphrodite.distributed.aux_output_connector.worker as aux_output_worker
+    import sonar.distributed.aux_output_connector.worker as aux_output_worker
 
     tp_group = SimpleNamespace(is_first_rank=True, world_size=1)
     store_constructor = Mock()
@@ -683,7 +683,7 @@ def test_aux_output_worker_connector_default_capacity(monkeypatch):
         scheduler_config=SimpleNamespace(max_num_seqs=8, max_num_batched_tokens=32),
         max_concurrent_batches=2,
     )
-    connector = aux_output_worker.AuxOutputWorkerConnector(aphrodite_config=config, model=Mock())
+    connector = aux_output_worker.AuxOutputWorkerConnector(sonar_config=config, model=Mock())
     store_constructor.assert_not_called()
     buffer_constructor.assert_not_called()
 
@@ -725,6 +725,6 @@ def test_v2_model_runner_accepts_routed_experts(monkeypatch):
         ec_transfer_config=None,
     )
 
-    unsupported = AphroditeConfig._get_v2_model_runner_unsupported_features(config)
+    unsupported = SonarConfig._get_v2_model_runner_unsupported_features(config)
 
     assert "routed experts capture" not in unsupported

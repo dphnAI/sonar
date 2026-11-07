@@ -263,6 +263,26 @@ if [ "$skip_platform_checks" -eq 0 ]; then
     esac
 fi
 
+if [ -z "$channel" ]; then
+    if [ "$assume_yes" -eq 1 ]; then
+        channel=release
+    else
+        channel=$(ask_value "Install channel (release or nightly)" release)
+    fi
+fi
+case "$channel" in
+    release | nightly) ;;
+    *) die "Unsupported channel '$channel'. Use release or nightly." ;;
+esac
+
+wheel_index="$SONAR_BASE_URL/whl/$channel/$backend/$architecture/simple"
+if [ "$dry_run" -eq 0 ]; then
+    curl --fail --location --silent --show-error --connect-timeout 10 --max-time 30 \
+        "${wheel_index}/sonar/" \
+        -o /dev/null ||
+        die "Cannot access the $channel Sonar index for $backend/$architecture. Refusing to install."
+fi
+
 library_available() {
     library=$1
     if command -v ldconfig >/dev/null 2>&1 && ldconfig -p 2>/dev/null | grep -q "$library"; then
@@ -422,53 +442,49 @@ if normalized != expected_arch:
 PY
 fi
 
-if [ -z "$channel" ]; then
-    if [ "$assume_yes" -eq 1 ]; then
-        channel=release
-    else
-        channel=$(ask_value "Install channel (release or nightly)" release)
-    fi
-fi
-case "$channel" in
-    release | nightly) ;;
-    *) die "Unsupported channel '$channel'. Use release or nightly." ;;
-esac
+# A preflight alone cannot prevent fallback if the package page later returns 404.
+# Pin Sonar itself; its dependencies may still come from PyPI or the torch index.
+if [ "$dry_run" -eq 0 ]; then
+    installer_dir=$(mktemp -d "${TMPDIR:-/tmp}/sonar-install.XXXXXXXX")
+    trap 'rm -rf "$installer_dir"' EXIT
+    trap 'exit 1' HUP INT TERM
+    requirements_path="$installer_dir/pyproject.toml"
+    "$venv_python" - "$requirements_path" "$wheel_index" <<'PY'
+import json
+import pathlib
+import sys
 
-set -- uv pip install --python "$venv_python" --upgrade aphrodite-engine
-case "$backend:$channel" in
-    cuda:release)
+pathlib.Path(sys.argv[1]).write_text(
+    '[project]\nname = "sonar-installer"\nversion = "0"\ndependencies = ["sonar"]\n'
+    '[tool.uv.sources]\nsonar = { index = "sonar-wheels" }\n'
+    '[[tool.uv.index]]\nname = "sonar-wheels"\n'
+    f'url = {json.dumps(sys.argv[2])}\nexplicit = true\n'
+)
+PY
+else
+    requirements_path='<temporary-directory>/pyproject.toml'
+    say "+ Generate a temporary project pinning sonar exclusively to $wheel_index"
+fi
+set -- uv pip install --python "$venv_python" --upgrade --reinstall-package sonar \
+    --requirements "$requirements_path" \
+    --index-strategy first-index \
+    --only-binary sonar
+case "$backend" in
+    cuda)
         set -- "$@" --torch-backend cu130
         ;;
-    cuda:nightly)
-        set -- "$@" \
-            --extra-index-url "$SONAR_BASE_URL/nightly" \
-            --index-strategy first-index \
-            --torch-backend cu130
-        ;;
-    *)
-        wheel_index="$SONAR_BASE_URL/whl/$channel/$backend/$architecture/simple"
-        if [ "$dry_run" -eq 0 ]; then
-            curl --fail --location --silent --show-error \
-                "${wheel_index}/aphrodite-engine/" \
-                -o /dev/null ||
-                die "No $channel wheel index is available for $backend/$architecture yet."
-        fi
-        set -- "$@" \
-            --extra-index-url "$wheel_index" \
-            --index-strategy first-index
-        if [ "$backend" = cpu ]; then
-            # triton-cpu is a direct URL dependency, which wheels cannot declare for uv, so
-            # request it here. Keep the URLs and markers in sync with requirements/cpu.txt.
-            triton_cpu=https://github.com/triton-lang/triton-cpu/releases/download/v3.8.0/triton-3.8.0+cpu
-            set -- "$@" --torch-backend cpu \
-                "triton @ $triton_cpu-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version == '3.11'" \
-                "triton @ $triton_cpu-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version >= '3.12'"
-        fi
+    cpu)
+        # triton-cpu is a direct URL dependency, which wheels cannot declare for uv, so
+        # request it here. Keep the URLs and markers in sync with requirements/cpu.txt.
+        triton_cpu=https://github.com/triton-lang/triton-cpu/releases/download/v3.8.0/triton-3.8.0+cpu
+        set -- "$@" --torch-backend cpu \
+            "triton @ $triton_cpu-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version == '3.11'" \
+            "triton @ $triton_cpu-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version >= '3.12'"
         ;;
 esac
 
 say "Installing Sonar from the $channel channel."
-run "$@"
+run env UV_NO_SOURCES=false "$@"
 
 if [ "$dry_run" -eq 0 ]; then
     "$venv_python" - "$backend" "$channel" <<'PY'
@@ -476,12 +492,12 @@ import json
 import pathlib
 import sys
 
-import aphrodite
+import sonar
 
 record = {
     "backend": sys.argv[1],
     "channel": sys.argv[2],
-    "version": getattr(aphrodite, "__version__", "unknown"),
+    "version": getattr(sonar, "__version__", "unknown"),
 }
 path = pathlib.Path(sys.prefix) / ".sonar-install.json"
 path.write_text(json.dumps(record, indent=2) + "\n")
@@ -494,4 +510,4 @@ say "Activate the environment with:"
 say "  . $(shell_quote "$venv_path/bin/activate")"
 say
 say "Then verify the installation with:"
-say "  aphrodite --version"
+say "  sonar --version"

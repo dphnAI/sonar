@@ -9,20 +9,20 @@ import pytest
 import torch
 from transformers import Qwen4ExpConfig, Qwen4ExpTextConfig
 
-from aphrodite.config import CacheConfig, ParallelConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.utils import (
+from sonar.config import CacheConfig, ParallelConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.utils import (
     should_ignore_layer,
 )
-from aphrodite.model_executor.models.config import (
+from sonar.model_executor.models.config import (
     Qwen4ExpForConditionalGenerationConfig,
 )
-from aphrodite.models.qwen4_exp.nvidia.model import (
+from sonar.models.qwen4_exp.nvidia.model import (
     Qwen4ExpForCausalLM,
     Qwen4ExpForConditionalGeneration,
 )
-from aphrodite.models.qwen4_exp.nvidia.model_state import Qwen4ExpModelState
-from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
+from sonar.models.qwen4_exp.nvidia.model_state import Qwen4ExpModelState
+from sonar.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
 
 from ...utils import spawn_new_process_for_each_test
 
@@ -71,7 +71,7 @@ def test_moe_sp_rejects_pipeline_parallel() -> None:
         ),
     )
     with (
-        patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=True),
+        patch("sonar.platforms.current_platform.is_cuda_alike", return_value=True),
         pytest.raises(ValueError, match="MoE SP requires PP=1"),
     ):
         Qwen4ExpForConditionalGenerationConfig.verify_and_update_config(config)
@@ -82,7 +82,7 @@ def test_moe_sp_rejects_pipeline_parallel() -> None:
 @pytest.mark.parametrize("use_sp", [False, True])
 def test_qwen4_exp_mtp_returns_sample_and_multi_streams(backend: str, use_sp: bool) -> None:
     """MTP returns complete, contiguous outputs after gathering padded SP shards."""
-    mtp_module = f"aphrodite.models.qwen4_exp.{backend}.mtp"
+    mtp_module = f"sonar.models.qwen4_exp.{backend}.mtp"
     model = object.__new__(import_module(mtp_module).Qwen4ExpMultiTokenPredictor)
     model.use_hc_sequence_parallel = use_sp
     model.use_sequence_parallel = False
@@ -142,7 +142,7 @@ def test_qwen4_exp_mtp_returns_sample_and_multi_streams(backend: str, use_sp: bo
 @spawn_new_process_for_each_test
 @pytest.mark.parametrize("backend", ["amd", "nvidia"])
 def test_qwen4_exp_mtp_remaps_mixed_precision_layer_indices(backend: str) -> None:
-    mtp_module = import_module(f"aphrodite.models.qwen4_exp.{backend}.mtp")
+    mtp_module = import_module(f"sonar.models.qwen4_exp.{backend}.mtp")
 
     quantized_layers = {
         "model.language_model.layers.0.mlp.experts": {"quant_algo": "NVFP4"},

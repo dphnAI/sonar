@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import Literal
 
-from aphrodite.inputs import MultiModalDataDict, MultiModalUUIDDict
+from sonar.inputs import MultiModalDataDict, MultiModalUUIDDict
 
 ModalityType = Literal["image", "video", "audio"]
 MultiModalDataCounts = Mapping[ModalityType, int]

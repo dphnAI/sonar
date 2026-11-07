@@ -3,10 +3,10 @@
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
     HiSparseConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
     HiSparseKVConnectorStats,
 )
 
@@ -91,10 +91,10 @@ def test_prom_metrics_observe_host_metrics(kv_cache_metrics: bool):
 
     from prometheus_client import Counter, Gauge, Histogram
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.stats import (
         HiSparsePromMetrics,
     )
-    from aphrodite.v1.metrics.stats import KVCacheEvictionEvent
+    from sonar.v1.metrics.stats import KVCacheEvictionEvent
 
     class _FakeMetric:
         def __init__(self, **kwargs: Any):
@@ -123,7 +123,7 @@ def test_prom_metrics_observe_host_metrics(kv_cache_metrics: bool):
             created[kwargs["name"]] = self
 
     prom = HiSparsePromMetrics(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             kv_transfer_config=None,
             observability_config=SimpleNamespace(kv_cache_metrics=kv_cache_metrics, custom_histogram_buckets=None),
         ),
@@ -141,16 +141,16 @@ def test_prom_metrics_observe_host_metrics(kv_cache_metrics: bool):
     later.record_host_evictions([KVCacheEvictionEvent(3.0, 3.0, ())])
     prom.observe(stats.aggregate(later).to_dict())
 
-    assert created["aphrodite:hisparse_cache_hits"].increments == [3]
-    assert created["aphrodite:hisparse_host_to_device_bytes"].increments == [32]
-    assert created["aphrodite:hisparse_host_cache_usage_perc"].set_values == [0.75]
-    assert created["aphrodite:hisparse_pending_page_transfers"].set_values == [3]
+    assert created["sonar:hisparse_cache_hits"].increments == [3]
+    assert created["sonar:hisparse_host_to_device_bytes"].increments == [32]
+    assert created["sonar:hisparse_host_cache_usage_perc"].set_values == [0.75]
+    assert created["sonar:hisparse_pending_page_transfers"].set_values == [3]
     if not kv_cache_metrics:
         assert not any("host_block" in name for name in created)
         return
-    assert created["aphrodite:hisparse_host_block_lifetime_seconds"].observed == [5.0, 3.0]
-    assert created["aphrodite:hisparse_host_block_idle_before_evict_seconds"].observed == [
+    assert created["sonar:hisparse_host_block_lifetime_seconds"].observed == [5.0, 3.0]
+    assert created["sonar:hisparse_host_block_idle_before_evict_seconds"].observed == [
         2.0,
         3.0,
     ]
-    assert created["aphrodite:hisparse_host_block_reuse_gap_seconds"].observed == [1.0, 2.0]
+    assert created["sonar:hisparse_host_block_reuse_gap_seconds"].observed == [1.0, 2.0]

@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from packaging.tags import Tag
 
-from aphrodite.build_utils import precompiled
+from sonar.build_utils import precompiled
 
-WHEEL_NAME = "aphrodite_engine-0.0.0-cp38-abi3-linux_x86_64.whl"
+WHEEL_NAME = "sonar-0.0.0-cp38-abi3-linux_x86_64.whl"
 
 
 def _make_wheel(path: Path, files: dict[str, bytes]) -> precompiled.WheelCandidate:
@@ -40,7 +40,7 @@ def test_compatible_candidate_ignores_non_wheel_links(monkeypatch: pytest.Monkey
     </a>
     """
 
-    candidate = precompiled._compatible_candidate("https://example.test/commit/aphrodite-engine/index.html", html)
+    candidate = precompiled._compatible_candidate("https://example.test/commit/sonar/index.html", html)
 
     assert candidate.filename == WHEEL_NAME
     assert candidate.sha256 == digest
@@ -88,7 +88,7 @@ def test_get_base_commit_uses_origin_main(tmp_path: Path) -> None:
 
 
 def test_extracts_allowlisted_files_and_preserves_tracked_interfaces(tmp_path: Path) -> None:
-    package = tmp_path / "aphrodite"
+    package = tmp_path / "sonar"
     flash_attn = package / "vllm_flash_attn"
     flash_attn.mkdir(parents=True)
     interface = flash_attn / "flash_attn_interface.py"
@@ -103,15 +103,15 @@ def test_extracts_allowlisted_files_and_preserves_tracked_interfaces(tmp_path: P
     first = _make_wheel(
         tmp_path / WHEEL_NAME,
         {
-            "aphrodite/_C_stable_libtorch.abi3.so": b"first",
-            "aphrodite/_deepselect_C.abi3.so": b"deepselect",
-            "aphrodite/libs/libtcmalloc.so.4": b"cpu allocator",
-            "aphrodite/unrelated/libskip.so.1": b"ignore",
-            "aphrodite/vllm_flash_attn/flash_attn_interface.py": b"wheel copy",
-            "aphrodite/third_party/deep_gemm/old.py": b"old",
-            "aphrodite/third_party/deep_gemm/_C.py": b"first wrapper",
-            "aphrodite/third_party/deep_gemm/_C_extension.abi3.so": b"first stable extension",
-            "aphrodite/unrelated.py": b"ignore",
+            "sonar/_C_stable_libtorch.abi3.so": b"first",
+            "sonar/_deepselect_C.abi3.so": b"deepselect",
+            "sonar/libs/libtcmalloc.so.4": b"cpu allocator",
+            "sonar/unrelated/libskip.so.1": b"ignore",
+            "sonar/vllm_flash_attn/flash_attn_interface.py": b"wheel copy",
+            "sonar/third_party/deep_gemm/old.py": b"old",
+            "sonar/third_party/deep_gemm/_C.py": b"first wrapper",
+            "sonar/third_party/deep_gemm/_C_extension.abi3.so": b"first stable extension",
+            "sonar/unrelated.py": b"ignore",
         },
     )
     patch = precompiled.extract_precompiled_wheel(tmp_path, first)
@@ -123,7 +123,7 @@ def test_extracts_allowlisted_files_and_preserves_tracked_interfaces(tmp_path: P
     assert interface.read_text() == "tracked\n"
     assert (package / "third_party/deep_gemm/old.py").is_file()
     assert not (package / "unrelated.py").exists()
-    assert "aphrodite" in patch
+    assert "sonar" in patch
     assert all(not binding.exists() for binding in legacy_bindings)
     assert (deep_gemm / "user_notes.txt").read_text() == "keep this file\n"
 
@@ -137,10 +137,10 @@ def test_extracts_allowlisted_files_and_preserves_tracked_interfaces(tmp_path: P
     second = _make_wheel(
         second_path,
         {
-            "aphrodite/_C_stable_libtorch.abi3.so": b"second",
-            "aphrodite/third_party/deep_gemm/new.py": b"new",
-            "aphrodite/third_party/deep_gemm/_C.py": b"second wrapper",
-            "aphrodite/third_party/deep_gemm/_C_extension.abi3.so": b"second stable extension",
+            "sonar/_C_stable_libtorch.abi3.so": b"second",
+            "sonar/third_party/deep_gemm/new.py": b"new",
+            "sonar/third_party/deep_gemm/_C.py": b"second wrapper",
+            "sonar/third_party/deep_gemm/_C_extension.abi3.so": b"second stable extension",
         },
     )
     precompiled.extract_precompiled_wheel(tmp_path, second)
@@ -153,45 +153,45 @@ def test_extracts_allowlisted_files_and_preserves_tracked_interfaces(tmp_path: P
     assert (package / "third_party/deep_gemm/_C.py").read_bytes() == b"second wrapper"
     assert (package / "third_party/deep_gemm/_C_extension.abi3.so").read_bytes() == b"second stable extension"
     manifest = json.loads((tmp_path / precompiled.MANIFEST_PATH).read_text())
-    assert "aphrodite/third_party/deep_gemm/new.py" in manifest["paths"]
-    assert "aphrodite/third_party/deep_gemm/_C.py" in manifest["paths"]
-    assert "aphrodite/third_party/deep_gemm/_C_extension.abi3.so" in manifest["paths"]
+    assert "sonar/third_party/deep_gemm/new.py" in manifest["paths"]
+    assert "sonar/third_party/deep_gemm/_C.py" in manifest["paths"]
+    assert "sonar/third_party/deep_gemm/_C_extension.abi3.so" in manifest["paths"]
 
 
 def test_rust_only_extraction_preserves_executable_and_parser(tmp_path: Path) -> None:
     wheel_path = tmp_path / WHEEL_NAME
     with zipfile.ZipFile(wheel_path, "w") as wheel:
-        executable = zipfile.ZipInfo("aphrodite/aphrodite-rs")
+        executable = zipfile.ZipInfo("sonar/sonar-rs")
         executable.create_system = 3
         executable.external_attr = 0o100755 << 16
         wheel.writestr(executable, b"rust frontend")
-        wheel.writestr("aphrodite/_rust_parser.abi3.so", b"parser")
-        wheel.writestr("aphrodite/_deepselect_C.abi3.so", b"native extension")
-        wheel.writestr("aphrodite/libs/libtcmalloc.so.4", b"cpu allocator")
+        wheel.writestr("sonar/_rust_parser.abi3.so", b"parser")
+        wheel.writestr("sonar/_deepselect_C.abi3.so", b"native extension")
+        wheel.writestr("sonar/libs/libtcmalloc.so.4", b"cpu allocator")
     candidate = precompiled.WheelCandidate(
         str(wheel_path), wheel_path.name, hashlib.sha256(wheel_path.read_bytes()).hexdigest()
     )
 
     patch = precompiled.extract_precompiled_wheel(tmp_path, candidate, extract_extensions=False, extract_rust=True)
 
-    package = tmp_path / "aphrodite"
-    frontend = package / "aphrodite-rs"
+    package = tmp_path / "sonar"
+    frontend = package / "sonar-rs"
     assert frontend.read_bytes() == b"rust frontend"
     assert frontend.stat().st_mode & 0o777 == 0o755
     assert (package / "_rust_parser.abi3.so").read_bytes() == b"parser"
     assert not (package / "_deepselect_C.abi3.so").exists()
     assert not (package / "libs/libtcmalloc.so.4").exists()
-    assert set(patch["aphrodite"]) == {"aphrodite-rs", "_rust_parser.abi3.so"}
+    assert set(patch["sonar"]) == {"sonar-rs", "_rust_parser.abi3.so"}
 
 
 def test_checksum_mismatch_fails_before_replacing_existing_files(tmp_path: Path) -> None:
-    target = tmp_path / "aphrodite/_C_stable_libtorch.abi3.so"
+    target = tmp_path / "sonar/_C_stable_libtorch.abi3.so"
     target.parent.mkdir()
     target.write_bytes(b"existing")
     wheel_path = tmp_path / WHEEL_NAME
     candidate = _make_wheel(
         wheel_path,
-        {"aphrodite/_C_stable_libtorch.abi3.so": b"replacement"},
+        {"sonar/_C_stable_libtorch.abi3.so": b"replacement"},
     )
     candidate = precompiled.WheelCandidate(candidate.url_or_path, candidate.filename, "0" * 64)
 
@@ -204,7 +204,7 @@ def test_checksum_mismatch_fails_before_replacing_existing_files(tmp_path: Path)
 def test_zip_traversal_is_rejected(tmp_path: Path) -> None:
     candidate = _make_wheel(
         tmp_path / WHEEL_NAME,
-        {"aphrodite/../escape.so": b"bad"},
+        {"sonar/../escape.so": b"bad"},
     )
 
     with pytest.raises(precompiled.PrecompiledWheelError, match="Unsafe path"):
@@ -221,7 +221,7 @@ def test_unsafe_manifest_is_ignored(tmp_path: Path) -> None:
             {
                 "url": "https://example.test/wheel.whl",
                 "sha256": "a" * 64,
-                "paths": ["aphrodite/../outside.so"],
+                "paths": ["sonar/../outside.so"],
             }
         )
     )

@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.sampling_params import RepetitionDetectionParams, SamplingParams
-from aphrodite.v1.core.sched.utils import check_sequence_repetition, check_stop
-from aphrodite.v1.request import Request, RequestStatus
+from sonar.sampling_params import RepetitionDetectionParams, SamplingParams
+from sonar.v1.core.sched.utils import check_sequence_repetition, check_stop
+from sonar.v1.request import Request, RequestStatus
 
 pytestmark = pytest.mark.cpu_test
 

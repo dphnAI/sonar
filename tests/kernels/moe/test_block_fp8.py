@@ -4,40 +4,40 @@
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fused_moe import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fused_moe import (
     fused_experts,
     fused_topk,
     override_config,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     fp8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts import triton_moe
-from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts import triton_moe
+from sonar.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
     _valid_deep_gemm_shape,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+from sonar.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
     TritonOrDeepGemmExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+from sonar.model_executor.layers.fused_moe.fused_moe import (
     try_get_optimal_moe_config,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import (
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import (
     get_mk_alignment_for_contiguous_layout,
     is_deep_gemm_e8m0_used,
 )
-from aphrodite.utils.import_utils import has_deep_gemm
+from sonar.utils.import_utils import has_deep_gemm
 from tests.kernels.moe.utils import (
     make_dummy_moe_config,
     make_test_quant_config,
@@ -57,7 +57,7 @@ if current_platform.is_fp8_fnuz():
         allow_module_level=True,
     )
 
-aphrodite_config = AphroditeConfig()
+sonar_config = SonarConfig()
 
 # Test configurations
 DTYPES = [torch.bfloat16]  # [torch.half, torch.bfloat16, torch.float32]
@@ -201,7 +201,7 @@ def test_w8a8_block_fp8_fused_moe(M, N, K, E, topk, block_size, dtype, seed, mon
     topk_weights, topk_ids, _ = fused_topk(a, score.float(), topk, False)
 
     # Set the context to avoid lots of warning spam.
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_out = torch_w8a8_block_fp8_moe(
             a,
             w1,
@@ -235,7 +235,7 @@ def test_w8a8_block_fp8_fused_moe(M, N, K, E, topk, block_size, dtype, seed, mon
     # ~1-ULP gap pushes m_out past the base tol, so validate m_out against an
     # fp32-SiLU reference — keeping the tight base tolerance, no widened override.
     if current_platform.is_rocm() and K >= 4096 and N >= 1024:
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             ref_out_m = torch_w8a8_block_fp8_moe(
                 a,
                 w1,
@@ -293,7 +293,7 @@ def test_h200_block_fp8_up_and_down_tma_matches_pointer(M, modular, workspace_in
         def run():
             return fused_experts(a, w1, w2, topk_weights, topk_ids, quant_config=quant_config)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         with override_config({**config, "USE_TMA": False}):
             pointer_output = run()
         tma_output = run()
@@ -333,7 +333,7 @@ def test_w8a8_block_fp8_clamp_skips_fused_silu_quant(clamp_limit, monkeypatch, w
 
     monkeypatch.setattr(triton_moe.ops, "silu_and_mul_per_block_quant", counting_fused_op)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         m_fused_moe.apply(
             a,
             w1,
@@ -380,7 +380,7 @@ def test_w8a8_block_fp8_fused_moe_expert_map(M, N, K, topk, ep_size, workspace_i
     m_fused_moe = modular_triton_fused_moe(make_dummy_moe_config(), quant_config)
     topk_weights, topk_ids, _ = fused_topk(a, score.float(), topk, False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_out = torch_w8a8_block_fp8_moe(a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, block_size, expert_map=e_map)
         m_out = m_fused_moe.apply(
             a,
@@ -472,7 +472,7 @@ def test_w8a8_block_fp8_deep_gemm_fused_moe(M, N, K, E, topk, seed, monkeypatch)
         )
 
     # Set the context to avoid lots of warning spam.
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_out = torch_w8a8_block_fp8_moe(a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, block_size)
 
         if use_compile:
@@ -583,7 +583,7 @@ def test_w8a8_block_fp8_fused_moe_refined_block_scales(tp_rank, workspace_init):
 
     topk_weights, topk_ids, _ = fused_topk(a, score.float(), topk, False)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ref_out = torch_w8a8_block_fp8_moe(a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, refined_block)
         out = fused_experts(a, w1, w2, topk_weights, topk_ids, quant_config=quant_config)
 

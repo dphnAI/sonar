@@ -7,9 +7,9 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.platforms import current_platform
 
 from ...utils import build_model_context
 
@@ -21,7 +21,7 @@ def _noise_image(width: int, height: int) -> Image.Image:
     return Image.fromarray(rng.integers(0, 256, (height, width, 3), dtype=np.uint8))
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize(("width", "height"), [(1240, 1754), (310, 470)])
 def test_mm_device_do_normalize(width: int, height: int):
     device = current_platform.device_type
@@ -49,7 +49,7 @@ def test_mm_device_do_normalize(width: int, height: int):
     torch.testing.assert_close(output, normalized_values.flatten(1).to(device), rtol=1.6e-2, atol=1e-5)
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 @pytest.mark.parametrize("mm_device_do_normalize", [False, True])
 @pytest.mark.parametrize("layout", ["ndarray_hwc", "tensor_hwc", "tensor_chw"])
 def test_array_image_inputs(mm_device_do_normalize: bool, layout: str):
@@ -74,7 +74,7 @@ def test_array_image_inputs(mm_device_do_normalize: bool, layout: str):
     torch.testing.assert_close(pixel_values(item), pixel_values(image), rtol=0, atol=0)
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_explicit_kwargs_without_device_normalize():
     ctx = build_model_context(
         _MODEL_ID,

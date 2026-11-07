@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.transformers_utils.configs.speculators.base import SpeculatorsConfig
+from sonar.transformers_utils.configs.speculators.base import SpeculatorsConfig
 
 pytestmark = pytest.mark.skip_global_cleanup
 

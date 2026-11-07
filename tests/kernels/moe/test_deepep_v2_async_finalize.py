@@ -17,7 +17,7 @@ requires deep_ep to be importable.
 import pytest
 import torch
 
-from aphrodite.utils.import_utils import has_deep_ep_v2
+from sonar.utils.import_utils import has_deep_ep_v2
 
 requires_deep_ep_v2 = pytest.mark.skipif(
     not has_deep_ep_v2(),
@@ -25,11 +25,11 @@ requires_deep_ep_v2 = pytest.mark.skipif(
 )
 
 if has_deep_ep_v2():
-    import aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 as _dv2
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+    import sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 as _dv2
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
         DeepEPV2PrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+    from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
         TopKWeightAndReduceContiguous,
     )
 

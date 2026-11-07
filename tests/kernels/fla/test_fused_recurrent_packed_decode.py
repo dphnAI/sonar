@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops import (
     fused_recurrent_gated_delta_rule,
     fused_recurrent_gated_delta_rule_packed_decode,
 )

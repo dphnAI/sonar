@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers import TokenizerLike, get_tokenizer
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,

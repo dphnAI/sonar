@@ -6,7 +6,7 @@ The example uses four GPUs:
 
 * GPUs 0-1 run two trainer actors. Each actor exposes the parameters owned by
   one logical pipeline stage.
-* GPUs 2-3 run one tensor-parallel Aphrodite engine.
+* GPUs 2-3 run one tensor-parallel Sonar engine.
 
 Each stage declares itself the owner of its parameters in `ParamMeta.owners`,
 so both trainer ranks join the weight-transfer communicator and each
@@ -29,16 +29,16 @@ import torch
 from huggingface_hub import snapshot_download
 from transformers import AutoModelForCausalLM
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import WeightTransferConfig
-from aphrodite.distributed.weight_transfer import (
+from sonar import LLM, SamplingParams
+from sonar.config import WeightTransferConfig
+from sonar.distributed.weight_transfer import (
     ParamMeta,
-    RayAphroditeWeightSyncClient,
+    RaySonarWeightSyncClient,
     WeightSource,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.nccl_engine import NCCLTrainerInitInfo
-from aphrodite.utils.network_utils import get_ip, get_open_port
+from sonar.distributed.weight_transfer.nccl_engine import NCCLTrainerInitInfo
+from sonar.utils.network_utils import get_ip, get_open_port
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 NUM_SOURCES = 2
@@ -82,7 +82,7 @@ class StageSource(WeightSource):
 
 
 class MyLLM(LLM):
-    """Allow the Aphrodite Ray executor to allocate its own worker GPUs."""
+    """Allow the Sonar Ray executor to allocate its own worker GPUs."""
 
     def __init__(self, *args, **kwargs):
         os.environ.pop("CUDA_VISIBLE_DEVICES", None)
@@ -124,7 +124,7 @@ class TrainerSource:
                 rank=self.source_rank,
                 packed=True,
             ),
-            client=RayAphroditeWeightSyncClient(llm_handle),
+            client=RaySonarWeightSyncClient(llm_handle),
             source=source,
         )
 

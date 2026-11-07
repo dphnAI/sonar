@@ -8,12 +8,12 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader import tensorizer
+from sonar.model_executor.model_loader import tensorizer
 
 pytestmark = [pytest.mark.cpu_test, pytest.mark.skip_global_cleanup]
 
 
-def test_serialize_aphrodite_model_forwards_model_revision(
+def test_serialize_sonar_model_forwards_model_revision(
     monkeypatch: pytest.MonkeyPatch,
 ):
     @contextlib.contextmanager
@@ -45,7 +45,7 @@ def test_serialize_aphrodite_model_forwards_model_revision(
         revision="pinned-revision",
     )
 
-    tensorizer.serialize_aphrodite_model(model, tensorizer_config, model_config)
+    tensorizer.serialize_sonar_model(model, tensorizer_config, model_config)
 
     assert snapshot_download.call_args.args == ("repo/model",)
     assert snapshot_download.call_args.kwargs["revision"] == "pinned-revision"

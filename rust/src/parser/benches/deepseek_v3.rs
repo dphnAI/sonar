@@ -3,9 +3,9 @@
 
 use std::time::Duration;
 
-use aphrodite_parser::tool::test_utils::{split_by_chars, test_tools};
-use aphrodite_parser::tool::{DeepSeekV3ToolParser, Tool, ToolParser};
 use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use sonar_parser::tool::test_utils::{split_by_chars, test_tools};
+use sonar_parser::tool::{DeepSeekV3ToolParser, Tool, ToolParser};
 use tool_parser::parsers::DeepSeekParser as ExternalDeepSeekParser;
 
 mod utils;

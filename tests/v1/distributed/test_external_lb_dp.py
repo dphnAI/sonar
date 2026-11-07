@@ -15,14 +15,14 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.distributed.elastic_ep.external_elastic_ep import (
+from sonar.distributed.elastic_ep.external_elastic_ep import (
     ExternalElasticEPScaleCoordinator,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 if TYPE_CHECKING:
-    from aphrodite.v1.engine.core_client import DPAsyncMPClient
+    from sonar.v1.engine.core_client import DPAsyncMPClient
 
 MODEL_NAME = os.getenv("MODEL_NAME", "ibm-research/PowerMoE-3b")
 ELASTIC_EP_MODEL_NAME = "deepseek-ai/DeepSeek-V2-Lite-Chat"
@@ -49,7 +49,7 @@ class DictStore:
 
 def test_external_elastic_ep_visible_epoch_has_bootstrap_and_phase(monkeypatch):
     client = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             parallel_config=SimpleNamespace(
                 data_parallel_master_port=12345,
                 _data_parallel_master_port_list=[12346, 12347],
@@ -74,7 +74,7 @@ def test_external_elastic_ep_visible_epoch_has_bootstrap_and_phase(monkeypatch):
 
 def test_external_elastic_ep_calculates_target_expert_redundancy():
     client = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(get_num_experts=lambda: 128),
             parallel_config=SimpleNamespace(eplb_config=SimpleNamespace(num_redundant_experts=0)),
         )
@@ -89,7 +89,7 @@ def test_external_elastic_ep_calculates_target_expert_redundancy():
 async def test_validate_expert_capacity_on_every_rank(dp_rank, monkeypatch):
     """Validate expert capacity on every rank before waiting for an epoch."""
     client = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             model_config=SimpleNamespace(get_num_experts=lambda: 128),
             parallel_config=SimpleNamespace(
                 data_parallel_rank=dp_rank,
@@ -102,7 +102,7 @@ async def test_validate_expert_capacity_on_every_rank(dp_rank, monkeypatch):
     )
     coordinator = ExternalElasticEPScaleCoordinator(cast("DPAsyncMPClient", client))
     store = DictStore({})
-    monkeypatch.setattr("aphrodite.distributed.utils.get_cached_tcp_store_client", lambda *args: store)
+    monkeypatch.setattr("sonar.distributed.utils.get_cached_tcp_store_client", lambda *args: store)
 
     with pytest.raises(ValueError, match="cannot retain all model experts"):
         await asyncio.wait_for(coordinator.prepare(4, 2), timeout=1)
@@ -127,7 +127,7 @@ async def test_external_elastic_ep_late_rank_observes_epoch_error():
 
 
 class ExternalLBServerManager:
-    """Manages data parallel Aphrodite server instances for external
+    """Manages data parallel Sonar server instances for external
     load balancer testing."""
 
     def __init__(
@@ -173,14 +173,14 @@ class ExternalLBServerManager:
         )
 
         env_dict = {
-            "APHRODITE_SERVER_DEV_MODE": "1",
+            "SONAR_SERVER_DEV_MODE": "1",
             current_platform.device_control_env_var: ",".join(
                 str(current_platform.device_id_to_physical_device_id(i))
                 for i in range(rank * self.tp_size, (rank + 1) * self.tp_size)
             ),
         }
         if elastic_ep_scale_up_launch:
-            env_dict["APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH"] = "1"
+            env_dict["SONAR_ELASTIC_EP_SCALE_UP_LAUNCH"] = "1"
 
         server = RemoteOpenAIServer(
             self.model_name,
@@ -283,8 +283,8 @@ def _get_parallel_config(server: RemoteOpenAIServer):
     response = requests.get(server.url_for("server_info?config_format=json"))
     response.raise_for_status()
 
-    aphrodite_config = response.json()["aphrodite_config"]
-    return aphrodite_config["parallel_config"]
+    sonar_config = response.json()["sonar_config"]
+    return sonar_config["parallel_config"]
 
 
 def _assert_expert_parallel_config(
@@ -330,7 +330,7 @@ def _wait_for_scale_requests_to_start(
     reason="External Elastic EP scale-up requires three GPUs with TP_SIZE=1",
 )
 @pytest.mark.skipif(
-    os.getenv("APHRODITE_USE_RUST_FRONTEND") == "1",
+    os.getenv("SONAR_USE_RUST_FRONTEND") == "1",
     reason="Elastic EP scaling is not supported by the Rust frontend",
 )
 def test_external_lb_elastic_ep_scale_up(default_server_args) -> None:

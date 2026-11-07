@@ -6,14 +6,14 @@ use std::fmt;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::sampling::{
-    AphroditeSamplingParams, RepetitionDetectionParams,
-};
-use aphrodite_llm::WeightVersionSpan;
-use aphrodite_text::TruncationSide;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{DefaultOnNull, SerializeDisplay};
+use sonar_engine_core_client::protocol::sampling::{
+    RepetitionDetectionParams, SonarSamplingParams,
+};
+use sonar_llm::WeightVersionSpan;
+use sonar_text::TruncationSide;
 use validator::Validate;
 
 use crate::routes::openai::utils::metrics::{PerRequestMetrics, StreamPerRequestMetrics};
@@ -25,10 +25,10 @@ use crate::routes::openai::utils::types::{
     validate_top_p_value,
 };
 
-/// Aphrodite-compatible request type for the Chat Completions API.
+/// Sonar-compatible request type for the Chat Completions API.
 ///
-/// Mirrors the Python Aphrodite `ChatCompletionRequest` class. The local copy keeps
-/// the request type route-owned so we can add Aphrodite-only fields directly instead
+/// Mirrors the Python Sonar `ChatCompletionRequest` class. The local copy keeps
+/// the request type route-owned so we can add Sonar-only fields directly instead
 /// of layering wrapper deserializers on top.
 #[serde_with::skip_serializing_none]
 #[serde_with::serde_as]
@@ -123,10 +123,10 @@ pub struct ChatCompletionRequest {
     /// A unique identifier representing your end-user
     pub user: Option<String>,
 
-    // -------- Aphrodite Sampling Parameters --------
+    // -------- Sonar Sampling Parameters --------
     /// Sonar's extended sampler settings, with the Python API defaults.
     #[serde(default, flatten)]
-    pub aphrodite_sampling: AphroditeSamplingParams,
+    pub sonar_sampling: SonarSamplingParams,
 
     /// Whether to apply the engine's configured watermark to this request.
     /// `None` requests it like `true`.
@@ -193,7 +193,7 @@ pub struct ChatCompletionRequest {
     /// List of bad words to avoid during generation
     pub bad_words: Option<Vec<String>>,
 
-    // -------- Extra Aphrodite Parameters --------
+    // -------- Extra Sonar Parameters --------
     /// Token budget for reasoning/thinking. Accepts a non-negative integer, or
     /// `-1` for unlimited (mirroring the Python frontend, which normalizes `-1`
     /// to "no budget").
@@ -277,7 +277,7 @@ pub struct ChatCompletionRequest {
 
     /// Additional request parameters with string or numeric values for custom
     /// extensions
-    pub aphrodite_xargs: Option<HashMap<String, Value>>,
+    pub sonar_xargs: Option<HashMap<String, Value>>,
 
     /// Parameters for detecting repetitive N-gram patterns in output tokens
     pub repetition_detection: Option<RepetitionDetectionParams>,
@@ -317,7 +317,7 @@ impl Default for ChatCompletionRequest {
             include_reasoning: true,
             parallel_tool_calls: None,
             user: None,
-            aphrodite_sampling: AphroditeSamplingParams::default(),
+            sonar_sampling: SonarSamplingParams::default(),
             watermarking: None,
             use_beam_search: false,
             top_k: None,
@@ -356,7 +356,7 @@ impl Default for ChatCompletionRequest {
             cache_salt: None,
             kv_transfer_params: None,
             ec_transfer_params: None,
-            aphrodite_xargs: None,
+            sonar_xargs: None,
             repetition_detection: None,
             stream_interval: None,
         }
@@ -375,7 +375,7 @@ impl Normalizable for ChatCompletionRequest {
     }
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionResponse` class.
+/// Mirrors the Python Sonar `ChatCompletionResponse` class.
 ///
 /// Do not skip serializing `None` fields here: non-streaming response types
 /// should serialize `None` as explicit `null`.
@@ -399,7 +399,7 @@ pub(crate) struct ChatCompletionResponse {
     pub ec_transfer_params: Option<Value>,
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionResponseChoice` class.
+/// Mirrors the Python Sonar `ChatCompletionResponseChoice` class.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ChatCompletionChoice {
     pub index: u32,
@@ -426,7 +426,7 @@ impl fmt::Display for AssistantRole {
     }
 }
 
-/// Mirrors the Python Aphrodite response `ChatMessage` class.
+/// Mirrors the Python Sonar response `ChatMessage` class.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ChatCompletionMessage {
     pub role: AssistantRole,
@@ -441,7 +441,7 @@ pub(crate) struct ChatCompletionMessage {
     pub reasoning: Option<String>,
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionStreamResponse` class.
+/// Mirrors the Python Sonar `ChatCompletionStreamResponse` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ChatCompletionStreamResponse {
@@ -481,7 +481,7 @@ pub(crate) struct ChatCompletionStreamPrompt {
     pub prompt_text: Option<String>,
 }
 
-/// Mirrors the Python Aphrodite `ChatCompletionResponseStreamChoice` class.
+/// Mirrors the Python Sonar `ChatCompletionResponseStreamChoice` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct ChatCompletionStreamChoice {
@@ -495,7 +495,7 @@ pub(crate) struct ChatCompletionStreamChoice {
     pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
-/// Mirrors the Python Aphrodite `DeltaMessage` class.
+/// Mirrors the Python Sonar `DeltaMessage` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct ChatMessageDelta {

@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use aphrodite_tokenizer::test_utils::TestTokenizer;
+use sonar_tokenizer::test_utils::TestTokenizer;
 
 use super::{ReasoningParserFactory, names};
 
@@ -128,8 +128,8 @@ fn factory_distinguishes_glm_reasoning_framing() {
 
 #[test]
 fn step5_preserves_reasoning_and_content_whitespace_across_chunks() {
-    use aphrodite_tokenizer::Tokenizer as _;
-    use aphrodite_tokenizer::test_utils::decode_chunks;
+    use sonar_tokenizer::Tokenizer as _;
+    use sonar_tokenizer::test_utils::decode_chunks;
 
     let tokenizer = Arc::new(
         TestTokenizer::new()

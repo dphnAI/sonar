@@ -8,13 +8,13 @@ from transformers import processing_utils
 from transformers.processing_utils import ProcessingKwargs
 from typing_extensions import Unpack
 
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.transformers_utils.processor import (
+from sonar.tokenizers import get_tokenizer
+from sonar.transformers_utils.processor import (
     get_processor,
     get_processor_kwargs_keys,
     get_processor_kwargs_type,
 )
-from aphrodite.transformers_utils.repo_utils import _snapshot_non_weight_files
+from sonar.transformers_utils.repo_utils import _snapshot_non_weight_files
 
 
 class _FakeProcessorKwargs(ProcessingKwargs, total=False):  # type: ignore

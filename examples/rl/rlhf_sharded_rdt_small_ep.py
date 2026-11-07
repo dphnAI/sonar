@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Sharded-RDT weight sync on FOUR GPUs, one node: 2 FSDP2 trainer ranks -> 2
-Aphrodite DP ranks with expert parallelism.
+Sonar DP ranks with expert parallelism.
 
 The reference example for the backend, sized to fit a CI runner:
 ``CheckpointNameSource`` over an FSDP2 model, one serve actor per rank, the
@@ -20,7 +20,7 @@ what CI runs.
 The trainer publishes CHECKPOINT names, not the names its own modules carry:
 Transformers fuses each layer's experts into ``[E, ...]`` tensors
 (``mlp.experts.gate_up_proj``/``down_proj``) while the checkpoint stores them per
-expert, and Aphrodite's MoE loaders read the per-expert form. ``CheckpointNameSource``
+expert, and Sonar's MoE loaders read the per-expert form. ``CheckpointNameSource``
 splits them back, which is the same conversion a real trainer does when it maps
 its internal layout onto checkpoint names. Publishing the fused names instead
 works only for the Qwen families, whose loaders happen to accept them.
@@ -61,9 +61,9 @@ import torch
 import torch.distributed as dist
 from ray.util.placement_group import placement_group, placement_group_table
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-from rdt_aphrodite_serve import (
+from rdt_sonar_serve import (
     http_generate,
-    launch_aphrodite_serve,
+    launch_sonar_serve,
     pause_generation,
     resume_generation,
     shutdown_server,
@@ -73,21 +73,21 @@ from rdt_weight_source import CheckpointNameSource
 from torch.distributed.fsdp import fully_shard
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from aphrodite.distributed.weight_transfer import (
-    HTTPAphroditeWeightSyncClient,
+from sonar.distributed.weight_transfer import (
+    HTTPSonarWeightSyncClient,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.sharded_rdt_trainer import (
+from sonar.distributed.weight_transfer.sharded_rdt_trainer import (
     ShardedRDTTrainerInitInfo,
 )
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.network_utils import get_open_port
 
 # Weights are built, never loaded, so this costs a config fetch -- but every rank
 # materializes the model before sharding, so the default wants a 40 GiB card.
 MODEL_NAME = os.environ.get("RDT_MODEL", "Qwen/Qwen1.5-MoE-A2.7B")
 RAY_NAMESPACE = "sharded_rdt_small_ep_example"
-APHRODITE_PORT = int(os.environ.get("RDT_APHRODITE_PORT", "8100"))
-APHRODITE_ENDPOINT = f"http://127.0.0.1:{APHRODITE_PORT}"
+SONAR_PORT = int(os.environ.get("RDT_SONAR_PORT", "8100"))
+SONAR_ENDPOINT = f"http://127.0.0.1:{SONAR_PORT}"
 
 FSDP_WORLD_SIZE = 2
 INFERENCE_TP_SIZE = 1
@@ -126,7 +126,7 @@ class FSDPTrainWorker:
     def get_rank(self):
         return self.rank
 
-    def setup_engine(self, aphrodite_endpoint: str):
+    def setup_engine(self, sonar_endpoint: str):
         self.engine = WeightTransferTrainerFactory.trainer_init(
             ShardedRDTTrainerInitInfo(
                 rank=self.rank,
@@ -135,7 +135,7 @@ class FSDPTrainWorker:
                 num_rdt_buffers=int(os.environ.get("NUM_RDT_BUFFERS", "2")),
                 buffer_presize_gb=float(os.environ.get("RDT_BUFFER_PRESIZE_GB", "0")),
             ),
-            client=HTTPAphroditeWeightSyncClient(aphrodite_endpoint),
+            client=HTTPSonarWeightSyncClient(sonar_endpoint),
             source=CheckpointNameSource(self.model),
         )
 
@@ -145,7 +145,7 @@ class FSDPTrainWorker:
 
 def main():
     # Ship a minimal working_dir (this example dir) so Ray actors do NOT inherit
-    # a workspace snapshot that shadows the editable Aphrodite install.
+    # a workspace snapshot that shadows the editable Sonar install.
     runtime_env: dict[str, object] = {
         "py_executable": sys.executable,
         "working_dir": os.path.dirname(os.path.abspath(__file__)),
@@ -154,7 +154,7 @@ def main():
         k: os.environ[k]
         for k in (
             "NCCL_CUMEM_ENABLE",
-            "APHRODITE_NCCL_SO_PATH",
+            "SONAR_NCCL_SO_PATH",
             "LD_PRELOAD",
             "LD_LIBRARY_PATH",
         )
@@ -167,8 +167,8 @@ def main():
             ray.init(address="auto", runtime_env=runtime_env, namespace=RAY_NAMESPACE)
         except (ConnectionError, RuntimeError):
             # No cluster to join (a bare CI runner): start one on this node.
-            # `launch_aphrodite_serve` hands the child this cluster's address, which
-            # it needs -- Aphrodite's ray DP backend would otherwise start its own.
+            # `launch_sonar_serve` hands the child this cluster's address, which
+            # it needs -- Sonar's ray DP backend would otherwise start its own.
             ray.init(runtime_env=runtime_env, namespace=RAY_NAMESPACE)
 
     print(f"[init] model {MODEL_NAME}, {FSDP_WORLD_SIZE} trainer + {INFERENCE_DP_SIZE} inference GPUs")
@@ -201,45 +201,45 @@ def main():
     ray.get([w.get_rank.remote() for w in workers])
     print(f"[init] {FSDP_WORLD_SIZE} FSDP trainer workers ready (seeded weights).")
 
-    server = launch_aphrodite_serve(
+    server = launch_sonar_serve(
         MODEL_NAME,
         tensor_parallel_size=INFERENCE_TP_SIZE,
         data_parallel_size=INFERENCE_DP_SIZE,
         enable_expert_parallel=True,
-        port=APHRODITE_PORT,
+        port=SONAR_PORT,
         extra_args=["--max-model-len", "2048", "--max-num-seqs", "8"],
     )
     try:
-        wait_for_server(APHRODITE_ENDPOINT, server)
+        wait_for_server(SONAR_ENDPOINT, server)
 
-        before = http_generate(APHRODITE_ENDPOINT, MODEL_NAME, PROMPTS)
-        print("[generate] BEFORE sync (Aphrodite's own dummy init):")
+        before = http_generate(SONAR_ENDPOINT, MODEL_NAME, PROMPTS)
+        print("[generate] BEFORE sync (Sonar's own dummy init):")
         for p, t in zip(PROMPTS, before):
             print(f"  {p!r} -> {t!r}")
 
         print("[sync] building trainer engines (bake on the sender)...")
         t0 = time.perf_counter()
-        ray.get([w.setup_engine.remote(APHRODITE_ENDPOINT) for w in workers])
+        ray.get([w.setup_engine.remote(SONAR_ENDPOINT) for w in workers])
         print(f"[sync] engine setup (incl. bake) took {time.perf_counter() - t0:.2f}s")
 
-        pause_generation(APHRODITE_ENDPOINT)
+        pause_generation(SONAR_ENDPOINT)
         t0 = time.perf_counter()
         ray.get([w.sync_weights.remote() for w in workers])
         print(f"[sync] iter 0 took {time.perf_counter() - t0:.3f}s")
-        resume_generation(APHRODITE_ENDPOINT)
+        resume_generation(SONAR_ENDPOINT)
 
-        after = http_generate(APHRODITE_ENDPOINT, MODEL_NAME, PROMPTS)
+        after = http_generate(SONAR_ENDPOINT, MODEL_NAME, PROMPTS)
         print("[generate] AFTER sync (the trainer's weights):")
         for p, t in zip(PROMPTS, after):
             print(f"  {p!r} -> {t!r}")
 
         # Sync again; replay must be stable, so generation must not move.
-        pause_generation(APHRODITE_ENDPOINT)
+        pause_generation(SONAR_ENDPOINT)
         t0 = time.perf_counter()
         ray.get([w.sync_weights.remote() for w in workers])
         print(f"[sync] iter 1 took {time.perf_counter() - t0:.3f}s")
-        resume_generation(APHRODITE_ENDPOINT)
-        again = http_generate(APHRODITE_ENDPOINT, MODEL_NAME, PROMPTS)
+        resume_generation(SONAR_ENDPOINT)
+        again = http_generate(SONAR_ENDPOINT, MODEL_NAME, PROMPTS)
 
         # Greedy decoding, so both comparisons are exact.
         assert after != before, (

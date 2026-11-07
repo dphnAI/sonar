@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Unit tests for ``aphrodite.v1.worker.xpu_model_runner`` (XPU worker / CUDA shims)."""
+"""Unit tests for ``sonar.v1.worker.xpu_model_runner`` (XPU worker / CUDA shims)."""
 
 import pytest
 import torch
 from torch._dynamo.variables.torch import TorchInGraphFunctionVariable
 
-from aphrodite.v1.worker.xpu_model_runner import _torch_cuda_wrapper
+from sonar.v1.worker.xpu_model_runner import _torch_cuda_wrapper
 
 # XPU-only: needs distinct torch.cuda vs torch.xpu current_stream symbols.
 pytestmark = pytest.mark.skipif(

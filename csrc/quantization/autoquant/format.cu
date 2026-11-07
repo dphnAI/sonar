@@ -18,7 +18,7 @@
 #include <iostream>
 #include "common.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 __device__ void atomic_assign_u4(uint32_t* address, uint32_t index,
@@ -174,4 +174,4 @@ void dequantize_s4(uint4* dst, const uint32_t* src, size_t count,
 }
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

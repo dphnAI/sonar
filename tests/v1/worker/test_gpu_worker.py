@@ -9,11 +9,11 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.v1.worker import gpu_worker, startup_plan
-from aphrodite.v1.worker.gpu_worker import maybe_rocm_profiling_fallback
-from aphrodite.v1.worker.startup_plan import (
+from sonar.platforms import current_platform
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.v1.worker import gpu_worker, startup_plan
+from sonar.v1.worker.gpu_worker import maybe_rocm_profiling_fallback
+from sonar.v1.worker.startup_plan import (
     maybe_apply_startup_plan,
     maybe_save_startup_plan,
 )
@@ -81,10 +81,10 @@ def test_load_model_preserves_compiled_graphs_at_runtime(monkeypatch):
 
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     monkeypatch.setattr(gpu_worker, "has_ec_transfer", lambda: False)
-    monkeypatch.setattr(gpu_worker, "set_current_aphrodite_config", lambda config: nullcontext())
+    monkeypatch.setattr(gpu_worker, "set_current_sonar_config", lambda config: nullcontext())
     loading_threads = []
     worker = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(weight_transfer_config=None),
+        sonar_config=SimpleNamespace(weight_transfer_config=None),
         model_runner=SimpleNamespace(load_model=lambda **kwargs: loading_threads.append(torch.get_num_threads())),
         _maybe_get_memory_pool_context=lambda **kwargs: nullcontext(),
         _scoped_allocator_max_split=lambda **kwargs: nullcontext(),
@@ -199,8 +199,8 @@ def test_scoped_max_split_ignores_async_allocator(monkeypatch):
 @pytest.mark.parametrize("kv_cache_memory_bytes", [None, 1])
 def test_memory_profile_bounds_decode_logits_rows(monkeypatch, kv_cache_memory_bytes):
     """ROCm decode workspace uses max_num_seqs during startup profiling."""
-    from aphrodite.config import get_current_aphrodite_config_or_none
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _max_decode_logits_rows
+    from sonar.config import get_current_sonar_config_or_none
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _max_decode_logits_rows
 
     config = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_seqs=16),
@@ -218,7 +218,7 @@ def test_memory_profile_bounds_decode_logits_rows(monkeypatch, kv_cache_memory_b
         raise Profiled
 
     worker = SimpleNamespace(
-        aphrodite_config=config,
+        sonar_config=config,
         randomize_dummy_inputs=True,
         cache_config=SimpleNamespace(kv_cache_memory_bytes=kv_cache_memory_bytes),
         model_runner=SimpleNamespace(profile_run=profile_run, model_memory_usage=0),
@@ -228,20 +228,20 @@ def test_memory_profile_bounds_decode_logits_rows(monkeypatch, kv_cache_memory_b
     monkeypatch.setattr(gpu_worker, "maybe_apply_startup_plan", lambda _: None)
     monkeypatch.setattr(gpu_worker, "memory_profiling", lambda *args, **kwargs: nullcontext())
 
-    assert get_current_aphrodite_config_or_none() is None
+    assert get_current_sonar_config_or_none() is None
     with pytest.raises(Profiled):
         gpu_worker.Worker.determine_available_memory(worker)
-    assert get_current_aphrodite_config_or_none() is None
+    assert get_current_sonar_config_or_none() is None
 
 
-# Startup-plan persistence (aphrodite/v1/worker/startup_plan.py), applied and
+# Startup-plan persistence (sonar/v1/worker/startup_plan.py), applied and
 # saved by Worker.determine_available_memory / compile_or_warm_up_model.
 
 
 def _plan_worker(config_hash="abc123", free_memory=78 * GiB_bytes, kv_bytes=None):
     """The minimal Worker surface the startup-plan entry points touch."""
     return SimpleNamespace(
-        aphrodite_config=SimpleNamespace(compute_hash=lambda: config_hash),
+        sonar_config=SimpleNamespace(compute_hash=lambda: config_hash),
         rank=0,
         parallel_config=SimpleNamespace(world_size=1),
         init_snapshot=SimpleNamespace(free_memory=free_memory),
@@ -260,10 +260,10 @@ def _plan_platform(name="NVIDIA H100 PCIe"):
 @pytest.fixture
 def plan_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """Enable the startup plan, isolated under a tmp cache root."""
-    monkeypatch.setenv("APHRODITE_ENABLE_STARTUP_PLAN", "1")
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path))
-    monkeypatch.setattr(startup_plan.envs, "APHRODITE_ENABLE_STARTUP_PLAN", True)
-    monkeypatch.setattr(startup_plan.envs, "APHRODITE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SONAR_ENABLE_STARTUP_PLAN", "1")
+    monkeypatch.setenv("SONAR_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr(startup_plan.envs, "SONAR_ENABLE_STARTUP_PLAN", True)
+    monkeypatch.setattr(startup_plan.envs, "SONAR_CACHE_ROOT", str(tmp_path))
     with patch.object(startup_plan, "current_platform", _plan_platform()):
         yield
 
@@ -272,14 +272,14 @@ def test_startup_plan_fingerprint_sensitivity(plan_env):
     """The fingerprint is the OOM-safety key: stable for identical inputs,
     different for anything the profiled value depends on."""
     fp = startup_plan.compute_plan_fingerprint
-    base = fp(_plan_worker().aphrodite_config, 0, 1)
-    assert base == fp(_plan_worker().aphrodite_config, 0, 1)
-    assert base != fp(_plan_worker("other").aphrodite_config, 0, 1)
-    assert base != fp(_plan_worker().aphrodite_config, 1, 2)
+    base = fp(_plan_worker().sonar_config, 0, 1)
+    assert base == fp(_plan_worker().sonar_config, 0, 1)
+    assert base != fp(_plan_worker("other").sonar_config, 0, 1)
+    assert base != fp(_plan_worker().sonar_config, 1, 2)
     with patch.object(startup_plan, "current_platform", _plan_platform("NVIDIA A100")):
-        assert base != fp(_plan_worker().aphrodite_config, 0, 1)
-    with patch("aphrodite.__version__", "0.0.0+plan-test"):
-        assert base != fp(_plan_worker().aphrodite_config, 0, 1)
+        assert base != fp(_plan_worker().sonar_config, 0, 1)
+    with patch("sonar.__version__", "0.0.0+plan-test"):
+        assert base != fp(_plan_worker().sonar_config, 0, 1)
 
 
 def test_startup_plan_apply_gate(plan_env):
@@ -306,7 +306,7 @@ def test_startup_plan_rejects_budget_recorded_before_aux_capture(plan_env):
     """Ignore an old-schema budget even when the fingerprint matches."""
     worker = _plan_worker()
     maybe_save_startup_plan(worker, 1024)
-    fingerprint = startup_plan.compute_plan_fingerprint(worker.aphrodite_config, 0, 1)
+    fingerprint = startup_plan.compute_plan_fingerprint(worker.sonar_config, 0, 1)
     path = startup_plan._plan_path(fingerprint)
     with open(path) as f:
         plan = json.load(f)
@@ -412,7 +412,7 @@ def test_execute_model_waits_previous_pp_send_before_forward(
     metadata handle is left to the GroupCoordinator's reaper."""
     import torch
 
-    from aphrodite.sequence import IntermediateTensors
+    from sonar.sequence import IntermediateTensors
 
     log: list[str] = []
     previous_tensor_send = _OrderedHandle(log, "prev-tensor")
@@ -436,7 +436,7 @@ def test_execute_model_waits_previous_pp_send_before_forward(
         return IntermediateTensors({"hidden_states": torch.zeros(1)})
 
     worker = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             parallel_config=SimpleNamespace(pipeline_parallel_size=2, distributed_executor_backend="mp"),
         ),
         use_v2_model_runner=True,
@@ -458,14 +458,14 @@ def test_jit_monitor_activation_follows_enable_jit_warmup(
     """The post-warmup JIT monitor must stay off when JIT warmup is disabled
     (e.g. by enforce_eager): runtime compilation is then expected, and
     warning/erroring on it would be noise."""
-    from aphrodite.utils import jit_monitor
+    from sonar.utils import jit_monitor
 
     calls = []
     monkeypatch.setattr(jit_monitor, "activate", lambda **kwargs: calls.append(kwargs))
 
     def worker(enable_jit_warmup):
         return SimpleNamespace(
-            aphrodite_config=SimpleNamespace(kernel_config=SimpleNamespace(enable_jit_warmup=enable_jit_warmup)),
+            sonar_config=SimpleNamespace(kernel_config=SimpleNamespace(enable_jit_warmup=enable_jit_warmup)),
             observability_config=SimpleNamespace(jit_monitor_mode="warn", jit_monitor_verbose=False),
         )
 

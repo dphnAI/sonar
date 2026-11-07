@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not torch.accelerator.is_available(), reason="CUDA required")
 
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(not torch.accelerator.is_available(), reason="CU
 def _require_sm90_and_cutedsl():
     if not current_platform.has_device_capability(90):
         pytest.skip("Requires SM90+ (Hopper/Blackwell)")
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
         is_available,
     )
 
@@ -37,7 +37,7 @@ def _assert_close(out, ref, *, min_cos_sim=0.99, context=""):
 
 
 def _gemm(a, b, output_dtype=torch.float32):
-    from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+    from sonar.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
         LL_FP32W_GEMM_KERNEL,
     )
 
@@ -349,23 +349,23 @@ def _make_gate_linear(
     output_size=64,
 ):
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_rank",
+        "sonar.model_executor.layers.linear.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.layers.linear.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_rank",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_rank",
         lambda: 0,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
+        "sonar.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
 
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     return GateLinear(
         input_size=input_size,

@@ -7,10 +7,10 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.config.mamba import MambaBackendEnum, MambaConfig, MambaSSUAlgorithm
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
+from sonar.config.mamba import MambaBackendEnum, MambaConfig, MambaSSUAlgorithm
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.layers.mamba.mamba_utils import MambaStateShapeCalculator
+from sonar.model_executor.layers.mamba.ops.ssu_dispatch import (
     FlashInferSSUBackend,
     TritonSSUBackend,
     commit_replayssm_ring_trackers,
@@ -21,11 +21,11 @@ from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
     selective_state_update_replayssm_flashinfer,
     update_replayssm_ring_trackers,
 )
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadata
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import (
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadata
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
@@ -48,7 +48,7 @@ except ImportError:
 
 @pytest.fixture(autouse=True)
 def restore_backend_state():
-    import aphrodite.model_executor.layers.mamba.ops.ssu_dispatch as mod
+    import sonar.model_executor.layers.mamba.ops.ssu_dispatch as mod
 
     old_backend = mod._mamba_ssu_backend
     old_replayssm_kernel = mod._flashinfer_replayssm_kernel
@@ -363,7 +363,7 @@ def test_flashinfer_forwards_ssu_algorithm(
 
 
 def test_uninitialized_backend_raises():
-    import aphrodite.model_executor.layers.mamba.ops.ssu_dispatch as mod
+    import sonar.model_executor.layers.mamba.ops.ssu_dispatch as mod
 
     # restore_backend_state (autouse) puts the global back afterwards.
     mod._mamba_ssu_backend = None
@@ -380,7 +380,7 @@ def test_uninitialized_backend_raises():
     ],
 )
 def test_init_is_noop_for_non_ssu_mamba_type(mamba_type):
-    import aphrodite.model_executor.layers.mamba.ops.ssu_dispatch as mod
+    import sonar.model_executor.layers.mamba.ops.ssu_dispatch as mod
 
     old = mod._mamba_ssu_backend
     mod._mamba_ssu_backend = None
@@ -434,7 +434,7 @@ def test_triton_basic_call():
 
 @pytest.mark.parametrize("layout", ["packed", "dense"])
 def test_replayssm_flashinfer_call_forwards_mtp_layout(monkeypatch, layout):
-    import aphrodite.model_executor.layers.mamba.ops.ssu_dispatch as mod
+    import sonar.model_executor.layers.mamba.ops.ssu_dispatch as mod
 
     kernel = Mock(return_value=torch.empty(0))
     monkeypatch.setattr(mod, "_flashinfer_replayssm_kernel", kernel)
@@ -510,7 +510,7 @@ def test_replayssm_flashinfer_call_forwards_mtp_layout(monkeypatch, layout):
     ],
 )
 def test_replayssm_mixer_selects_mtp_layout(monkeypatch, query_start_loc, expected_shape, expected_max_seqlen):
-    import aphrodite.model_executor.layers.mamba.mamba_mixer2 as mod
+    import sonar.model_executor.layers.mamba.mamba_mixer2 as mod
 
     mixer = MambaMixer2.__new__(MambaMixer2)
     torch.nn.Module.__init__(mixer)

@@ -22,7 +22,7 @@ class TestTritonMoeForwardExpertMap:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         mock_expert_map = torch.tensor([0, -1, 1, -1], device=device)
 
-        from aphrodite.utils.import_utils import import_triton_kernels
+        from sonar.utils.import_utils import import_triton_kernels
 
         import_triton_kernels()
 
@@ -33,14 +33,13 @@ class TestTritonMoeForwardExpertMap:
         with (
             patch("triton_kernels.topk.topk") as mock_topk,
             patch(
-                "aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe.make_routing_data"
+                "sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe.make_routing_data"
             ) as mock_make_routing,
             patch(
-                "aphrodite.model_executor.layers.fused_moe.experts."
-                "gpt_oss_triton_kernels_moe.triton_kernel_fused_experts"
+                "sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe.triton_kernel_fused_experts"
             ) as mock_fused_experts,
         ):
-            from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
+            from sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (  # noqa: E501
                 triton_kernel_moe_forward,
             )
 

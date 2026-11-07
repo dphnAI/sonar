@@ -15,10 +15,10 @@ from typing import Any, Literal
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.config.aphrodite import set_current_aphrodite_config
-from aphrodite.model_executor.layers.attention import mla_attention as mla_attention_module
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar import _custom_ops as ops
+from sonar.config.sonar import set_current_sonar_config
+from sonar.model_executor.layers.attention import mla_attention as mla_attention_module
+from sonar.model_executor.layers.attention.mla_attention import (
     MLAAttention,
     MLACommonBaseImpl,
     MLACommonMetadataBuilder,
@@ -27,36 +27,36 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
     _use_masked_mha,
     build_mla_chunked_context_metadata,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
-from aphrodite.v1.attention.backend import CommonAttentionMetadata, MLAAttentionImpl
-from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
-from aphrodite.v1.attention.backends.mla import flashmla as flashmla_module
-from aphrodite.v1.attention.backends.mla import tokenspeed_mla as tokenspeed_mla_module
-from aphrodite.v1.attention.backends.mla.prefill import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
+from sonar.v1.attention.backend import CommonAttentionMetadata, MLAAttentionImpl
+from sonar.v1.attention.backends.fa_utils import flash_attn_supports_mla
+from sonar.v1.attention.backends.mla import flashmla as flashmla_module
+from sonar.v1.attention.backends.mla import tokenspeed_mla as tokenspeed_mla_module
+from sonar.v1.attention.backends.mla.prefill import (
     MLAPrefillBackendEnum,
     get_mla_prefill_backend,
 )
-from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
-from aphrodite.v1.attention.backends.mla.prefill.selector import (
+from sonar.v1.attention.backends.mla.prefill.base import MLADimensions
+from sonar.v1.attention.backends.mla.prefill.selector import (
     MLAPrefillSelectorConfig,
 )
-from aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged import (
+from sonar.v1.attention.backends.mla.prefill.trtllm_ragged import (
     is_cute_dsl_mla_prefill_supported,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.ops.flashmla import is_flashmla_dense_supported
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.ops.flashmla import is_flashmla_dense_supported
+from sonar.v1.kv_cache_interface import (
     KVQuantMode,
     MLAAttentionSpec,
 )
-from aphrodite.v1.worker.block_table import get_block_table_width
+from sonar.v1.worker.block_table import get_block_table_width
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
     try_get_attention_backend,
 )
 
@@ -231,10 +231,10 @@ def test_mla_kv_cache_spec_uses_layer_cache_dtype(
     rope_dim: int,
     row_bytes: int,
 ):
-    from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
+    from sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
         FlashInferMLASparseSM120Impl,
     )
-    from aphrodite.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseImpl
+    from sonar.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseImpl
 
     impl: Any = object.__new__(FlashInferMLASparseSM120Impl if sm120 else FlashMLASparseImpl)
     impl.kv_lora_rank = kv_lora_rank
@@ -250,9 +250,9 @@ def test_mla_kv_cache_spec_uses_layer_cache_dtype(
         sliding_window=None,
     )
     layer._uses_flat_kv_cache = MethodType(MLAAttention._uses_flat_kv_cache, layer)
-    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=64), model_config=None)
+    sonar_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=64), model_config=None)
 
-    spec = MLAAttention.get_kv_cache_spec(layer, aphrodite_config)
+    spec = MLAAttention.get_kv_cache_spec(layer, sonar_config)
 
     assert isinstance(spec, MLAAttentionSpec)
     assert spec.cache_dtype_str == cache_dtype
@@ -759,7 +759,7 @@ class MockMLAAttentionLayer(MLAAttention):
     """
 
     # AttentionLayerBase declares ``impl`` as the dense AttentionImpl; an MLA
-    # layer holds an MLAAttentionImpl (Aphrodite's own MLAAttention.__init__ ignores
+    # layer holds an MLAAttentionImpl (Sonar's own MLAAttention.__init__ ignores
     # the same mismatch).
     impl: MLAAttentionImpl
 
@@ -817,7 +817,7 @@ class MockMLAAttentionLayer(MLAAttention):
     def get_attn_backend(self):
         raise NotImplementedError
 
-    def get_kv_cache_spec(self, aphrodite_config):
+    def get_kv_cache_spec(self, sonar_config):
         raise NotImplementedError
 
     # test replica takes only the arguments the test passes
@@ -910,7 +910,7 @@ class MockMLAAttentionLayer(MLAAttention):
         return output
 
 
-def test_mock_mla_dcp_fp8_decode_gathers_quantized_query(monkeypatch, default_aphrodite_config):
+def test_mock_mla_dcp_fp8_decode_gathers_quantized_query(monkeypatch, default_sonar_config):
     if not torch.cuda.is_available():
         pytest.skip("CUDA is required for FP8 decode query quantization path.")
 
@@ -973,7 +973,7 @@ def test_mock_mla_dcp_fp8_decode_gathers_quantized_query(monkeypatch, default_ap
     monkeypatch.setattr(mla_attention_module, "get_dcp_group", lambda: fake_group)
 
     impl = _FakeImpl()
-    with set_current_aphrodite_config(default_aphrodite_config):
+    with set_current_sonar_config(default_sonar_config):
         layer = MockMLAAttentionLayer(
             impl=impl,
             num_heads=num_heads,
@@ -1030,16 +1030,16 @@ def test_tokenspeed_mla_noncausal_capability():
 
 
 def test_flashinfer_mla_dspark_dcp_supports_target_and_draft(monkeypatch):
-    flashinfer_mla_module = pytest.importorskip("aphrodite.v1.attention.backends.mla.flashinfer_mla")
-    aphrodite_config = SimpleNamespace(
+    flashinfer_mla_module = pytest.importorskip("sonar.v1.attention.backends.mla.flashinfer_mla")
+    sonar_config = SimpleNamespace(
         speculative_config=SimpleNamespace(method="dspark"),
         parallel_config=SimpleNamespace(decode_context_parallel_size=2),
         model_config=None,
     )
     monkeypatch.setattr(
         flashinfer_mla_module,
-        "get_current_aphrodite_config",
-        lambda: aphrodite_config,
+        "get_current_sonar_config",
+        lambda: sonar_config,
     )
 
     backend = flashinfer_mla_module.FlashInferMLABackend
@@ -1197,11 +1197,11 @@ def test_tokenspeed_mla_decode_contract(
 def test_tokenspeed_mla_dcp_matches_unsharded_decode(monkeypatch, cp_interleave_size, seq_len):
     from tokenspeed_mla import tokenspeed_mla_decode
 
-    from aphrodite.v1.attention.ops.dcp import (
+    from sonar.v1.attention.ops.dcp import (
         _lse_weighted_combine,
         mask_dcp_empty_shards_,
     )
-    from aphrodite.v1.worker.workspace import WorkspaceManager
+    from sonar.v1.worker.workspace import WorkspaceManager
 
     torch.manual_seed(7)
     device = torch.device("cuda")
@@ -1215,7 +1215,7 @@ def test_tokenspeed_mla_dcp_matches_unsharded_decode(monkeypatch, cp_interleave_
     head_size = kv_lora_rank + qk_rope_head_dim
 
     def make_paged_cache(tokens: torch.Tensor):
-        # Empty DCP ranks still have the null block in Aphrodite's physical cache.
+        # Empty DCP ranks still have the null block in Sonar's physical cache.
         num_pages = max(1, cdiv(tokens.shape[0], kernel_block_size))
         cache = torch.zeros(
             num_pages,
@@ -1397,7 +1397,7 @@ def run_attention_backend(
     backend: AttentionBackendEnum,
     kv_cache_spec: MLAAttentionSpec,
     layer_names: list[str],
-    aphrodite_config,
+    sonar_config,
     device: torch.device,
     common_attn_metadata: CommonAttentionMetadata,
     query: torch.Tensor,
@@ -1421,16 +1421,16 @@ def run_attention_backend(
     assert issubclass(impl_cls, MLAAttentionImpl)
 
     # Force the prefill backend selection (None means auto-select).
-    aphrodite_config.attention_config.mla_prefill_backend = prefill_backend
+    sonar_config.attention_config.mla_prefill_backend = prefill_backend
     mla_attention_module.backend_supports_prefill_query_quantization.cache_clear()
 
-    # Set the current aphrodite config so that get_current_aphrodite_config() works
+    # Set the current sonar config so that get_current_sonar_config() works
     # in the backend implementations
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         # Instantiate MLA implementation
-        num_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-        num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config)
-        head_size = aphrodite_config.model_config.get_head_size()
+        num_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+        num_kv_heads = sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config)
+        head_size = sonar_config.model_config.get_head_size()
         # Production MLA passes 1/sqrt(qk_head_dim) (the prefill scale) to the
         # impl and forwards the same value to the prefill backend. FLASHINFER
         # prefill reads sm_scale back from impl.scale via global_hyperparameters
@@ -1457,7 +1457,7 @@ def run_attention_backend(
         )
 
         # Process weights on the impl
-        act_dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
+        act_dtype = _convert_dtype_to_torch(sonar_config.model_config.dtype)
         impl.process_weights_after_loading(act_dtype)
 
         # Initialize DCP attributes (normally set by MLAAttention.forward
@@ -1481,7 +1481,7 @@ def run_attention_backend(
 
         # Attach prefill backend (normally created by MLAAttention.__init__)
         prefill_scale = (qk_nope_head_dim + qk_rope_head_dim) ** -0.5
-        prefill_backend_cls = get_mla_prefill_backend(aphrodite_config)
+        prefill_backend_cls = get_mla_prefill_backend(sonar_config)
         mock_layer.prefill_backend = prefill_backend_cls(
             num_heads=num_heads,
             scale=prefill_scale,
@@ -1489,15 +1489,15 @@ def run_attention_backend(
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         )
 
         # Populate static_forward_context with mock attention layers
         for layer_name in layer_names:
-            aphrodite_config.compilation_config.static_forward_context[layer_name] = mock_layer
+            sonar_config.compilation_config.static_forward_context[layer_name] = mock_layer
 
         # Build metadata
-        builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
+        builder = builder_cls(kv_cache_spec, layer_names, sonar_config, device)
         if chunked_prefill_workspace_size is not None:
             assert isinstance(builder, MLACommonMetadataBuilder)
             builder.chunked_prefill_workspace_size = chunked_prefill_workspace_size
@@ -1551,7 +1551,7 @@ def _fp8_cache_roundtrip(tensor: torch.Tensor, scale: float) -> torch.Tensor:
 
 
 def _run_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     batch_spec_name: str,
@@ -1575,12 +1575,12 @@ def _run_backend_correctness(
     1. Generating a batch of sequences with specified context and query lengths.
     2. Computing a ground-truth attention output using torch.sdpa on
        contiguous Q, K, and V tensors.
-    3. Simulating Aphrodite's paged KV cache: It takes the context portion of the
+    3. Simulating Sonar's paged KV cache: It takes the context portion of the
        K/V tensors and manually places them into a paged buffer according to
        the test's (randomly generated) block table.
-    4. Running each Aphrodite attention backend with the new queries and the
+    4. Running each Sonar attention backend with the new queries and the
        simulated paged KV cache.
-    5. Comparing the Aphrodite backend's output to the ground-truth SDPA output.
+    5. Comparing the Sonar backend's output to the ground-truth SDPA output.
 
     Note: When tensor_parallel_size > 1, we simulate the head partitioning
     by overriding the model config to use fewer heads, without requiring
@@ -1608,7 +1608,7 @@ def _run_backend_correctness(
 
     hf_config_override = None
     if tensor_parallel_size > 1:
-        from aphrodite.config import ModelConfig
+        from sonar.config import ModelConfig
 
         temp_config = ModelConfig(model=model, max_model_len=1)
         original_num_heads = temp_config.hf_text_config.num_attention_heads
@@ -1619,7 +1619,7 @@ def _run_backend_correctness(
         if original_num_kv_heads is not None:
             hf_config_override["num_key_value_heads"] = max(1, original_num_kv_heads // tensor_parallel_size)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name=model,
         tensor_parallel_size=1,  # Always use TP=1 to avoid multi-GPU requirements
         max_model_len=max(batch_spec.seq_lens),
@@ -1628,16 +1628,16 @@ def _run_backend_correctness(
         hf_config_override=hf_config_override,
     )
     if hf_config_override and current_platform.is_xpu():
-        aphrodite_config.model_config.model_arch_config.total_num_attention_heads = hf_config_override[
+        sonar_config.model_config.model_arch_config.total_num_attention_heads = hf_config_override[
             "num_attention_heads"
         ]
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
-    aphrodite_config.attention_config.trtllm_ragged_backend = trtllm_ragged_backend
-    aphrodite_config.attention_config.use_prefill_query_quantization = use_prefill_query_quantization
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.attention_config.trtllm_ragged_backend = trtllm_ragged_backend
+    sonar_config.attention_config.use_prefill_query_quantization = use_prefill_query_quantization
 
     # For spec decode tests, add a speculative_config to set the reorder_batch_threshold
     if is_spec_decode_test:
-        from aphrodite.config import SpeculativeConfig
+        from sonar.config import SpeculativeConfig
 
         # Get the query length from the batch spec (they should all be uniform,
         # except under adaptive verification, where the longest is k+1)
@@ -1645,7 +1645,7 @@ def _run_backend_correctness(
         # Set num_speculative_tokens to query_len - 1
         # (since threshold is 1 + num_spec_tokens)
         # Use ngram method which doesn't require a draft model
-        aphrodite_config.speculative_config = SpeculativeConfig(
+        sonar_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=query_len - 1,
             enable_adaptive_verification=adaptive_verification,
@@ -1657,9 +1657,9 @@ def _run_backend_correctness(
     batch_size = batch_spec.batch_size
     seq_lens = batch_spec.seq_lens
     query_lens = batch_spec.query_lens
-    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
-    head_size = aphrodite_config.model_config.get_head_size()
-    dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
+    num_q_heads = sonar_config.model_config.get_num_attention_heads(sonar_config.parallel_config)
+    head_size = sonar_config.model_config.get_head_size()
+    dtype = _convert_dtype_to_torch(sonar_config.model_config.dtype)
     kv_lora_rank = 512
     qk_rope_head_dim = 64
     total_head_size = kv_lora_rank + qk_rope_head_dim
@@ -1673,7 +1673,7 @@ def _run_backend_correctness(
     decode_scale = prefill_scale
 
     # 2. Generate data and compute SDPA reference output for MLA
-    all_q_aphrodite, all_kv_c_aphrodite, all_k_pe_aphrodite = [], [], []
+    all_q_sonar, all_kv_c_sonar, all_k_pe_sonar = [], [], []
     all_sdpa_outputs: list[list[torch.Tensor]] = []
     kv_c_contexts, k_pe_contexts = [], []
 
@@ -1832,25 +1832,25 @@ def _run_backend_correctness(
             else:
                 all_sdpa_outputs[backend_idx].append(sdpa_out_i_prefill)
 
-        # Inputs for Aphrodite MLA backends are just the new tokens
-        all_q_aphrodite.append(q_c)
-        all_kv_c_aphrodite.append(kv_c_full[context_len:])  # New kv_c tokens
-        all_k_pe_aphrodite.append(k_pe_full[context_len:])  # New k_pe tokens
+        # Inputs for Sonar MLA backends are just the new tokens
+        all_q_sonar.append(q_c)
+        all_kv_c_sonar.append(kv_c_full[context_len:])  # New kv_c tokens
+        all_k_pe_sonar.append(k_pe_full[context_len:])  # New k_pe tokens
 
         # Contextual K/V data used to populate the paged cache (MLA format)
         kv_c_contexts.append(kv_c_full[:context_len])
         k_pe_contexts.append(k_pe_full[:context_len])
 
     # Concatenate all sequences (no reordering needed)
-    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
-    kv_c_aphrodite = torch.cat(all_kv_c_aphrodite, dim=0)
-    k_pe_aphrodite = torch.cat(all_k_pe_aphrodite, dim=0)
+    query_sonar = torch.cat(all_q_sonar, dim=0)
+    kv_c_sonar = torch.cat(all_kv_c_sonar, dim=0)
+    k_pe_sonar = torch.cat(all_k_pe_sonar, dim=0)
     sdpa_outputs = {}
     for backend_idx, backend in enumerate(backends_to_test):
         sdpa_outputs[backend] = torch.cat(all_sdpa_outputs[backend_idx], dim=0)
 
     # Create mock kv_b_proj using the same weights as reference implementation
-    from aphrodite.model_executor.layers.linear import ColumnParallelLinear
+    from sonar.model_executor.layers.linear import ColumnParallelLinear
 
     mock_kv_b_proj = ColumnParallelLinear(
         input_size=kv_lora_rank,
@@ -1911,7 +1911,7 @@ def _run_backend_correctness(
             # lengths off the host query lengths.
             metadata_per_block_size[block_size] = _with_even_cpu_query_split(common_attn_metadata)
 
-    # 4. Run Aphrodite backends and compare
+    # 4. Run Sonar backends and compare
     rtol = 1e-2
     atol = {
         "auto": 2e-2,
@@ -1932,10 +1932,10 @@ def _run_backend_correctness(
         # Create kv_cache_spec with the correct block_size for this backend
         backend_kv_cache_spec = MLAAttentionSpec(
             block_size=block_size,
-            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
-            head_size=aphrodite_config.model_config.get_head_size(),
-            dtype=aphrodite_config.model_config.dtype,
-            sliding_window=aphrodite_config.model_config.get_sliding_window(),
+            num_kv_heads=sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config),
+            head_size=sonar_config.model_config.get_head_size(),
+            dtype=sonar_config.model_config.dtype,
+            sliding_window=sonar_config.model_config.get_sliding_window(),
             cache_dtype_str=kv_cache_dtype,
         )
 
@@ -1943,12 +1943,12 @@ def _run_backend_correctness(
             backend_name,
             backend_kv_cache_spec,
             ["placeholder"],
-            aphrodite_config,
+            sonar_config,
             device,
             common_attn_metadata,
-            query_aphrodite,
-            kv_c_aphrodite,
-            k_pe_aphrodite,
+            query_sonar,
+            kv_c_sonar,
+            k_pe_sonar,
             kv_cache,
             kv_lora_rank,
             qk_nope_head_dim,
@@ -2027,7 +2027,7 @@ def _run_backend_correctness(
     _prefill_backend_dimension_params(),
 )
 def test_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     batch_spec_name: str,
@@ -2041,7 +2041,7 @@ def test_backend_correctness(
     v_head_dim: int,
 ):
     _run_backend_correctness(
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         workspace_init,
         batch_spec_name,
@@ -2064,7 +2064,7 @@ def test_backend_correctness(
 @pytest.mark.parametrize("trtllm_ragged_backend", ["trtllm-gen", "cute-dsl"])
 @pytest.mark.parametrize("use_prefill_query_quantization", [False, True])
 def test_chunked_context_backend_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     prefill_backend: MLAPrefillBackendEnum,
@@ -2086,7 +2086,7 @@ def test_chunked_context_backend_correctness(
         if not is_cute_dsl_mla_prefill_supported(qk_nope_head_dim + 64, v_head_dim, query_dtype):
             pytest.skip("Unsupported CuTe DSL prefill dimensions or query dtype")
     _run_backend_correctness(
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         workspace_init,
         batch_spec_name="chunked_context_prefill",
@@ -2105,12 +2105,12 @@ def test_chunked_context_backend_correctness(
 
 
 @pytest.mark.skipif(not ADAPTIVE_VARLEN_BACKENDS, reason="No adaptive varlen decode backend")
-def test_adaptive_varlen_decode_correctness(default_aphrodite_config, dist_init, workspace_init):
+def test_adaptive_varlen_decode_correctness(default_sonar_config, dist_init, workspace_init):
     """Device query lengths 1..k+1 against an even host split, as adaptive
     verification hands them to the target model's attention. TP 8 gives 16
     heads, the padded Kimi-K3 count."""
     _run_backend_correctness(
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         workspace_init,
         "spec_decode_ragged_small",

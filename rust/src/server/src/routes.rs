@@ -40,7 +40,8 @@ use crate::middleware;
 use crate::routes::openai::utils::types::{ErrorDetail, ErrorResponse};
 use crate::state::AppState;
 
-const SCALE_OUT_DISABLED_MESSAGE: &str = "Scale-out endpoints are disabled. Restart aphrodite serve with --enable-scale-out to enable them.";
+const SCALE_OUT_DISABLED_MESSAGE: &str =
+    "Scale-out endpoints are disabled. Restart sonar serve with --enable-scale-out to enable them.";
 
 /// Scale-out routes that Python registers together with
 /// `/inference/v1/generate` but the Rust frontend does not implement yet.
@@ -70,7 +71,7 @@ async fn disabled_scale_out() -> (StatusCode, Json<ErrorResponse>) {
 
 /// Placeholder for a route the Python frontend registers but the Rust frontend
 /// does not implement yet. Returning 501 instead of 404 tells clients that the
-/// endpoint exists in Aphrodite and how to reach it.
+/// endpoint exists in Sonar and how to reach it.
 async fn not_supported(method: Method, path: MatchedPath) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::NOT_IMPLEMENTED,
@@ -78,7 +79,7 @@ async fn not_supported(method: Method, path: MatchedPath) -> (StatusCode, Json<E
             error: ErrorDetail {
                 message: format!(
                     "{method} {} is not supported by the Rust frontend yet. \
-                     Set APHRODITE_USE_RUST_FRONTEND=0 to use the Python frontend.",
+                     Set SONAR_USE_RUST_FRONTEND=0 to use the Python frontend.",
                     path.as_str()
                 ),
                 error_type: "NotImplementedError".to_string(),
@@ -90,14 +91,14 @@ async fn not_supported(method: Method, path: MatchedPath) -> (StatusCode, Json<E
 }
 
 fn server_dev_mode_enabled() -> bool {
-    std::env::var("APHRODITE_SERVER_DEV_MODE")
+    std::env::var("SONAR_SERVER_DEV_MODE")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .is_some_and(|value| value != 0)
 }
 
 fn runtime_lora_updating_enabled() -> bool {
-    std::env::var("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING")
+    std::env::var("SONAR_ALLOW_RUNTIME_LORA_UPDATING")
         .ok()
         .is_some_and(|value| matches!(value.trim().to_lowercase().as_str(), "1" | "true"))
 }
@@ -179,7 +180,7 @@ fn build_router_with_options(
         // TODO: implement elastic EP scaling.
         .route("/scale_elastic_ep", post(not_supported))
         .route("/is_scaling_elastic_ep", post(not_supported))
-        // Aphrodite specific endpoints
+        // Sonar specific endpoints
         .route("/tokenize", post(tokenize::tokenize))
         .route("/detokenize", post(tokenize::detokenize));
 

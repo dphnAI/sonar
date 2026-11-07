@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+from functools import cache
+from typing import TYPE_CHECKING, NamedTuple, cast
+
+import torch
+
+import sonar.envs as envs
+from sonar.config.cache import (
+    KV_CACHE_DTYPES,
+    CacheDType,
+    is_known_kv_cache_dtype,
+)
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.v1.attention.backend import AttentionBackend, AttentionType
+from sonar.v1.attention.backends.registry import (
+    MambaAttentionBackendEnum,
+)
+
+if TYPE_CHECKING:
+    from sonar.v1.kv_cache_interface import KVCacheSpecKind
+
+
+class AttentionSelectorConfig(NamedTuple):
+    head_size: int
+    dtype: torch.dtype
+    kv_cache_dtype: CacheDType | None
+    block_size: int | None
+    use_mla: bool = False
+    has_sink: bool = False
+    use_sparse: bool = False
+    use_mm_prefix: bool = False
+    use_per_head_quant_scales: bool = False
+    attn_type: str = AttentionType.DECODER
+    has_sliding_window: bool = False
+    use_non_causal: bool = False
+    use_batch_invariant: bool = False
+    use_kv_connector: bool = False
+    use_pcp: bool = False
+    use_adaptive_verification: bool = False
+    use_dcp: bool = False
+    use_rswa: bool = False
+
+    def __repr__(self):
+        return (
+            f"AttentionSelectorConfig(head_size={self.head_size}, "
+            f"dtype={self.dtype}, "
+            f"kv_cache_dtype={self.kv_cache_dtype}, "
+            f"block_size={self.block_size}, "
+            f"use_mla={self.use_mla}, "
+            f"has_sink={self.has_sink}, "
+            f"use_sparse={self.use_sparse}, "
+            f"use_mm_prefix={self.use_mm_prefix}, "
+            f"use_per_head_quant_scales={self.use_per_head_quant_scales}, "
+            f"attn_type={self.attn_type}, "
+            f"has_sliding_window={self.has_sliding_window}, "
+            f"use_non_causal={self.use_non_causal}, "
+            f"use_batch_invariant={self.use_batch_invariant}, "
+            f"use_kv_connector={self.use_kv_connector}, "
+            f"use_adaptive_verification={self.use_adaptive_verification}, "
+            f"use_pcp={self.use_pcp}, "
+            f"use_dcp={self.use_dcp}, "
+            f"use_rswa={self.use_rswa})"
+        )
+
+
+def get_attn_spec_kind(
+    use_mla: bool,
+    has_sliding_window: bool,
+    attn_type: str,
+) -> "KVCacheSpecKind":
+    """Derive the KV-cache group kind a layer belongs to from its signals.
+
+    Mirrors ``get_kv_cache_spec_kind`` (which derives the kind from the
+    produced ``KVCacheSpec``) so users can target groups by kind when
+    setting ``AttentionConfig.backend_per_kind``.
+
+    ``SINK_FULL_ATTENTION`` is intentionally not derived here: it is produced
+    only by the ``StaticSinkAttention`` layer, whereas a plain ``Attention``
+    layer with attention sinks (e.g. gpt-oss) still yields a
+    ``FullAttentionSpec``/``SlidingWindowSpec``. Sinks therefore do not change
+    the kind.
+
+    Args:
+        use_mla: Whether the layer uses multi-head latent attention.
+        has_sliding_window: Whether the layer applies a sliding window.
+        attn_type: The layer's ``AttentionType``.
+
+    Returns:
+        The ``KVCacheSpecKind`` the layer maps to.
+
+    """
+    from sonar.v1.kv_cache_interface import KVCacheSpecKind
+
+    if attn_type == AttentionType.ENCODER_ONLY:
+        return KVCacheSpecKind.ENCODER_ONLY_ATTENTION
+    if attn_type == AttentionType.ENCODER_DECODER:
+        return KVCacheSpecKind.CROSS_ATTENTION
+    if use_mla:
+        if has_sliding_window:
+            return KVCacheSpecKind.SLIDING_WINDOW_MLA
+        return KVCacheSpecKind.MLA_ATTENTION
+    if has_sliding_window:
+        return KVCacheSpecKind.SLIDING_WINDOW
+    return KVCacheSpecKind.FULL_ATTENTION
+
+
+def get_attn_backend(
+    head_size: int,
+    dtype: torch.dtype,
+    kv_cache_dtype: str | None,
+    use_mla: bool = False,
+    has_sink: bool = False,
+    use_sparse: bool = False,
+    use_mm_prefix: bool = False,
+    use_per_head_quant_scales: bool = False,
+    attn_type: str | None = None,
+    num_heads: int | None = None,
+    has_sliding_window: bool = False,
+) -> type[AttentionBackend]:
+    """Selects which attention backend to use and lazily imports it."""
+    if kv_cache_dtype is not None:
+        assert is_known_kv_cache_dtype(kv_cache_dtype), (
+            f"Invalid kv_cache_dtype: {kv_cache_dtype}. Valid values are: {KV_CACHE_DTYPES}"
+        )
+
+    from sonar.config import get_current_sonar_config
+
+    sonar_config = get_current_sonar_config()
+
+    cache_config = sonar_config.cache_config
+    block_size: int | None
+    if cache_config is not None and cache_config.user_specified_block_size:
+        block_size = cache_config.block_size
+    else:
+        block_size = None
+
+    kv_transfer_config = sonar_config.kv_transfer_config
+    use_kv_connector = kv_transfer_config is not None and kv_transfer_config.is_kv_transfer_instance
+
+    speculative_config = sonar_config.speculative_config
+    use_adaptive_verification = speculative_config is not None and speculative_config.enable_adaptive_verification
+    if use_adaptive_verification:
+        from sonar.compilation.backends import model_tag
+
+        # The drafter always runs full-length blocks; only the verifier sees
+        # the trimmed, device-decided query lengths.
+        use_adaptive_verification = model_tag != "dspark_head"
+
+    attn_type = attn_type or AttentionType.DECODER
+    attn_selector_config = AttentionSelectorConfig(
+        head_size=head_size,
+        dtype=dtype,
+        kv_cache_dtype=cast(CacheDType | None, kv_cache_dtype),
+        block_size=block_size,
+        use_mla=use_mla,
+        has_sink=has_sink,
+        use_sparse=use_sparse,
+        use_mm_prefix=use_mm_prefix,
+        use_per_head_quant_scales=use_per_head_quant_scales,
+        attn_type=attn_type,
+        has_sliding_window=has_sliding_window,
+        use_non_causal=sonar_config.attention_config.use_non_causal,
+        use_batch_invariant=envs.SONAR_BATCH_INVARIANT,
+        use_kv_connector=use_kv_connector,
+        use_pcp=sonar_config.parallel_config.prefill_context_parallel_size > 1,
+        use_adaptive_verification=use_adaptive_verification,
+        use_dcp=sonar_config.parallel_config.decode_context_parallel_size > 1,
+        use_rswa=(sonar_config.model_config is not None and sonar_config.model_config.rswa_window is not None),
+    )
+
+    attention_config = sonar_config.attention_config
+    backend = attention_config.backend
+    if attention_config.backend_per_kind:
+        kind = get_attn_spec_kind(
+            use_mla=use_mla,
+            has_sliding_window=has_sliding_window,
+            attn_type=attn_type,
+        )
+        backend = attention_config.backend_per_kind.get(kind.value, backend)
+
+    # The KV cache layout is resolved across all of the model's backends at once
+    # in get_kv_cache_spec(); a single selection cannot see its peers.
+    return _cached_get_attn_backend(
+        backend=backend,
+        attn_selector_config=attn_selector_config,
+        num_heads=num_heads,
+        _run_kv_cache_dtype=(cache_config.cache_dtype if cache_config is not None else None),
+    )
+
+
+@cache
+def _cached_get_attn_backend(
+    backend,
+    attn_selector_config: AttentionSelectorConfig,
+    num_heads: int | None = None,
+    *,
+    _run_kv_cache_dtype: CacheDType | None = None,
+) -> type[AttentionBackend]:
+    # Some platform selectors inspect the run-wide cache dtype. Keep it in the
+    # cache key even though they read the value from the current config.
+    from sonar.platforms import current_platform
+
+    attention_cls = current_platform.get_attn_backend_cls(
+        backend,
+        attn_selector_config=attn_selector_config,
+        num_heads=num_heads,
+    )
+    if not attention_cls:
+        raise ValueError(f"Invalid attention backend for {current_platform.device_name}")
+    backend = resolve_obj_by_qualname(attention_cls)
+    return backend
+
+
+def get_mamba_attn_backend(
+    mamba_type: MambaAttentionBackendEnum,
+) -> type[AttentionBackend]:
+    """Select which mamba attention backend to use and lazily import it."""
+    return _cached_get_mamba_attn_backend(mamba_type)
+
+
+@cache
+def _cached_get_mamba_attn_backend(
+    mamba_type: MambaAttentionBackendEnum,
+) -> type[AttentionBackend]:
+    assert mamba_type and isinstance(mamba_type, MambaAttentionBackendEnum)
+
+    mamba_attn_backend = mamba_type.get_class()
+    if envs.SONAR_BATCH_INVARIANT and not mamba_attn_backend.supports_batch_invariance():
+        raise RuntimeError(f"SONAR batch_invariant mode is not supported for {mamba_attn_backend.get_name()}.")
+    return mamba_attn_backend

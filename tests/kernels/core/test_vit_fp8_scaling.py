@@ -9,12 +9,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+from sonar.model_executor.layers.attention.mm_encoder_attention import (
     _FP8_AMAX_HISTORY_LEN,
     _FP8_MAX,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     is_flashinfer_cudnn_fp8_prefill_attn_supported,
 )
 
@@ -33,7 +33,7 @@ def _is_mi3xx() -> bool:
     if not current_platform.is_rocm():
         return False
 
-    from aphrodite.platforms.rocm import on_mi3xx
+    from sonar.platforms.rocm import on_mi3xx
 
     return on_mi3xx()
 
@@ -42,16 +42,16 @@ def _is_mi3xx() -> bool:
 def _build_attention(mm_config, attn_backend=None):
     """Yield an MMEncoderAttention with the given multimodal config.
 
-    The AphroditeConfig context stays active while the test runs so that
+    The SonarConfig context stays active while the test runs so that
     ``get_multimodal_config()`` calls during the forward path resolve. Also
     invokes ``process_weights_after_loading`` to simulate the model loader's
     auto-scan. Yields ``None`` if FlashInfer cuDNN is not available.
     """
-    from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     if attn_backend is None:
         attn_backend = AttentionBackendEnum.FLASHINFER
@@ -60,13 +60,13 @@ def _build_attention(mm_config, attn_backend=None):
         yield None
         return
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
+    sonar_config = SonarConfig()
+    sonar_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
+            "sonar.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=attn_backend,
         ),
     ):
@@ -82,7 +82,7 @@ def _build_attention(mm_config, attn_backend=None):
 @pytest.fixture
 def _make_attention():
     """Create an MMEncoderAttention with dynamic FP8 scaling."""
-    from aphrodite.config.multimodal import MultiModalConfig
+    from sonar.config.multimodal import MultiModalConfig
 
     with _build_attention(MultiModalConfig(mm_encoder_attn_dtype="fp8")) as attn:
         yield attn
@@ -91,7 +91,7 @@ def _make_attention():
 @pytest.fixture
 def _make_static_attention(tmp_path):
     """Create an MMEncoderAttention with static FP8 scales from a file."""
-    from aphrodite.config.multimodal import MultiModalConfig
+    from sonar.config.multimodal import MultiModalConfig
 
     scale_file = tmp_path / "scales.json"
     scale_file.write_text(
@@ -186,8 +186,8 @@ def test_static_scales_loaded(_make_static_attention) -> None:
 )
 def test_aiter_static_scales_loaded(tmp_path) -> None:
     """Verify AITER reuses the existing static FP8 scale loading path."""
-    from aphrodite.config.multimodal import MultiModalConfig
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.config.multimodal import MultiModalConfig
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     scale_file = tmp_path / "aiter_scales.json"
     scale_file.write_text(json.dumps({LAYER_0: {"q": 224.0, "k": 198.0, "v": 210.0}}))
@@ -207,9 +207,9 @@ def test_aiter_static_scales_loaded(tmp_path) -> None:
 
 def test_static_scales_missing_layer(tmp_path) -> None:
     """Verify error when requested layer is not in the scale file."""
-    from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
-    from aphrodite.config.multimodal import MultiModalConfig
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.config import ModelConfig, SonarConfig, set_current_sonar_config
+    from sonar.config.multimodal import MultiModalConfig
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     if not is_flashinfer_cudnn_fp8_prefill_attn_supported():
         pytest.skip("FlashInfer cuDNN not available")
@@ -220,17 +220,17 @@ def test_static_scales_missing_layer(tmp_path) -> None:
         mm_encoder_attn_dtype="fp8",
         mm_encoder_fp8_scale_path=str(scale_file),
     )
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
+    sonar_config = SonarConfig()
+    sonar_config.model_config = MagicMock(spec=ModelConfig, multimodal_config=mm_config)
 
-    from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
+    from sonar.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
 
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
+            "sonar.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=AttentionBackendEnum.FLASHINFER,
         ),
     ):
@@ -245,8 +245,8 @@ def test_static_scales_missing_layer(tmp_path) -> None:
 
 def test_dynamic_scales_auto_save(tmp_path) -> None:
     """Verify scales are saved to disk after the amax buffer fills."""
-    import aphrodite.model_executor.layers.attention.mm_encoder_attention as _mod
-    from aphrodite.config.multimodal import MultiModalConfig
+    import sonar.model_executor.layers.attention.mm_encoder_attention as _mod
+    from sonar.config.multimodal import MultiModalConfig
 
     if not is_flashinfer_cudnn_fp8_prefill_attn_supported():
         pytest.skip("FlashInfer cuDNN not available")

@@ -592,7 +592,7 @@ def main() -> int:
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--hipify-map", type=Path)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--commit", default=os.environ.get("BUILDKITE_COMMIT", ""))
+    parser.add_argument("--commit", default=os.environ.get("SONAR_BUILD_COMMIT", ""))
     parser.add_argument("--rocm-path", type=Path, default=Path("/opt/rocm"))
     args = parser.parse_args()
     tools = {}

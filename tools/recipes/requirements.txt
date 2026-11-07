@@ -1,4 +1,4 @@
-# Dependencies used by `aphrodite bench sweep plot`.
+# Dependencies used by `sonar bench sweep plot`.
 matplotlib
 pandas
 seaborn

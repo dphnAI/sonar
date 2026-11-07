@@ -9,12 +9,12 @@ import huggingface_hub.constants
 import pytest
 import torch
 
-from aphrodite.model_executor.model_loader.ep_weight_filter import (
+from sonar.model_executor.model_loader.ep_weight_filter import (
     compute_local_expert_ids,
     parse_expert_id,
     should_skip_weight,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader.weight_utils import (
     safetensors_weights_iterator,
 )
 
@@ -221,7 +221,7 @@ class TestSafetensorsWeightsIteratorWithEpFilter:
         """Download GPT-2 safetensors to a temp dir (shared across class)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             huggingface_hub.constants.HF_HUB_OFFLINE = False
-            from aphrodite.model_executor.model_loader.weight_utils import (
+            from sonar.model_executor.model_loader.weight_utils import (
                 download_weights_from_hf,
             )
 

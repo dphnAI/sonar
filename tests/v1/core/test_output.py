@@ -2,15 +2,15 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.multimodal.utils import strip_covered_mm_data
-from aphrodite.v1.core.sched.output import NewRequestData
+from sonar.multimodal.utils import strip_covered_mm_data
+from sonar.v1.core.sched.output import NewRequestData
 
 
 def _create_new_requests_data(prompt_embeds: torch.Tensor | None) -> NewRequestData:

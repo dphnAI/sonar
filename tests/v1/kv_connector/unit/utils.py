@@ -11,47 +11,47 @@ from unittest.mock import Mock
 import numpy as np
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar import SamplingParams
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ModelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorMetadata,
     KVConnectorRole,
     KVConnectorWorkerMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.example_connector import (  # noqa
+from sonar.distributed.kv_transfer.kv_connector.v1.example_connector import (  # noqa
     ExampleConnector,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.scheduler import Scheduler, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.scheduler import Scheduler, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
-from aphrodite.v1.request import Request
-from aphrodite.v1.structured_output import StructuredOutputManager
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+from sonar.v1.request import Request
+from sonar.v1.structured_output import StructuredOutputManager
 
 if TYPE_CHECKING:
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
         _RegionPairs,
     )
 
@@ -100,7 +100,7 @@ def assert_scheduler_empty(scheduler: Scheduler):
         assert block.ref_cnt == 0
 
 
-def create_aphrodite_config(
+def create_sonar_config(
     model: str = "facebook/opt-125m",
     max_num_seqs: int = 16,
     max_num_batched_tokens: int = 64,
@@ -119,8 +119,8 @@ def create_aphrodite_config(
     kv_role: str = "kv_consumer",
     disable_hybrid_kv_cache_manager: bool | None = None,
     num_speculative_tokens: int | None = None,
-) -> AphroditeConfig:
-    """Initialize AphroditeConfig For Testing."""
+) -> SonarConfig:
+    """Initialize SonarConfig For Testing."""
     model_config = ModelConfig(
         model=model,
         trust_remote_code=True,
@@ -159,7 +159,7 @@ def create_aphrodite_config(
         if num_speculative_tokens is not None
         else None
     )
-    return AphroditeConfig(
+    return SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -171,13 +171,13 @@ def create_aphrodite_config(
 
 
 def create_scheduler(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     num_blocks: int = 10000,
     kv_cache_config: KVCacheConfig | None = None,
     hash_block_size: int | None = None,
 ) -> Scheduler | AsyncScheduler:
     """Initialize Scheduler For Testing."""
-    block_size = aphrodite_config.cache_config.block_size
+    block_size = sonar_config.cache_config.block_size
     if kv_cache_config is None:
         kv_cache_config = KVCacheConfig(
             num_blocks=num_blocks,  # A large number of blocks to hold all requests
@@ -194,14 +194,14 @@ def create_scheduler(
                 )
             ],
         )
-    aphrodite_config.cache_config.num_gpu_blocks = num_blocks
+    sonar_config.cache_config.num_gpu_blocks = num_blocks
 
-    scheduler_cls = AsyncScheduler if aphrodite_config.scheduler_config.async_scheduling else Scheduler
+    scheduler_cls = AsyncScheduler if sonar_config.scheduler_config.async_scheduling else Scheduler
     return scheduler_cls(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(sonar_config),
         block_size=block_size,
         hash_block_size=hash_block_size,
     )
@@ -324,7 +324,7 @@ class TestExampleConnector(ExampleConnector):
 
     def __init__(
         self,
-        config: AphroditeConfig,
+        config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
@@ -399,11 +399,11 @@ class MockKVConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(aphrodite_config, role, kv_cache_config)
+        super().__init__(sonar_config, role, kv_cache_config)
         extra_config = self._kv_transfer_config.kv_connector_extra_config
         self.config = MockKVConfig(
             matched_tokens=extra_config["matched_tokens"],
@@ -524,7 +524,7 @@ def make_nixl_scheduler(
     """
     from types import SimpleNamespace
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
         NixlConnectorScheduler,
     )
 
@@ -536,7 +536,7 @@ def make_nixl_scheduler(
         block_size=16,
         mamba_enabled=has_mamba,
     )
-    sched.aphrodite_config = SimpleNamespace(num_prefill_lookahead_tokens=0)
+    sched.sonar_config = SimpleNamespace(num_prefill_lookahead_tokens=0)
 
     if heartbeat:
         sched._heartbeat_by_engine = {}
@@ -577,7 +577,7 @@ def make_nixl_push_scheduler(
     """
     from unittest.mock import MagicMock
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
         NixlPushConnectorScheduler,
     )
 
@@ -604,12 +604,12 @@ def make_nixl_push_scheduler(
         mamba_enabled=has_mamba,
     )
 
-    # aphrodite_config is consulted for parallel_config.tensor_parallel_size, and by
+    # sonar_config is consulted for parallel_config.tensor_parallel_size, and by
     # `_prefill_backoff` on both the P and D prefill paths.
-    aphrodite_config = MagicMock()
-    aphrodite_config.parallel_config.tensor_parallel_size = 1
-    aphrodite_config.num_prefill_lookahead_tokens = 0
-    sched.aphrodite_config = aphrodite_config
+    sonar_config = MagicMock()
+    sonar_config.parallel_config.tensor_parallel_size = 1
+    sonar_config.num_prefill_lookahead_tokens = 0
+    sched.sonar_config = sonar_config
 
     # Push-specific state.
     sched._push_pending_registrations = {}
@@ -639,7 +639,7 @@ def make_moriio_writer(fake_worker: Any) -> Any:
     import threading
     from queue import Queue
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
         MoRIIOWriter,
     )
 
@@ -677,7 +677,7 @@ def region_pairs_by_index(
     groups_match: bool = True,
 ) -> "_RegionPairs":
     """NIXL region pairs where peer region ``i`` pairs with local region ``i``."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
         _RegionPairs,
     )
 

@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.renderers.base import _SwappableExecutor
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.params import TokenizeParams
-from aphrodite.utils.async_utils import make_async
+from sonar.renderers.base import _SwappableExecutor
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.params import TokenizeParams
+from sonar.utils.async_utils import make_async
 
 MODEL_NAME = "openai-community/gpt2"
 
@@ -49,7 +49,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -72,7 +72,7 @@ class DummyTokenizer:
 
 def _build_renderer() -> HfRenderer:
     return HfRenderer(
-        MockAphroditeConfig(MockModelConfig(), parallel_config=MockParallelConfig()),
+        MockSonarConfig(MockModelConfig(), parallel_config=MockParallelConfig()),
         tokenizer=DummyTokenizer(),
     )
 

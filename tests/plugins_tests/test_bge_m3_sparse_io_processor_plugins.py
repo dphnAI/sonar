@@ -6,7 +6,7 @@ import json
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+from sonar.entrypoints.pooling.pooling.protocol import IOProcessorResponse
 
 # Test configuration for BGE-M3 sparse plugin
 from tests.utils import RemoteOpenAIServer
@@ -137,7 +137,7 @@ async def test_bge_m3_sparse_plugin_online(server: RemoteOpenAIServer, return_to
     "return_tokens",
     [True, False],
 )
-def test_bge_m3_sparse_plugin_offline(aphrodite_runner, return_tokens: bool):
+def test_bge_m3_sparse_plugin_offline(sonar_runner, return_tokens: bool):
     """Test BGE-M3 sparse plugin in offline mode."""
     prompt = {
         "data": {
@@ -146,7 +146,7 @@ def test_bge_m3_sparse_plugin_offline(aphrodite_runner, return_tokens: bool):
         }
     }
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,
@@ -180,7 +180,7 @@ def test_bge_m3_sparse_plugin_offline(aphrodite_runner, return_tokens: bool):
     assert response.usage.total_tokens == response.usage.prompt_tokens
 
 
-def test_bge_m3_sparse_plugin_offline_multiple_inputs(aphrodite_runner):
+def test_bge_m3_sparse_plugin_offline_multiple_inputs(sonar_runner):
     """Test BGE-M3 sparse plugin with multiple inputs in offline mode."""
     prompts = {
         "data": {
@@ -193,7 +193,7 @@ def test_bge_m3_sparse_plugin_offline_multiple_inputs(aphrodite_runner):
         }
     }
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,

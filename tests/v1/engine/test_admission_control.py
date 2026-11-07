@@ -26,28 +26,28 @@ import pytest
 from prometheus_client import REGISTRY
 from pydantic import ValidationError
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.config.scheduler import SchedulerConfig
-from aphrodite.entrypoints.serve.exception_handling.error_response import (
+from sonar.config import SonarConfig
+from sonar.config.scheduler import SchedulerConfig
+from sonar.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
 )
-from aphrodite.exceptions import (
-    AphroditeError,
+from sonar.exceptions import (
     GracefulHTTPError,
     MaxQueuedTokensError,
     QueueOverflowError,
+    SonarError,
 )
-from aphrodite.pooling_params import PoolingParams
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.argparse_utils import human_readable_int
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.admission_control import SharedAdmissionStats
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.output_processor import OutputProcessor
-from aphrodite.v1.metrics.loggers import StatLoggerManager
+from sonar.pooling_params import PoolingParams
+from sonar.sampling_params import SamplingParams
+from sonar.utils.argparse_utils import human_readable_int
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.admission_control import SharedAdmissionStats
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.output_processor import OutputProcessor
+from sonar.v1.metrics.loggers import StatLoggerManager
 
 _ADMISSION_METRIC_MODEL = "admission-metric-test"
-_ADMISSION_LOGGER = "aphrodite.v1.engine.async_llm"
+_ADMISSION_LOGGER = "sonar.v1.engine.async_llm"
 
 pytestmark = pytest.mark.cpu_test
 
@@ -71,7 +71,7 @@ def _make_async_llm(
 ) -> AsyncLLM:
     """Create a bare AsyncLLM with just the attributes needed for scheduling."""
     llm = AsyncLLM.__new__(AsyncLLM)
-    llm.aphrodite_config = AphroditeConfig()
+    llm.sonar_config = SonarConfig()
     llm.scheduler_config = SimpleNamespace(
         max_num_queued_reqs=max_num_queued_reqs,
         max_num_queued_tokens=max_num_queued_tokens,
@@ -86,19 +86,19 @@ def _make_async_llm(
 
 def _attach_prometheus_logger(llm: AsyncLLM, engine_indexes: list[int] | None = None) -> None:
     """Attach a real Prometheus logger manager to a lightweight AsyncLLM."""
-    aphrodite_config = MagicMock()
-    aphrodite_config.observability_config.show_hidden_metrics = False
-    aphrodite_config.observability_config.kv_cache_metrics = False
-    aphrodite_config.observability_config.custom_histogram_buckets = None
-    aphrodite_config.model_config.served_model_name = _ADMISSION_METRIC_MODEL
-    aphrodite_config.model_config.max_model_len = 2048
-    aphrodite_config.model_config.is_diffusion = False
-    aphrodite_config.speculative_config = None
-    aphrodite_config.kv_transfer_config = None
-    aphrodite_config.ec_transfer_config = None
-    aphrodite_config.lora_config = None
+    sonar_config = MagicMock()
+    sonar_config.observability_config.show_hidden_metrics = False
+    sonar_config.observability_config.kv_cache_metrics = False
+    sonar_config.observability_config.custom_histogram_buckets = None
+    sonar_config.model_config.served_model_name = _ADMISSION_METRIC_MODEL
+    sonar_config.model_config.max_model_len = 2048
+    sonar_config.model_config.is_diffusion = False
+    sonar_config.speculative_config = None
+    sonar_config.kv_transfer_config = None
+    sonar_config.ec_transfer_config = None
+    sonar_config.lora_config = None
     llm.logger_manager = StatLoggerManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_idxs=engine_indexes,
         enable_default_loggers=False,
     )
@@ -107,7 +107,7 @@ def _attach_prometheus_logger(llm: AsyncLLM, engine_indexes: list[int] | None = 
 def _admission_rejection_count(reason: str) -> float:
     """Read the Prometheus sample for one admission rejection reason."""
     value = REGISTRY.get_sample_value(
-        "aphrodite:admission_rejections_total",
+        "sonar:admission_rejections_total",
         {"model_name": _ADMISSION_METRIC_MODEL, "reason": reason},
     )
     assert value is not None
@@ -212,9 +212,9 @@ def test_graceful_http_error_carries_status_and_message():
     assert str(err) == "custom message"
 
 
-def test_graceful_http_error_is_aphrodite_error():
+def test_graceful_http_error_is_sonar_error():
     err = GracefulHTTPError("msg", HTTPStatus.TOO_MANY_REQUESTS)
-    assert isinstance(err, AphroditeError)
+    assert isinstance(err, SonarError)
 
 
 def test_queue_overflow_error():
@@ -232,9 +232,9 @@ def test_max_queued_tokens_error():
 
 
 @pytest.mark.parametrize("exc_cls", [QueueOverflowError, MaxQueuedTokensError])
-def test_admission_exceptions_are_aphrodite_errors(exc_cls):
-    """Admission rejections must reach the AphroditeError HTTP handler."""
-    assert issubclass(exc_cls, AphroditeError)
+def test_admission_exceptions_are_sonar_errors(exc_cls):
+    """Admission rejections must reach the SonarError HTTP handler."""
+    assert issubclass(exc_cls, SonarError)
 
 
 # ---------------------------------------------------------------------------

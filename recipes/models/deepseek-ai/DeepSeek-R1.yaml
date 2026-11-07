@@ -82,7 +82,7 @@ variants:
       - "--kv-cache-dtype"
       - "fp8"
     extra_env:
-      APHRODITE_ROCM_USE_SKINNY_GEMM: "0"
+      SONAR_ROCM_USE_SKINNY_GEMM: "0"
 
   redhat_nvfp4:
     model_id: "RedHatAI/DeepSeek-R1-NVFP4-FP8-BLOCK"
@@ -110,18 +110,18 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
     hardware_overrides:
       mi355x:
         extra_env:
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
   single_node_dpa_tp:
     extra_env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "1800"
+      SONAR_ENGINE_READY_TIMEOUT_S: "1800"
 
 guide: |
   ## Overview
@@ -138,13 +138,13 @@ guide: |
   - **Hardware (FP8)**: 8x H200 (CUDA) or 8x MI300X / MI325X / MI355X (ROCm)
   - **Hardware (NVFP4)**: 4x B200 GPUs
   - **Hardware (MXFP4)**: 8x MI350X / MI355X (ROCm)
-  - **Aphrodite**: Current stable release
+  - **Sonar**: Current stable release
 
   ### CUDA
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### ROCm (MI300X, MI325X, MI355X)
@@ -152,7 +152,7 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Client Usage
@@ -161,7 +161,7 @@ guide: |
 
   Tensor Parallel + Expert Parallel (TP8+EP) — CUDA:
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-R1-0528 \
+  sonar serve deepseek-ai/DeepSeek-R1-0528 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel
@@ -169,9 +169,9 @@ guide: |
 
   Tensor Parallel + Expert Parallel (TP8+EP) — ROCm:
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve deepseek-ai/DeepSeek-R1 \
+  sonar serve deepseek-ai/DeepSeek-R1 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel
@@ -179,7 +179,7 @@ guide: |
 
   Data Parallel + Expert Parallel (DP8+EP) — CUDA:
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-R1-0528 \
+  sonar serve deepseek-ai/DeepSeek-R1-0528 \
     --trust-remote-code \
     --data-parallel-size 8 \
     --enable-expert-parallel
@@ -190,11 +190,11 @@ guide: |
   Tensor Parallel (TP8) — ROCm. Validated on MI355X only; INT4 quick reduce and
   fused shared experts are not enabled on other AMD GPUs or other strategies:
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-  export APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
-  aphrodite serve deepseek-ai/DeepSeek-R1 \
+  sonar serve deepseek-ai/DeepSeek-R1 \
     --trust-remote-code \
     --tensor-parallel-size 8
   ```
@@ -208,10 +208,10 @@ guide: |
 
   Engine (all eight ranks in one process, listening on 8100):
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ENGINE_READY_TIMEOUT_S=1800
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ENGINE_READY_TIMEOUT_S=1800
 
-  aphrodite serve deepseek-ai/DeepSeek-R1 \
+  sonar serve deepseek-ai/DeepSeek-R1 \
     --trust-remote-code \
     --port 8100 \
     --data-parallel-size 8 \
@@ -220,9 +220,9 @@ guide: |
 
   Router (client-facing on 8000, spreads requests across the eight DP ranks):
   ```bash
-  uv pip install aphrodite-router
+  uv pip install vllm-router
 
-  aphrodite-router \
+  vllm-router \
     --host 0.0.0.0 \
     --port 8000 \
     --policy consistent_hash \
@@ -245,13 +245,13 @@ guide: |
 
   ### 4xB200 (FP4)
 
-  On Aphrodite v0.28.0 and later, the FlashInfer MoE kernels are selected automatically
+  On Sonar v0.28.0 and later, the FlashInfer MoE kernels are selected automatically
   for both FP4 and FP8 on Blackwell — no environment variables are needed. To pin
   the backend explicitly, pass `--moe-backend flashinfer_trtllm`.
 
   Tensor Parallel + Expert Parallel (TP4+EP):
   ```bash
-  CUDA_VISIBLE_DEVICES=0,1,2,3 aphrodite serve nvidia/DeepSeek-R1-FP4 \
+  CUDA_VISIBLE_DEVICES=0,1,2,3 sonar serve nvidia/DeepSeek-R1-FP4 \
     --trust-remote-code \
     --tensor-parallel-size 4 \
     --enable-expert-parallel
@@ -259,7 +259,7 @@ guide: |
 
   Data Parallel + Expert Parallel (DP4+EP):
   ```bash
-  CUDA_VISIBLE_DEVICES=0,1,2,3 aphrodite serve nvidia/DeepSeek-R1-FP4 \
+  CUDA_VISIBLE_DEVICES=0,1,2,3 sonar serve nvidia/DeepSeek-R1-FP4 \
     --trust-remote-code \
     --data-parallel-size 4 \
     --enable-expert-parallel
@@ -269,10 +269,10 @@ guide: |
 
   Tensor Parallel + FP8 KV cache (TP8):
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_SKINNY_GEMM=0
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_SKINNY_GEMM=0
 
-  aphrodite serve amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4 \
+  sonar serve amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --kv-cache-dtype fp8
@@ -280,12 +280,12 @@ guide: |
 
   ## Benchmarking
 
-  For benchmarking, prefix caching is disabled by default in Aphrodite — no extra server
+  For benchmarking, prefix caching is disabled by default in Sonar — no extra server
   flag is needed.
 
   ```bash
   # FP8 benchmark
-  aphrodite bench serve \
+  sonar bench serve \
     --model deepseek-ai/DeepSeek-R1-0528 \
     --dataset-name random \
     --random-input-len 8000 \
@@ -297,7 +297,7 @@ guide: |
 
   ```bash
   # NVFP4 benchmark
-  aphrodite bench serve \
+  sonar bench serve \
     --model nvidia/DeepSeek-R1-FP4 \
     --dataset-name random \
     --random-input-len 8000 \
@@ -309,7 +309,7 @@ guide: |
 
   ```bash
   # MXFP4 benchmark (MI350X / MI355X)
-  aphrodite bench serve \
+  sonar bench serve \
     --model amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4 \
     --dataset-name random \
     --random-input-len 8000 \
@@ -327,8 +327,8 @@ guide: |
   ## Troubleshooting
 
   - **Disaggregated Serving with Wide EP (Experimental GB200)**: See
-    [Aphrodite issue #33583](https://github.com/vllm-project/vllm/issues/33583),
-    [the Aphrodite blog post](https://blog.vllm.ai/2026/02/03/dsr1-gb200-part1.html), and
+    [Sonar issue #33583](https://github.com/vllm-project/vllm/issues/33583),
+    [the Sonar blog post](https://blog.vllm.ai/2026/02/03/dsr1-gb200-part1.html), and
     [this reference fork](https://github.com/minosfuture/vllm/tree/pd_gb200_0114/runs/DS-R1/fp4)
     for GB200 disaggregated serving recipes.
 
@@ -338,5 +338,5 @@ guide: |
   - [DeepSeek-R1-0528 on Hugging Face](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528)
   - [NVIDIA DeepSeek-R1-FP4](https://huggingface.co/nvidia/DeepSeek-R1-FP4)
   - [AMD DeepSeek-R1-0528-MXFP4-MTP-MoEFP4](https://huggingface.co/amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4)
-  - [Aphrodite Expert Parallelism docs](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment.html)
-  - [Aphrodite Data Parallel deployment docs](https://docs.vllm.ai/en/latest/serving/data_parallel_deployment.html)
+  - [Sonar Expert Parallelism docs](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment.html)
+  - [Sonar Data Parallel deployment docs](https://docs.vllm.ai/en/latest/serving/data_parallel_deployment.html)

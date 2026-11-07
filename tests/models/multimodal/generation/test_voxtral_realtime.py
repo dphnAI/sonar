@@ -12,16 +12,16 @@ from mistral_common.tokens.tokenizers.audio import Audio
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from mistral_common.tokens.tokenizers.tekken import SpecialTokenPolicy
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.config import CUDAGraphMode
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.engine.protocol import StreamingInput
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.inputs.preprocess import parse_model_prompt
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.kv_cache_interface import SlidingWindowSpec
+from sonar import LLM, SamplingParams
+from sonar.assets.audio import AudioAsset
+from sonar.config import CUDAGraphMode
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.engine.protocol import StreamingInput
+from sonar.platforms import current_platform
+from sonar.renderers.inputs.preprocess import parse_model_prompt
+from sonar.utils.math_utils import cdiv
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.kv_cache_interface import SlidingWindowSpec
 
 from ....utils import ROCM_ENGINE_KWARGS, create_new_process_for_each_test
 
@@ -68,8 +68,8 @@ def _normalize(texts: list[str]) -> list[str]:
 
 
 def assert_encoder_kv_cache_spec(engine: LLM) -> None:
-    aphrodite_config = engine.llm_engine.aphrodite_config
-    audio_config = aphrodite_config.model_config.hf_config.audio_config
+    sonar_config = engine.llm_engine.sonar_config
+    audio_config = sonar_config.model_config.hf_config.audio_config
     kv_cache_specs_per_rank = engine.llm_engine.model_executor.get_kv_cache_specs()
 
     assert len(kv_cache_specs_per_rank) == 1
@@ -89,7 +89,7 @@ def assert_encoder_kv_cache_spec(engine: LLM) -> None:
     assert (
         spec.max_admission_blocks_per_request(
             max_in_flight_tokens=1,
-            max_model_len=aphrodite_config.model_config.max_model_len,
+            max_model_len=sonar_config.model_config.max_model_len,
         )
         == 13
     )
@@ -109,7 +109,7 @@ def tokenizer() -> MistralTokenizer:
 async def async_engine(request):
     engine_config = {**ENGINE_CONFIG, **getattr(request, "param", {})}
     gpu_memory_utilization = ENGINE_CONFIG.get("gpu_memory_utilization", 0.9)
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if current_platform.is_rocm():
         from tests.utils import wait_for_memory_to_settle
@@ -127,7 +127,7 @@ async def async_engine(request):
         import torch
 
         torch._dynamo.reset()
-        from aphrodite.distributed import cleanup_dist_env_and_memory
+        from sonar.distributed import cleanup_dist_env_and_memory
 
         cleanup_dist_env_and_memory()
         from tests.utils import wait_for_memory_to_settle
@@ -170,17 +170,17 @@ def _assert_expected_text(outputs) -> None:
         assert got == expected, f"Output mismatch at index {i}:\n  got:      {got!r}\n  expected: {expected!r}"
 
 
-def test_voxtral_realtime_forward(audio_assets, tokenizer, aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_voxtral_realtime_forward(audio_assets, tokenizer, sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
-    aphrodite_kwargs = {**ENGINE_CONFIG}
-    aphrodite_kwargs["model_name"] = aphrodite_kwargs.pop("model")
+    sonar_kwargs = {**ENGINE_CONFIG}
+    sonar_kwargs["model_name"] = sonar_kwargs.pop("model")
 
-    with aphrodite_runner(**aphrodite_kwargs) as aphrodite_model:
-        assert_encoder_kv_cache_spec(aphrodite_model.llm)
+    with sonar_runner(**sonar_kwargs) as sonar_model:
+        assert_encoder_kv_cache_spec(sonar_model.llm)
         inputs, sampling_params = _build_inputs(audio_assets, tokenizer)
 
-        outputs = aphrodite_model.llm.generate(inputs, sampling_params=sampling_params)
+        outputs = sonar_model.llm.generate(inputs, sampling_params=sampling_params)
         _assert_expected_text(outputs)
 
 
@@ -190,29 +190,29 @@ def test_voxtral_realtime_forward(audio_assets, tokenizer, aphrodite_runner, mon
     [CUDAGraphMode.FULL_DECODE_ONLY, CUDAGraphMode.FULL_AND_PIECEWISE],
 )
 @create_new_process_for_each_test(method="spawn")
-def test_voxtral_realtime_cudagraph(audio_assets, tokenizer, aphrodite_runner, monkeypatch, cudagraph_mode):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_voxtral_realtime_cudagraph(audio_assets, tokenizer, sonar_runner, monkeypatch, cudagraph_mode):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
-    aphrodite_kwargs = {**ENGINE_CONFIG}
-    aphrodite_kwargs["model_name"] = aphrodite_kwargs.pop("model")
-    aphrodite_kwargs["enforce_eager"] = False
-    aphrodite_kwargs["compilation_config"] = {
+    sonar_kwargs = {**ENGINE_CONFIG}
+    sonar_kwargs["model_name"] = sonar_kwargs.pop("model")
+    sonar_kwargs["enforce_eager"] = False
+    sonar_kwargs["compilation_config"] = {
         "cudagraph_mode": cudagraph_mode,
         # max_num_seqs is 4, so this is the only decode size worth capturing.
         "cudagraph_capture_sizes": [4],
     }
 
-    with aphrodite_runner(**aphrodite_kwargs) as aphrodite_model:
+    with sonar_runner(**sonar_kwargs) as sonar_model:
         inputs, sampling_params = _build_inputs(audio_assets, tokenizer)
 
-        outputs = aphrodite_model.llm.generate(inputs, sampling_params=sampling_params)
+        outputs = sonar_model.llm.generate(inputs, sampling_params=sampling_params)
         _assert_expected_text(outputs)
 
 
 @pytest.mark.asyncio
 async def test_voxtral_realtime_generator(audio_assets, tokenizer, async_engine):
     # Lazy import to avoid CUDA-reinitialization error
-    from aphrodite.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
+    from sonar.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
 
     sampling_params = SamplingParams(temperature=0.0, max_tokens=1)
     audio_config = tokenizer.instruct_tokenizer.audio_encoder.audio_config
@@ -264,7 +264,7 @@ async def test_voxtral_realtime_generator(audio_assets, tokenizer, async_engine)
 
 @pytest.mark.asyncio
 async def test_voxtral_realtime_buffer_stops_at_max_model_len(tokenizer):
-    from aphrodite.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
+    from sonar.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
 
     audio_config = tokenizer.instruct_tokenizer.audio_encoder.audio_config
     audio = Audio.from_file(AudioAsset("winning_call").get_local_path(), strict=False)
@@ -293,7 +293,7 @@ async def test_voxtral_realtime_buffer_stops_at_max_model_len(tokenizer):
 @pytest.mark.parametrize("async_engine", [{"max_model_len": 128}], indirect=True)
 async def test_voxtral_realtime_generator_max_model_len(audio_assets, tokenizer, async_engine):
     # Lazy import to avoid CUDA-reinitialization error
-    from aphrodite.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
+    from sonar.model_executor.models.voxtral_realtime import VoxtralRealtimeBuffer
 
     max_model_len = async_engine.model_config.max_model_len
     sampling_params = SamplingParams(temperature=0.0, max_tokens=1)

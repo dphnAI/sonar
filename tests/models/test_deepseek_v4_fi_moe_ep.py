@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config.kernel import (
+from sonar.config.kernel import (
     FLASHINFER_MOE_EP_BACKENDS,
     FLASHINFER_MOE_EP_CUTEDSL,
     FLASHINFER_MOE_EP_DEEP_GEMM,
@@ -17,52 +17,52 @@ from aphrodite.config.kernel import (
     bind_passthrough_all2all_backend,
     validate_flashinfer_moe_ep_model,
 )
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.model_executor.layers.fused_moe import flashinfer_moe_ep as fi_ep
-from aphrodite.model_executor.layers.fused_moe import modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.engine.arg_utils import EngineArgs
+from sonar.model_executor.layers.fused_moe import flashinfer_moe_ep as fi_ep
+from sonar.model_executor.layers.fused_moe import modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     RoutingMethodType,
     nvfp4_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (
     FlashInferMoeEpExperts,
     epilogue_from_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     FLASHINFER_MOE_EP_MXFP4_BACKENDS,
     Mxfp4MoeBackend,
     make_mxfp4_moe_quant_config,
     map_mxfp4_backend,
     mxfp4_round_up_hidden_size_and_intermediate_size,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     backend_to_kernel_cls as mxfp4_backend_to_kernel_cls,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     NvFp4MoeBackend,
     convert_to_nvfp4_moe_kernel_format,
     map_nvfp4_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     backend_to_kernel_cls as nvfp4_backend_to_kernel_cls,
 )
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.passthrough import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize.passthrough import (
     PassThroughPrepareAndFinalize,
 )
-from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Static,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 
@@ -102,9 +102,9 @@ def test_non_fi_backend_ignores_architectures():
 
 @pytest.mark.parametrize("moe_backend", sorted(MEGA_MOE_BACKENDS))
 def test_token_sharding_backends_enable_dsv4_sequence_parallel(moe_backend: str):
-    from aphrodite.models.deepseek_v4.nvidia.model import _use_sequence_parallel
+    from sonar.models.deepseek_v4.nvidia.model import _use_sequence_parallel
 
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         parallel_config=SimpleNamespace(
             pipeline_parallel_size=1,
             enable_expert_parallel=True,
@@ -113,7 +113,7 @@ def test_token_sharding_backends_enable_dsv4_sequence_parallel(moe_backend: str)
         ),
         kernel_config=SimpleNamespace(moe_backend=moe_backend),
     )
-    assert _use_sequence_parallel(aphrodite_config)
+    assert _use_sequence_parallel(sonar_config)
 
 
 def test_dsv4_requests_pre_fc2_router_weight_placement():
@@ -168,12 +168,12 @@ def _is_supported(moe, weight_key, activation_key) -> tuple[bool, str]:
 
 @pytest.fixture
 def megakernel_host(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """A Aphrodite config without DBO/EPLB/weight transfer, on a supported device."""
+    """A Sonar config without DBO/EPLB/weight transfer, on a supported device."""
     config = SimpleNamespace(
         weight_transfer_config=None,
         parallel_config=SimpleNamespace(enable_dbo=False, enable_eplb=False),
     )
-    monkeypatch.setattr(fi_ep, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(fi_ep, "get_current_sonar_config", lambda: config)
     monkeypatch.setattr(FlashInferMoeEpExperts, "_supports_current_device", staticmethod(lambda: True))
     return config
 

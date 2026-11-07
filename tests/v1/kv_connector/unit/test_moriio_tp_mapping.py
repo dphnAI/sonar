@@ -9,24 +9,24 @@ from collections import OrderedDict
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import ROLE
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import ROLE
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
     HeadLayout,
     MambaStateLayout,
     compute_head_slice_offsets,
     compute_mamba_slice_offsets,
     get_layer_head_layout,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
     _rank_heads,
     compute_write_tp_mapping,
 )
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, compute_layout_strides
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_interface import FullAttentionSpec, compute_layout_strides
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 pytestmark = pytest.mark.cpu_test
 

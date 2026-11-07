@@ -17,40 +17,40 @@ from torch import nn
 from torch.nn import functional as F
 from transformers import Qwen4ExpTextConfig
 
-import aphrodite.model_executor.layers.vocab_parallel_embedding as embedding_module
-import aphrodite.model_executor.parameter as parameter_module
-import aphrodite.models.qwen4_exp.common.ngram_embedding as ngram_embedding_module
-import aphrodite.models.qwen4_exp.nvidia.ngram_embedding as nvidia_ngram_embedding_module
-import aphrodite.utils.gpu_sync_debug as gpu_sync_debug
-from aphrodite.config import AphroditeConfig, SpeculativeConfig
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.config.quantization import QuantizationConfigArgs
-from aphrodite.model_executor.layers.mamba.checkpoint import (
+import sonar.model_executor.layers.vocab_parallel_embedding as embedding_module
+import sonar.model_executor.parameter as parameter_module
+import sonar.models.qwen4_exp.common.ngram_embedding as ngram_embedding_module
+import sonar.models.qwen4_exp.nvidia.ngram_embedding as nvidia_ngram_embedding_module
+import sonar.utils.gpu_sync_debug as gpu_sync_debug
+from sonar.config import SonarConfig, SpeculativeConfig
+from sonar.config.compilation import CUDAGraphMode
+from sonar.config.quantization import QuantizationConfigArgs
+from sonar.model_executor.layers.mamba.checkpoint import (
     MambaPrefillCheckpointExporter,
     MambaPrefillCheckpointMetadata,
 )
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
 )
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.inc import INCConfig
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.inc import INCConfig
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptMixedPrecisionConfig,
     ModelOptNvFp4Config,
 )
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.models.qwen4_exp.amd import ple_layer as amd_ple_layer
-from aphrodite.models.qwen4_exp.amd.ple_layer import (
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.models.qwen4_exp.amd import ple_layer as amd_ple_layer
+from sonar.models.qwen4_exp.amd.ple_layer import (
     Qwen4ExpPLELayer as Qwen4ExpPLELayerAMD,
 )
-from aphrodite.models.qwen4_exp.common.ops.ple import ple_conv
-from aphrodite.models.qwen4_exp.common.ple import (
+from sonar.models.qwen4_exp.common.ops.ple import ple_conv
+from sonar.models.qwen4_exp.common.ple import (
     PLEShardOverlap,
     PLEVocabParallelEmbedding,
 )
-from aphrodite.models.qwen4_exp.nvidia.ngram_embedding import (
+from sonar.models.qwen4_exp.nvidia.ngram_embedding import (
     Qwen4ExpNGramEmbedding,
     Qwen4ExpPLEDeviceEmbedding,
     Qwen4ExpPLEDiskOffloadEmbedding,
@@ -61,16 +61,16 @@ from aphrodite.models.qwen4_exp.nvidia.ngram_embedding import (
     Qwen4ExpPLEUnquantizedEmbeddingMethod,
     stage_checkpoint_rows,
 )
-from aphrodite.models.qwen4_exp.nvidia.ple_layer import Qwen4ExpPLELayer
-from aphrodite.platforms import current_platform
-from aphrodite.utils.gpu_sync_debug import with_gpu_sync_check
-from aphrodite.utils.torch_utils import weak_ref_tensor
-from aphrodite.v1.attention.backends.short_conv_attn import (
+from sonar.models.qwen4_exp.nvidia.ple_layer import Qwen4ExpPLELayer
+from sonar.platforms import current_platform
+from sonar.utils.gpu_sync_debug import with_gpu_sync_check
+from sonar.utils.torch_utils import weak_ref_tensor
+from sonar.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionMetadata,
     PleShortConvAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import MambaSpec
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 
@@ -98,7 +98,7 @@ def test_ple_metadata_preserves_request_and_token_order(
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("CUDA required")
     device = torch.device(device)
-    config = AphroditeConfig()
+    config = SonarConfig()
     config.speculative_config = SpeculativeConfig(method="ngram", num_speculative_tokens=3)
     config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL if full_graph else CUDAGraphMode.NONE
     config.compilation_config.max_cudagraph_capture_size = 32
@@ -588,8 +588,8 @@ def test_pinned_ple_post_load_validates_scale_without_staging(
     """Validate scales through the loader while honoring the staging policy."""
     from contextlib import nullcontext
 
-    from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-    from aphrodite.model_executor.model_loader import utils as loader_utils
+    from sonar.model_executor.layers.quantization.base_config import QuantizeMethodBase
+    from sonar.model_executor.model_loader import utils as loader_utils
 
     source = _make_fp8_embedding_layer(monkeypatch, load_scale=load_scale)
     embedding = Qwen4ExpPLEPinnedHostEmbedding.__new__(Qwen4ExpPLEPinnedHostEmbedding)
@@ -1090,12 +1090,12 @@ def _make_ple_from_checkpoint(
         monkeypatch.setattr(module, "get_tensor_model_parallel_rank", lambda: 0)
         monkeypatch.setattr(module, "get_tensor_model_parallel_world_size", lambda: 1)
     group = SimpleNamespace(world_size=1)
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         load_config=SimpleNamespace(load_format="auto"),
         engram_config=SimpleNamespace(disk_offload=disk_offload, cpu_offload=False),
     )
     for name, value in (
-        ("get_current_aphrodite_config", aphrodite_config),
+        ("get_current_sonar_config", sonar_config),
         ("get_etp_group", group),
         ("get_tp_group", group),
     ):
@@ -1452,7 +1452,7 @@ def test_fused_ngram_ids_correctness(
     contexts: list[list[int]],
     first_token_id: int,
 ) -> None:
-    from aphrodite.models.qwen4_exp.common.ops.ple import ple_ngram_ids
+    from sonar.models.qwen4_exp.common.ops.ple import ple_ngram_ids
 
     device = torch.device("cuda")
     query_start_loc = torch.tensor([0, *accumulate(query_lens)], dtype=torch.int32, device=device)
@@ -2332,7 +2332,7 @@ def test_prefill_exports_conv_window_at_checkpoint(case: _ConvBatchCase, state_l
 def test_fused_gate_correctness(num_tokens: int, strided_kv: bool) -> None:
     import math
 
-    from aphrodite.models.qwen4_exp.common.ops.ple import ple_gate
+    from sonar.models.qwen4_exp.common.ops.ple import ple_gate
 
     device = torch.device("cuda")
     hc, h = 4, 2560
@@ -2407,7 +2407,7 @@ def _build_amd_ngram_embedding(
 
     monkeypatch.setattr(
         amd_ple_layer,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(engram_config=SimpleNamespace(cpu_offload=cpu_offload)),
     )
     config = Qwen4ExpTextConfig(
@@ -2539,7 +2539,7 @@ def test_amd_pinned_embedding_output_written_under_compile(
     )
 
     def lookup(ids: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-        torch.ops.aphrodite.qwen4_exp_amd_ple_ngram_embedding_pinned(ids, out, module.layer_name)
+        torch.ops.sonar.qwen4_exp_amd_ple_ngram_embedding_pinned(ids, out, module.layer_name)
         return out
 
     torch.compile(lookup, fullgraph=True)(ngram_ids, output)
@@ -2573,7 +2573,7 @@ def test_amd_pinned_embedding_output_written_under_cudagraph_capture(
     )
 
     def lookup(ids: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
-        torch.ops.aphrodite.qwen4_exp_amd_ple_ngram_embedding_pinned(ids, out, module.layer_name)
+        torch.ops.sonar.qwen4_exp_amd_ple_ngram_embedding_pinned(ids, out, module.layer_name)
         return out
 
     graph = torch.cuda.CUDAGraph()

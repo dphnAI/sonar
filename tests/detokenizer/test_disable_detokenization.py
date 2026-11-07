@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite.entrypoints.llm import LLM
-from aphrodite.sampling_params import SamplingParams
+from sonar.entrypoints.llm import LLM
+from sonar.sampling_params import SamplingParams
 
 
 @pytest.mark.parametrize("model", ["distilbert/distilgpt2"])

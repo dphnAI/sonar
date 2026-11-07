@@ -9,11 +9,11 @@ import itertools
 import torch
 import torch.nn.functional as F
 
-import aphrodite.model_executor.layers.activation  # noqa: F401
-from aphrodite.benchmarks.lib.utils import default_aphrodite_config
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
+import sonar.model_executor.layers.activation  # noqa: F401
+from sonar.benchmarks.lib.utils import default_sonar_config
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
 
 # Capped so the largest tensor stays under 2**31 elements: the shared activation
 # kernel computes the per-token pointer offset (blockIdx.x * d) in 32-bit, which
@@ -25,7 +25,7 @@ intermediate_size = [3072, 9728, 12288]
 configs = list(itertools.product(batch_size_range, seq_len_range, intermediate_size))
 
 
-@default_aphrodite_config()
+@default_sonar_config()
 def benchmark_relu_squared(
     batch_size: int,
     seq_len: int,

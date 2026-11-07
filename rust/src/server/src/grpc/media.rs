@@ -5,13 +5,13 @@
 
 use std::io::Cursor;
 
-use aphrodite_chat::MediaContentPart;
-use aphrodite_chat::multimodal::MultimodalInput;
-use aphrodite_engine_core_client::protocol::multimodal::{
+use serde::Deserialize as _;
+use sonar_chat::MediaContentPart;
+use sonar_chat::multimodal::MultimodalInput;
+use sonar_engine_core_client::protocol::multimodal::{
     MmFeatureSpec, MmKwargsItem, MmModality, PlaceholderRange,
 };
-use aphrodite_engine_core_client::protocol::tensor::WireTensor;
-use serde::Deserialize as _;
+use sonar_engine_core_client::protocol::tensor::WireTensor;
 use thiserror_ext::AsReport as _;
 use tonic::Status;
 use url::Url;
@@ -217,7 +217,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use aphrodite_engine_core_client::protocol::multimodal::{
+    use sonar_engine_core_client::protocol::multimodal::{
         MmBatchedField, MmField, MmFieldElem, MmFlatField, MmKwargValue, MmSlice, SliceSpec,
     };
 
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn kwargs_decode_python_encoder_tensor_and_factory_tuple() {
-        // MsgpackEncoder(size_threshold=1 << 30), Aphrodite 6cbb3c154e:
+        // MsgpackEncoder(size_threshold=1 << 30), Sonar 6cbb3c154e:
         // pixel_values = tensor([1., 2.]), MultiModalFlatField(slices=[slice(0, 2)]).
         let bytes = b"\x81\xacpixel_values\x82\xa4data\x93\xa7float32\x91\x02\xd7\x03\
             \x00\x00\x80\x3f\x00\x00\x00\x40\

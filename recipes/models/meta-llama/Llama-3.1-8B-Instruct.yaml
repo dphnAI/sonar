@@ -32,7 +32,7 @@ model:
 
 features:
   spec_decoding:
-    description: "EAGLE3 speculative decoding (requires Aphrodite >= 0.9.0)"
+    description: "EAGLE3 speculative decoding (requires Sonar >= 0.9.0)"
     args:
       - "--speculative-config"
       - '{"model":"RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3","method":"eagle3","num_speculative_tokens":3}'
@@ -134,7 +134,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -148,21 +148,21 @@ guide: |
   variant is lightweight and ideal for single-GPU deployment, with 128K context support.
   A 70B variant is also available (see related recipes).
 
-  TPU support is provided through [Aphrodite TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Trillium](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM/Llama3.x).
+  TPU support is provided through [Sonar TPU](https://github.com/vllm-project/tpu-inference) with a recipe for [Trillium](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM/Llama3.x).
 
   ## Prerequisites
 
   - Hardware: 1x GPU with >=16 GB VRAM (e.g. A100, L40S, H100, H200, MI300X/MI325X/MI355X), Intel XPU B60/B70, or 2x Xeon6/Xeon5 NUMA node
-  - Aphrodite >= 0.6.0
-  - CUDA Driver compatible with your Aphrodite version for 1x GPU
+  - Sonar >= 0.6.0
+  - CUDA Driver compatible with your Sonar version for 1x GPU
   - Docker with NVIDIA Container Toolkit (recommended) for 1x GPU
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### AMD ROCm
@@ -173,14 +173,14 @@ guide: |
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Launch on 1x MI300X / MI325X / MI355X with AITER enabled:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve meta-llama/Llama-3.1-8B-Instruct \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve meta-llama/Llama-3.1-8B-Instruct \
     --tensor-parallel-size 1
   ```
 
@@ -204,7 +204,7 @@ guide: |
     --privileged --network host --shm-size 16G \
     -v /dev/shm:/dev/shm -e HF_TOKEN=$HF_TOKEN \
     vllm/vllm-tpu:latest \
-    aphrodite serve meta-llama/Llama-3.1-8B-Instruct \
+    sonar serve meta-llama/Llama-3.1-8B-Instruct \
       --tensor-parallel-size 1 \
       --max-model-len 2048 \
       --host 0.0.0.0 --port 8000
@@ -213,7 +213,7 @@ guide: |
 
   ### Intel Xeon 6 Deployment via Docker
 
-  Launch the x86 CPU Aphrodite Docker container for `meta-llama/Llama-3.1-8B-Instruct`:
+  Launch the x86 CPU Sonar Docker container for `meta-llama/Llama-3.1-8B-Instruct`:
 
   ```bash
   docker run \
@@ -233,7 +233,7 @@ guide: |
     tuning for workload shape, latency targets, and platform capacity.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: runtime operational timeout tuning.
 
   Hardware-specific overrides may still use these settings when they are part of a
   validated platform configuration.
@@ -270,11 +270,11 @@ guide: |
   Enable the **Spec Decoding** toggle above, or add the `--speculative-config` manually:
 
   ```bash
-  aphrodite serve meta-llama/Llama-3.1-8B-Instruct \
+  sonar serve meta-llama/Llama-3.1-8B-Instruct \
     --speculative-config '{"model":"RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3","method":"eagle3","num_speculative_tokens":3}'
   ```
 
-  EAGLE3 verification requires Aphrodite >= 0.9.0. `num_speculative_tokens` of 3 is a reasonable
+  EAGLE3 verification requires Sonar >= 0.9.0. `num_speculative_tokens` of 3 is a reasonable
   starting point for chat workloads.
 
   ## Troubleshooting
@@ -283,7 +283,7 @@ guide: |
   Lower `--max-model-len` or `--gpu-memory-utilization`.
 
   **EAGLE3 draft head not loading:**
-  Upgrade Aphrodite to >= 0.9.0 — earlier releases don't support the EAGLE3 verification path.
+  Upgrade Sonar to >= 0.9.0 — earlier releases don't support the EAGLE3 verification path.
 
   ## References
 

@@ -11,13 +11,13 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.inputs import PlaceholderRange
-from aphrodite.renderers import renderer_from_config
-from aphrodite.renderers.base import BaseRenderer
-from aphrodite.renderers.hf import _ensure_prompt_embeds_placeholder_token
-from aphrodite.renderers.params import TokenizeParams
+from sonar.config import ModelConfig, SonarConfig
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.inputs import PlaceholderRange
+from sonar.renderers import renderer_from_config
+from sonar.renderers.base import BaseRenderer
+from sonar.renderers.hf import _ensure_prompt_embeds_placeholder_token
+from sonar.renderers.params import TokenizeParams
 
 
 def _renderer():
@@ -74,7 +74,7 @@ def test_split_multimodal_span_is_rejected():
     """Cutting mid-span would desync features from token ids, so reject."""
     engine_input = _mm_input(num_tokens=147, offset=80, length=50)
 
-    with pytest.raises(AphroditeValidationError, match="truncate_prompt_tokens"):
+    with pytest.raises(SonarValidationError, match="truncate_prompt_tokens"):
         _renderer()._truncate_expanded_prompt(engine_input, _params(96))
 
 
@@ -82,7 +82,7 @@ def test_dropped_multimodal_span_is_rejected():
     """A span entirely past the cut would be discarded silently."""
     engine_input = _mm_input(num_tokens=147, offset=100, length=20)
 
-    with pytest.raises(AphroditeValidationError, match="truncate_prompt_tokens"):
+    with pytest.raises(SonarValidationError, match="truncate_prompt_tokens"):
         _renderer()._truncate_expanded_prompt(engine_input, _params(96))
 
 
@@ -128,7 +128,7 @@ def test_mixed_prompt_embeds_truncation_covers_embeds_spans():
         mm_processor_cache_gb=0,
         enable_prompt_embeds=True,
     )
-    renderer = renderer_from_config(AphroditeConfig(model_config=model_config))
+    renderer = renderer_from_config(SonarConfig(model_config=model_config))
     tok = renderer.tokenizer
     pe_id = _ensure_prompt_embeds_placeholder_token(tok)
     hidden = model_config.get_hidden_size()
@@ -155,7 +155,7 @@ def test_mixed_prompt_embeds_truncation_covers_embeds_spans():
     assert len(out["prompt_token_ids"]) == 79
 
     # A limit inside the prompt_embeds span (54..74): must be rejected.
-    with pytest.raises(AphroditeValidationError, match="truncate_prompt_tokens"):
+    with pytest.raises(SonarValidationError, match="truncate_prompt_tokens"):
         renderer._process_singleton(
             _build_prompt(),
             tok_params=_params(64),

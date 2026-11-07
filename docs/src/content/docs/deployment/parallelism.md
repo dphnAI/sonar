@@ -43,7 +43,7 @@ Tensor parallelism splits each layer across GPUs. It requires fast GPU-to-GPU
 links because workers communicate during each layer.
 
 ```bash
-aphrodite serve Qwen/Qwen3-32B --tensor-parallel-size 4
+sonar serve Qwen/Qwen3-32B --tensor-parallel-size 4
 ```
 
 Use tensor parallelism within one NVLink or high-bandwidth GPU domain. Avoid a
@@ -61,7 +61,7 @@ uses less frequent communication than tensor parallelism and can cross nodes.
 Pipeline bubbles can increase latency at low request volume.
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --tensor-parallel-size 4 \
   --pipeline-parallel-size 2
 ```
@@ -79,7 +79,7 @@ Data parallelism creates model replicas. Each replica handles different
 requests.
 
 ```bash
-aphrodite serve MODEL --data-parallel-size 4
+sonar serve MODEL --data-parallel-size 4
 ```
 
 Use data parallelism when one replica fits and request volume is high. A data
@@ -96,7 +96,7 @@ Expert parallelism distributes mixture-of-experts layers across the available
 parallel ranks.
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --tensor-parallel-size 8 \
   --enable-expert-parallel
 ```
@@ -133,7 +133,7 @@ Run one request at the maximum supported input length. Then apply a
 representative concurrent load:
 
 ```bash
-aphrodite bench serve \
+sonar bench serve \
   --backend openai \
   --base-url http://127.0.0.1:2242 \
   --model MODEL \

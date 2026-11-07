@@ -4,9 +4,9 @@
 //! TLS CLI options mirroring Python's uvicorn `ssl_*` arguments, shared by the
 //! OpenAI frontend and the render server.
 
-use aphrodite_server::TlsConfig;
 use clap::Args;
 use serde::Deserialize;
+use sonar_server::TlsConfig;
 
 /// TLS options mirroring Python's uvicorn `ssl_*` arguments, shared by the
 /// OpenAI frontend and the render server.

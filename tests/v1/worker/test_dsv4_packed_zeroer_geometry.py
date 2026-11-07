@@ -16,8 +16,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.v1.kv_cache_interface import KVCacheLayout, MLAAttentionSpec
-from aphrodite.v1.worker.utils import (
+from sonar.v1.kv_cache_interface import KVCacheLayout, MLAAttentionSpec
+from sonar.v1.worker.utils import (
     AttentionGroup,
     KVBlockZeroer,
     allocate_kv_cache,
@@ -97,8 +97,8 @@ def test_overlaid_zeroer_dedups_segments_with_max_span():
     zeroed no matter which group owns it."""
     from unittest.mock import MagicMock
 
-    from aphrodite.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
-    from aphrodite.v1.kv_cache_interface import (
+    from sonar.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
+    from sonar.v1.kv_cache_interface import (
         KVCacheGroupSpec,
         KVCacheLayout,
         UniformTypeKVCacheSpecs,
@@ -119,14 +119,14 @@ def test_overlaid_zeroer_dedups_segments_with_max_span():
             UniformTypeKVCacheSpecs(block_size=64, kv_cache_specs=g2_specs),
         ),
     ]
-    from aphrodite.config import CacheConfig
+    from sonar.config import CacheConfig
 
-    aphrodite_config = MagicMock()
-    aphrodite_config.cache_config = CacheConfig()
-    aphrodite_config.cache_config.num_gpu_blocks_override = None
-    aphrodite_config.cache_config.kv_cache_layout = "BLHNC"
-    aphrodite_config.attention_config.hisparse_config = None
-    config = get_kv_cache_config_from_groups(aphrodite_config, groups, 8 * 1024 * 1024)
+    sonar_config = MagicMock()
+    sonar_config.cache_config = CacheConfig()
+    sonar_config.cache_config.num_gpu_blocks_override = None
+    sonar_config.cache_config.kv_cache_layout = "BLHNC"
+    sonar_config.attention_config.hisparse_config = None
+    config = get_kv_cache_config_from_groups(sonar_config, groups, 8 * 1024 * 1024)
     views = allocate_kv_cache(config, torch.device("cpu"), KVCacheLayout.BLHNC, None)
     buf_ptr = views["g1.big"].data_ptr()
 

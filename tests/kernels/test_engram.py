@@ -7,16 +7,16 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.models.deepseek_v41.common import engram as engram_ops
-from aphrodite.models.deepseek_v41.common.engram import (
+from sonar.models.deepseek_v41.common import engram as engram_ops
+from sonar.models.deepseek_v41.common.engram import (
     Engram,
     NgramHashState,
     ParallelEngramEmbedding,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _reference_engram_post_wkv(
@@ -146,7 +146,7 @@ def test_fused_engram_post_wkv_matches_reference(
 def test_sm120_engram_striped_packets_preserve_masked_rows_and_graph_updates(num_tokens, num_valid_tokens, use_mask):
     if not current_platform.is_device_capability(120):
         pytest.skip("SM120 required")
-    from aphrodite.models.deepseek_v41.common.ops.engram_sm120 import register_sm120_engram_ops
+    from sonar.models.deepseek_v41.common.ops.engram_sm120 import register_sm120_engram_ops
 
     register_sm120_engram_ops()
 
@@ -571,7 +571,7 @@ def test_lookback_window_reproduces_single_instance(runner, capture):
 @pytest.mark.parametrize("pcp", [False, True])
 def test_v2_model_state_gathers_lookback_window(pcp):
     """The window is gathered on device from the runner's token history."""
-    from aphrodite.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
+    from sonar.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
 
     depth, max_num_reqs, max_model_len = 3, 6, 16
     state = DeepseekV41ModelState.__new__(DeepseekV41ModelState)
@@ -860,7 +860,7 @@ def test_engram_shared_prefetch_stream_waits_per_layer():
 @pytest.mark.parametrize("cpu_offload", [None, False])
 def test_engram_constructor_honors_offload(monkeypatch, cpu_offload):
     """Default offload uses pinned storage and the given stream; False uses HBM."""
-    from aphrodite.config import EngramConfig
+    from sonar.config import EngramConfig
 
     config = SimpleNamespace(hidden_size=16, hc_mult=1, rms_norm_eps=1e-6)
     layout = SimpleNamespace(
@@ -870,12 +870,12 @@ def test_engram_constructor_honors_offload(monkeypatch, cpu_offload):
         n_heads=24,
         primes=(((3,) * 24,),),
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         engram_config=EngramConfig() if cpu_offload is None else EngramConfig(cpu_offload=cpu_offload),
         scheduler_config=SimpleNamespace(max_num_batched_tokens=8),
     )
-    offloaded = aphrodite_config.engram_config.cpu_offload
-    monkeypatch.setattr(engram_ops, "get_current_aphrodite_config", lambda: aphrodite_config)
+    offloaded = sonar_config.engram_config.cpu_offload
+    monkeypatch.setattr(engram_ops, "get_current_sonar_config", lambda: sonar_config)
     monkeypatch.setattr(engram_ops, "get_tensor_model_parallel_world_size", lambda: 1)
     monkeypatch.setattr(engram_ops, "get_tensor_model_parallel_rank", lambda: 0)
     monkeypatch.setattr(engram_ops, "ColumnParallelLinear", lambda *a, **k: torch.nn.Identity())
@@ -963,7 +963,7 @@ def test_engram_prefetch_detects_missing_dependency(monkeypatch, missing_depende
 
 
 def _run_engram_prepared_rows(cpu_offload, capture, tp_size=1, rank=0, use_sequence_parallel=False, delay=None):
-    from aphrodite.compilation.breakable_cudagraph import (
+    from sonar.compilation.breakable_cudagraph import (
         BreakableCUDAGraphCapture,
         eager_break_during_capture,
     )
@@ -990,10 +990,10 @@ def _run_engram_prepared_rows(cpu_offload, capture, tp_size=1, rank=0, use_seque
     # Exercise the production eager boundaries even when the test process
     # imported Engram before breakable graphs were enabled.
     if capture == "breakable":
-        import aphrodite.envs as envs
+        import sonar.envs as envs
 
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(envs, "APHRODITE_USE_BREAKABLE_CUDAGRAPH", True)
+            patch.setattr(envs, "SONAR_USE_BREAKABLE_CUDAGRAPH", True)
             for name in ("_start_prefetch", "_finish_prefetch"):
                 fn = eager_break_during_capture(inspect.unwrap(getattr(Engram, name)))
                 setattr(engram, name, fn.__get__(engram, Engram))
@@ -1073,7 +1073,7 @@ def _run_engram_prepared_rows(cpu_offload, capture, tp_size=1, rank=0, use_seque
 
 
 def _engram_tp_worker(rank, tp_size, port):
-    from aphrodite.distributed import cleanup_dist_env_and_memory
+    from sonar.distributed import cleanup_dist_env_and_memory
     from tests.utils import init_test_distributed_environment
 
     torch.accelerator.set_device_index(rank)
@@ -1091,7 +1091,7 @@ def _engram_tp_worker(rank, tp_size, port):
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA required")
 def test_engram_head_collectives_survive_graph_breaks():
     """All-gather preserves head order and local SP tokens across graph replay."""
-    from aphrodite.utils.network_utils import get_open_port
+    from sonar.utils.network_utils import get_open_port
 
     if torch.accelerator.device_count() < 2:
         pytest.skip("Requires two GPUs")

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.v1.structured_output.utils import strip_speculative_padding
+from sonar.v1.structured_output.utils import strip_speculative_padding
 
 
 def test_strips_trailing_padding():

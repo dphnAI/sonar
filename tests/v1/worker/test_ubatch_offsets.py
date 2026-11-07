@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from aphrodite.v1.worker import ubatching
-from aphrodite.v1.worker.ubatch_utils import maybe_create_ubatch_slices
-from aphrodite.v1.worker.ubatching import (
+from sonar.v1.worker import ubatching
+from sonar.v1.worker.ubatch_utils import maybe_create_ubatch_slices
+from sonar.v1.worker.ubatching import (
     dbo_current_ubatch_token_offset,
     make_ubatch_contexts,
 )

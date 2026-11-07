@@ -10,11 +10,11 @@ import pybase64
 import pytest
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.media import AudioEmbeddingMediaIO, ImageEmbeddingMediaIO
-from aphrodite.renderers.embed_utils import safe_load_prompt_embeds
-from aphrodite.utils.sparse_utils import check_sparse_tensor_invariants_threadsafe
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.media import AudioEmbeddingMediaIO, ImageEmbeddingMediaIO
+from sonar.renderers.embed_utils import safe_load_prompt_embeds
+from sonar.utils.sparse_utils import check_sparse_tensor_invariants_threadsafe
 
 
 def _encode_tensor(tensor: torch.Tensor) -> bytes:
@@ -53,7 +53,7 @@ class TestNegativeControlWithoutRace:
 
     def test_malicious_sparse_rejected_by_prompt_loader(self, model_config):
         encoded = _encode_tensor(_create_malicious_sparse_tensor())
-        with pytest.raises((RuntimeError, ValueError, AphroditeValidationError)):
+        with pytest.raises((RuntimeError, ValueError, SonarValidationError)):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_malicious_sparse_rejected_by_image_loader(self):
@@ -133,7 +133,7 @@ class TestConcurrentRaceProtection:
             try:
                 safe_load_prompt_embeds(model_config, malicious_encoded)
                 bypassed.append(True)
-            except (RuntimeError, ValueError, AphroditeValidationError):
+            except (RuntimeError, ValueError, SonarValidationError):
                 rejected.append(True)
 
         with ThreadPoolExecutor(max_workers=num_workers) as pool:
@@ -178,7 +178,7 @@ class TestGlobalFlagRestoration:
         initial = torch.sparse.check_sparse_tensor_invariants.is_enabled()
         malicious_encoded = _encode_tensor(_create_malicious_sparse_tensor())
 
-        with pytest.raises((RuntimeError, ValueError, AphroditeValidationError)):
+        with pytest.raises((RuntimeError, ValueError, SonarValidationError)):
             safe_load_prompt_embeds(model_config, malicious_encoded)
 
         assert torch.sparse.check_sparse_tensor_invariants.is_enabled() == initial
@@ -189,7 +189,7 @@ class TestGlobalFlagRestoration:
         malicious_encoded = _encode_tensor(_create_malicious_sparse_tensor())
 
         def attempt_load(_):
-            with contextlib.suppress(RuntimeError, ValueError, AphroditeValidationError):
+            with contextlib.suppress(RuntimeError, ValueError, SonarValidationError):
                 safe_load_prompt_embeds(model_config, malicious_encoded)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -222,17 +222,17 @@ class TestCrossLoaderLockSharing:
         t2.join(timeout=10)
 
         malicious = _encode_tensor(_create_malicious_sparse_tensor())
-        with pytest.raises((RuntimeError, ValueError, AphroditeValidationError)):
+        with pytest.raises((RuntimeError, ValueError, SonarValidationError)):
             safe_load_prompt_embeds(model_config, malicious)
         with pytest.raises((RuntimeError, ValueError)):
             io_handler.load_base64("", malicious.decode("utf-8"))
 
     def test_all_loaders_use_same_context_manager(self):
         """Verify all modules reference the same context manager function."""
-        import aphrodite.multimodal.media.audio as audio_mod
-        import aphrodite.multimodal.media.image as image_mod
-        import aphrodite.renderers.embed_utils as embed_mod
-        from aphrodite.utils.sparse_utils import check_sparse_tensor_invariants_threadsafe as cm_from_utils
+        import sonar.multimodal.media.audio as audio_mod
+        import sonar.multimodal.media.image as image_mod
+        import sonar.renderers.embed_utils as embed_mod
+        from sonar.utils.sparse_utils import check_sparse_tensor_invariants_threadsafe as cm_from_utils
 
         assert embed_mod.check_sparse_tensor_invariants_threadsafe is cm_from_utils
         assert image_mod.check_sparse_tensor_invariants_threadsafe is cm_from_utils

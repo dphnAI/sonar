@@ -34,8 +34,8 @@ Commandline arguments:
     --shuffle-seed: Random seed when the repeat mode is "random".
                     (Optional, default: 0)
 
-In the meantime, it also supports all the Aphrodite engine args to initialize the 
-LLM engine. You can refer to the `aphrodite.engine.arg_utils.EngineArgs` for more
+In the meantime, it also supports all the Sonar engine args to initialize the 
+LLM engine. You can refer to the `sonar.engine.arg_utils.EngineArgs` for more
 details.
 """
 
@@ -43,9 +43,9 @@ import dataclasses
 import random
 import time
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.engine.arg_utils import EngineArgs
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 def test_long_document_qa(llm=None, sampling_params=None, prompts=None):

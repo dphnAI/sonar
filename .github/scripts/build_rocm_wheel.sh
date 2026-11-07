@@ -5,7 +5,7 @@ set -euo pipefail
 
 output_dir="${1:?usage: build_rocm_wheel.sh OUTPUT_DIR}"
 architectures="${PYTORCH_ROCM_ARCH:-gfx90a;gfx942;gfx950}"
-version="${APHRODITE_VERSION_OVERRIDE:-}"
+version="${SONAR_VERSION_OVERRIDE:-}"
 max_jobs="${MAX_JOBS:-12}"
 dockerfile="${ROCM_BUILD_DOCKERFILE:-docker/Dockerfile.rocm}"
 
@@ -14,10 +14,10 @@ rm -f "$output_dir"/*.whl
 
 docker buildx build \
   --file "$dockerfile" \
-  --target export_aphrodite \
+  --target export_sonar \
   --output "type=local,dest=${output_dir}" \
   --build-arg "ARG_PYTORCH_ROCM_ARCH=${architectures}" \
-  --build-arg "APHRODITE_VERSION_OVERRIDE=${version}" \
+  --build-arg "SONAR_VERSION_OVERRIDE=${version}" \
   --build-arg "MAX_JOBS=${max_jobs}" \
   .
 

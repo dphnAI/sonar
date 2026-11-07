@@ -10,12 +10,12 @@ tokens without changing any shape.
 import pytest
 import torch
 
-from aphrodite.models.step5.amd.ops.csa_paged import sparse_attention_paged
-from aphrodite.models.step5.common.ops.sparse_decode_attention import (
+from sonar.models.step5.amd.ops.csa_paged import sparse_attention_paged
+from sonar.models.step5.common.ops.sparse_decode_attention import (
     sparse_decode_attention,
 )
-from aphrodite.models.step5.common.ops.sparse_indexer import select_regions
-from aphrodite.platforms import current_platform
+from sonar.models.step5.common.ops.sparse_indexer import select_regions
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="Step5 CSA kernels are the ROCm path")
 
@@ -188,10 +188,10 @@ def test_summaries_on_coarse_summary_blocks():
     """ROCm keeps summaries in their own KV group, whose block (384 tokens,
     48 regions) differs from the main 16-token block; summaries and decode
     scores must match the main-block layout."""
-    from aphrodite.models.step5.common.ops.sparse_indexer_scores import (
+    from sonar.models.step5.common.ops.sparse_indexer_scores import (
         decode_summary_scores,
     )
-    from aphrodite.models.step5.common.ops.summary_update import (
+    from sonar.models.step5.common.ops.summary_update import (
         build_prefill_groups,
         update_prefill,
     )

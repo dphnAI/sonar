@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-import aphrodite
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode, PassConfig
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.config import CompilationConfig, CompilationMode, PassConfig, SonarConfig
+from sonar.platforms import current_platform
 from tests.compile.backend import TestBackend
 
 DEVICE_TYPE = current_platform.device_type
@@ -51,14 +51,14 @@ def test_noop_elimination(dtype, num_tokens, hidden_size, buffer_size):
             )
             return d
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(eliminate_noops=True),
         )
     )
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        noop_pass = NoOpEliminationPass(aphrodite_config)
+    with sonar.config.set_current_sonar_config(sonar_config):
+        noop_pass = NoOpEliminationPass(sonar_config)
 
         backend = TestBackend(noop_pass)
 
@@ -99,14 +99,14 @@ def test_non_noop_slice_preserved():
             y = torch.slice_scatter(base, src, dim=0, start=0, end=-1)
             return x[0:-1, :], y
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(eliminate_noops=True),
         )
     )
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
-        noop_pass = NoOpEliminationPass(aphrodite_config)
+    with sonar.config.set_current_sonar_config(sonar_config):
+        noop_pass = NoOpEliminationPass(sonar_config)
         backend = TestBackend(noop_pass)
         model = SliceModel()
         ref = model(x)

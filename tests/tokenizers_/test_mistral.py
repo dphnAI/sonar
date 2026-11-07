@@ -10,10 +10,10 @@ from mistral_common.exceptions import InvalidMessageStructureException
 from mistral_common.guidance.grammar_factory import GrammarFactory
 from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
-from aphrodite.tokenizers.mistral import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.exceptions import SonarValidationError
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
+from sonar.tokenizers.mistral import (
     MistralTokenizer,
     _validate_apply_chat_template_args,
     validate_request_params,
@@ -2242,7 +2242,7 @@ def test_validate_request_params_rejects_chat_template() -> None:
         messages=[],
         chat_template="{{ messages }}",
     )
-    with pytest.raises(AphroditeValidationError, match="chat_template") as exc_info:
+    with pytest.raises(SonarValidationError, match="chat_template") as exc_info:
         validate_request_params(request)
     assert exc_info.value.parameter == "chat_template"
 

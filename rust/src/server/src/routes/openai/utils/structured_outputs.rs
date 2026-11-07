@@ -3,16 +3,16 @@
 
 use std::mem::discriminant;
 
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 use thiserror_ext::AsReport as _;
 
 use crate::error::{ApiError, bail_invalid_request};
 
 /// JSON schema specification nested inside a `json_schema` response format.
 ///
-/// Mirrors the Python Aphrodite `JsonSchemaResponseFormat` class.
+/// Mirrors the Python Sonar `JsonSchemaResponseFormat` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JsonSchemaFormat {
@@ -29,7 +29,7 @@ pub struct JsonSchemaFormat {
 /// Supported `response_format` types for chat and completion requests.
 ///
 /// This is our own definition (rather than the `openai-protocol` crate's) so
-/// that we can support the Aphrodite-specific `structural_tag` variant.
+/// that we can support the Sonar-specific `structural_tag` variant.
 ///
 /// Original Python definitions:
 /// <https://github.com/vllm-project/vllm/blob/main/vllm/entrypoints/generate/base/protocol.py#L71-L112>
@@ -41,7 +41,7 @@ pub enum ResponseFormat {
     JsonSchema {
         json_schema: JsonSchemaFormat,
     },
-    /// Aphrodite-specific structural tag format. The entire object (including the
+    /// Sonar-specific structural tag format. The entire object (including the
     /// `type` field) is JSON-serialized and passed as
     /// `StructuredOutputConstraint::StructuralTag`.
     ///
@@ -74,7 +74,7 @@ fn deserialize_structured_outputs(
 /// `structured_outputs` and keeps its options; a constraint of another kind is
 /// rejected, since a request may use only one.
 ///
-/// Mirrors the Python Aphrodite conversion in
+/// Mirrors the Python Sonar conversion in
 /// `structured_outputs_from_response_format()`: <https://github.com/vllm-project/vllm/blob/7b569ec895/vllm/entrypoints/generate/base/protocol.py#L181-L210>
 pub fn convert_from_response_format(
     response_format: Option<&ResponseFormat>,
@@ -150,9 +150,9 @@ pub fn convert_from_response_format_value(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputConstraint;
     use axum::http::StatusCode;
     use serde_json::json;
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputConstraint;
 
     use super::*;
 

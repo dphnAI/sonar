@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 pytestmark = pytest.mark.cpu_test
 

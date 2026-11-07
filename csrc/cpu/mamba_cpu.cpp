@@ -74,7 +74,7 @@ at::Tensor causal_conv1d_update_cpu_impl(
     cache_idx_ptr = cache_idx_int.data_ptr<int32_t>();
   }
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(dtype, "causal_conv1d_update", [&] {
+  SONAR_DISPATCH_FLOATING_TYPES(dtype, "causal_conv1d_update", [&] {
     mamba_cpu::causal_conv1d_update_kernel<scalar_t>(
         x_c.data_ptr<scalar_t>(), state_c.data_ptr<scalar_t>(), stride_s_slot,
         stride_s_dim, stride_s_state, w_c.data_ptr<scalar_t>(),
@@ -190,11 +190,11 @@ void selective_state_update_cpu_impl(
 
   // Dispatch on (state_t, input_t, out_t): write directly into `out`
   // without any intermediate float32 buffer.
-  APHRODITE_DISPATCH_FLOATING_TYPES(state_type, "ssu_state", [&] {
+  SONAR_DISPATCH_FLOATING_TYPES(state_type, "ssu_state", [&] {
     using state_t = scalar_t;
-    APHRODITE_DISPATCH_FLOATING_TYPES(input_type, "ssu_input", [&] {
+    SONAR_DISPATCH_FLOATING_TYPES(input_type, "ssu_input", [&] {
       using input_t = scalar_t;
-      APHRODITE_DISPATCH_FLOATING_TYPES(out.scalar_type(), "ssu_out", [&] {
+      SONAR_DISPATCH_FLOATING_TYPES(out.scalar_type(), "ssu_out", [&] {
         using out_t = scalar_t;
         mamba_cpu::selective_state_update_kernel<state_t, input_t, out_t>(
             state.data_ptr<state_t>(), stride_state_n, stride_state_h,
@@ -272,15 +272,14 @@ void mamba_chunk_scan_fwd_cpu_impl(
               "mamba_chunk_scan_fwd_cpu: out must be contiguous (writes via "
               "raw data_ptr)");
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(
-      input_type, "mamba_chunk_scan_fwd_cpu", [&] {
-        mamba_cpu::mamba_chunk_scan_fwd_kernel<scalar_t>(
-            final_states.data_ptr<float>(), x_in.data_ptr<scalar_t>(),
-            dt_c.data_ptr<float>(), A_f32.data_ptr<float>(),
-            B_in.data_ptr<scalar_t>(), C_in.data_ptr<scalar_t>(),
-            D_f32.defined() ? D_f32.data_ptr<float>() : nullptr,
-            z_in.defined() ? z_in.data_ptr<scalar_t>() : nullptr,
-            out.data_ptr<scalar_t>(), cu_int.data_ptr<int32_t>(), batch, nheads,
-            ngroups, headdim, dstate);
-      });
+  SONAR_DISPATCH_FLOATING_TYPES(input_type, "mamba_chunk_scan_fwd_cpu", [&] {
+    mamba_cpu::mamba_chunk_scan_fwd_kernel<scalar_t>(
+        final_states.data_ptr<float>(), x_in.data_ptr<scalar_t>(),
+        dt_c.data_ptr<float>(), A_f32.data_ptr<float>(),
+        B_in.data_ptr<scalar_t>(), C_in.data_ptr<scalar_t>(),
+        D_f32.defined() ? D_f32.data_ptr<float>() : nullptr,
+        z_in.defined() ? z_in.data_ptr<scalar_t>() : nullptr,
+        out.data_ptr<scalar_t>(), cu_int.data_ptr<int32_t>(), batch, nheads,
+        ngroups, headdim, dstate);
+  });
 }

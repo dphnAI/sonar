@@ -20,29 +20,29 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
-from aphrodite import SamplingParams
-from aphrodite.distributed.kv_events import BlockStored, KVEventBatch, ZmqEventPublisher
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.pooling_params import LateInteractionParams, PoolingParams
-from aphrodite.usage.usage_lib import UsageContext
-from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from aphrodite.v1.engine import (
+from sonar import SamplingParams
+from sonar.distributed.kv_events import BlockStored, KVEventBatch, ZmqEventPublisher
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.pooling_params import LateInteractionParams, PoolingParams
+from sonar.usage.usage_lib import UsageContext
+from sonar.utils.torch_utils import set_default_torch_num_threads
+from sonar.v1.engine import (
     EngineCoreOutputs,
     EngineCoreReadyResponse,
     EngineCoreRequest,
 )
-from aphrodite.v1.engine.core import EngineCore
-from aphrodite.v1.engine.core_client import (
+from sonar.v1.engine.core import EngineCore
+from sonar.v1.engine.core_client import (
     AsyncMPClient,
     DPLBAsyncMPClient,
     EngineCoreClient,
     MPClient,
     SyncMPClient,
 )
-from aphrodite.v1.engine.utils import CoreEngineProcManager
-from aphrodite.v1.executor.abstract import Executor
-from aphrodite.v1.pool.late_interaction import (
+from sonar.v1.engine.utils import CoreEngineProcManager
+from sonar.v1.executor.abstract import Executor
+from sonar.v1.pool.late_interaction import (
     LATE_INTERACTION_MODE_CACHE_QUERY,
     LATE_INTERACTION_MODE_SCORE_DOC,
 )
@@ -88,7 +88,7 @@ def make_request(params: SamplingParams, prompt_tokens_ids: list[int] | None = N
 
 
 def _reload_envs_module():
-    import aphrodite.envs as envs_mod
+    import sonar.envs as envs_mod
 
     cache_clear = getattr(getattr(envs_mod, "__getattr__", None), "cache_clear", None)
     if cache_clear is not None:
@@ -97,13 +97,13 @@ def _reload_envs_module():
 
 
 def _reload_core_client_module():
-    module = importlib.import_module("aphrodite.v1.engine.core_client")
+    module = importlib.import_module("sonar.v1.engine.core_client")
     return importlib.reload(module)
 
 
 def test_mp_client_uses_env_timeout(monkeypatch: pytest.MonkeyPatch):
     timeout_value = 654
-    monkeypatch.setenv("APHRODITE_ENGINE_READY_TIMEOUT_S", str(timeout_value))
+    monkeypatch.setenv("SONAR_ENGINE_READY_TIMEOUT_S", str(timeout_value))
 
     # Ensure that the environment variable is loaded if caching is enabled
     _reload_envs_module()
@@ -157,14 +157,14 @@ def test_mp_client_uses_env_timeout(monkeypatch: pytest.MonkeyPatch):
         local_engines_only=False,
         enable_elastic_ep=False,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         parallel_config=parallel_config,
         cache_config=SimpleNamespace(effective_attention_block_size=None),
     )
 
     client = core_client_mod.MPClient(
         asyncio_mode=False,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         executor_class=object,
         log_stats=False,
         client_addresses={
@@ -215,7 +215,7 @@ def _make_dplb_client(num_engines: int = 3, client_count: int = 1) -> DPLBAsyncM
     client.lb_engines = [[0, 0, 0.0] for _ in range(num_engines)]
     client.eng_start_index = 0
     client._kv_event_sources = {}
-    client.aphrodite_config = SimpleNamespace(
+    client.sonar_config = SimpleNamespace(
         use_v2_model_runner=True,
         parallel_config=SimpleNamespace(all2all_backend="allgather_reducescatter"),
     )
@@ -440,7 +440,7 @@ def test_apply_ready_response_syncs_engine_metadata(effective_size, other_size):
 
     client = object.__new__(MPClient)
     client._effective_attention_block_sizes = set()
-    client.aphrodite_config = SimpleNamespace(
+    client.sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(block_size=16, num_gpu_blocks=0),
         model_config=SimpleNamespace(max_model_len=8192),
         parallel_config=SimpleNamespace(_coord_store_port=0),
@@ -456,7 +456,7 @@ def test_apply_ready_response_syncs_engine_metadata(effective_size, other_size):
             block_size=1056,
             dp_stats_address=None,
             dtype="bfloat16",
-            aphrodite_version="test",
+            sonar_version="test",
             world_size=1,
             data_parallel_size=1,
             tensor_parallel_size=1,
@@ -479,7 +479,7 @@ def test_apply_ready_response_syncs_engine_metadata(effective_size, other_size):
     else:
         fields["effective_attention_block_size"] = effective_size
     client._apply_ready_response(msgspec.msgpack.encode(fields))
-    assert client.aphrodite_config.cache_config.block_size == 1056
+    assert client.sonar_config.cache_config.block_size == 1056
     import dataclasses
 
     first = client.capacity_reports[0]
@@ -489,7 +489,7 @@ def test_apply_ready_response_syncs_engine_metadata(effective_size, other_size):
     updated = dataclasses.replace(second, kv_cache_size_tokens=5678)
     client._apply_ready_response(msgspec.msgpack.encode(updated))
     assert client.capacity_reports == {0: first, 1: updated}
-    cache_config = client.aphrodite_config.cache_config
+    cache_config = client.sonar_config.cache_config
     assert cache_config.effective_attention_block_size == effective_size
 
     fields["effective_attention_block_size"] = other_size
@@ -498,7 +498,7 @@ def test_apply_ready_response_syncs_engine_metadata(effective_size, other_size):
 
     client._apply_ready_response(b"")
     assert cache_config.effective_attention_block_size is None
-    assert client.aphrodite_config.parallel_config._coord_store_port == 1234
+    assert client.sonar_config.parallel_config._coord_store_port == 1234
     assert client.coordinator_input_address == "tcp://127.0.0.1:1235"
     assert client.coordinator_output_address == "tcp://127.0.0.1:1236"
 
@@ -508,7 +508,7 @@ def test_apply_ready_response_syncs_mamba_block_size():
 
     client = object.__new__(MPClient)
     client._effective_attention_block_sizes = set()
-    client.aphrodite_config = SimpleNamespace(
+    client.sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(block_size=16, num_gpu_blocks=0),
         model_config=SimpleNamespace(max_model_len=8192),
         parallel_config=SimpleNamespace(_coord_store_port=0),
@@ -522,7 +522,7 @@ def test_apply_ready_response_syncs_mamba_block_size():
             block_size=1056,
             dp_stats_address=None,
             dtype="bfloat16",
-            aphrodite_version="test",
+            sonar_version="test",
             world_size=1,
             data_parallel_size=1,
             tensor_parallel_size=1,
@@ -538,7 +538,7 @@ def test_apply_ready_response_syncs_mamba_block_size():
         )
     )
     client._apply_ready_response(payload)
-    assert client.aphrodite_config.cache_config.mamba_block_size == 1056
+    assert client.sonar_config.cache_config.mamba_block_size == 1056
 
 
 def loop_until_done(client: EngineCoreClient, outputs: dict):
@@ -689,7 +689,7 @@ def subprocess_echo_patch(monkeypatch, tmp_path):
         "\n".join(
             [
                 "import time",
-                "from aphrodite.v1.engine.core import EngineCore",
+                "from sonar.v1.engine.core import EngineCore",
                 inspect.getsource(echo),
                 "EngineCore.echo = echo",
             ]
@@ -713,7 +713,7 @@ def subprocess_echo_dc_patch(monkeypatch, tmp_path):
                 inspect.getsource(TestMessage),
                 f"TestMessage.__module__ = '{TEST_MODULE}'",
                 "",
-                "from aphrodite.v1.engine.core import EngineCore",
+                "from sonar.v1.engine.core import EngineCore",
                 inspect.getsource(echo_dc),
                 "EngineCore.echo_dc = echo_dc",
             ]
@@ -737,7 +737,7 @@ def subprocess_echo_dc_dict_patch(monkeypatch, tmp_path):
                 inspect.getsource(TestMessage),
                 f"TestMessage.__module__ = '{TEST_MODULE}'",
                 "",
-                "from aphrodite.v1.engine.core import EngineCore",
+                "from sonar.v1.engine.core import EngineCore",
                 inspect.getsource(echo_dc_dict),
                 "EngineCore.echo_dc_dict = echo_dc_dict",
             ]
@@ -762,7 +762,7 @@ def subprocess_echo_dc_nested_patch(monkeypatch, tmp_path):
                 inspect.getsource(TestMessage),
                 f"TestMessage.__module__ = '{TEST_MODULE}'",
                 "",
-                "from aphrodite.v1.engine.core import EngineCore",
+                "from sonar.v1.engine.core import EngineCore",
                 inspect.getsource(echo_dc_nested),
                 "EngineCore.echo_dc_nested = echo_dc_nested",
             ]
@@ -784,7 +784,7 @@ def subprocess_future_echo_patch(monkeypatch, tmp_path):
                 "from concurrent.futures import Future",
                 "from typing import Any",
                 "",
-                "from aphrodite.v1.engine.core import EngineCore",
+                "from sonar.v1.engine.core import EngineCore",
                 inspect.getsource(future_echo),
                 "EngineCore.future_echo = future_echo",
             ]
@@ -808,14 +808,14 @@ def test_engine_core_client(
         m.setattr(EngineCore, "echo", echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=multiprocessing_mode,
                 asyncio_mode=False,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=False,
             )
@@ -891,14 +891,14 @@ async def test_engine_core_client_asyncio(
         m.setattr(EngineCore, "echo", echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -975,20 +975,20 @@ async def test_engine_core_client_util_method_custom_return(
 ):
     with monkeypatch.context() as m:
         # Must set insecure serialization to allow returning custom types.
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         # Monkey-patch core engine utility function to test.
         m.setattr(EngineCore, "echo_dc", echo_dc, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -1021,20 +1021,20 @@ async def test_engine_core_client_util_method_custom_dict_return(
 ):
     with monkeypatch.context() as m:
         # Must set insecure serialization to allow returning custom types.
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         # Monkey-patch core engine utility function to test.
         m.setattr(EngineCore, "echo_dc_dict", echo_dc_dict, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -1072,20 +1072,20 @@ async def test_engine_core_client_util_method_nested_structures(
 ):
     with monkeypatch.context() as m:
         # Must set insecure serialization to allow returning custom types.
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
         # Monkey-patch core engine utility function to test.
         m.setattr(EngineCore, "echo_dc_nested", echo_dc_nested, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -1162,14 +1162,14 @@ async def test_engine_core_client_future_utility_async(
         m.setattr(EngineCore, "future_echo", future_echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                aphrodite_config=aphrodite_config,
+                sonar_config=sonar_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -1218,14 +1218,14 @@ def test_kv_cache_events(
     )
     engine_args.kv_events_config = publisher_config
 
-    aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+    sonar_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
 
-    executor_class = Executor.get_class(aphrodite_config)
+    executor_class = Executor.get_class(sonar_config)
     with set_default_torch_num_threads(1):
         client = EngineCoreClient.make_client(
             multiprocess_mode=multiprocessing_mode,
             asyncio_mode=False,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=False,
         )
@@ -1291,14 +1291,14 @@ async def test_kv_cache_events_dp(
     )
     engine_args.kv_events_config = publisher_config
 
-    aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+    sonar_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
 
-    executor_class = Executor.get_class(aphrodite_config)
+    executor_class = Executor.get_class(sonar_config)
     with set_default_torch_num_threads(1):
         client = EngineCoreClient.make_client(
             multiprocess_mode=multiprocessing_mode,
             asyncio_mode=True,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=False,
         )
@@ -1369,9 +1369,9 @@ def test_startup_failure(monkeypatch: pytest.MonkeyPatch):
 
         t = time.time()
         engine_args = EngineArgs(model=MODEL_NAME)
-        aphrodite_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(aphrodite_config)
-        print(f"AphroditeConfig creation took {time.time() - t:.2f} seconds.")
+        sonar_config = engine_args.create_engine_config(usage_context=UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(sonar_config)
+        print(f"SonarConfig creation took {time.time() - t:.2f} seconds.")
 
         # Start another thread to wait for engine core process to start
         # and kill it - simulate fatal uncaught process exit.
@@ -1388,7 +1388,7 @@ def test_startup_failure(monkeypatch: pytest.MonkeyPatch):
         _core_client = EngineCoreClient.make_client(
             multiprocess_mode=True,
             asyncio_mode=True,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             executor_class=executor_class,
             log_stats=True,
         )
@@ -1401,17 +1401,17 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
     """Test that EngineCoreProc can be instantiated when CUDA_VISIBLE_DEVICES
     is empty. This ensures the engine frontend does not need access to GPUs.
     """
-    from aphrodite.v1.engine.core import EngineCoreProc
-    from aphrodite.v1.executor.abstract import Executor
+    from sonar.v1.engine.core import EngineCoreProc
+    from sonar.v1.executor.abstract import Executor
 
     # Create a simple mock executor instead of a complex custom class
     mock_executor_class = MagicMock(spec=Executor)
 
-    def create_mock_executor(aphrodite_config):
+    def create_mock_executor(sonar_config):
         mock_executor = MagicMock()
 
         # Only implement the methods that are actually called during init
-        from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+        from sonar.v1.kv_cache_interface import FullAttentionSpec
 
         mock_spec = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=64, dtype=torch.float16)
 
@@ -1428,7 +1428,7 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
     with monkeypatch.context() as m:
         m.setenv("CUDA_VISIBLE_DEVICES", "")  # No CUDA devices
 
-        from aphrodite.v1.engine.utils import EngineZmqAddresses
+        from sonar.v1.engine.utils import EngineZmqAddresses
 
         def mock_startup_handshake(self, handshake_socket, local_client, headless, parallel_config):
             return EngineZmqAddresses(
@@ -1441,11 +1441,9 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
         # Background processes are not important here
         m.setattr(EngineCoreProc, "startup_handshake", mock_startup_handshake)
 
-        aphrodite_config = EngineArgs(
-            model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True
-        ).create_engine_config()
+        sonar_config = EngineArgs(model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True).create_engine_config()
         engine_core_proc = EngineCoreProc(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             local_client=True,
             handshake_address="tcp://127.0.0.1:12345",
             executor_class=mock_executor_class,
@@ -1458,17 +1456,17 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
 
 def _ready_response_with_weight_transfer(weight_transfer_config):
     """Build a ready response against a mock executor."""
-    from aphrodite.v1.engine.core import EngineCoreProc
+    from sonar.v1.engine.core import EngineCoreProc
 
     executor = MagicMock()
     executor.supports_draft_weight_updates.return_value = True
 
     proc = MagicMock()
     proc.model_executor = executor
-    proc.aphrodite_config = MagicMock()
-    proc.aphrodite_config.weight_transfer_config = weight_transfer_config
-    proc.aphrodite_config.lora_config = None
-    proc.aphrodite_config.model_config.enable_sleep_mode = False
+    proc.sonar_config = MagicMock()
+    proc.sonar_config.weight_transfer_config = weight_transfer_config
+    proc.sonar_config.lora_config = None
+    proc.sonar_config.model_config.enable_sleep_mode = False
     proc.scheduler = MagicMock()
 
     response = EngineCoreProc._make_ready_response(proc)
@@ -1499,12 +1497,12 @@ def test_apply_ready_response_retains_kv_event_sources():
     without KV events contribute nothing."""
     import msgspec
 
-    from aphrodite.config.kv_events import KVEventsConfig
+    from sonar.config.kv_events import KVEventsConfig
 
     client = object.__new__(MPClient)
     client._effective_attention_block_sizes = set()
     client._kv_event_sources = {}
-    client.aphrodite_config = SimpleNamespace(
+    client.sonar_config = SimpleNamespace(
         cache_config=SimpleNamespace(block_size=16, num_gpu_blocks=0),
         model_config=SimpleNamespace(max_model_len=8192),
         parallel_config=SimpleNamespace(_coord_store_port=0),
@@ -1518,7 +1516,7 @@ def test_apply_ready_response_retains_kv_event_sources():
                 block_size=16,
                 dp_stats_address=None,
                 dtype="bfloat16",
-                aphrodite_version="test",
+                sonar_version="test",
                 world_size=2,
                 data_parallel_size=2,
                 tensor_parallel_size=1,

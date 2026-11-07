@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite import version
+from sonar import version
 
 
 def test_version_is_defined():
@@ -37,5 +37,5 @@ def test_version_tuple():
     ],
 )
 def test_prev_minor_version_was(version_tuple, version_str, expected):
-    with patch("aphrodite.version.__version_tuple__", version_tuple):
+    with patch("sonar.version.__version_tuple__", version_tuple):
         assert version._prev_minor_version_was(version_str) == expected

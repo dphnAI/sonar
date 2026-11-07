@@ -16,7 +16,7 @@
 
 #define CEILDIV(x, y) (((x) + (y) - 1) / (y))
 
-namespace aphrodite {
+namespace sonar {
 namespace moe {
 namespace batched_moe_align_block_size {
 
@@ -425,7 +425,7 @@ __global__ void moe_sum_vec_kernel(
     const int32_t* __restrict__ expert_map, const int64_t stride_tk_token,
     const int64_t stride_tk_k) {
   using vec_t =
-      aphrodite::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;  // 16-byte pack
+      sonar::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;  // 16-byte pack
   constexpr int VEC = MOE_SUM_VEC<scalar_t>;
   const int64_t n_vec = d / VEC;
   const int64_t total = num_tokens * n_vec;
@@ -472,7 +472,7 @@ __global__ void moe_sum_vec_dynamic_kernel(
     const int64_t stride_token, const int64_t stride_topk,
     const idx_t* __restrict__ topk_ids, const int32_t* __restrict__ expert_map,
     const int64_t stride_tk_token, const int64_t stride_tk_k) {
-  using vec_t = aphrodite::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;
+  using vec_t = sonar::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;
   constexpr int VEC = MOE_SUM_VEC<scalar_t>;
   const int64_t n_vec = d / VEC;
   const int64_t total = num_tokens * n_vec;
@@ -533,7 +533,7 @@ __global__ void moe_sum_scalar_kernel(
         }
       }
       x += static_cast<float>(
-          APHRODITE_LDG(&in_tok[k * stride_topk + idx * stride_hidden]));
+          SONAR_LDG(&in_tok[k * stride_topk + idx * stride_hidden]));
     }
     out[token_idx * d + idx] = static_cast<scalar_t>(x);
   }
@@ -667,7 +667,7 @@ __global__ void moe_lora_align_block_size_small_batch_expert_kernel(
 }
 
 }  // namespace moe
-}  // namespace aphrodite
+}  // namespace sonar
 
 // taken from
 // https://github.com/sgl-project/sglang/blob/8b5f83ed3b7d2a49ad5c5cd5aa61c5d502f47dbc
@@ -714,7 +714,7 @@ void moe_align_block_size(torch::stable::Tensor topk_ids, int64_t num_experts,
                                           torch::headeronly::ScalarType::Int);
   }
 
-  APHRODITE_STABLE_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(
+  SONAR_STABLE_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(
       topk_ids.scalar_type(), "moe_align_block_size_kernel", [&] {
         // calc needed amount of shared mem for `cumsum` tensors
         bool small_batch_expert_mode =
@@ -730,7 +730,7 @@ void moe_align_block_size(torch::stable::Tensor topk_ids, int64_t num_experts,
           // threadIdx.x < fill_threads: filling sorted_token_ids
           constexpr int32_t fill_threads = 256;
           auto small_batch_expert_kernel =
-              aphrodite::moe::moe_align_block_size_small_batch_expert_kernel<
+              sonar::moe::moe_align_block_size_small_batch_expert_kernel<
                   scalar_t, fill_threads>;
           small_batch_expert_kernel<<<1, fill_threads + threads,
                                       shared_mem_size, stream>>>(
@@ -746,8 +746,7 @@ void moe_align_block_size(torch::stable::Tensor topk_ids, int64_t num_experts,
         } else {
           torch::stable::Tensor cumsum_buffer = torch::stable::new_empty(
               topk_ids, {num_experts + 1}, torch::headeronly::ScalarType::Int);
-          auto align_kernel =
-              aphrodite::moe::moe_align_block_size_kernel<scalar_t>;
+          auto align_kernel = sonar::moe::moe_align_block_size_kernel<scalar_t>;
 
           size_t num_warps = CEILDIV(padded_num_experts, experts_per_warp);
           size_t shared_mem_size =
@@ -776,7 +775,7 @@ void moe_align_block_size(torch::stable::Tensor topk_ids, int64_t num_experts,
           dim3 gridDims(1, actual_blocks);
 
           auto sort_kernel =
-              aphrodite::moe::count_and_sort_expert_tokens_kernel<scalar_t>;
+              sonar::moe::count_and_sort_expert_tokens_kernel<scalar_t>;
           sort_kernel<<<gridDims, block_threads, 0, stream>>>(
               reinterpret_cast<const scalar_t*>(topk_ids.const_data_ptr()),
               reinterpret_cast<int32_t*>(sorted_token_ids.mutable_data_ptr()),
@@ -794,7 +793,7 @@ void batched_moe_align_block_size(int64_t max_tokens_per_batch,
                                   torch::stable::Tensor sorted_ids,
                                   torch::stable::Tensor batch_ids,
                                   torch::stable::Tensor num_tokens_post_pad) {
-  namespace batched_kernel = aphrodite::moe::batched_moe_align_block_size;
+  namespace batched_kernel = sonar::moe::batched_moe_align_block_size;
 
   const torch::stable::accelerator::DeviceGuard device_guard(
       batch_num_tokens.get_device_index());
@@ -868,14 +867,14 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
     }
 
 #define LAUNCH_MOE_SUM_PAD_AWARE_VEC(TOPK)                                     \
-  aphrodite::moe::moe_sum_vec_kernel<scalar_t, idx_t, TOPK, true>              \
+  sonar::moe::moe_sum_vec_kernel<scalar_t, idx_t, TOPK, true>                  \
       <<<grid, dim3(block), 0, stream>>>(                                      \
           out_ptr, in_ptr, num_tokens, hidden_size, stride_token, stride_topk, \
           topk_ids_ptr, expert_map_ptr, stride_tk_token, stride_tk_k)
 
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(
         input.scalar_type(), "moe_sum_pad_aware", [&] {
-          constexpr int VEC = aphrodite::moe::MOE_SUM_VEC<scalar_t>;
+          constexpr int VEC = sonar::moe::MOE_SUM_VEC<scalar_t>;
           constexpr int WIDTH = VEC * sizeof(scalar_t);
           auto* out_ptr =
               reinterpret_cast<scalar_t*>(output.mutable_data_ptr());
@@ -888,7 +887,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
               (reinterpret_cast<uintptr_t>(in_ptr) % WIDTH == 0) &&
               (reinterpret_cast<uintptr_t>(out_ptr) % WIDTH == 0);
 
-          APHRODITE_STABLE_DISPATCH_IDX_TYPES(
+          SONAR_STABLE_DISPATCH_IDX_TYPES(
               tk.scalar_type(), "moe_sum_pad_aware_idx", [&] {
                 auto* topk_ids_ptr =
                     reinterpret_cast<const idx_t*>(tk.const_data_ptr());
@@ -918,8 +917,8 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
                       LAUNCH_MOE_SUM_PAD_AWARE_VEC(9);
                       break;
                     default:
-                      aphrodite::moe::moe_sum_vec_dynamic_kernel<scalar_t,
-                                                                 idx_t, true>
+                      sonar::moe::moe_sum_vec_dynamic_kernel<scalar_t, idx_t,
+                                                             true>
                           <<<grid, dim3(block), 0, stream>>>(
                               out_ptr, in_ptr, num_tokens, hidden_size, topk,
                               stride_token, stride_topk, topk_ids_ptr,
@@ -929,7 +928,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
                 } else {
                   dim3 grid(num_tokens);
                   dim3 block(std::min(hidden_size, 1024));
-                  aphrodite::moe::moe_sum_scalar_kernel<scalar_t, idx_t, true>
+                  sonar::moe::moe_sum_scalar_kernel<scalar_t, idx_t, true>
                       <<<grid, block, 0, stream>>>(
                           out_ptr, in_ptr, hidden_size, topk, stride_token,
                           stride_topk, stride_hidden, topk_ids_ptr,
@@ -942,13 +941,13 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
   }
 
 #define LAUNCH_MOE_SUM_VEC(TOPK)                                      \
-  aphrodite::moe::moe_sum_vec_kernel<scalar_t, int32_t, TOPK, false>  \
+  sonar::moe::moe_sum_vec_kernel<scalar_t, int32_t, TOPK, false>      \
       <<<grid, dim3(block), 0, stream>>>(out_ptr, in_ptr, num_tokens, \
                                          hidden_size, stride_token,   \
                                          stride_topk, nullptr, nullptr, 0, 0)
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "moe_sum", [&] {
-    constexpr int VEC = aphrodite::moe::MOE_SUM_VEC<scalar_t>;
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "moe_sum", [&] {
+    constexpr int VEC = sonar::moe::MOE_SUM_VEC<scalar_t>;
     constexpr int WIDTH = VEC * sizeof(scalar_t);  // 16 bytes
     auto* out_ptr = reinterpret_cast<scalar_t*>(output.mutable_data_ptr());
     auto* in_ptr = reinterpret_cast<const scalar_t*>(input.const_data_ptr());
@@ -985,7 +984,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
           LAUNCH_MOE_SUM_VEC(9);
           break;
         default:
-          aphrodite::moe::moe_sum_vec_dynamic_kernel<scalar_t, int32_t, false>
+          sonar::moe::moe_sum_vec_dynamic_kernel<scalar_t, int32_t, false>
               <<<grid, dim3(block), 0, stream>>>(
                   out_ptr, in_ptr, num_tokens, hidden_size, topk, stride_token,
                   stride_topk, nullptr, nullptr, 0, 0);
@@ -994,7 +993,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
     } else {
       dim3 grid(num_tokens);
       dim3 block(std::min(hidden_size, 1024));
-      aphrodite::moe::moe_sum_scalar_kernel<scalar_t, int32_t, false>
+      sonar::moe::moe_sum_scalar_kernel<scalar_t, int32_t, false>
           <<<grid, block, 0, stream>>>(out_ptr, in_ptr, hidden_size, topk,
                                        stride_token, stride_topk, stride_hidden,
                                        nullptr, nullptr, 0, 0);
@@ -1041,7 +1040,7 @@ void moe_lora_align_block_size(
                                           torch::headeronly::ScalarType::Int);
   }
 
-  APHRODITE_STABLE_DISPATCH_INTEGRAL_TYPES(
+  SONAR_STABLE_DISPATCH_INTEGRAL_TYPES(
       topk_ids.scalar_type(), "moe_lora_align_sum_kernel", [&] {
         bool small_batch_expert_mode =
             (topk_ids.numel() < 1024) && (num_experts <= 64);
@@ -1060,12 +1059,11 @@ void moe_lora_align_block_size(
           constexpr int32_t fill_threads = 256;
 
           dim3 blockDim(num_thread + fill_threads);
-          auto kernel = aphrodite::moe::
-              moe_lora_align_block_size_small_batch_expert_kernel<scalar_t,
-                                                                  fill_threads>;
-          STD_CUDA_CHECK(
-              APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
-                  (void*)kernel, shared_mem));
+          auto kernel =
+              sonar::moe::moe_lora_align_block_size_small_batch_expert_kernel<
+                  scalar_t, fill_threads>;
+          STD_CUDA_CHECK(SONAR_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
+              (void*)kernel, shared_mem));
           // Grid size is (max_loras + 1) because active_lora_ids has length
           // max_loras + 1: sorted-unique values of token_lora_mapping, which
           // can include -1 (base-model tokens) in addition to up to max_loras
@@ -1103,7 +1101,7 @@ void moe_lora_align_block_size(
               torch::headeronly::ScalarType::Int);
 
           auto align_kernel =
-              aphrodite::moe::moe_lora_align_block_size_kernel<scalar_t>;
+              sonar::moe::moe_lora_align_block_size_kernel<scalar_t>;
 
           // Launch two threadblocks per LoRA slot, across max_loras + 1 slots
           // to cover the extra "-1" (base-model tokens) entry that
@@ -1146,8 +1144,7 @@ void moe_lora_align_block_size(
           // active_lora_ids has -1 at position 0.
           dim3 gridDims(max_loras + 1, actual_blocks);
           auto sort_kernel =
-              aphrodite::moe::lora_count_and_sort_expert_tokens_kernel<
-                  scalar_t>;
+              sonar::moe::lora_count_and_sort_expert_tokens_kernel<scalar_t>;
 
           sort_kernel<<<gridDims, block_threads, 0, stream>>>(
               reinterpret_cast<const scalar_t*>(topk_ids.const_data_ptr()),

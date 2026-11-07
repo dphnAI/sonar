@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
+from sonar.platforms import current_platform
 from tests.utils import single_gpu_only
 
 from ..utils import (
@@ -16,9 +16,9 @@ from ..utils import (
 
 
 @pytest.fixture
-def disable_aphrodite_compile_cache_on_rocm(request: pytest.FixtureRequest) -> None:
+def disable_sonar_compile_cache_on_rocm(request: pytest.FixtureRequest) -> None:
     if current_platform.is_rocm():
-        request.getfixturevalue("disable_aphrodite_compile_cache")
+        request.getfixturevalue("disable_sonar_compile_cache")
 
 
 @pytest.mark.parametrize(
@@ -36,23 +36,23 @@ def disable_aphrodite_compile_cache_on_rocm(request: pytest.FixtureRequest) -> N
         },
     ],
 )
-@pytest.mark.usefixtures("disable_aphrodite_compile_cache_on_rocm")
+@pytest.mark.usefixtures("disable_sonar_compile_cache_on_rocm")
 @single_gpu_only
 def test_ngram_and_suffix_correctness(
     speculative_config: dict,
     model_name: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         block_size=None,
-        # Keep LLM defaults; AphroditeRunner only provides lifecycle cleanup here.
+        # Keep LLM defaults; SonarRunner only provides lifecycle cleanup here.
         trust_remote_code=False,
         enable_chunked_prefill=None,
         speculative_config=speculative_config,
         max_model_len=4096,
         # Preserve LLM's default compilation/cudagraph configuration. Without
-        # this, AphroditeRunner injects its reduced test-only capture sizes.
+        # this, SonarRunner injects its reduced test-only capture sizes.
         compilation_config=CompilationConfig(),
     ) as runner:
         evaluate_llm_for_gsm8k(runner.llm)
@@ -62,14 +62,14 @@ def test_ngram_and_suffix_correctness(
 @single_gpu_only
 def test_ngram_gpu_default_with_async_scheduling(
     async_scheduling: bool,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Test ngram_gpu speculative decoding (k=3) correctness with and without
     async scheduling, validated via GSM8K accuracy.
     Uses Qwen/Qwen3-8B (ref GSM8K accuracy: 87%-92%).
     """
     qwen3_model = "Qwen/Qwen3-8B"
-    with aphrodite_runner(
+    with sonar_runner(
         qwen3_model,
         block_size=None,
         trust_remote_code=False,
@@ -85,7 +85,7 @@ def test_ngram_gpu_default_with_async_scheduling(
         compilation_config=CompilationConfig(),
     ) as spec_runner:
         # Assert the resolved async_scheduling config matches what was requested.
-        assert spec_runner.llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling == async_scheduling
+        assert spec_runner.llm.llm_engine.sonar_config.scheduler_config.async_scheduling == async_scheduling
         evaluate_llm_for_gsm8k(spec_runner.llm, expected_accuracy_threshold=0.8)
 
 
@@ -93,14 +93,14 @@ def test_ngram_gpu_default_with_async_scheduling(
 def test_suffix_decoding_acceptance(
     sampling_config: SamplingParams,
     model_name: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Check that suffix decoding caching takes effect and improves acceptance
     lengths and acceptance rates over multiple runs of the same prompts.
     """
     test_prompts = get_test_prompts(mm_enabled=False)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         block_size=None,
         trust_remote_code=False,
@@ -121,8 +121,8 @@ def test_suffix_decoding_acceptance(
             spec_runner.llm.chat(test_prompts, sampling_config)
             # Collect draft and acceptance stats.
             metrics = spec_runner.llm.get_metrics()
-            num_draft.append(get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_draft_tokens"))
-            num_accept.append(get_spec_decode_metric_value(metrics, "aphrodite:spec_decode_num_accepted_tokens"))
+            num_draft.append(get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_draft_tokens"))
+            num_accept.append(get_spec_decode_metric_value(metrics, "sonar:spec_decode_num_accepted_tokens"))
 
     # Calculate the acceptance rates for the first and last runs.
     first_accept_tokens = num_accept[0]

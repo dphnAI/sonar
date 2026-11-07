@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""End-to-end tests for the Aphrodite RL pause/resume lifecycle."""
+"""End-to-end tests for the Sonar RL pause/resume lifecycle."""
 
 import os
 import threading
@@ -32,7 +32,7 @@ def use_v2(request):
 @pytest.fixture(scope="module")
 def server_url(use_v2):
     env_vars = {
-        "APHRODITE_USE_V2_MODEL_RUNNER": "1" if use_v2 else "0",
+        "SONAR_USE_V2_MODEL_RUNNER": "1" if use_v2 else "0",
     }
 
     with (

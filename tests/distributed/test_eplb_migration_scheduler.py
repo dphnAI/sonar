@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.parallel import EPLBConfig
-from aphrodite.distributed.eplb.eplb_communicator import EplbCommunicator
-from aphrodite.distributed.eplb.migration_scheduler import (
+from sonar.config.parallel import EPLBConfig
+from sonar.distributed.eplb.eplb_communicator import EplbCommunicator
+from sonar.distributed.eplb.migration_scheduler import (
     MigrationFlow,
     schedule_migration_batches,
     schedule_migration_batches_for_layers,
 )
-from aphrodite.distributed.eplb.rebalance_execute import move_from_buffer, move_to_buffer
+from sonar.distributed.eplb.rebalance_execute import move_from_buffer, move_to_buffer
 
 
 class _MockEplbCommunicator(EplbCommunicator):

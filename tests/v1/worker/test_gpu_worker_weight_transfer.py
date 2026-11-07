@@ -11,10 +11,10 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, ParallelConfig, get_current_aphrodite_config
-from aphrodite.lora.layers import BaseLayerWithLoRA
-from aphrodite.model_executor.model_loader.reload.inplace import get_parameter_for_reload
-from aphrodite.v1.worker.gpu_worker import Worker
+from sonar.config import ParallelConfig, SonarConfig, get_current_sonar_config
+from sonar.lora.layers import BaseLayerWithLoRA
+from sonar.model_executor.model_loader.reload.inplace import get_parameter_for_reload
+from sonar.v1.worker.gpu_worker import Worker
 
 
 class _RecordingEngine:
@@ -30,10 +30,10 @@ class _RecordingEngine:
         self.supports_draft_weight_update = False
         self.update_calls: list[dict] = []
         self.supports_draft_weight_update = True
-        self.seen_configs: list[AphroditeConfig] = []
+        self.seen_configs: list[SonarConfig] = []
 
     def _record_config(self) -> None:
-        self.seen_configs.append(get_current_aphrodite_config())
+        self.seen_configs.append(get_current_sonar_config())
 
     def start_weight_update(self) -> None:
         self._record_config()
@@ -60,11 +60,11 @@ class _RecordingEngine:
 
 class _RecordingModelRunner:
     def __init__(self) -> None:
-        self.seen_config: AphroditeConfig | None = None
+        self.seen_config: SonarConfig | None = None
         self.reset_lora_calls = 0
 
     def reload_weights(self) -> None:
-        self.seen_config = get_current_aphrodite_config()
+        self.seen_config = get_current_sonar_config()
 
     def reset_lora_state(self) -> None:
         self.reset_lora_calls += 1
@@ -75,7 +75,7 @@ class _RecordingModelRunner:
 
 def _make_worker(engine: _RecordingEngine | None) -> Worker:
     worker = object.__new__(Worker)
-    worker.aphrodite_config = AphroditeConfig()
+    worker.sonar_config = SonarConfig()
     worker.weight_transfer_engine = engine
     worker._weight_update_active = False
     worker._weight_update_is_draft = False
@@ -90,7 +90,7 @@ def test_reload_weights_sets_current_config():
 
     Worker.reload_weights(worker)
 
-    assert model_runner.seen_config is worker.aphrodite_config
+    assert model_runner.seen_config is worker.sonar_config
 
 
 @pytest.mark.parametrize("enabled,active", [(True, False), (True, True), (False, False)])
@@ -142,7 +142,7 @@ def test_start_update_finish_delegates_to_engine():
     assert engine.finished is True
     assert engine.reset_count == 1
     assert worker._weight_update_active is False
-    assert engine.seen_configs == [worker.aphrodite_config] * 3
+    assert engine.seen_configs == [worker.sonar_config] * 3
     assert worker.model_runner.reset_lora_calls == 1
 
 
@@ -177,7 +177,7 @@ def test_rank_local_update_uses_data_parallel_index_after_reconfigure():
     assert parallel_config.data_parallel_rank == 0
     assert parallel_config.data_parallel_index == 2
 
-    worker.aphrodite_config.parallel_config = parallel_config
+    worker.sonar_config.parallel_config = parallel_config
     Worker.start_weight_update(worker)
 
     Worker.update_weights(
@@ -242,7 +242,7 @@ def test_update_resets_active_on_error():
 
 @pytest.mark.parametrize("mode", ["direct", "layerwise"])
 def test_failed_finish_ends_session_only_in_direct_mode(mode, monkeypatch):
-    monkeypatch.setenv("APHRODITE_RELOAD_MODE", mode)
+    monkeypatch.setenv("SONAR_RELOAD_MODE", mode)
     engine = _RecordingEngine(raise_on_finish=True)
     worker = _make_worker(engine)
     Worker.start_weight_update(worker)

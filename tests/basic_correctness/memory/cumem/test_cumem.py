@@ -6,11 +6,11 @@ import gc
 import pytest
 import torch
 
-import aphrodite.device_allocator.cumem as cumem
-from aphrodite import LLM, SamplingParams
-from aphrodite.device_allocator import get_mem_allocator_instance
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import PIN_MEMORY
+import sonar.device_allocator.cumem as cumem
+from sonar import LLM, SamplingParams
+from sonar.device_allocator import get_mem_allocator_instance
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import PIN_MEMORY
 
 from ....utils import create_new_process_for_each_test
 
@@ -237,7 +237,7 @@ def test_basic_cumem(register_error, monkeypatch):
 @create_new_process_for_each_test("fork" if current_platform.is_cuda() else "spawn")
 def test_release_kv_cache_memory_preserves_generation(full_sleep, monkeypatch):
     """Rejected release and KV-only/full sleep cycles preserve greedy tokens."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     kv_cache_memory_bytes = 256 * 1024 * 1024
     llm = LLM(
         "Qwen/Qwen3-0.6B",
@@ -304,7 +304,7 @@ def test_release_kv_cache_memory_preserves_generation(full_sleep, monkeypatch):
 @create_new_process_for_each_test("fork" if current_platform.is_cuda() else "spawn")
 def test_sleep_with_only_weights_asleep(first_level, second_level, monkeypatch):
     """Repeated sleep after KV-only wake preserves mappings and recoverability."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     llm = LLM(
         "Qwen/Qwen3-0.6B",
         enable_sleep_mode=True,
@@ -413,8 +413,8 @@ def test_workspace_scratch_discarded_on_sleep():
     """Workspace scratch lives in the sleep-mode pool: sleep discards it, any
     (selective) wake remaps it at the same address so captured graphs replay,
     and a buffer outgrown by a resize stays usable until it is released."""
-    from aphrodite.device_allocator.sleep_mode_backend import CuMemBackend
-    from aphrodite.v1.worker.workspace import WorkspaceManager
+    from sonar.device_allocator.sleep_mode_backend import CuMemBackend
+    from sonar.v1.worker.workspace import WorkspaceManager
 
     allocator = get_mem_allocator_instance()
     manager = WorkspaceManager(
@@ -490,7 +490,7 @@ def test_reentered_tag(free_x_early):
 def test_runtime_state_survives_sleep(level):
     """Runtime state is offloaded at both levels and restored by the first
     selective wake; a nested kv_cache pool keeps its own tag."""
-    from aphrodite.device_allocator.sleep_mode_backend import CuMemBackend
+    from sonar.device_allocator.sleep_mode_backend import CuMemBackend
 
     allocator = get_mem_allocator_instance()
     with allocator.use_memory_pool("runtime"):
@@ -600,12 +600,12 @@ def test_cudagraph_pool_sleep(level):
     from contextlib import nullcontext
     from types import SimpleNamespace
 
-    import aphrodite.distributed.device_communicators.pynccl_allocator as nccl_alloc
-    from aphrodite.compilation.cudagraph_pool import (
+    import sonar.distributed.device_communicators.pynccl_allocator as nccl_alloc
+    from sonar.compilation.cudagraph_pool import (
         capture_outside_cumem_pool,
         capture_pool,
     )
-    from aphrodite.device_allocator.sleep_mode_backend import CuMemBackend
+    from sonar.device_allocator.sleep_mode_backend import CuMemBackend
 
     allocator = get_mem_allocator_instance()
     on, off = (SimpleNamespace(use_cumem_cudagraph_pool=v) for v in (True, False))

@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
-from aphrodite.v1.core.encoder_cache_manager import (
+from sonar.multimodal.inputs import MultiModalFeatureSpec, PlaceholderRange
+from sonar.v1.core.encoder_cache_manager import (
     EncoderCacheManager,
     EncoderDecoderCacheManager,
 )

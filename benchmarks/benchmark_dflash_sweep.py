@@ -162,7 +162,7 @@ def run_benchmark(args: argparse.Namespace) -> None:
             "num_speculative_tokens": args.num_speculative_tokens,
         }
     server_cmd = [
-        args.aphrodite_bin,
+        args.sonar_bin,
         "run",
         args.model,
         "--tokenizer",
@@ -206,7 +206,7 @@ def run_benchmark(args: argparse.Namespace) -> None:
 
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
-    env.setdefault("APHRODITE_NO_USAGE_STATS", "1")
+    env.setdefault("SONAR_NO_USAGE_STATS", "1")
     proc = subprocess.Popen(
         server_cmd,
         stdout=subprocess.PIPE,
@@ -319,7 +319,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--model", default="Qwen/Qwen3.5-4B")
     parser.add_argument("--draft-model", default="z-lab/Qwen3.5-4B-DFlash")
     parser.add_argument("--tokenizer-model")
-    parser.add_argument("--aphrodite-bin", default="aphrodite")
+    parser.add_argument("--sonar-bin", default="sonar")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=2242)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.8)

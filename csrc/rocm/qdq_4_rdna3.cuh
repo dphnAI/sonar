@@ -23,7 +23,7 @@
 #include <hip/hip_bf16.h>
 #include <hip/hip_fp16.h>
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq_rdna3 {
 
 using bf16_t = __hip_bfloat16;
@@ -137,6 +137,6 @@ __forceinline__ __device__ void prep_zero_scale_bf16_f32(uint32_t zero,
 }
 
 }  // namespace gptq_rdna3
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // _qdq_4_rdna3_cuh

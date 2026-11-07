@@ -8,27 +8,27 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     DeviceConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.spec_decode.dflash import DFlashProposer
-from aphrodite.v1.spec_decode.draft_model import DraftModelProposer
-from aphrodite.v1.spec_decode.eagle import EagleProposer
-from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
-from aphrodite.v1.spec_decode.metadata import SpecDecodeMetadata
-from aphrodite.v1.spec_decode.utils import extend_all_queries_by_N
-from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from sonar.config.load import LoadConfig
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.spec_decode.dflash import DFlashProposer
+from sonar.v1.spec_decode.draft_model import DraftModelProposer
+from sonar.v1.spec_decode.eagle import EagleProposer
+from sonar.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
+from sonar.v1.spec_decode.metadata import SpecDecodeMetadata
+from sonar.v1.spec_decode.utils import extend_all_queries_by_N
+from sonar.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 from tests.utils import get_attn_backend_list_based_on_platform
 from tests.v1.attention.utils import (
     BatchSpec,
@@ -94,7 +94,7 @@ def _create_proposer(
         speculative_config.draft_model_config.hf_config.pard_token = 0
 
     device = DEVICE_TYPE
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(block_size=16),
         speculative_config=speculative_config,
@@ -112,11 +112,11 @@ def _create_proposer(
 
     proposer: SpecDecodeBaseProposer
     if method == "dflash":
-        proposer = DFlashProposer(aphrodite_config=aphrodite_config, device=device)
+        proposer = DFlashProposer(sonar_config=sonar_config, device=device)
     elif "eagle" in method:
-        proposer = EagleProposer(aphrodite_config=aphrodite_config, device=device)
+        proposer = EagleProposer(sonar_config=sonar_config, device=device)
     else:
-        proposer = DraftModelProposer(aphrodite_config=aphrodite_config, device=device)
+        proposer = DraftModelProposer(sonar_config=sonar_config, device=device)
     proposer.block_size = BLOCK_SIZE
     return proposer
 
@@ -669,9 +669,9 @@ def test_set_inputs_first_pass_parallel_drafting():
 @pytest.mark.parametrize("pp_size", [1, 2])
 @pytest.mark.parametrize("use_distinct_embed_tokens", [True, False])
 @pytest.mark.parametrize("use_distinct_lm_head", [True, False])
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_pp_group")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_aphrodite_config")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_model")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_pp_group")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_layers_from_sonar_config")
+@mock.patch("sonar.v1.spec_decode.llm_base_proposer.get_model")
 def test_load_model(
     mock_get_model,
     mock_get_layers,
@@ -684,7 +684,7 @@ def test_load_model(
     monkeypatch,
 ):
     if attn_backend == "ROCM_AITER_FA" and current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
     # Setup draft model mock
     mock_model = mock.MagicMock()
@@ -733,7 +733,7 @@ def test_load_model(
     target_model.lm_head = mock.MagicMock()
     target_model.model.embed_tokens = mock.MagicMock()
 
-    from aphrodite.model_executor.models import SupportsMultiModal
+    from sonar.model_executor.models import SupportsMultiModal
 
     assert not isinstance(target_model, SupportsMultiModal)
 
@@ -768,7 +768,7 @@ def test_propose(method, attn_backend, num_speculative_tokens, monkeypatch):
         pytest.skip("TRITON_ATTN does not support multi-token eagle spec decode on current platform")
 
     if attn_backend == "ROCM_AITER_FA" and current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
 
     # Use GPU device
     device = torch.device(DEVICE_TYPE)
@@ -868,9 +868,9 @@ def test_propose(method, attn_backend, num_speculative_tokens, monkeypatch):
         raise ValueError(f"Unsupported attention backend: {attn_backend}")
 
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.sonar_config),
         layer_names=sorted(proposer._draft_attn_layer_names),
-        aphrodite_config=proposer.aphrodite_config,
+        sonar_config=proposer.sonar_config,
         device=device,
     )
 
@@ -937,9 +937,9 @@ def test_propose_refreshes_layout_caches_each_draft_step():
 
     builder_cls, _ = try_get_attention_backend(AttentionBackendEnum.FLASH_ATTN)
     builder = builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.sonar_config),
         layer_names=["layer.0"],
-        aphrodite_config=proposer.aphrodite_config,
+        sonar_config=proposer.sonar_config,
         device=device,
     )
     req_index_buffer = torch.zeros(64, dtype=torch.int32, device=device)
@@ -1065,7 +1065,7 @@ def test_propose_stores_probabilistic_draft_probs(attn_backend, monkeypatch):
         return probs.argmax(dim=-1), probs
 
     monkeypatch.setattr(
-        "aphrodite.v1.spec_decode.llm_base_proposer.compute_probs_and_sample_next_token",
+        "sonar.v1.spec_decode.llm_base_proposer.compute_probs_and_sample_next_token",
         fake_compute_probs,
     )
 
@@ -1078,9 +1078,9 @@ def test_propose_stores_probabilistic_draft_probs(attn_backend, monkeypatch):
 
     attn_metadata_builder_cls, _ = try_get_attention_backend(AttentionBackendEnum[attn_backend])
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.sonar_config),
         layer_names=sorted(proposer._draft_attn_layer_names),
-        aphrodite_config=proposer.aphrodite_config,
+        sonar_config=proposer.sonar_config,
         device=device,
     )
     mock_attn_group = mock.MagicMock()

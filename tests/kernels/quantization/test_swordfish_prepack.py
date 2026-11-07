@@ -9,18 +9,18 @@ The CUDA op `swordfish_prepack_B` must reproduce the pure-torch reference
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
     get_weight_perm,
     marlin_permute_weights,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import pack_rows
-from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import pack_rows
+from sonar.model_executor.layers.quantization.utils.swordfish_utils_test import (
     SWORDFISH_BLOCK_INT32,
     swordfish_pack_weights_ref,
     swordfish_shape_ok,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.utils import opcheck
 
 if not current_platform.is_cuda():

@@ -4,13 +4,13 @@
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import KernelConfig
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from tests.conftest import AphroditeRunner
+from sonar import LLM, SamplingParams
+from sonar.config import KernelConfig
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.platforms import current_platform
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine.async_llm import AsyncLLM
+from tests.conftest import SonarRunner
 from tests.utils import create_new_process_for_each_test, wait_for_gpu_memory_to_clear
 from tests.v1.shutdown.utils import (
     SHUTDOWN_TEST_THRESHOLD_BYTES,
@@ -91,7 +91,7 @@ def test_llm_delete(
 
     with monkeypatch.context() as m:
         MP_VALUE = "1" if enable_multiprocessing else "0"
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", MP_VALUE)
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", MP_VALUE)
 
         # Instantiate LLM; make request to complete any deferred
         # initialization; then delete instance
@@ -121,16 +121,16 @@ def test_llm_delete_inprocess(
     model: str,
     send_one_request: bool,
 ) -> None:
-    """Test that AphroditeRunner frees GPU memory in in-process (no MP) mode."""
+    """Test that SonarRunner frees GPU memory in in-process (no MP) mode."""
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
-        with AphroditeRunner(
+        with SonarRunner(
             model,
             kernel_config=KernelConfig(enable_jit_warmup=False),
-        ) as aphrodite_model:
+        ) as sonar_model:
             if send_one_request:
-                aphrodite_model.generate(
+                sonar_model.generate(
                     ["Hello my name is"],
                     SamplingParams(max_tokens=1),
                 )
@@ -138,7 +138,7 @@ def test_llm_delete_inprocess(
         wait_for_gpu_memory_to_clear(
             devices=[0],
             threshold_bytes=SHUTDOWN_TEST_THRESHOLD_BYTES,
-            # Activate the helper's ROCm idle-runtime floor. AphroditeRunner
+            # Activate the helper's ROCm idle-runtime floor. SonarRunner
             # already performed the stable-memory wait during context exit.
             threshold_ratio=0.01 if current_platform.is_rocm() else None,
             # Fail in the child before the outer pytest timeout expires.

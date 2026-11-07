@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_xpu(),
@@ -15,7 +15,7 @@ def test_xpu_sparse_impl_implements_logical_topk_hook():
     """``MLAAttention.forward`` calls ``impl.record_logical_topk_ready()``
     unconditionally for sparse layers, so every sparse MLA impl must define it.
     Without it DeepSeek-V3.2 / GLM-5 crash on the first forward on XPU."""
-    from aphrodite.v1.attention.backends.mla.xpu_mla_sparse import XPUMLASparseImpl
+    from sonar.v1.attention.backends.mla.xpu_mla_sparse import XPUMLASparseImpl
 
     hook = getattr(XPUMLASparseImpl, "record_logical_topk_ready", None)
     assert callable(hook)

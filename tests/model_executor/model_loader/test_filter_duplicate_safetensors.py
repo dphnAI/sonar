@@ -11,9 +11,9 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.model_loader import DefaultModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config.load import LoadConfig
+from sonar.model_executor.model_loader import DefaultModelLoader
+from sonar.model_executor.model_loader.weight_utils import (
     filter_duplicate_safetensors_files,
     filter_safetensors_files_by_weight_name,
 )
@@ -120,7 +120,7 @@ def test_loader_does_not_read_shards_the_model_skips(mtp_checkpoint, monkeypatch
         return iter(())
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.default_loader.instanttensor_weights_iterator",
+        "sonar.model_executor.model_loader.default_loader.instanttensor_weights_iterator",
         fake_iterator,
     )
 

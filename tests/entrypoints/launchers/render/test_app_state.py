@@ -5,10 +5,10 @@ from argparse import Namespace
 import pytest
 from starlette.datastructures import State
 
-import aphrodite.entrypoints.launchers.render.app_state as app_state_mod
-from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.entrypoints.common.cli_args import make_arg_parser
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+import sonar.entrypoints.launchers.render.app_state as app_state_mod
+from sonar.config import ModelConfig, SonarConfig
+from sonar.entrypoints.common.cli_args import make_arg_parser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 class _CaptureKwargs:
@@ -24,7 +24,7 @@ class _CaptureKwargs:
 
 
 def _render_cli_args(*argv: str) -> Namespace:
-    """Parse ``argv`` the way ``aphrodite launch render`` does, so new serve flags
+    """Parse ``argv`` the way ``sonar launch render`` does, so new serve flags
     carry their defaults instead of needing a hand-maintained ``Namespace``."""
     args = make_arg_parser(FlexibleArgumentParser()).parse_args(list(argv))
     if args.model_tag is not None:
@@ -39,8 +39,8 @@ async def test_render_app_state_uses_config_resolved_reasoning_parser(monkeypatc
     server does, otherwise harmony markup leaks unparsed into derender output.
     """
     model_config = ModelConfig("openai/gpt-oss-20b")
-    aphrodite_config = AphroditeConfig(model_config=model_config)
-    assert aphrodite_config.structured_outputs_config.reasoning_parser == "openai_gptoss"
+    sonar_config = SonarConfig(model_config=model_config)
+    assert sonar_config.structured_outputs_config.reasoning_parser == "openai_gptoss"
 
     class _Renderer(_CaptureKwargs):
         captured = []
@@ -60,23 +60,23 @@ async def test_render_app_state_uses_config_resolved_reasoning_parser(monkeypatc
 
     args = _render_cli_args("openai/gpt-oss-20b")
 
-    await app_state_mod.init_render_app_state(aphrodite_config, State(), args)
+    await app_state_mod.init_render_app_state(sonar_config, State(), args)
 
     assert _Renderer.captured[0]["reasoning_parser"] == "openai_gptoss"
     assert _Derenderer.captured[0]["reasoning_parser"] == "openai_gptoss"
 
 
 def test_explicit_reasoning_parser_flag_wins_over_model_default():
-    """An explicit --reasoning-parser must survive AphroditeConfig construction
+    """An explicit --reasoning-parser must survive SonarConfig construction
     for models that define their own default (gpt_oss); the default only
     applies when the resolved value is empty."""
-    from aphrodite.engine.arg_utils import AsyncEngineArgs
+    from sonar.engine.arg_utils import AsyncEngineArgs
 
     engine_args = AsyncEngineArgs(model="openai/gpt-oss-20b", reasoning_parser="deepseek_r1")
     model_config = engine_args.create_model_config()
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         structured_outputs_config=engine_args.create_structured_outputs_config(),
     )
 
-    assert aphrodite_config.structured_outputs_config.reasoning_parser == "deepseek_r1"
+    assert sonar_config.structured_outputs_config.reasoning_parser == "deepseek_r1"

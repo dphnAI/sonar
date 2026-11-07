@@ -7,31 +7,31 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
 
-import aphrodite._custom_ops as ops
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import (
+import sonar._custom_ops as ops
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig
+from sonar.distributed import (
     get_dp_group,
     get_pcp_group,
     get_tensor_model_parallel_world_size,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import is_fp8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.fp8_utils import is_fp8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,
@@ -42,14 +42,14 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
     kMxfp4Static,
 )
-from aphrodite.utils.import_utils import (
+from sonar.utils.import_utils import (
     has_aiter,
     has_deep_ep,
     has_deep_ep_v2,
     has_deep_gemm,
     has_mori,
 )
-from aphrodite.utils.math_utils import next_power_of_2
+from sonar.utils.math_utils import next_power_of_2
 from tests.kernels.moe.utils import (
     _interleave_gate_up_rows,
     make_test_weights,
@@ -108,7 +108,7 @@ class Config:
 
     # Opt into AITER's DeepSeek-V4.1 a4w4 (DSV4) kernel path (SEPARATED
     # gate/up layout instead of INTERLEAVE); see
-    # APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4 in config.py.
+    # SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4 in config.py.
     use_mxfp4_w4a4_dsv4: bool = False
 
     def __post_init__(self):
@@ -172,7 +172,7 @@ class Config:
     @property
     def swiglu_limit(self) -> float | None:
         """Clamp limit for SWIGLUOAI_UNINTERLEAVE (MiniMax-M3 convention,
-        see aphrodite/transformers_utils/configs/minimax_m3.py); None otherwise,
+        see sonar/transformers_utils/configs/minimax_m3.py); None otherwise,
         matching FusedMoEConfig's own default."""
         return 7.0 if self.activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE else None
 
@@ -219,35 +219,35 @@ class Config:
     def num_local_experts(self) -> int:
         return self.E // self.world_size
 
-    def make_env_data(self) -> tuple[AphroditeConfig, dict[Any, Any]]:
-        """Make env data for aphrodite launch."""
-        aphrodite_config = AphroditeConfig()
-        aphrodite_config.model_config = SimpleNamespace(
+    def make_env_data(self) -> tuple[SonarConfig, dict[Any, Any]]:
+        """Make env data for sonar launch."""
+        sonar_config = SonarConfig()
+        sonar_config.model_config = SimpleNamespace(
             enforce_eager=True,
             is_moe=True,
             enable_sleep_mode=False,
             sleep_mode_backend="cumem",
             sleep_mode_offload_cudagraph=False,
         )
-        aphrodite_config.parallel_config.data_parallel_size = self.world_size
-        aphrodite_config.parallel_config.enable_expert_parallel = True
+        sonar_config.parallel_config.data_parallel_size = self.world_size
+        sonar_config.parallel_config.enable_expert_parallel = True
 
         env_dict = {
-            "APHRODITE_USE_DEEP_GEMM": str(int(self.needs_deep_gemm())),
+            "SONAR_USE_DEEP_GEMM": str(int(self.needs_deep_gemm())),
         }
 
         if self.use_mxfp4_w4a4_dsv4:
             # model_type must pass FusedMoEConfig.__post_init__'s validation
             # gate for this env var.
-            aphrodite_config.model_config.hf_config = SimpleNamespace(model_type="deepseek_v41")
-            env_dict["APHRODITE_ROCM_USE_AITER_MOE_A4W4_DSV4"] = "1"
+            sonar_config.model_config.hf_config = SimpleNamespace(model_type="deepseek_v41")
+            env_dict["SONAR_ROCM_USE_AITER_MOE_A4W4_DSV4"] = "1"
 
-        aphrodite_config.parallel_config.all2all_backend = self.all2all_backend()
+        sonar_config.parallel_config.all2all_backend = self.all2all_backend()
         # "mori" labels the MORI EPv2 prepare/finalize here.
         if self.all2all_backend() == "mori":
-            aphrodite_config.parallel_config.mori_ep_v2 = True
+            sonar_config.parallel_config.mori_ep_v2 = True
 
-        return aphrodite_config, env_dict
+        return sonar_config, env_dict
 
     def fp8_quant_key_pair(self) -> tuple[QuantKey, QuantKey]:
         """Derive the (weight_quant_key, activation_quant_key) pair an FP8
@@ -281,7 +281,7 @@ class Config:
     def mxfp4_backend(self) -> "Mxfp4MoeBackend":
         """The AITER mxfp4 kernel backend this config's (weight, activation)
         dtype pair maps to."""
-        from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+        from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
 
         assert self.weight_dtype == "mxfp4"
         return Mxfp4MoeBackend.AITER if self.is_w4a16_mxfp4 else Mxfp4MoeBackend.AITER_MXFP4_MXFP4
@@ -440,7 +440,7 @@ class Config:
         if self.needs_deep_gemm() and not has_deep_gemm():
             return (
                 False,
-                "Needs DeepGEMM, but the current Aphrodite environment does not provide it.",
+                "Needs DeepGEMM, but the current Sonar environment does not provide it.",
             )
         if self.needs_aiter() and not has_aiter():  # noqa: SIM103
             return False, "Needs Aiter, but Aiter not available."
@@ -449,7 +449,7 @@ class Config:
         if self.needs_mori() and not rocm_aiter_ops.is_fused_moe_enabled():
             return False, (
                 "Mori requires AITER's fused-moe backend to be enabled "
-                "(APHRODITE_ROCM_USE_AITER=1 and APHRODITE_ROCM_USE_AITER_MOE=1)."
+                "(SONAR_ROCM_USE_AITER=1 and SONAR_ROCM_USE_AITER_MOE=1)."
             )
 
         try:
@@ -773,7 +773,7 @@ def _make_gscale(num_experts: int) -> torch.Tensor:
 
 def make_modular_kernel(
     config: Config,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     quant_config: FusedMoEQuantConfig,
 ) -> mk.FusedMoEKernel:
     # make moe config
@@ -782,7 +782,7 @@ def make_modular_kernel(
         pcp_size_=get_pcp_group().world_size,
         dp_size_=get_dp_group().world_size,
         sp_size_=1,
-        aphrodite_parallel_config=aphrodite_config.parallel_config,
+        sonar_parallel_config=sonar_config.parallel_config,
     )
 
     moe = FusedMoEConfig(
@@ -796,7 +796,7 @@ def make_modular_kernel(
         in_dtype=config.dtype,
         max_num_tokens=next_power_of_2(config.M),
         activation=config.activation,
-        device=aphrodite_config.device_config.device,
+        device=sonar_config.device_config.device,
         routing_method=RoutingMethodType.DeepSeekV3,
         hidden_dim_unpadded=config.hidden_dim_unpadded,
         intermediate_size_per_partition_unpadded=(config.intermediate_size_per_partition_unpadded),
@@ -837,7 +837,7 @@ def _shuffle_weights_for_aiter(rank_weights: WeightTensors) -> WeightTensors:
     tensors directly, so without this every call asks for a `preshuffle_off` module
     that is not prebuilt, and JIT-compiles a kernel the image already ships.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     w1, w2 = rocm_aiter_ops.shuffle_weights(rank_weights.w1, rank_weights.w2)
     w1.is_shuffled = True
@@ -850,12 +850,12 @@ def _maybe_convert_weights_for_experts(
     rank_weights: WeightTensors,
 ) -> WeightTensors:
     """Convert weights to expert-specific format (e.g., TrtLLM BlockMajorK)."""
-    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
         AiterExperts,
         AiterFp8ChannelExperts,
         AiterFp8TensorExperts,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import (
         Fp8MoeBackend,
         convert_to_fp8_moe_kernel_format,
     )
@@ -864,7 +864,7 @@ def _maybe_convert_weights_for_experts(
     fe_name = getattr(fe_type, "__name__", "")
 
     if issubclass(fe_type, AiterExperts) and config.weight_dtype == "mxfp4":
-        from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+        from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
             convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
         )
 
@@ -877,7 +877,7 @@ def _maybe_convert_weights_for_experts(
         if config.use_mxfp4_w4a4_dsv4:
             # DSV4's SEPARATED layout needs the real production converter
             # (not the gpt-oss one below), on un-interleaved weights.
-            from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+            from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
                 convert_weight_to_mxfp4_moe_kernel_format,
             )
 
@@ -966,7 +966,7 @@ def _maybe_convert_weights_for_experts(
 
 def run_modular_kernel(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     config: Config,
     weights: WeightTensors,
     rank_tensors: RankTensors,
@@ -984,7 +984,7 @@ def run_modular_kernel(
         gscale = None
 
     if config.weight_dtype == "mxfp4":
-        from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+        from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
             make_mxfp4_moe_quant_config,
         )
 
@@ -1008,7 +1008,7 @@ def run_modular_kernel(
             per_out_ch_quant=config.is_per_out_ch_quant,
         )
 
-    mk = make_modular_kernel(config, aphrodite_config, quant_config)
+    mk = make_modular_kernel(config, sonar_config, quant_config)
 
     # impls might update the tensor in place
     hidden_states = rank_tensors.hidden_states.clone()
@@ -1034,7 +1034,7 @@ def run_modular_kernel(
 
     with set_forward_context(
         None,
-        aphrodite_config,
+        sonar_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):

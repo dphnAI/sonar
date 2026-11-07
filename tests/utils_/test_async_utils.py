@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from aphrodite.utils.async_utils import merge_async_iterators
+from sonar.utils.async_utils import merge_async_iterators
 
 
 async def _mock_async_iterator(idx: int):

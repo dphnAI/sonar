@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Multimodal preprocessing benchmark (`aphrodite-bench mm-processor`), mirroring
-//! `aphrodite bench mm-processor`.
+//! Multimodal preprocessing benchmark (`sonar-bench mm-processor`), mirroring
+//! `sonar bench mm-processor`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -14,16 +14,16 @@ use futures::future::join_all;
 use serde::Serialize;
 use tokio::sync::Semaphore;
 
-use aphrodite_chat::{
+use sonar_chat::{
     ChatContent, ChatContentPart, ChatLlm, ChatMessage, ChatRequest, LoadModelBackendsOptions,
     load_model_backends,
 };
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
-use aphrodite_llm::Llm;
-use aphrodite_managed_engine::cli::ManagedEngineArgs;
-use aphrodite_managed_engine::{ManagedEngineConfig, ManagedEngineHandle};
-use aphrodite_text::TextLlm;
-use aphrodite_tracing::timing::RequestTimingStats;
+use sonar_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
+use sonar_llm::Llm;
+use sonar_managed_engine::cli::ManagedEngineArgs;
+use sonar_managed_engine::{ManagedEngineConfig, ManagedEngineHandle};
+use sonar_text::TextLlm;
+use sonar_tracing::timing::RequestTimingStats;
 
 use crate::config::RangeRatio;
 use crate::datasets::SampleRequest;
@@ -133,7 +133,7 @@ pub struct MmProcessorArgs {
     pub engine: ManagedEngineArgs,
 }
 
-/// Entry point for `aphrodite-bench mm-processor`.
+/// Entry point for `sonar-bench mm-processor`.
 pub async fn run_mm_processor(args: MmProcessorArgs, timing: RequestTimingStats) -> Result<()> {
     if args.max_concurrency == 0 {
         anyhow::bail!("--max-concurrency must be greater than 0");
@@ -538,7 +538,7 @@ fn print_e2el_summary(
     println!("Request throughput: {throughput:.3} req/s");
 }
 
-/// JSON result schema mirroring `aphrodite bench mm-processor`.
+/// JSON result schema mirroring `sonar bench mm-processor`.
 #[derive(Serialize)]
 struct BenchmarkResultJson {
     completed: usize,

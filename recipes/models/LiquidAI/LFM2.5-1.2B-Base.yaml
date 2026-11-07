@@ -40,7 +40,7 @@ hardware_overrides:
   # output identical). Inert (falls back to native) on non-Blackwell GPUs.
   blackwell:
     extra_env:
-      APHRODITE_USE_OINK_OPS: "1"
+      SONAR_USE_OINK_OPS: "1"
 strategy_overrides:
   single_node_tp:
     tp: 1
@@ -58,7 +58,7 @@ guide: |
   - **Pretrained base**: No chat template, no instruction tuning — a clean foundation for fine-tuning or raw completion.
   - **Hybrid backbone**: Gated short convolutions interleaved with grouped-query attention — a smaller KV cache and lower decode latency than a same-size full-attention transformer.
   - **32K context**: 32,768-token context window.
-  - **Native Aphrodite support**: Served via the `Lfm2ForCausalLM` architecture.
+  - **Native Sonar support**: Served via the `Lfm2ForCausalLM` architecture.
 
   ### Supported Variants
 
@@ -81,20 +81,20 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: 1× GPU with ≥8 GB VRAM.
-  - **Aphrodite**: ≥ 0.23.0.
+  - **Sonar**: ≥ 0.23.0.
 
   ### pip (NVIDIA CUDA)
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Deployment Configurations
 
   ### Quick Start (Single GPU, BF16)
   ```bash
-  aphrodite serve LiquidAI/LFM2.5-1.2B-Base
+  sonar serve LiquidAI/LFM2.5-1.2B-Base
   ```
 
   ### Docker (NVIDIA)
@@ -128,10 +128,10 @@ guide: |
   - Use `/v1/completions` (raw continuation) — there is no chat template on a base model.
   - For fine-tuning, this checkpoint is the recommended starting point for custom LFM2.5-1.2B tasks.
   - Set `--max-model-len` to match your workload (up to 32K).
-  - Sampling presets are per-request client defaults — don't bake them into `aphrodite serve`.
+  - Sampling presets are per-request client defaults — don't bake them into `sonar serve`.
 
   ## References
   - [Model card](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Base)
   - [LFM2.5 usage guide](../../LiquidAI/LFM2.5)
   - [Liquid AI](https://www.liquid.ai/)
-  - [Aphrodite supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)
+  - [Sonar supported models](https://docs.vllm.ai/en/latest/models/supported_models.html)

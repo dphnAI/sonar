@@ -11,10 +11,10 @@ from unittest.mock import patch
 
 import helion
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.register import register_kernel
-from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.register import register_kernel
+from sonar.kernels.helion.utils import get_canonical_gpu_name
 
 GPU_PLATFORM = get_canonical_gpu_name()
 
@@ -50,7 +50,7 @@ def dummy_kernel_registry(
         cm = ConfigManager(base_dir=config_dir)
 
         with patch(
-            "aphrodite.kernels.helion.config_manager.ConfigManager",
+            "sonar.kernels.helion.config_manager.ConfigManager",
             return_value=cm,
         ):
 

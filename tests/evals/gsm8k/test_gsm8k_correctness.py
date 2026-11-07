@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""GSM8K evaluation using Aphrodite server and isolated GSM8K script.
+"""GSM8K evaluation using Sonar server and isolated GSM8K script.
 Replacement for lm-eval-harness with better performance and control.
 
 Usage:
@@ -14,7 +14,7 @@ import pytest
 import requests
 import yaml
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 from .gsm8k_eval import evaluate_gsm8k
@@ -73,12 +73,12 @@ def get_acceptance_length(server_url: str) -> float:
     response.raise_for_status()
     counters: dict[str, float] = {}
     for line in response.text.splitlines():
-        if line.startswith("aphrodite:spec_decode_num_"):
+        if line.startswith("sonar:spec_decode_num_"):
             name, _, value = line.partition(" ")
             counters[name.split("{")[0]] = float(value)
 
-    num_drafts = counters.get("aphrodite:spec_decode_num_drafts_total", 0.0)
-    num_accepted = counters.get("aphrodite:spec_decode_num_accepted_tokens_total", 0.0)
+    num_drafts = counters.get("sonar:spec_decode_num_drafts_total", 0.0)
+    num_accepted = counters.get("sonar:spec_decode_num_accepted_tokens_total", 0.0)
     assert num_drafts > 0, "no drafts recorded; speculative decoding did not run for this config"
     return 1.0 + num_accepted / num_drafts
 
@@ -100,7 +100,7 @@ def test_gsm8k_correctness(config_filename):
         "deepseek-ai/DeepSeek-V3.2" in eval_config["model_name"]
         or "deepseek-ai/DeepSeek-R1" in eval_config["model_name"]
     ):
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         if get_cdna_version() < 4:
             pytest.skip(
@@ -108,7 +108,7 @@ def test_gsm8k_correctness(config_filename):
                 "CDNA 4 due to agent pool disk space issues and pod evictions."
             )
     if current_platform.is_rocm() and ("Qwen3.5-35B-A3B-MXFP4-AITER-TP2" in config_filename.name):
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         if not on_gfx950():
             pytest.skip(
@@ -116,7 +116,7 @@ def test_gsm8k_correctness(config_filename):
                 "The quantization scheme is not supported on non-GFX950 platforms."
             )
     if "--all2all-backend=moonep" in eval_config.get("server_args", ""):
-        from aphrodite.utils.import_utils import has_moonep
+        from sonar.utils.import_utils import has_moonep
 
         if not has_moonep():
             pytest.skip("Skipping MoonEP config: the moonep package is not installed.")
@@ -135,7 +135,7 @@ def test_gsm8k_correctness(config_filename):
 
     startup_max_wait_seconds = eval_config.get("startup_max_wait_seconds", DEFAULT_STARTUP_MAX_WAIT_SECONDS)
     env_dict = dict(eval_config.get("env") or {})
-    env_dict["APHRODITE_ENGINE_READY_TIMEOUT_S"] = str(int(startup_max_wait_seconds))
+    env_dict["SONAR_ENGINE_READY_TIMEOUT_S"] = str(int(startup_max_wait_seconds))
 
     print(f"Starting GSM8K evaluation for model: {eval_config['model_name']}")
     print(f"Expected metric threshold: {eval_config['accuracy_threshold']}")

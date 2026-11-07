@@ -7,7 +7,7 @@ import json
 import pytest
 from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage
 
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 def test_function_call_dict_converted_to_object():
@@ -250,7 +250,7 @@ def test_function_call_validation_failure_logs_debug(caplog):
     }
 
     # Mock the logger to verify debug was called
-    with patch("aphrodite.entrypoints.openai.responses.protocol.logger") as mock_logger:
+    with patch("sonar.entrypoints.openai.responses.protocol.logger") as mock_logger:
         with pytest.raises(ValueError):
             ResponsesRequest(**request_data)
 

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
 
 from ....utils import check_answers, prep_prompts
 
@@ -32,7 +32,7 @@ model_config = {
 @pytest.mark.parametrize("batch_size", [5])
 @pytest.mark.parametrize("seed", [1])
 @pytest.mark.parametrize("disable_hybrid_kv_cache_manager", [True, False])
-def test_sliding_window_retrieval(model, batch_size, seed, disable_hybrid_kv_cache_manager, aphrodite_runner):
+def test_sliding_window_retrieval(model, batch_size, seed, disable_hybrid_kv_cache_manager, sonar_runner):
     """The test does a bunch of assignments "x1 = 10\nx2 = 33\n..." and then
     asks for value of one of them (which is outside the sliding window).
     If we tell it upfront which we are going to be looking for, then
@@ -45,7 +45,7 @@ def test_sliding_window_retrieval(model, batch_size, seed, disable_hybrid_kv_cac
 
     test_config = model_config[model]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         max_model_len=None,
         enable_chunked_prefill=None,
@@ -79,7 +79,7 @@ def test_sliding_window_retrieval(model, batch_size, seed, disable_hybrid_kv_cac
 
 
 @pytest.mark.parametrize("model", ["google/gemma-3-1b-it"])
-def test_hybrid_kv_cache_manager_output_equivalence(model, aphrodite_runner):
+def test_hybrid_kv_cache_manager_output_equivalence(model, sonar_runner):
     """Disabling the hybrid KV cache manager must not change what the model
     computes: it promotes the sliding-window layers to full-attention *storage*
     only, so the global layers must keep attending globally.
@@ -93,7 +93,7 @@ def test_hybrid_kv_cache_manager_output_equivalence(model, aphrodite_runner):
 
     outputs = []
     for disable_hybrid in (False, True):
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             max_model_len=None,
             enable_chunked_prefill=None,

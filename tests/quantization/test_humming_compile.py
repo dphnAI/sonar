@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_humming
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_humming
 
 pytestmark = pytest.mark.skipif(
     not (has_humming() and current_platform.is_cuda()),
@@ -13,9 +13,9 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_humming_input_quant_compiles_fullgraph():
-    """Humming's forward helpers look up ``DeviceInfo`` on every call; Aphrodite
+    """Humming's forward helpers look up ``DeviceInfo`` on every call; Sonar
     traces them with ``fullgraph=True`` (vllm-project/humming#147)."""
-    import aphrodite.utils.humming as hm
+    import sonar.utils.humming as hm
 
     weight_schema = hm.HummingWeightSchema(b_dtype="int4", weight_scale_group_size=128)
     input_schema = hm.HummingInputSchema(a_dtype="int8")

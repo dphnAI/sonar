@@ -8,16 +8,16 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.recoverssm_metadata import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.recoverssm_metadata import (
     RecoverSSMMetadata,
     RecoverSSMPostprocessMetadata,
 )
-from aphrodite.v1.worker.gpu.model_states import mamba_hybrid
-from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
-from aphrodite.v1.worker.gpu.model_states.recoverssm import RecoverSSMState
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.gpu.model_states import mamba_hybrid
+from sonar.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
+from sonar.v1.worker.gpu.model_states.recoverssm import RecoverSSMState
+from sonar.v1.worker.utils import AttentionGroup
 from tests.v1.attention.test_gdn_metadata_builder import (
     BLOCK_SIZE,
     DEVICE,
@@ -38,7 +38,7 @@ HAS_GPU = current_platform.is_cuda_alike() or current_platform.is_xpu()
 
 def test_prepare_attn_forwards_positions(monkeypatch: pytest.MonkeyPatch) -> None:
     state = object.__new__(MambaHybridModelState)
-    state.aphrodite_config = SimpleNamespace(num_speculative_tokens=0, speculative_config=None)
+    state.sonar_config = SimpleNamespace(num_speculative_tokens=0, speculative_config=None)
     state.model_config = SimpleNamespace(max_model_len=8192)
     state._align_mode = False
     state.recoverssm = None
@@ -104,7 +104,7 @@ def test_padded_prompt_tail_builds_as_spec_decode(
     """
     k = 3
     state = object.__new__(MambaHybridModelState)
-    state.aphrodite_config = SimpleNamespace(num_speculative_tokens=k)
+    state.sonar_config = SimpleNamespace(num_speculative_tokens=k)
     state.model_config = SimpleNamespace(max_model_len=8192)
     state._align_mode = False
     state.recoverssm = None
@@ -167,7 +167,7 @@ def test_padded_prompt_tail_builds_as_spec_decode(
 
 def _mamba_hybrid_state(num_speculative_tokens: int) -> MambaHybridModelState:
     state = object.__new__(MambaHybridModelState)
-    state.aphrodite_config = SimpleNamespace(num_speculative_tokens=num_speculative_tokens)
+    state.sonar_config = SimpleNamespace(num_speculative_tokens=num_speculative_tokens)
     state.model_config = SimpleNamespace(max_model_len=8192)
     state._align_mode = False
     state.recoverssm = None
@@ -226,7 +226,7 @@ def _prepare_attn_metadata(
         return Mock()
 
     monkeypatch.setattr(
-        "aphrodite.v1.worker.gpu.model_states.mamba_hybrid.build_attn_metadata",
+        "sonar.v1.worker.gpu.model_states.mamba_hybrid.build_attn_metadata",
         fake_build_attn_metadata,
     )
 

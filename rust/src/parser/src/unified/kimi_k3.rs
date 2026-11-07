@@ -4,8 +4,8 @@
 //! Unified parser for the Kimi K3 (XTML) chat format.
 //!
 //! Original Python implementations:
-//! - `aphrodite/reasoning/kimi_k3_reasoning_parser.py`
-//! - `aphrodite/tool_parsers/kimi_k3_tool_parser.py`
+//! - `sonar/reasoning/kimi_k3_reasoning_parser.py`
+//! - `sonar/tool_parsers/kimi_k3_tool_parser.py`
 //!
 //! K3 wraps one assistant message into XTML channels built from the dedicated
 //! special tokens `<|open|>`, `<|close|>`, and `<|sep|>`:
@@ -48,8 +48,8 @@
 
 mod grammar;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
 use serde_json::{Map, Value};
+use sonar_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
 use winnow::ascii::{multispace0 as ws0, multispace1 as ws1};
 use winnow::combinator::{alt, delimited, eof, preceded, repeat, seq, terminated};
 use winnow::error::{ContextError, ErrMode, ModalResult, StrContext};
@@ -731,10 +731,10 @@ fn xtml_error(label: &'static str) -> ErrMode<ContextError> {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::DecodedText;
-    use aphrodite_tokenizer::Tokenizer as _;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
     use serde_json::{Value, json};
+    use sonar_tokenizer::DecodedText;
+    use sonar_tokenizer::Tokenizer as _;
+    use sonar_tokenizer::test_utils::TestTokenizer;
     use thiserror_ext::AsReport;
 
     use super::{

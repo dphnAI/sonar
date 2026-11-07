@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""RLHF with FSDP2 training and Aphrodite tensor-parallel inference using **NCCL M2N**
+"""RLHF with FSDP2 training and Sonar tensor-parallel inference using **NCCL M2N**
 sharding-aware weight transfer.
 
 Layout (4 GPUs, no colocation):
   * GPUs 0-1: two FSDP2 training workers, one per GPU.
-  * GPUs 2-3: one Aphrodite ``LLM`` actor with ``tensor_parallel_size=2``.
+  * GPUs 2-3: one Sonar ``LLM`` actor with ``tensor_parallel_size=2``.
 
 The trainer and the inference workers share one NCCL communicator of 4 ranks:
 trainer ranks ``[0, 2)`` and inference ranks ``[2, 4)``. Every parameter moves
@@ -15,7 +15,7 @@ full tensor, which broadcast-based weight sync would force it to do.
 
 Every FSDP rank builds an ``M2NTrainerWeightTransferEngine`` and calls
 ``send_weights()``; all ranks run every reshard, and only rank 0 drives the
-inference side through its ``RayAphroditeWeightSyncClient``.
+inference side through its ``RaySonarWeightSyncClient``.
 
 Requires the ``nccl-extensions`` package (NCCL 2.30.5+). The backend creates
 the data-plane communicator with ``nccl4py`` and passes it directly to M2N.
@@ -36,15 +36,15 @@ from huggingface_hub import snapshot_download
 from torch.distributed.fsdp import fully_shard
 from transformers import AutoModelForCausalLM
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import WeightTransferConfig
-from aphrodite.distributed.weight_transfer import (
+from sonar import LLM, SamplingParams
+from sonar.config import WeightTransferConfig
+from sonar.distributed.weight_transfer import (
     ModuleSource,
-    RayAphroditeWeightSyncClient,
+    RaySonarWeightSyncClient,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.m2n_trainer import M2NTrainerInitInfo
-from aphrodite.utils.network_utils import get_ip, get_open_port
+from sonar.distributed.weight_transfer.m2n_trainer import M2NTrainerInitInfo
+from sonar.utils.network_utils import get_ip, get_open_port
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 
@@ -118,7 +118,7 @@ class FSDPTrainWorker:
                 dst_mesh_dims=(num_workers // INFERENCE_TP_SIZE, INFERENCE_TP_SIZE),
                 rank=self.rank,  # FSDP rank; sender is 0
             ),
-            client=RayAphroditeWeightSyncClient(llm_handle),
+            client=RaySonarWeightSyncClient(llm_handle),
             source=ModuleSource(self.model),
         )
 
@@ -153,7 +153,7 @@ def main():
     )
     ray.get(llm.ready.remote())
     num_workers = ray.get(llm.get_world_size.remote())
-    print(f"[init] Aphrodite ready with {num_workers} inference workers.")
+    print(f"[init] Sonar ready with {num_workers} inference workers.")
 
     prompts = [
         "Hello, my name is",
@@ -191,7 +191,7 @@ def main():
         ]
     )
 
-    print("[sync] Resharding FSDP -> Aphrodite...")
+    print("[sync] Resharding FSDP -> Sonar...")
     ray.get([w.send_weights.remote() for w in fsdp_workers])
     print("[sync] Weight transfer complete.")
 

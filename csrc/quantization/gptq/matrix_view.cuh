@@ -11,7 +11,7 @@ https://github.com/turboderp/exllama
 
 #include "qdq_util.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq {
 
 class MatrixView_half {
@@ -224,5 +224,5 @@ class MatrixView_q8_row {
 };
 
 }  // namespace gptq
-}  // namespace aphrodite
+}  // namespace sonar
 #endif

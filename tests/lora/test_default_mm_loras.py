@@ -7,11 +7,11 @@ import unittest.mock as mock
 
 import pytest
 
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
 
-from ..conftest import AphroditeRunner, AudioTestAssets
+from ..conftest import AudioTestAssets, SonarRunner
 from ..utils import create_new_process_for_each_test
 
 MODEL_PATH = hf_api().snapshot_download("microsoft/Phi-4-multimodal-instruct")
@@ -26,7 +26,7 @@ AUDIO_PROMPT = "<|user|><|audio_1|>Can you transcribe this audio?<|end|><|assist
 RESPONSE_SUFFIX_WITH_LORA = "Spoken text: The first words I spoke in the original chronograph, a little piece of practical poetry. Mary had a little lamb, it slept with quite a snow, and everywhere that Mary went, the lamb was sure to go."  # noqa: E501
 RESPONSE_SUFFIX_WITHOUT_LORA = "Certainly! Here is the transcription of the audio you provided:\n\nThe first words I spoke in the original phonograph record: A little piece of practical poetry. Mary had a little lamb; its fleece was white as snow, and everywhere that Mary went, the lamb was sure to go."  # noqa: E501
 
-APHRODITE_RUNNER_BASE_KWARGS = {
+SONAR_RUNNER_BASE_KWARGS = {
     "model_name": MODEL_PATH,
     "dtype": "half",
     "enable_lora": "True",
@@ -40,17 +40,17 @@ APHRODITE_RUNNER_BASE_KWARGS = {
 }
 
 
-def run_test(aphrodite_runner, audio_assets, monkeypatch, lora_request, expected_suffix, **kwargs):
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+def run_test(sonar_runner, audio_assets, monkeypatch, lora_request, expected_suffix, **kwargs):
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
     inputs = [([AUDIO_PROMPT], [audio_assets[0].audio_and_sample_rate[0]])]
 
     # Apply any additional kwargs as overrides to the base kwargs
-    aphrodite_runner_kwargs = {**APHRODITE_RUNNER_BASE_KWARGS, **kwargs}
+    sonar_runner_kwargs = {**SONAR_RUNNER_BASE_KWARGS, **kwargs}
 
-    with aphrodite_runner(**aphrodite_runner_kwargs) as aphrodite_model:
-        aphrodite_outputs_with_default_lora = [
-            aphrodite_model.generate_greedy(
+    with sonar_runner(**sonar_runner_kwargs) as sonar_model:
+        sonar_outputs_with_default_lora = [
+            sonar_model.generate_greedy(
                 prompts,
                 max_tokens=128,
                 audios=audios,
@@ -59,18 +59,18 @@ def run_test(aphrodite_runner, audio_assets, monkeypatch, lora_request, expected
             for prompts, audios in inputs
         ]
 
-        assert aphrodite_outputs_with_default_lora[-1][-1][-1].endswith(expected_suffix)
+        assert sonar_outputs_with_default_lora[-1][-1][-1].endswith(expected_suffix)
 
 
 @create_new_process_for_each_test()
 def test_active_default_mm_lora(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     audio_assets: AudioTestAssets,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Ensure that we can use the default audio lora."""
     run_test(
-        aphrodite_runner,
+        sonar_runner,
         audio_assets,
         monkeypatch,
         lora_request=None,
@@ -82,14 +82,14 @@ def test_active_default_mm_lora(
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_inactive_default_mm_lora(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     audio_assets: AudioTestAssets,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Ensure that modalities are filtered properly."""
     # Default image lora won't be active since we only pass audio
     run_test(
-        aphrodite_runner,
+        sonar_runner,
         audio_assets,
         monkeypatch,
         lora_request=None,
@@ -101,13 +101,13 @@ def test_inactive_default_mm_lora(
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_default_mm_lora_succeeds_with_redundant_lora_request(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     audio_assets: AudioTestAssets,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Ensure that redundantly providing the lora works."""
     run_test(
-        aphrodite_runner,
+        sonar_runner,
         audio_assets,
         monkeypatch,
         lora_request=LoRARequest("audio", 1, AUDIO_LORA_PATH),
@@ -119,14 +119,14 @@ def test_default_mm_lora_succeeds_with_redundant_lora_request(
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_default_mm_lora_fails_with_overridden_lora_request(
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     audio_assets: AudioTestAssets,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Ensure that if the lora_request conflicts with default_mm_loras,
     we use the lora_request."""
     run_test(
-        aphrodite_runner,
+        sonar_runner,
         audio_assets,
         monkeypatch,
         lora_request=LoRARequest("speech", 2, AUDIO_LORA_PATH),
@@ -136,17 +136,17 @@ def test_default_mm_lora_fails_with_overridden_lora_request(
 
 
 @create_new_process_for_each_test()
-def test_default_mm_lora_does_not_expand_string_reqs(aphrodite_runner, monkeypatch):
+def test_default_mm_lora_does_not_expand_string_reqs(sonar_runner, monkeypatch):
     # See run_test: force spawn to avoid the forked-child CUDA re-init crash.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
     class MockEngineException(Exception):
         pass
 
     # Regression test for ensuring default multimodal lora resolution
     # does not expand the lora req if the prompt type is a string.
-    aphrodite_runner_kwargs = {
-        **APHRODITE_RUNNER_BASE_KWARGS,
+    sonar_runner_kwargs = {
+        **SONAR_RUNNER_BASE_KWARGS,
         **{"default_mm_loras": {"audio": AUDIO_LORA_PATH}},
     }
 
@@ -156,14 +156,14 @@ def test_default_mm_lora_does_not_expand_string_reqs(aphrodite_runner, monkeypat
 
     with (
         mock.patch(
-            "aphrodite.v1.engine.llm_engine.LLMEngine.add_request",
+            "sonar.v1.engine.llm_engine.LLMEngine.add_request",
             side_effect=MockEngineException(mock_err),
         ) as mock_add_request,
-        aphrodite_runner(**aphrodite_runner_kwargs) as aphrodite_model,
+        sonar_runner(**sonar_runner_kwargs) as sonar_model,
     ):
         # Die once we actually submit the request to the engine
         with pytest.raises(MockEngineException):
-            aphrodite_model.llm.generate(prompts=AUDIO_PROMPT)
+            sonar_model.llm.generate(prompts=AUDIO_PROMPT)
 
         # Then check to make sure the submitted lora request
         # and text prompt were zipped together correctly

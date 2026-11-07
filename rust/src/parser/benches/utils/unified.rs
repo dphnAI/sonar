@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 
-use aphrodite_parser::tool::test_utils::split_by_chars;
-use aphrodite_parser::unified::{UnifiedParser, UnifiedParserEvent, UnifiedParserOutput};
-use aphrodite_tokenizer::{DecodedText, Tokenizer};
+use sonar_parser::tool::test_utils::split_by_chars;
+use sonar_parser::unified::{UnifiedParser, UnifiedParserEvent, UnifiedParserOutput};
+use sonar_tokenizer::{DecodedText, Tokenizer};
 
 /// Split `text` into token-attributed chunks of at most `chunk_chars`
 /// characters, as the frontend streams them to a unified parser.

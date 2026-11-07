@@ -81,21 +81,21 @@ guide: |
 
   ## Prerequisites
 
-  - Aphrodite >= 0.11.1
+  - Sonar >= 0.11.1
   - Hardware: multi-GPU recommended for production deployments
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine openai --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index openai --torch-backend cu130
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve arcee-ai/Trinity-Large-Thinking \
+  sonar serve arcee-ai/Trinity-Large-Thinking \
     --dtype bfloat16 \
     --reasoning-parser deepseek_r1 \
     --enable-auto-tool-choice \

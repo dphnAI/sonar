@@ -5,7 +5,7 @@ import math
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
+from sonar import _custom_ops as ops
 
 # DeepSeek V3 MLA dimensions
 NOPE_DIM = 512  # NoPE latent dimension (FP8 quantized in cache)

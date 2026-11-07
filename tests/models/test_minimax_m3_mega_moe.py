@@ -9,21 +9,21 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
+from sonar.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     DeepGemmMegaMoEExperts,
 )
-from aphrodite.models.minimax_m3.nvidia.model import (
+from sonar.models.minimax_m3.nvidia.model import (
     MEGA_MOE_FC2_INPUT_SCALE,
     _mega_moe_expert_params_mapping,
     _mega_moe_expert_weight,
     _use_mega_moe,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="NVFP4 MegaMoE requires CUDA")
 
 
-def _aphrodite_config(moe_backend: str, moe_quant_algo: str | None):
+def _sonar_config(moe_backend: str, moe_quant_algo: str | None):
     return SimpleNamespace(
         kernel_config=SimpleNamespace(moe_backend=moe_backend),
         quant_config=SimpleNamespace(moe_quant_algo=moe_quant_algo),
@@ -41,12 +41,12 @@ def _aphrodite_config(moe_backend: str, moe_quant_algo: str | None):
 )
 def test_mega_moe_is_gated_on_nvfp4_checkpoints(moe_backend, moe_quant_algo, expected):
     """MegaMoE is opt-in and refuses checkpoints whose experts are not NVFP4."""
-    aphrodite_config = _aphrodite_config(moe_backend, moe_quant_algo)
+    sonar_config = _sonar_config(moe_backend, moe_quant_algo)
     if expected is NotImplementedError:
         with pytest.raises(NotImplementedError, match="NVFP4 routed experts"):
-            _use_mega_moe(aphrodite_config)
+            _use_mega_moe(sonar_config)
     else:
-        assert _use_mega_moe(aphrodite_config) is expected
+        assert _use_mega_moe(sonar_config) is expected
 
 
 def test_mega_moe_expert_weight_follows_the_qat_recipe():
@@ -98,10 +98,10 @@ def _mega_moe_block(num_experts=8, top_k=2, hidden_size=512, intermediate_size=2
     """An SM100 MiniMax-M3.1 MoE block on MegaMoE with an MXFP8 shared expert."""
     if not current_platform.is_device_capability_family(100):
         pytest.skip("DeepGEMM NVFP4 MegaMoE requires SM100")
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.config.kernel import KernelConfig
-    from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-    from aphrodite.models.minimax_m3.nvidia.model import MiniMaxM3MoE
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.config.kernel import KernelConfig
+    from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+    from sonar.models.minimax_m3.nvidia.model import MiniMaxM3MoE
 
     config = SimpleNamespace(
         hidden_size=hidden_size,
@@ -123,9 +123,9 @@ def _mega_moe_block(num_experts=8, top_k=2, hidden_size=512, intermediate_size=2
         exclude_modules=[],
         moe_quant_algo="NVFP4",
     )
-    aphrodite_config = AphroditeConfig(kernel_config=KernelConfig(moe_backend="deep_gemm_mega_moe"))
-    aphrodite_config.scheduler_config.max_num_batched_tokens = 256
-    with set_current_aphrodite_config(aphrodite_config), torch.device("cuda"):
+    sonar_config = SonarConfig(kernel_config=KernelConfig(moe_backend="deep_gemm_mega_moe"))
+    sonar_config.scheduler_config.max_num_batched_tokens = 256
+    with set_current_sonar_config(sonar_config), torch.device("cuda"):
         moe = MiniMaxM3MoE(
             config,
             layer_id=0,
@@ -168,11 +168,11 @@ def test_mega_moe_block_matches_the_qat_reference(dist_init, num_tokens):
     loaded from a compressed-tensors checkpoint, reproduces the QAT recipe:
     per-token FC1 input scales and the fixed FC2 input scale on the unweighted
     SwiGLU output. Routing weights scale the BF16 expert outputs in combine."""
-    from aphrodite.third_party.deep_gemm.utils import (
+    from sonar.third_party.deep_gemm.utils import (
         cast_back_from_fp8,
         per_token_cast_to_fp8,
     )
-    from aphrodite.third_party.deep_gemm.utils.nvfp4 import (
+    from sonar.third_party.deep_gemm.utils.nvfp4 import (
         cast_back_from_nvfp4,
         per_token_cast_to_nvfp4,
     )

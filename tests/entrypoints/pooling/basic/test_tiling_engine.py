@@ -6,14 +6,14 @@ from unittest import mock
 
 import pytest
 
-from aphrodite import PoolingParams
+from sonar import PoolingParams
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_seqs=2,  # small to trigger tiling
@@ -24,7 +24,7 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 

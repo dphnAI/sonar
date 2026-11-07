@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def pytest_addoption(parser):
@@ -22,7 +22,7 @@ def _list_keys() -> list[str]:
     device name and, on ROCm, its CDNA generation (``cdna3``, ``cdna4``)."""
     keys = ["common", current_platform.device_name]
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         if cdna := get_cdna_version():
             keys.append(f"cdna{cdna}")

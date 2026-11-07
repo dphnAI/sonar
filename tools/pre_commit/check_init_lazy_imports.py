@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Ensure we perform lazy loading in aphrodite/__init__.py.
+"""Ensure we perform lazy loading in sonar/__init__.py.
 i.e: appears only within the `if typing.TYPE_CHECKING:` guard,
 **except** for a short whitelist.
 """
@@ -11,12 +11,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
 
-INIT_PATH: Final = Path("aphrodite/__init__.py")
+INIT_PATH: Final = Path("sonar/__init__.py")
 
 # If you need to add items to whitelist, do it here.
 ALLOWED_IMPORTS: Final[frozenset[str]] = frozenset(
     {
-        "aphrodite.env_override",
+        "sonar.env_override",
     }
 )
 ALLOWED_FROM_MODULES: Final[frozenset[str]] = frozenset(
@@ -31,11 +31,11 @@ def _is_internal(name: str | None, *, level: int = 0) -> bool:
         return True
     if name is None:
         return False
-    return name.startswith("aphrodite.") or name == "aphrodite"
+    return name.startswith("sonar.") or name == "sonar"
 
 
 def _fail(violations: Iterable[tuple[int, str]]) -> None:
-    print("ERROR: Disallowed eager imports in aphrodite/__init__.py:\n", file=sys.stderr)
+    print("ERROR: Disallowed eager imports in sonar/__init__.py:\n", file=sys.stderr)
     for lineno, msg in violations:
         print(f"  Line {lineno}: {msg}", file=sys.stderr)
     sys.exit(1)

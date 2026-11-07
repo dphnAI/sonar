@@ -1639,7 +1639,7 @@ mod tests {
     // --- native JSON data file reading ---
 
     fn write_temp_file(name: &str, content: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("aphrodite-bench-test-json-{name}"));
+        let path = std::env::temp_dir().join(format!("sonar-bench-test-json-{name}"));
         std::fs::write(&path, content).unwrap();
         path
     }

@@ -24,8 +24,8 @@ model:
   base_args:
     - "--trust-remote-code"
   base_env:
-    APHRODITE_DEEP_GEMM_WARMUP: "skip"
-    APHRODITE_USE_DEEP_GEMM: "0"
+    SONAR_DEEP_GEMM_WARMUP: "skip"
+    SONAR_USE_DEEP_GEMM: "0"
 
 features:
   tool_calling:
@@ -61,7 +61,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -92,7 +92,7 @@ compatible_strategies:
 hardware_overrides:
   # FlashInfer TRTLLM MoE kernels are NVIDIA-only; pin them per-brand so AMD
   # keeps auto-selection (AITER on ROCm). Replaces the deployment guide's
-  # APHRODITE_FLASHINFER_MOE_BACKEND=latency (removed in Aphrodite v0.28.0).
+  # SONAR_FLASHINFER_MOE_BACKEND=latency (removed in Sonar v0.28.0).
   nvidia:
     extra_args:
       - "--moe-backend"
@@ -102,10 +102,10 @@ strategy_overrides:
   pd_cluster:
     prefill:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
     decode:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
 
 guide: |
   ## Overview
@@ -126,22 +126,22 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** 0.22.1 or newer (per the official deployment guide)
+  - **Sonar version:** 0.22.1 or newer (per the official deployment guide)
   - **Hardware (FP8, recommended):** 8x H100 or 8x H200
   - **Hardware (BF16):** 8x H200 (141 GB each)
   - **Trust remote code:** required — the repo ships a custom tokenizer
     (`InternS1Tokenizer`)
   - **MoE kernel env:** the deployment guide disables DeepGEMM
-    (`APHRODITE_USE_DEEP_GEMM=0`, already set by this recipe) and selects the
+    (`SONAR_USE_DEEP_GEMM=0`, already set by this recipe) and selects the
     FlashInfer TRTLLM MoE backend on NVIDIA (applied automatically when you
     pick an NVIDIA GPU above)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U "aphrodite-engine>=0.22.1" --torch-backend=auto
+  uv pip install -U "sonar>=0.22.1" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch commands
@@ -149,7 +149,7 @@ guide: |
   ### Recommended — official FP8 checkpoint, TP=8
 
   ```bash
-  aphrodite serve internlm/Intern-S2-397B-FP8 \
+  sonar serve internlm/Intern-S2-397B-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -161,7 +161,7 @@ guide: |
   ### BF16 (8x H200)
 
   ```bash
-  aphrodite serve internlm/Intern-S2-397B \
+  sonar serve internlm/Intern-S2-397B \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -173,7 +173,7 @@ guide: |
   ### With MTP speculative decoding
 
   ```bash
-  aphrodite serve internlm/Intern-S2-397B-FP8 \
+  sonar serve internlm/Intern-S2-397B-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --reasoning-parser qwen3 \
@@ -236,12 +236,12 @@ guide: |
   - **OOM at full 262K context:** drop `--max-model-len` to 65536 or 131072,
     or lower `--gpu-memory-utilization` headroom.
   - **DeepGEMM warmup failures / slow startup:** this recipe already exports
-    `APHRODITE_DEEP_GEMM_WARMUP=skip` and `APHRODITE_USE_DEEP_GEMM=0` per the deployment
+    `SONAR_DEEP_GEMM_WARMUP=skip` and `SONAR_USE_DEEP_GEMM=0` per the deployment
     guide — if you launch outside the builder, set them yourself.
   - **Time-series inputs** (`time_series_url`): currently supported only on
-    LMDeploy, not Aphrodite — see the model card.
+    LMDeploy, not Sonar — see the model card.
   - **Wrong parser name:** LMDeploy examples use `--tool-call-parser
-    interns2-preview`; on Aphrodite the correct parser is `qwen3_coder` (already
+    interns2-preview`; on Sonar the correct parser is `qwen3_coder` (already
     wired into the Tool Calling feature above).
 
   ## References
@@ -250,4 +250,4 @@ guide: |
   - [FP8 checkpoint](https://huggingface.co/internlm/Intern-S2-397B-FP8)
   - [Deployment guide](https://huggingface.co/internlm/Intern-S2-397B-FP8/blob/main/deployment_guide.md)
   - [Intern-S1 GitHub](https://github.com/InternLM/Intern-S1)
-  - [Aphrodite documentation](https://docs.vllm.ai/)
+  - [Sonar documentation](https://docs.vllm.ai/)

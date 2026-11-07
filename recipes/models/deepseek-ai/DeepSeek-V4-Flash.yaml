@@ -22,15 +22,15 @@ meta:
     mi325x: verified
     mi355x: verified
     # Atlas A5 8-card mixed serving of FP8 (Preview). 950PR verified 2026-08-29
-    # on Aphrodite Ascend 0.23.0 (DP4+EP, MTP k=1). 950DT matches the v0.23.0
-    # Aphrodite Ascend mixed recipe (same command, 4 of 8 NPUs).
+    # on Sonar Ascend 0.23.0 (DP4+EP, MTP k=1). 950DT matches the v0.23.0
+    # Sonar Ascend mixed recipe (same command, 4 of 8 NPUs).
     # 950PR additionally verified 2026-09-09 on FP8 (0731) with DSpark k=5,
     # same DP4+EP command; 950DT follows it. See the hardware note for the
     # required fix.
     ascend_950dt_8x: verified
     ascend_950pr_8x: verified
     # Atlas 800 A3 (16× Ascend 910C, 64 GB each). W8A8 quantized checkpoint,
-    # DP2+TP8 on all 16 NPUs. Verified 2026-09-23 on Aphrodite Ascend v0.23.0-a3.
+    # DP2+TP8 on all 16 NPUs. Verified 2026-09-23 on Sonar Ascend v0.23.0-a3.
     ascend_910c: verified
 
 model:
@@ -94,7 +94,7 @@ features:
             args:
               - "--speculative-config"
               - '{"method":"mtp","num_speculative_tokens":1}'
-          # Preview MTP head is next-1. Aphrodite Ascend 0.23.0 runs the draft eager
+          # Preview MTP head is next-1. Sonar Ascend 0.23.0 runs the draft eager
           # while the target keeps FULL_DECODE_ONLY ACLGraph. DSpark is not in
           # this release; do not raise k or switch method on the preview weights.
           npu:
@@ -118,7 +118,7 @@ features:
               - "--speculative-config"
               - '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","attention_backend":"B12X_MLA_SPARSE"}'
           # 950PR was verified at k=5 with an eager draft while the target keeps
-          # its FULL_DECODE_ONLY ACLGraph. Aphrodite Ascend does not implement
+          # its FULL_DECODE_ONLY ACLGraph. Sonar Ascend does not implement
           # probabilistic draft sampling, so that key is left off.
           npu:
             args:
@@ -146,7 +146,7 @@ variants:
     vram_minimum_gb: 200
     description: "Official DeepSeek-V4-Flash release (2026-07-31) superseding the preview — substantially stronger agentic performance, with the DSpark draft module attached."
     # 950PR does load this checkpoint's DSpark draft module: the v0.23.0-a5 tag
-    # currently ships Aphrodite Ascend main (0.1.dev1+g6e6aad57e), not the 0.23.0
+    # currently ships Sonar Ascend main (0.1.dev1+g6e6aad57e), not the 0.23.0
     # release. 950DT is offered on the same grounds the FP8 (Preview) row
     # already uses — one A5 profile, one command, 4 of 8 NPUs — and its 4x96 GB
     # clears this variant's 200 GB minimum. 0731 itself was run on 950PR.
@@ -200,17 +200,17 @@ variants:
         extra_env:
           PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
           CUTE_DSL_ARCH: "sm_121a"
-          APHRODITE_USE_AOT_COMPILE: "1"
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
-          APHRODITE_USE_MEGA_AOT_ARTIFACT: "-1"
-          APHRODITE_MEMORY_PROFILE_INCLUDE_ATTN: "1"
-          APHRODITE_USE_FLASHINFER_SAMPLER: "1"
-          APHRODITE_USE_B12X_WO_PROJECTION: "1"
-          APHRODITE_USE_B12X_MHC: "1"
-          APHRODITE_USE_B12X_FP8_GEMM: "1"
-          APHRODITE_USE_B12X_MOE: "1"
-          APHRODITE_USE_B12X_SPARSE_INDEXER: "1"
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_AOT_COMPILE: "1"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_MEGA_AOT_ARTIFACT: "-1"
+          SONAR_MEMORY_PROFILE_INCLUDE_ATTN: "1"
+          SONAR_USE_FLASHINFER_SAMPLER: "1"
+          SONAR_USE_B12X_WO_PROJECTION: "1"
+          SONAR_USE_B12X_MHC: "1"
+          SONAR_USE_B12X_FP8_GEMM: "1"
+          SONAR_USE_B12X_MOE: "1"
+          SONAR_USE_B12X_SPARSE_INDEXER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
           B12X_MLA_SM120_UNIFIED: "1"
           B12X_MOE_FORCE_A8: "1"
           GLOO_SOCKET_IFNAME: "$IFACE_NAME"
@@ -270,17 +270,17 @@ variants:
         extra_env:
           PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
           CUTE_DSL_ARCH: "sm_121a"
-          APHRODITE_USE_AOT_COMPILE: "1"
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
-          APHRODITE_USE_MEGA_AOT_ARTIFACT: "-1"
-          APHRODITE_MEMORY_PROFILE_INCLUDE_ATTN: "1"
-          APHRODITE_USE_FLASHINFER_SAMPLER: "1"
-          APHRODITE_USE_B12X_WO_PROJECTION: "1"
-          APHRODITE_USE_B12X_MHC: "1"
-          APHRODITE_USE_B12X_FP8_GEMM: "1"
-          APHRODITE_USE_B12X_MOE: "1"
-          APHRODITE_USE_B12X_SPARSE_INDEXER: "1"
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_AOT_COMPILE: "1"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_MEGA_AOT_ARTIFACT: "-1"
+          SONAR_MEMORY_PROFILE_INCLUDE_ATTN: "1"
+          SONAR_USE_FLASHINFER_SAMPLER: "1"
+          SONAR_USE_B12X_WO_PROJECTION: "1"
+          SONAR_USE_B12X_MHC: "1"
+          SONAR_USE_B12X_FP8_GEMM: "1"
+          SONAR_USE_B12X_MOE: "1"
+          SONAR_USE_B12X_SPARSE_INDEXER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
           B12X_MLA_SM120_UNIFIED: "1"
           B12X_MOE_FORCE_A8: "1"
           GLOO_SOCKET_IFNAME: "$IFACE_NAME"
@@ -298,7 +298,7 @@ variants:
           - "deep_gemm_mega_moe"
       # `computeDockerMeta` has no Huawei brand, so a bare string docker_image
       # would only pin NVIDIA. Exact-GPU overrides land regardless of brand.
-      # The pip tab is hidden: the official Aphrodite wheel has no NPU kernels.
+      # The pip tab is hidden: the official Sonar wheel has no NPU kernels.
       ascend_950dt_8x:
         docker_image: "quay.io/ascend/vllm-ascend:v0.23.0-a5"
         install:
@@ -348,17 +348,17 @@ variants:
         extra_env:
           PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
           CUTE_DSL_ARCH: "sm_121a"
-          APHRODITE_USE_AOT_COMPILE: "1"
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
-          APHRODITE_USE_MEGA_AOT_ARTIFACT: "-1"
-          APHRODITE_MEMORY_PROFILE_INCLUDE_ATTN: "1"
-          APHRODITE_USE_FLASHINFER_SAMPLER: "1"
-          APHRODITE_USE_B12X_WO_PROJECTION: "1"
-          APHRODITE_USE_B12X_MHC: "1"
-          APHRODITE_USE_B12X_FP8_GEMM: "1"
-          APHRODITE_USE_B12X_MOE: "1"
-          APHRODITE_USE_B12X_SPARSE_INDEXER: "1"
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_AOT_COMPILE: "1"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_MEGA_AOT_ARTIFACT: "-1"
+          SONAR_MEMORY_PROFILE_INCLUDE_ATTN: "1"
+          SONAR_USE_FLASHINFER_SAMPLER: "1"
+          SONAR_USE_B12X_WO_PROJECTION: "1"
+          SONAR_USE_B12X_MHC: "1"
+          SONAR_USE_B12X_FP8_GEMM: "1"
+          SONAR_USE_B12X_MOE: "1"
+          SONAR_USE_B12X_SPARSE_INDEXER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
           B12X_MLA_SM120_UNIFIED: "1"
           B12X_MOE_FORCE_A8: "1"
           GLOO_SOCKET_IFNAME: "$IFACE_NAME"
@@ -425,17 +425,17 @@ variants:
         extra_env:
           PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
           CUTE_DSL_ARCH: "sm_121a"
-          APHRODITE_USE_AOT_COMPILE: "1"
-          APHRODITE_USE_BREAKABLE_CUDAGRAPH: "0"
-          APHRODITE_USE_MEGA_AOT_ARTIFACT: "-1"
-          APHRODITE_MEMORY_PROFILE_INCLUDE_ATTN: "1"
-          APHRODITE_USE_FLASHINFER_SAMPLER: "1"
-          APHRODITE_USE_B12X_WO_PROJECTION: "1"
-          APHRODITE_USE_B12X_MHC: "1"
-          APHRODITE_USE_B12X_FP8_GEMM: "1"
-          APHRODITE_USE_B12X_MOE: "1"
-          APHRODITE_USE_B12X_SPARSE_INDEXER: "1"
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
+          SONAR_USE_AOT_COMPILE: "1"
+          SONAR_USE_BREAKABLE_CUDAGRAPH: "0"
+          SONAR_USE_MEGA_AOT_ARTIFACT: "-1"
+          SONAR_MEMORY_PROFILE_INCLUDE_ATTN: "1"
+          SONAR_USE_FLASHINFER_SAMPLER: "1"
+          SONAR_USE_B12X_WO_PROJECTION: "1"
+          SONAR_USE_B12X_MHC: "1"
+          SONAR_USE_B12X_FP8_GEMM: "1"
+          SONAR_USE_B12X_MOE: "1"
+          SONAR_USE_B12X_SPARSE_INDEXER: "1"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
           B12X_MLA_SM120_UNIFIED: "1"
           B12X_MOE_FORCE_A8: "1"
           GLOO_SOCKET_IFNAME: "$IFACE_NAME"
@@ -497,7 +497,7 @@ variants:
       # Override the npu generation-level "0,1,2,3" (for A5) — A3 uses all 16 NPUs.
       ASCEND_RT_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15"
       # Pull W8A8 weights from ModelScope (Eco-Tech checkpoint).
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
     hardware_overrides:
       ascend_910c:
         docker_image: "quay.io/ascend/vllm-ascend:v0.23.0-a3"
@@ -534,9 +534,9 @@ strategy_hardware:
   # hardware; this makes the Strategy row agree. multi_node_dep needs no entry:
   # the Nodes row is pinned to 1 here, which already hides every multi_node
   # strategy.
-  # Atlas A5 mixed serving is DP+EP only (Aphrodite Ascend 0.23.0). TP-only does not
+  # Atlas A5 mixed serving is DP+EP only (Sonar Ascend 0.23.0). TP-only does not
   # partition the V4 MoE layers on 950; TEP and intra-node PD are documented
-  # separately in the Aphrodite Ascend 1P1D tutorial, not this builder.
+  # separately in the Sonar Ascend 1P1D tutorial, not this builder.
   single_node_tp:
     npu: unsupported
   single_node_tep:
@@ -570,7 +570,7 @@ hardware_overrides:
       - "--compilation-config"
       - '{"mode": 3, "cudagraph_mode": "FULL_DECODE_ONLY"}'
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   # Shared by 950DT 8x (8×96 GB) and 950PR 8x (8×128 GB). Mixed serving uses 4 of the
   # 8 NPUs (DP4+EP). HCCL_BUFFSIZE=1024 is required for MC2 dispatch; 200 MB
   # default fails profile_run with aclnnMoeDistributeDispatchV4 561002.
@@ -612,7 +612,7 @@ strategy_overrides:
     hardware_overrides:
     # sm_120 has neither Blackwell kernel: the FP4 indexer cache and
     # deep_gemm_mega_moe are SM100-only and abort at startup. Turned back off
-    # here — these are the values Aphrodite resolves to unaided (FP8 indexer cache,
+    # here — these are the values Sonar resolves to unaided (FP8 indexer cache,
     # DEEPGEMM_MXFP4 MoE backend), which is the verified configuration.
       rtx_pro_6000_8x:
         extra_args:
@@ -704,7 +704,7 @@ strategy_overrides:
           - "B12X_MLA_SPARSE"
   pd_cluster:
     env:
-      APHRODITE_USE_NCCL_SYMM_MEM: "1"
+      SONAR_USE_NCCL_SYMM_MEM: "1"
       NCCL_CUMEM_ENABLE: "1"
       NCCL_MNNVL_ENABLE: "1"
       NCCL_NVLS_ENABLE: "1"
@@ -738,24 +738,24 @@ strategy_overrides:
 hardware_notes:
   dgx_spark_gb10:
     title: "DGX Spark setup required"
-    body: "This hardware uses the community eugr/spark-vllm-b12x:latest docker image and a 2-node TP launch — the B12X backends the command relies on are not in Aphrodite main, so there is no pip/wheel path on Spark. Before running the generated command, check the DGX Spark cluster guide for IFACE_NAME, IB_IF and HEAD_IP."
+    body: "This hardware uses the community eugr/spark-vllm-b12x:latest docker image and a 2-node TP launch — the B12X backends the command relies on are not in Sonar main, so there is no pip/wheel path on Spark. Before running the generated command, check the DGX Spark cluster guide for IFACE_NAME, IB_IF and HEAD_IP."
     link:
       label: "DGX Spark cluster guide"
       href: "#dgx-spark-gb10-cluster"
   ascend_950dt_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Mixed serving on one 8-card 950DT node uses 4 of 8 NPUs (DP4+EP). FP8 (Preview) runs MTP k=1; FP8 (0731) runs DSpark k=5, verified on 950PR and offered here on the same A5 command. Pin quay.io/ascend/vllm-ascend:v0.23.0-a5 — the NVIDIA pip wheel cannot run here. Set HCCL_BUFFSIZE=1024 before launch. DeepSeek-V4 on 950 also needs the indexer quant_mode fix in vllm-project/vllm-ascend#16104 — without it the image the tag currently ships aborts during warmup with QuantLightningIndexerV2 EZ0021."
     link:
       label: "Ascend 950DT 8x mixed"
       href: "#huawei-ascend-950dt-8x"
   ascend_950pr_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Mixed serving on one 8-card 950PR node uses 4 of 8 NPUs (DP4+EP). FP8 (Preview) runs MTP k=1, same command as 950DT; FP8 (0731) runs DSpark k=5. Pin quay.io/ascend/vllm-ascend:v0.23.0-a5 and set HCCL_BUFFSIZE=1024 before launch. DeepSeek-V4 on 950 also needs the indexer quant_mode fix in vllm-project/vllm-ascend#16104 — without it the image the tag currently ships aborts during warmup with QuantLightningIndexerV2 EZ0021."
     link:
       label: "Ascend 950PR 8x mixed"
       href: "#huawei-ascend-950pr-8x"
   ascend_910c:
-    title: "Aphrodite Ascend A3 image required"
+    title: "Sonar Ascend A3 image required"
     body: "Single-node DP2+TP8 on all 16 NPUs using the W8A8 quantized checkpoint from Eco-Tech. TP8 shards the 284B weights to 35.5 GB per NPU (within the 64 GB limit). Pin quay.io/ascend/vllm-ascend:v0.23.0-a3 — the NVIDIA pip wheel cannot run here. Set HCCL_BUFFSIZE=2560 before launch. The A3 path uses ModelScope to download the W8A8 weights (pip install modelscope). Multi-node PD separation is also available; see the vllm-ascend tutorial."
     link:
       label: "Ascend 910C A3 reference"
@@ -813,7 +813,7 @@ guide: |
   ```
 
   The fused checkpoints are ~167 GB on disk versus ~160 GB for the preview — the draft
-  module is the difference. Both require **Aphrodite 0.25.0**: DSpark drafting itself landed
+  module is the difference. Both require **Sonar 0.25.0**: DSpark drafting itself landed
   in 0.25.0, but ROCm support for it (MI325X / MI355X) only shipped in 0.26.0. On
   NVIDIA-only deployments 0.25.0 is sufficient, except the 0731 checkpoint
   on RTX PRO 6000 (sm_120) with DSpark, which needs `vllm/vllm-openai:nightly`
@@ -837,7 +837,7 @@ guide: |
 
   Note that neither fused checkpoint ships a Jinja chat template — the repos provide an
   `encoding/` folder with `encode_messages` / `parse_message_from_completion_text`
-  helpers instead. Serving through Aphrodite with `--tokenizer-mode deepseek_v4` (the
+  helpers instead. Serving through Sonar with `--tokenizer-mode deepseek_v4` (the
   **Tool Calling** pill) applies the built-in DeepSeek-V4 encoding, so the OpenAI-
   compatible endpoint works without the helper scripts.
 
@@ -895,23 +895,23 @@ guide: |
   ### H100 (8×80 GB)
 
   The FP8 (0731) and DSpark checkpoints are selectable on H100. A reported
-  8×H100 TP8 + EP deployment of 0731 served requests with Aphrodite 0.26.0, while
+  8×H100 TP8 + EP deployment of 0731 served requests with Sonar 0.26.0, while
   the same deployment failed during startup on 0.27.0, both with and without
-  DSpark. See [Aphrodite #52065](https://github.com/vllm-project/vllm/issues/52065).
+  DSpark. See [Sonar #52065](https://github.com/vllm-project/vllm/issues/52065).
 
-  For the separate DSpark checkpoint, a 4×H100 TP4 report on Aphrodite 0.25.0
+  For the separate DSpark checkpoint, a 4×H100 TP4 report on Sonar 0.25.0
   reached inference after removing `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
   and setting `--gpu-memory-utilization` below 0.9. A 2×H100 NVL report also
-  ran the checkpoint with DSpark k=5 on a custom Aphrodite build. These reports
+  ran the checkpoint with DSpark k=5 on a custom Sonar build. These reports
   establish Hopper compatibility, but do not verify this recipe's generated
   H100 topology or current image. Check startup and inference before production.
-  See [Aphrodite #49101](https://github.com/vllm-project/vllm/issues/49101) and
+  See [Sonar #49101](https://github.com/vllm-project/vllm/issues/49101) and
   [the H100 NVL report](https://github.com/vllm-project/vllm/pull/46995#issuecomment-4835994467).
 
   ### DGX Spark (GB10) cluster
 
-  DGX Spark requires the community Spark Aphrodite build for this model rather than the
-  stock Aphrodite release/nightly image. The **DGX Spark (GB10)** hardware pill pins the
+  DGX Spark requires the community Spark Sonar build for this model rather than the
+  stock Sonar release/nightly image. The **DGX Spark (GB10)** hardware pill pins the
   Docker tab to `eugr/spark-vllm-b12x:latest`, whose build carries the B12X
   backends and Spark-specific kernels for the GB10 / SM12x family.
 
@@ -950,7 +950,7 @@ guide: |
   ### DGX Station Single-GPU
 
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-V4-Flash \
+  sonar serve deepseek-ai/DeepSeek-V4-Flash \
     --tensor-parallel-size 1 --pipeline-parallel-size 1 \
     --kv-cache-dtype fp8 --trust-remote-code --block-size 256 \
     --gpu-memory-utilization 0.92 \
@@ -967,7 +967,7 @@ guide: |
   Single-node TP8 + expert parallelism on the **0731** checkpoint. Serving
   without speculative decoding was verified on 8× RTX PRO 6000 (PCIe, no
   NVLink). DSpark on **0731** needs `vllm/vllm-openai:nightly` (or a build
-  that includes Aphrodite #51538) plus a FlashInfer that instantiates the SM120
+  that includes Sonar #51538) plus a FlashInfer that instantiates the SM120
   sparse-MLA decode kernel for `topk=192`. The Preview, NVFP4, and DSpark
   variant checkpoints are not verified on this profile.
 
@@ -977,7 +977,7 @@ guide: |
   checkpoint has no MTP head; Spec Decoding defaults to DSpark.
 
   Host-side FlashInfer install before launching 0731 with DSpark (`--no-deps`
-  is required so pip does not replace Aphrodite's torch):
+  is required so pip does not replace Sonar's torch):
 
   ```bash
   # Trace: flashinfer-ai/flashinfer#4380
@@ -992,7 +992,7 @@ guide: |
   /usr/bin/python3.12 -m pip install -U --pre flashinfer-jit-cache \
   --index-url https://flashinfer.ai/whl/nightly/cu130
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Flash-0731 \
+  sonar serve deepseek-ai/DeepSeek-V4-Flash-0731 \
   --trust-remote-code \
   --kv-cache-dtype fp8 \
   --block-size 256 \
@@ -1017,13 +1017,13 @@ guide: |
 
   ### MI325X (1×256GB)
 
-  Validated end-to-end with Aphrodite 0.25.0 and PyTorch HIP 7.2.53211. Use this
+  Validated end-to-end with Sonar 0.25.0 and PyTorch HIP 7.2.53211. Use this
   conservative TP1 eager-mode launch instead of the MI355X throughput settings:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Flash \
+  sonar serve deepseek-ai/DeepSeek-V4-Flash \
     --host 0.0.0.0 \
     --port 8002 \
     --tensor-parallel-size 1 \
@@ -1050,9 +1050,9 @@ guide: |
   If you want to further lower the latency, you can run with `--tensor-parallel-size 8`.
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Flash \
+  sonar serve deepseek-ai/DeepSeek-V4-Flash \
     --host localhost \
     --port 8001 \
     --dtype auto \
@@ -1108,10 +1108,10 @@ guide: |
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -v /mnt/shared:/mnt/shared \
     -e TILELANG_CLEANUP_TEMP_FILES=1 \
-    -e APHRODITE_DISABLE_COMPILE_CACHE=1 \
-    -e APHRODITE_ENGINE_READY_TIMEOUT_S=3600 \
-    -e APHRODITE_LOG_STATS_INTERVAL=1 \
-    -e APHRODITE_MOONCAKE_BOOTSTRAP_PORT=8998 \
+    -e SONAR_DISABLE_COMPILE_CACHE=1 \
+    -e SONAR_ENGINE_READY_TIMEOUT_S=3600 \
+    -e SONAR_LOG_STATS_INTERVAL=1 \
+    -e SONAR_MOONCAKE_BOOTSTRAP_PORT=8998 \
     -e CUDA_VISIBLE_DEVICES=0,1,2,3 \
     vllm/vllm-openai:v0.28.0 \
     deepseek-ai/DeepSeek-V4-Flash \
@@ -1140,10 +1140,10 @@ guide: |
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -v /mnt/shared:/mnt/shared \
     -e TILELANG_CLEANUP_TEMP_FILES=1 \
-    -e APHRODITE_DISABLE_COMPILE_CACHE=1 \
-    -e APHRODITE_ENGINE_READY_TIMEOUT_S=3600 \
-    -e APHRODITE_LOG_STATS_INTERVAL=1 \
-    -e APHRODITE_MOONCAKE_BOOTSTRAP_PORT=9889 \
+    -e SONAR_DISABLE_COMPILE_CACHE=1 \
+    -e SONAR_ENGINE_READY_TIMEOUT_S=3600 \
+    -e SONAR_LOG_STATS_INTERVAL=1 \
+    -e SONAR_MOONCAKE_BOOTSTRAP_PORT=9889 \
     -e CUDA_VISIBLE_DEVICES=4,5,6,7 \
     vllm/vllm-openai:v0.28.0 \
     deepseek-ai/DeepSeek-V4-Flash \
@@ -1193,10 +1193,10 @@ guide: |
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -v /mnt/shared:/mnt/shared \
     -e TILELANG_CLEANUP_TEMP_FILES=1 \
-    -e APHRODITE_DISABLE_COMPILE_CACHE=1 \
-    -e APHRODITE_ENGINE_READY_TIMEOUT_S=3600 \
-    -e APHRODITE_LOG_STATS_INTERVAL=1 \
-    -e APHRODITE_NIXL_SIDE_CHANNEL_PORT=5557 \
+    -e SONAR_DISABLE_COMPILE_CACHE=1 \
+    -e SONAR_ENGINE_READY_TIMEOUT_S=3600 \
+    -e SONAR_LOG_STATS_INTERVAL=1 \
+    -e SONAR_NIXL_SIDE_CHANNEL_PORT=5557 \
     -e CUDA_VISIBLE_DEVICES=0,1,2,3 \
     vllm/vllm-openai:v0.28.0 \
     deepseek-ai/DeepSeek-V4-Flash \
@@ -1225,10 +1225,10 @@ guide: |
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -v /mnt/shared:/mnt/shared \
     -e TILELANG_CLEANUP_TEMP_FILES=1 \
-    -e APHRODITE_DISABLE_COMPILE_CACHE=1 \
-    -e APHRODITE_ENGINE_READY_TIMEOUT_S=3600 \
-    -e APHRODITE_LOG_STATS_INTERVAL=1 \
-    -e APHRODITE_NIXL_SIDE_CHANNEL_PORT=5558 \
+    -e SONAR_DISABLE_COMPILE_CACHE=1 \
+    -e SONAR_ENGINE_READY_TIMEOUT_S=3600 \
+    -e SONAR_LOG_STATS_INTERVAL=1 \
+    -e SONAR_NIXL_SIDE_CHANNEL_PORT=5558 \
     -e CUDA_VISIBLE_DEVICES=4,5,6,7 \
     vllm/vllm-openai:v0.28.0 \
     deepseek-ai/DeepSeek-V4-Flash \

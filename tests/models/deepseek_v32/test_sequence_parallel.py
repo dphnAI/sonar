@@ -7,9 +7,9 @@ from unittest.mock import Mock
 import torch
 from torch import nn
 
-from aphrodite.models.deepseek_v32.nvidia import model as deepseek_v32_model
-from aphrodite.models.deepseek_v32.nvidia import mtp as deepseek_v32_mtp
-from aphrodite.sequence import IntermediateTensors
+from sonar.models.deepseek_v32.nvidia import model as deepseek_v32_model
+from sonar.models.deepseek_v32.nvidia import mtp as deepseek_v32_mtp
+from sonar.sequence import IntermediateTensors
 
 
 class _IdentityNorm(nn.Module):

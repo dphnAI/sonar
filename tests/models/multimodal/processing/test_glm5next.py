@@ -26,15 +26,15 @@ from transformers.models.glm5_next.video_processing_glm5_next import (
 )
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.distributed.ec_transfer.ec_connector.utils import (
+from sonar.distributed.ec_transfer.ec_connector.utils import (
     PlaceholderMetadataResolver,
     collect_ec_item_metadata,
 )
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils.item_tracker import _get_embeds_data
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import MultiModalFeatureSpec
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils.item_tracker import _get_embeds_data
 
 from ....multimodal.utils import random_image, random_video
 from ...utils import build_model_context
@@ -354,7 +354,7 @@ def test_video_shorter_than_one_sampling_interval_is_rejected(processor):
         )
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_mm_device_do_normalize():
     device = current_platform.device_type
     ctx = build_model_context(

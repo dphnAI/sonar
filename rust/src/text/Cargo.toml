@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-text"
+name = "sonar-text"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,17 +21,17 @@ thiserror.workspace = true
 thiserror-ext.workspace = true
 tracing.workspace = true
 trait-set.workspace = true
-aphrodite-engine-core-client.workspace = true
-aphrodite-llm.workspace = true
-aphrodite-tokenizer.workspace = true
+sonar-engine-core-client.workspace = true
+sonar-llm.workspace = true
+sonar-tokenizer.workspace = true
 
 [dev-dependencies]
 expect-test.workspace = true
 futures.workspace = true
 serial_test.workspace = true
 tokio.workspace = true
-aphrodite-llm = { workspace = true, features = ["test-util"] }
-aphrodite-tokenizer = { workspace = true, features = ["test-utils"] }
+sonar-llm = { workspace = true, features = ["test-util"] }
+sonar-tokenizer = { workspace = true, features = ["test-utils"] }
 
 [lints]
 workspace = true

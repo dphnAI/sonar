@@ -65,7 +65,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -137,16 +137,16 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   pd_cluster:
     prefill:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
     decode:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
 
 guide: |
   ## Overview
@@ -158,17 +158,17 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
+  - **Sonar version:** >= 0.17.0
   - **Hardware (BF16):** 4x H200 or 8x H100
   - **Hardware (FP8):** 2x H200 or 4x H100
   - **Hardware (Int4):** single 80 GB GPU
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launching the Server
@@ -176,7 +176,7 @@ guide: |
   ### BF16 on 4xH200 (TP4)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-122B-A10B \
+  sonar serve Qwen/Qwen3.5-122B-A10B \
     --tensor-parallel-size 4 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -185,7 +185,7 @@ guide: |
   ### FP8 on 2xH200 (TP2)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-122B-A10B-FP8 \
+  sonar serve Qwen/Qwen3.5-122B-A10B-FP8 \
     --tensor-parallel-size 2 \
     --max-model-len 262144 \
     --reasoning-parser qwen3
@@ -194,7 +194,7 @@ guide: |
   ### Throughput-focused (text-only, EP)
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-122B-A10B-FP8 \
+  sonar serve Qwen/Qwen3.5-122B-A10B-FP8 \
     -dp 4 --enable-expert-parallel \
     --language-model-only \
     --reasoning-parser qwen3 \
@@ -204,7 +204,7 @@ guide: |
   ### MTP speculative decoding
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-122B-A10B-FP8 \
+  sonar serve Qwen/Qwen3.5-122B-A10B-FP8 \
     --tensor-parallel-size 2 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
@@ -213,13 +213,13 @@ guide: |
   ### AMD (MI325X / MI355X, single GPU, FP8)
 
   The FP8 checkpoint fits one MI300X-class GPU. Three settings matter on ROCm and none is on by
-  default: `APHRODITE_ROCM_USE_AITER=1` switches the MoE to the AITER FP8 kernels,
+  default: `SONAR_ROCM_USE_AITER=1` switches the MoE to the AITER FP8 kernels,
   `--attention-backend ROCM_AITER_FA` keeps decode flat across context (the auto-selected
   `ROCM_ATTN` decays with prompt length on this hybrid GDN model), and `--kv-cache-dtype fp8`
   keeps MTP flat across context too.
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve Qwen/Qwen3.5-122B-A10B-FP8 \
+  SONAR_ROCM_USE_AITER=1 sonar serve Qwen/Qwen3.5-122B-A10B-FP8 \
     --attention-backend ROCM_AITER_FA \
     --kv-cache-dtype fp8 --max-num-seqs 64 \
     --reasoning-parser qwen3
@@ -258,7 +258,7 @@ guide: |
   ## Troubleshooting
 
   - **CUDA graph / Mamba cache size error:** reduce `--max-cudagraph-capture-size`
-    (default 512). See [Aphrodite PR #34571](https://github.com/vllm-project/vllm/pull/34571).
+    (default 512). See [Sonar PR #34571](https://github.com/vllm-project/vllm/pull/34571).
   - **Disable reasoning:** add `--default-chat-template-kwargs '{"enable_thinking": false}'`.
   - **Prefix Caching (Mamba):** currently experimental in "align" mode.
 

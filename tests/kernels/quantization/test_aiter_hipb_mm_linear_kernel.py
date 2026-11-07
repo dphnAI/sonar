@@ -9,20 +9,20 @@ import os
 import pytest
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.kernels.linear.scaled_mm.aiter import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.kernels.linear.scaled_mm.aiter import (
     AiterHipbMMPerTokenFp8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
     FP8ScaledMMLinearLayerConfig,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
     kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import TestFP8Layer
 
 aiter_available = importlib.util.find_spec("aiter") is not None
@@ -32,15 +32,15 @@ pytestmark = [
         not (current_platform.is_rocm() and current_platform.supports_fp8() and aiter_available),
         reason="Requires ROCm + FP8 support + aiter",
     ),
-    pytest.mark.usefixtures("default_aphrodite_config"),
+    pytest.mark.usefixtures("default_sonar_config"),
 ]
 
 
 @pytest.fixture
 def enable_hipb_mm_kernel(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR_HIPBMM", "1")
     rocm_aiter_ops.refresh_env_variables()
     yield
     rocm_aiter_ops.refresh_env_variables()
@@ -112,39 +112,39 @@ def test_hipb_mm_kernel_requires_hipbmm_flag(monkeypatch: pytest.MonkeyPatch):
     # The kernel rejects when `is_hip_fp8bmm_enabled()` is False. That helper
     # requires AITER + AITER_LINEAR + MI3xx, so dropping AITER_LINEAR exercises
     # the rejection branch.
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "0")
-    monkeypatch.delenv("APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM", raising=False)
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR", "0")
+    monkeypatch.delenv("SONAR_ROCM_USE_AITER_LINEAR_HIPBMM", raising=False)
     rocm_aiter_ops.refresh_env_variables()
 
     is_supported, reason = AiterHipbMMPerTokenFp8ScaledMMLinearKernel.is_supported()
 
     assert not is_supported
     assert reason == (
-        "requires setting `APHRODITE_ROCM_USE_AITER=1`, "
-        "`APHRODITE_ROCM_USE_AITER_LINEAR=1`, "
-        "and `APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM=1`."
+        "requires setting `SONAR_ROCM_USE_AITER=1`, "
+        "`SONAR_ROCM_USE_AITER_LINEAR=1`, "
+        "and `SONAR_ROCM_USE_AITER_LINEAR_HIPBMM=1`."
     )
 
 
 def test_hipb_mm_flag_enables_hip_online_tuning(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    import aphrodite.envs as envs_mod
-    import aphrodite.platforms.rocm as rocm_mod
+    import sonar.envs as envs_mod
+    import sonar.platforms.rocm as rocm_mod
 
     # The rocm.py gate requires all three AITER flags (and MI3xx) to auto-set
     # HIP_ONLINE_TUNING.
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_LINEAR_HIPBMM", "1")
 
     try:
         importlib.reload(envs_mod)
         importlib.reload(rocm_mod)
-        assert envs_mod.APHRODITE_ROCM_USE_AITER
-        assert envs_mod.APHRODITE_ROCM_USE_AITER_LINEAR
-        assert envs_mod.APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM
+        assert envs_mod.SONAR_ROCM_USE_AITER
+        assert envs_mod.SONAR_ROCM_USE_AITER_LINEAR
+        assert envs_mod.SONAR_ROCM_USE_AITER_LINEAR_HIPBMM
         assert os.environ.get("HIP_ONLINE_TUNING") == "1"
     finally:
         monkeypatch.undo()

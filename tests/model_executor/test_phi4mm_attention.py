@@ -3,7 +3,7 @@
 
 import torch
 
-from aphrodite.model_executor.models.phi4mm_utils import MultiHeadedAttention
+from sonar.model_executor.models.phi4mm_utils import MultiHeadedAttention
 
 
 def test_eager_attention_does_not_retain_probability_matrix():

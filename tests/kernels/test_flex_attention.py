@@ -6,9 +6,9 @@ import pytest
 import torch
 from packaging import version
 
-from aphrodite.config import AttentionConfig
-from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.v1.attention.backends.flex_attention import (
+from sonar.config import AttentionConfig
+from sonar.model_executor.layers.attention import Attention
+from sonar.v1.attention.backends.flex_attention import (
     BlockSparsityHint,
     FlexAttentionMetadataBuilder,
     physical_to_logical_mapping,
@@ -16,8 +16,8 @@ from aphrodite.v1.attention.backends.flex_attention import (
 from tests.utils import set_random_seed
 from tests.v1.attention.utils import (
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
     create_standard_kv_cache_spec,
 )
 
@@ -68,7 +68,7 @@ def test_flex_attention_explicit_block_sizes_override_encoder_defaults():
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_full_cudagraphs(aphrodite_runner):
+def test_flex_attention_full_cudagraphs(sonar_runner):
     """Test the numerics for flex attention full cudagraphs support."""
     model_name = "Qwen/Qwen2.5-1.5B-Instruct"
     seed = 42
@@ -82,7 +82,7 @@ def test_flex_attention_full_cudagraphs(aphrodite_runner):
 
     # Run with flex attention eager
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -94,7 +94,7 @@ def test_flex_attention_full_cudagraphs(aphrodite_runner):
 
     # Run with flex attention compiled
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -121,8 +121,8 @@ def windowed_causal_mask_mod(b, h, q_idx, kv_idx):
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+def test_flex_attention_custom_mask_full_cudagraphs(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setattr(
         Attention,
         "logical_mask_mod",
@@ -141,7 +141,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatc
     ]
 
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -152,7 +152,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatc
         output_eager = llm_eager.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -179,7 +179,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatc
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_vs_default_backend(aphrodite_runner):
+def test_flex_attention_vs_default_backend(sonar_runner):
     """Test that FlexAttention produces the same outputs as the default backend.
 
     This test compares the outputs from the FlexAttention backend with
@@ -197,7 +197,7 @@ def test_flex_attention_vs_default_backend(aphrodite_runner):
 
     # Run with flex attention
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -209,7 +209,7 @@ def test_flex_attention_vs_default_backend(aphrodite_runner):
 
     # Run with default backend
     set_random_seed(seed)
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -231,7 +231,7 @@ def test_flex_attention_vs_default_backend(aphrodite_runner):
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_encoder_flex_attention_vs_default_backend(aphrodite_runner):
+def test_encoder_flex_attention_vs_default_backend(sonar_runner):
     """Test that FlexAttention produces the same outputs as the default backend.
 
     This test compares the outputs from the FlexAttention backend with
@@ -247,7 +247,7 @@ def test_encoder_flex_attention_vs_default_backend(aphrodite_runner):
     ]
 
     # Run with flex attention
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="pooling",
         dtype=torch.bfloat16,
@@ -259,7 +259,7 @@ def test_encoder_flex_attention_vs_default_backend(aphrodite_runner):
         flex_outputs = llm_flex.embed(prompts)
 
     # Run with default backend
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="pooling",
         dtype=torch.bfloat16,
@@ -290,17 +290,15 @@ def test_block_mask_direct_vs_slow_path():
     """
     device = torch.device("cuda")
 
-    aphrodite_config = create_aphrodite_config(
-        model_name="Qwen/Qwen2.5-1.5B-Instruct", block_size=16, max_model_len=1024
-    )
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen2.5-1.5B-Instruct", block_size=16, max_model_len=1024)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
 
     # Use a mixed batch that will create groups spanning multiple sequences
     batch_spec = BatchSpec(seq_lens=[35, 64, 128, 256], query_lens=[33, 5, 32, 64], name="test_mixed_batch")
 
-    common_attn_metadata = create_common_attn_metadata(batch_spec, aphrodite_config.cache_config.block_size, device)
+    common_attn_metadata = create_common_attn_metadata(batch_spec, sonar_config.cache_config.block_size, device)
 
-    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
+    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], sonar_config, device)
 
     metadata_direct = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     builder.direct_build = False
@@ -343,11 +341,11 @@ def test_flex_attention_request_count_changes_reuse_compiled_graph(direct_build)
     from torch._dynamo.testing import CompileCounterWithBackend
     from torch.nn.attention.flex_attention import flex_attention
 
-    from aphrodite.v1.attention.backends.flex_attention import get_kernel_options
+    from sonar.v1.attention.backends.flex_attention import get_kernel_options
 
     torch.manual_seed(42)
     device = torch.device("cuda")
-    config = create_aphrodite_config(
+    config = create_sonar_config(
         model_name="Qwen/Qwen3-0.6B",
         max_model_len=128,
         num_gpu_blocks=40,
@@ -443,12 +441,12 @@ def test_block_sparsity_hint_prunes_blocks():
     """
     device = torch.device("cuda")
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="facebook/opt-125m",
         block_size=16,
         max_model_len=1024,
     )
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
 
     batch_spec = BatchSpec(
         seq_lens=[256],
@@ -456,9 +454,9 @@ def test_block_sparsity_hint_prunes_blocks():
         name="test_sparsity_hint",
     )
 
-    common_attn_metadata = create_common_attn_metadata(batch_spec, aphrodite_config.cache_config.block_size, device)
+    common_attn_metadata = create_common_attn_metadata(batch_spec, sonar_config.cache_config.block_size, device)
 
-    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
+    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], sonar_config, device)
 
     metadata_no_hint = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     metadata_no_hint.block_mask = metadata_no_hint._build_block_mask_direct()

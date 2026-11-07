@@ -35,10 +35,10 @@ from typing import Any
 
 from openai.types.responses.tool_param import FunctionToolParam
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.gemma4_engine_tool_parser import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.gemma4_engine_tool_parser import (
     Gemma4EngineToolParser as Gemma4ToolParser,
 )
 

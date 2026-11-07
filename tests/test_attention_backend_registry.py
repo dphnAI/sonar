@@ -3,17 +3,17 @@
 import pytest
 import torch
 
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backend import (
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
 )
-from aphrodite.v1.attention.backends.registry import (
+from sonar.v1.attention.backends.registry import (
     AttentionBackendEnum,
     MambaAttentionBackendEnum,
     register_backend,
 )
-from aphrodite.v1.attention.selector import AttentionSelectorConfig
+from sonar.v1.attention.selector import AttentionSelectorConfig
 
 
 class CustomAttentionImpl(AttentionImpl):

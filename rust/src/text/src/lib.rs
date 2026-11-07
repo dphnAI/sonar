@@ -9,11 +9,6 @@
 
 use std::mem::take;
 
-use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-pub use aphrodite_llm::FinishReason;
-use aphrodite_llm::{GenerateOutputStream, Llm};
-use aphrodite_tokenizer::DynTokenizer;
 pub use backend::{
     DynTextBackend, GenerationConfigMode, SamplingHints, SamplingLimits, TextBackend,
 };
@@ -28,6 +23,11 @@ pub use output::{
     TextOutputStreamExt, TokenAnchor, TokenAttribution,
 };
 pub use request::{Prompt, SamplingParams, TextRequest, normalize_top_k};
+use sonar_engine_core_client::EngineCoreClient;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+pub use sonar_llm::FinishReason;
+use sonar_llm::{GenerateOutputStream, Llm};
+use sonar_tokenizer::DynTokenizer;
 use trait_set::trait_set;
 
 pub mod backend;
@@ -36,7 +36,7 @@ mod lower;
 pub mod output;
 mod request;
 mod truncation;
-pub use aphrodite_tokenizer as tokenizer;
+pub use sonar_tokenizer as tokenizer;
 pub use truncation::{PromptTruncation, PromptTruncationLimit, TruncationSide};
 
 trait_set! {
@@ -152,7 +152,7 @@ impl TextRequestProcessor {
         request.validate()?;
 
         if request.arrival_time.is_none() {
-            request.arrival_time = Some(aphrodite_llm::current_unix_timestamp_secs());
+            request.arrival_time = Some(sonar_llm::current_unix_timestamp_secs());
         }
 
         let prompt_token_ids = self.prepare_prompt_tokens(
@@ -308,7 +308,7 @@ impl TextLlm {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::*;
 

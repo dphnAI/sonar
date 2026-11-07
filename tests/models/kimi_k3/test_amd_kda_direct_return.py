@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 
-from aphrodite.models.kimi_k3.amd.kda import KimiK3DeltaAttention
-from aphrodite.models.kimi_k3.amd.linear import KimiDecoderLayer
+from sonar.models.kimi_k3.amd.kda import KimiK3DeltaAttention
+from sonar.models.kimi_k3.amd.linear import KimiDecoderLayer
 
 
 class _ReturningAttention(nn.Module):

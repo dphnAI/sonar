@@ -16,16 +16,16 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import BatchDescriptor, set_forward_context
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.forward_context import BatchDescriptor, set_forward_context
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 from ...utils import create_new_process_for_each_test
 
@@ -194,7 +194,7 @@ class LlamaModel(nn.Module):
     def __init__(
         self,
         *,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         config: LlamaConfig,
         prefix: str = "",
         **kwargs,
@@ -256,11 +256,11 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
     compile_config = deepcopy(compile_config)
     cudagraph_runtime_mode = compile_config.cudagraph_mode
 
-    aphrodite_config = AphroditeConfig(compilation_config=compile_config, additional_config=llama_config)
-    with set_current_aphrodite_config(aphrodite_config):
-        model = LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="").eval().cuda()
+    sonar_config = SonarConfig(compilation_config=compile_config, additional_config=llama_config)
+    with set_current_sonar_config(sonar_config):
+        model = LlamaModel(config=llama_config, sonar_config=sonar_config, prefix="").eval().cuda()
 
-    with set_forward_context({}, aphrodite_config=aphrodite_config):  # background context
+    with set_forward_context({}, sonar_config=sonar_config):  # background context
         B = 16  # max batch size
         input_ids = torch.randint(0, llama_config.vocab_size, (B,)).cuda()
         positions = torch.arange(B).cuda()
@@ -271,7 +271,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
         # simulate cudagraphs capturing
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -280,7 +280,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
             model(input_ids[:2], positions[:2])
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -292,7 +292,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
         # simulate cudagraphs replay
         with set_forward_context(
             {},
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -320,11 +320,11 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
 )
 @create_new_process_for_each_test("spawn")
 def test_toy_llama(backend: str, use_inductor_graph_partition: bool, monkeypatch, tmp_path):
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
-    # We disable the Aphrodite compile cache into a new tmp dir for 1 reason:
+    # We disable the Sonar compile cache into a new tmp dir for 1 reason:
     # 1. To make sure we can properly track the number of Inductor compilations.
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
 
     if use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
         pytest.skip("Inductor graph partition only supported in torch>=2.9")
@@ -342,7 +342,7 @@ def test_toy_llama(backend: str, use_inductor_graph_partition: bool, monkeypatch
     )
 
     compile_config_no_split = CompilationConfig(
-        mode=CompilationMode.APHRODITE_COMPILE,
+        mode=CompilationMode.SONAR_COMPILE,
         use_inductor_graph_partition=use_inductor_graph_partition,
         cudagraph_mode=CUDAGraphMode.PIECEWISE,
         backend=backend,
@@ -425,23 +425,20 @@ def benchmark():
     for piecewise in [False, True]:
         if piecewise:
             compilation_config = CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 splitting_ops=["silly::attention"],
                 cudagraph_capture_sizes=cudagraph_sizes,
             )
         else:
             compilation_config = CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 cudagraph_capture_sizes=cudagraph_sizes,
             )
 
-        aphrodite_config = AphroditeConfig(compilation_config=compilation_config)
-        with set_current_aphrodite_config(aphrodite_config):
+        sonar_config = SonarConfig(compilation_config=compilation_config)
+        with set_current_sonar_config(sonar_config):
             model = (
-                LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="")
-                .eval()
-                .cuda()
-                .to(torch.bfloat16)
+                LlamaModel(config=llama_config, sonar_config=sonar_config, prefix="").eval().cuda().to(torch.bfloat16)
             )
 
         B = 256  # max batch size

@@ -11,10 +11,10 @@ endif()
 # Local tree: set deepgemm_SOURCE_DIR directly (no FetchContent download).
 # Upstream git: use FetchContent_Populate with explicit options (CMP0169 NEW
 # disallows one-argument Populate(dep) after Declare; MakeAvailable would run
-# DeepGEMM's top-level CMakeLists.txt, which Aphrodite must not load).
+# DeepGEMM's top-level CMakeLists.txt, which Sonar must not load).
 if(DEEPGEMM_SRC_DIR)
   # cmake_path(ABSOLUTE_PATH <var> ...) reads the path from <var>; NORMALIZE is a
-  # flag (no trailing path argument). Resolve relative paths against Aphrodite root.
+  # flag (no trailing path argument). Resolve relative paths against Sonar root.
   set(_deepgemm_user_src "${DEEPGEMM_SRC_DIR}")
   cmake_path(ABSOLUTE_PATH _deepgemm_user_src
     BASE_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -115,7 +115,7 @@ if(DEEPGEMM_ARCHS)
   #
   # DeepGEMM integration notes
   # --------------------------
-  # We vendor DeepGEMM into aphrodite/third_party/deep_gemm/ and bundle:
+  # We vendor DeepGEMM into sonar/third_party/deep_gemm/ and bundle:
   #   - deep_gemm/_C.py (Python shim over torch.ops.deep_gemm)
   #   - deep_gemm/_C_extension.abi3.so (single limited-API extension)
   # The build is delegated to tools/build_deepgemm_C.py (setup.py build_ext).
@@ -160,15 +160,15 @@ if(DEEPGEMM_ARCHS)
   # extension. Python would import it before the new _C.py facade.
   install(CODE [[
     file(GLOB _dg_legacy_extensions LIST_DIRECTORIES FALSE
-      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/aphrodite/third_party/deep_gemm/_C.cpython-*.so"
-      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/aphrodite/third_party/deep_gemm/_C.abi3.so")
+      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/sonar/third_party/deep_gemm/_C.cpython-*.so"
+      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/sonar/third_party/deep_gemm/_C.abi3.so")
     if(_dg_legacy_extensions)
       file(REMOVE ${_dg_legacy_extensions})
     endif()
   ]] COMPONENT _deep_gemm_C)
 
   install(DIRECTORY "${_dg_dir}/"
-    DESTINATION aphrodite/third_party/deep_gemm
+    DESTINATION sonar/third_party/deep_gemm
     COMPONENT _deep_gemm_C
     FILES_MATCHING
       PATTERN "_C.py"
@@ -180,26 +180,26 @@ if(DEEPGEMM_ARCHS)
   install(FILES
     "${deepgemm_SOURCE_DIR}/deep_gemm/__init__.py"
     "${deepgemm_SOURCE_DIR}/deep_gemm/locality_domain.py"
-    DESTINATION aphrodite/third_party/deep_gemm
+    DESTINATION sonar/third_party/deep_gemm
     COMPONENT _deep_gemm_C)
 
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/deep_gemm/utils/"
-    DESTINATION aphrodite/third_party/deep_gemm/utils
+    DESTINATION sonar/third_party/deep_gemm/utils
     COMPONENT _deep_gemm_C
     FILES_MATCHING PATTERN "*.py")
 
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/deep_gemm/testing/"
-    DESTINATION aphrodite/third_party/deep_gemm/testing
+    DESTINATION sonar/third_party/deep_gemm/testing
     COMPONENT _deep_gemm_C
     FILES_MATCHING PATTERN "*.py")
 
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/deep_gemm/legacy/"
-    DESTINATION aphrodite/third_party/deep_gemm/legacy
+    DESTINATION sonar/third_party/deep_gemm/legacy
     COMPONENT _deep_gemm_C
     FILES_MATCHING PATTERN "*.py")
 
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/deep_gemm/mega/"
-    DESTINATION aphrodite/third_party/deep_gemm/mega
+    DESTINATION sonar/third_party/deep_gemm/mega
     COMPONENT _deep_gemm_C
     FILES_MATCHING PATTERN "*.py")
 
@@ -207,7 +207,7 @@ if(DEEPGEMM_ARCHS)
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/deep_gemm_envs.py"
     "# Pre-installed environment variables\npersistent_envs = dict()\n")
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/deep_gemm_envs.py"
-    DESTINATION aphrodite/third_party/deep_gemm
+    DESTINATION sonar/third_party/deep_gemm
     RENAME envs.py
     COMPONENT _deep_gemm_C)
 
@@ -218,12 +218,12 @@ if(DEEPGEMM_ARCHS)
 
   # DeepGEMM's own CUDA headers
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/deep_gemm/include/"
-    DESTINATION aphrodite/third_party/deep_gemm/include
+    DESTINATION sonar/third_party/deep_gemm/include
     COMPONENT _deep_gemm_C)
 
-  # CUTLASS and CuTe headers (vendored for JIT, separate from Aphrodite's CUTLASS)
+  # CUTLASS and CuTe headers (vendored for JIT, separate from Sonar's CUTLASS)
   install(DIRECTORY "${deepgemm_SOURCE_DIR}/third-party/cutlass/include/"
-    DESTINATION aphrodite/third_party/deep_gemm/include
+    DESTINATION sonar/third_party/deep_gemm/include
     COMPONENT _deep_gemm_C)
 
 else()

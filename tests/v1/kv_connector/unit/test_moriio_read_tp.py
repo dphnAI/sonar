@@ -18,8 +18,8 @@ import msgspec
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import ssm_conv_transfer_utils
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import ssm_conv_transfer_utils
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     MoRIIOAgentMetadata,
     MoRIIOConnectorMetadata,
     MoRIIOError,
@@ -27,17 +27,17 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common impo
     MoRIIOTransferAck,
     ReqMeta,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     get_moriio_read_holder_tp_ranks,
     resolve_moriio_transfer_ack,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout import (
     HeadLayout,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 from .test_moriio_hetero_tp_write import (
     DECODE_BLOCKS,

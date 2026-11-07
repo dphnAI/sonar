@@ -12,7 +12,7 @@
 //
 // Only defined when the build has an SM100 target (-DENABLE_NVFP4_SM100=1);
 // callers must guard on the same macro.
-namespace aphrodite {
+namespace sonar {
 
 // concat_and_cache_mla for the nvfp4_ds_mla layout.
 //   kv_c:       bf16   [num_tokens, 512]
@@ -34,4 +34,4 @@ void launch_cp_gather_and_upconvert_nvfp4_kv_cache(
     int64_t block_table_stride, int64_t cache_block_stride,
     int64_t cache_entry_stride, int64_t dst_entry_stride, cudaStream_t stream);
 
-}  // namespace aphrodite
+}  // namespace sonar

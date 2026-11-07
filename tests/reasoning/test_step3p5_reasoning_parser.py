@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite.parser.engine.registered_adapters import Step3p5ParserReasoningAdapter
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.tokenizers import get_tokenizer
+from sonar.parser.engine.registered_adapters import Step3p5ParserReasoningAdapter
+from sonar.reasoning import ReasoningParserManager
+from sonar.tokenizers import get_tokenizer
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "step3p5"

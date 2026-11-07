@@ -7,7 +7,7 @@ import tempfile
 
 from transformers import PreTrainedConfig
 
-from aphrodite.transformers_utils.config import _CONFIG_REGISTRY, get_config
+from sonar.transformers_utils.config import _CONFIG_REGISTRY, get_config
 
 
 class _TestCustomConfig(PreTrainedConfig):

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from time import time
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 # Common prefix.
 prefix = (

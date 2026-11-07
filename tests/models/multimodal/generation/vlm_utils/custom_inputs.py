@@ -4,9 +4,9 @@
 
 from collections.abc import Callable
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.video import (
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.image import rescale_image_size
+from sonar.multimodal.video import (
     rescale_video_size,
     resize_video,
     sample_frames_from_video,

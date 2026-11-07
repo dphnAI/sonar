@@ -9,7 +9,7 @@
 # Engine shutdown is driven from the frontend. If a frontend process dies while
 # EngineCore is still starting up, the process manager sends SIGTERM to its
 # children and force kills whatever is still alive after a short timeout (see
-# shutdown in aphrodite/v1/utils.py). Construction is slow - it spawns the executor
+# shutdown in sonar/v1/utils.py). Construction is slow - it spawns the executor
 # processes, loads weights, profiles and captures CUDA graphs - so that
 # shutdown often lands inside the construction window. Bigger models and more
 # ranks widen the window. This is the case PR 52299 (follow up to 43417) has to
@@ -36,10 +36,10 @@ import queue
 import signal as signal_module
 from typing import Any
 
-from aphrodite.config import WatchdogConfig
-from aphrodite.v1.engine import EngineCoreRequestType
-from aphrodite.v1.engine import core as core_module
-from aphrodite.v1.engine.core import EngineCoreProc, EngineShutdownState
+from sonar.config import WatchdogConfig
+from sonar.v1.engine import EngineCoreRequestType
+from sonar.v1.engine import core as core_module
+from sonar.v1.engine.core import EngineCoreProc, EngineShutdownState
 
 WAKEUP_ITEM = (EngineCoreRequestType.WAKEUP, None)
 CONSTRUCTION_SIGNAL = signal_module.SIGTERM
@@ -107,7 +107,7 @@ class _StubModelConfig:
     is_moe = False
 
 
-class _StubAphroditeConfig:
+class _StubSonarConfig:
     def __init__(self):
         self.parallel_config = _StubParallelConfig()
         self.model_config = _StubModelConfig()
@@ -135,7 +135,7 @@ def _run_engine_core(
             # Same queue type as EngineCore, so the wakeup path under test is
             # the real one.
             self.input_queue = queue.Queue[tuple[EngineCoreRequestType, Any]]()
-            self.aphrodite_config = kwargs.get("aphrodite_config")
+            self.sonar_config = kwargs.get("sonar_config")
             if signal_during_construction:
                 # The termination signal lands mid construction, while the
                 # caller still sees engine_core == None.
@@ -172,7 +172,7 @@ def _run_engine_core(
     monkeypatch.setattr(core_module, "maybe_init_worker_tracer", lambda *a, **k: None)
     monkeypatch.setattr(core_module, "decorate_logs", lambda *a, **k: None)
 
-    EngineCoreProc.run_engine_core(aphrodite_config=_StubAphroditeConfig())
+    EngineCoreProc.run_engine_core(sonar_config=_StubSonarConfig())
     return trace
 
 

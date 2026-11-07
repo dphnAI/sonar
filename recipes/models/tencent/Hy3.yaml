@@ -26,7 +26,7 @@ model:
     docker:
       note: "Recommended: the dedicated image ships the Hy3 runtime and dependencies."
     pip:
-      note: "Aphrodite 0.28.0 includes Hy3 support and the optimizations from Aphrodite #47433."
+      note: "Sonar 0.28.0 includes Hy3 support and the optimizations from Sonar #47433."
   architecture: moe
   parameter_count: "295B"
   active_parameters: "21B"
@@ -90,22 +90,22 @@ hardware_overrides:
   # issue (per the Hy3 model card); applies on Hopper and Blackwell/NVL systems.
   hopper:
     extra_env:
-      APHRODITE_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+      SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
   blackwell:
     extra_env:
-      APHRODITE_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
+      SONAR_FLASHINFER_ALLREDUCE_BACKEND: "trtllm"
   amd:
     extra_args:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       # AITER fused-MoE disabled (CK GEMM crash); Triton fallback works.
-      APHRODITE_ROCM_USE_AITER_MOE: "0"
-      APHRODITE_ROCM_USE_AITER_MHA: "1"
-      APHRODITE_ROCM_USE_AITER_RMSNORM: "1"
-      APHRODITE_ROCM_USE_AITER_LINEAR: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER_MOE: "0"
+      SONAR_ROCM_USE_AITER_MHA: "1"
+      SONAR_ROCM_USE_AITER_RMSNORM: "1"
+      SONAR_ROCM_USE_AITER_LINEAR: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 
 strategy_overrides: {}
 
@@ -120,8 +120,8 @@ guide: |
   ## Availability
 
   Hy3 uses the same model code as
-  [Hy3-preview](https://huggingface.co/tencent/Hy3-preview), so any Aphrodite build that
-  serves Hy3-preview also serves Hy3. Aphrodite 0.28.0 includes
+  [Hy3-preview](https://huggingface.co/tencent/Hy3-preview), so any Sonar build that
+  serves Hy3-preview also serves Hy3. Sonar 0.28.0 includes
   [#47433](https://github.com/vllm-project/vllm/pull/47433), which adds Tencent's
   HPC-Ops attention and MoE backends. The HPC-Ops kernels are still built and
   installed separately (see the HPC-Ops backends section below).
@@ -137,7 +137,7 @@ guide: |
   docker run --gpus all \
     -p 8000:8000 \
     --ipc=host \
-    -e APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm \
+    -e SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai:hy3 tencent/Hy3 \
       --tensor-parallel-size 8 \
@@ -153,7 +153,7 @@ guide: |
   uv venv --python 3.12 --seed --managed-python
   source .venv/bin/activate
   git clone https://github.com/vllm-project/vllm.git
-  cd aphrodite
+  cd sonar
   uv pip install --editable . --torch-backend=auto
   ```
 
@@ -171,14 +171,14 @@ guide: |
   selected on the recipe site):
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
   # MoE disabled (CK GEMM crash); Triton fallback. See troubleshooting note below.
-  export APHRODITE_ROCM_USE_AITER_MOE=0
-  export APHRODITE_ROCM_USE_AITER_MHA=1
-  export APHRODITE_ROCM_USE_AITER_RMSNORM=1
-  export APHRODITE_ROCM_USE_AITER_LINEAR=1
+  export SONAR_ROCM_USE_AITER_MOE=0
+  export SONAR_ROCM_USE_AITER_MHA=1
+  export SONAR_ROCM_USE_AITER_RMSNORM=1
+  export SONAR_ROCM_USE_AITER_LINEAR=1
 
-  aphrodite serve tencent/Hy3 \
+  sonar serve tencent/Hy3 \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
@@ -187,12 +187,12 @@ guide: |
     --gpu-memory-utilization 0.90
   ```
 
-  > **ROCm troubleshooting — AITER fused-MoE.** With `APHRODITE_ROCM_USE_AITER_MOE=1`
+  > **ROCm troubleshooting — AITER fused-MoE.** With `SONAR_ROCM_USE_AITER_MOE=1`
   > the engine currently aborts during warmup with
   > `RuntimeError: wrong! device_gemm with the specified compilation parameters
   > does not support this GEMM problem` (raised from `aiter` `ck_moe_stage2`).
   > Workaround: set
-  > `APHRODITE_ROCM_USE_AITER_MOE=0` to fall back to the Triton MoE kernel; the other
+  > `SONAR_ROCM_USE_AITER_MOE=0` to fall back to the Triton MoE kernel; the other
   > AITER backends (MHA / RMSNorm / Linear) run as-is. The docker run needs the
   > ROCm device flags `--device /dev/kfd --device /dev/dri --group-add video
   > --group-add render` (the recipe's NVIDIA `docker run` above is CUDA-only).
@@ -200,7 +200,7 @@ guide: |
   MTP (recommended on AMD for lower latency, same flags as the NVIDIA path):
 
   ```bash
-  aphrodite serve tencent/Hy3 \
+  sonar serve tencent/Hy3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 2 \
@@ -217,8 +217,8 @@ guide: |
 
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
-  export APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  aphrodite serve tencent/Hy3 \
+  export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+  sonar serve tencent/Hy3 \
     --tensor-parallel-size 8 \
     --tool-call-parser hy_v3 \
     --reasoning-parser hy_v3 \
@@ -230,8 +230,8 @@ guide: |
 
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
-  export APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  aphrodite serve tencent/Hy3 \
+  export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+  sonar serve tencent/Hy3 \
     --tensor-parallel-size 8 \
     --speculative-config.method mtp \
     --speculative-config.num_speculative_tokens 2 \
@@ -259,8 +259,8 @@ guide: |
 
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
-  export APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  aphrodite serve tencent/Hy3 \
+  export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+  sonar serve tencent/Hy3 \
     --tensor-parallel-size 8 \
     --attention-backend HPC_ATTN
   ```
@@ -270,8 +270,8 @@ guide: |
 
   ```bash
   # Switch to the trtllm all-reduce backend to work around an mnnvl workspace-size issue.
-  export APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-  aphrodite serve tencent/Hy3-FP8 \
+  export SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+  sonar serve tencent/Hy3-FP8 \
     --tensor-parallel-size 8 \
     --moe-backend hpc \
     --kv-cache-dtype fp8_e4m3 \
@@ -280,7 +280,7 @@ guide: |
 
   Both backends combine with the standard `--tool-call-parser` / `--reasoning-parser` and
   MTP flags shown above. See the
-  [Aphrodite × HPC-Ops post](https://vllm.ai/blog/2026-07-06-vllm-hpc-ops) for benchmarks and
+  [Sonar × HPC-Ops post](https://vllm.ai/blog/2026-07-06-vllm-hpc-ops) for benchmarks and
   details.
 
   ## Sampling and Reasoning Modes
@@ -367,7 +367,7 @@ guide: |
   The following benchmarks the FP8 checkpoint (8192→1024, concurrency 32, 160 prompts):
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model tencent/Hy3-FP8 \
     --dataset-name random \
     --random-input-len 8192 \
@@ -407,5 +407,5 @@ guide: |
   - [FP8 checkpoint — tencent/Hy3-FP8](https://huggingface.co/tencent/Hy3-FP8)
   - [NVFP4-FP8 checkpoint — RedHatAI/Hy3-NVFP4-FP8](https://huggingface.co/RedHatAI/Hy3-NVFP4-FP8)
   - [GitHub: Tencent-Hunyuan/Hy3](https://github.com/Tencent-Hunyuan/Hy3)
-  - [Aphrodite × HPC-Ops: high-performance attention & MoE backends](https://vllm.ai/blog/2026-07-06-vllm-hpc-ops)
+  - [Sonar × HPC-Ops: high-performance attention & MoE backends](https://vllm.ai/blog/2026-07-06-vllm-hpc-ops)
   - [Tencent Hy3](https://hy.tencent.com/research/hy3)

@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use aphrodite_text::Prompt;
 use serde_json::Value;
+use sonar_text::Prompt;
 
 use super::deepseek::{self, DsDialect};
 use super::{ChatRenderer, RenderedPrompt};

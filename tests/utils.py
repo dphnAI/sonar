@@ -34,30 +34,30 @@ import torch
 import torch.nn.functional as F
 from typing_extensions import ParamSpec
 
-import aphrodite.envs as envs
-from aphrodite.distributed import (
+import sonar.envs as envs
+from sonar.distributed import (
     ensure_model_parallel_initialized,
     init_distributed_environment,
 )
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.cli.serve import ServeSubcommand
-from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.entrypoints.cli.serve import ServeSubcommand
+from sonar.logger import init_logger
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
-from aphrodite.model_executor.model_loader import get_model_loader
-from aphrodite.platforms import current_platform
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.mem_constants import GB_bytes
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import (
+from sonar.model_executor.model_loader import get_model_loader
+from sonar.platforms import current_platform
+from sonar.tokenizers import get_tokenizer
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.mem_constants import GB_bytes
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.torch_utils import (
     set_random_seed,  # noqa: F401 - re-exported for use in test files
 )
-from aphrodite.v1.engine.utils import get_engine_process_shutdown_timeout
+from sonar.v1.engine.utils import get_engine_process_shutdown_timeout
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.kernels.linear import _KernelT
+    from sonar.model_executor.kernels.linear import _KernelT
 
 logger = init_logger(__name__)
 
@@ -65,7 +65,7 @@ FP8_DTYPE = current_platform.fp8_dtype()
 
 
 if current_platform.is_cuda():
-    from aphrodite.third_party.pynvml import (
+    from sonar.third_party.pynvml import (
         nvmlDeviceGetHandleByIndex,
         nvmlDeviceGetHandleByUUID,
         nvmlDeviceGetMemoryInfo,
@@ -87,8 +87,8 @@ else:
         yield
 
 
-APHRODITE_PATH = Path(__file__).parent.parent
-"""Path to root of the Aphrodite repository."""
+SONAR_PATH = Path(__file__).parent.parent
+"""Path to root of the Sonar repository."""
 
 # ROCm: disable prefix caching and eliminate batch variance to reduce
 # test flakiness.
@@ -166,21 +166,21 @@ def _run_in_new_process_group(
     child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
     env_dict: dict[str, str] | None,
     model: str,
-    aphrodite_serve_args: list[str],
+    sonar_serve_args: list[str],
 ) -> None:
     os.setsid()
-    child_process_fxn(env_dict, model, aphrodite_serve_args)
+    child_process_fxn(env_dict, model, sonar_serve_args)
 
 
-class RemoteAPHRODITEServer:
-    """Base class for launching Aphrodite server subprocesses for testing.
+class RemoteSONARServer:
+    """Base class for launching Sonar server subprocesses for testing.
 
     Subclasses must override ``_create_cli_subcommand`` and
     ``_start_server``.
     """
 
-    DUMMY_API_KEY = "token-abc123"  # Aphrodite's OpenAI server does not need API key
-    _active_servers: set["RemoteAPHRODITEServer"] = set()
+    DUMMY_API_KEY = "token-abc123"  # Sonar's OpenAI server does not need API key
+    _active_servers: set["RemoteSONARServer"] = set()
     _active_servers_lock = threading.RLock()
     _cleanup_hooks_registered = False
     _signal_hooks_registered = False
@@ -191,7 +191,7 @@ class RemoteAPHRODITEServer:
         """Return a CLISubcommand instance used to parse CLI args."""
         raise NotImplementedError
 
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
+    def _start_server(self, model: str, sonar_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         """Subclasses override this method to customize server process launch."""
         raise NotImplementedError
 
@@ -212,7 +212,7 @@ class RemoteAPHRODITEServer:
     def __init__(
         self,
         model: str,
-        aphrodite_serve_args: list[str],
+        sonar_serve_args: list[str],
         *,
         env_dict: dict[str, str] | None = None,
         seed: int = 0,
@@ -221,29 +221,29 @@ class RemoteAPHRODITEServer:
         override_hf_configs: dict[str, Any] | None = None,
     ) -> None:
         if auto_port:
-            if "-p" in aphrodite_serve_args or "--port" in aphrodite_serve_args:
+            if "-p" in sonar_serve_args or "--port" in sonar_serve_args:
                 raise ValueError("You have manually specified the port when `auto_port=True`.")
 
             # No need for a port if using unix sockets
-            if "--uds" not in aphrodite_serve_args:
+            if "--uds" not in sonar_serve_args:
                 # Don't mutate the input args
-                aphrodite_serve_args = aphrodite_serve_args + ["--port", str(get_open_port())]
+                sonar_serve_args = sonar_serve_args + ["--port", str(get_open_port())]
         if seed is not None:
-            if "--seed" in aphrodite_serve_args:
+            if "--seed" in sonar_serve_args:
                 raise ValueError(f"You have manually specified the seed when `seed={seed}`.")
 
-            aphrodite_serve_args = aphrodite_serve_args + ["--seed", str(seed)]
+            sonar_serve_args = sonar_serve_args + ["--seed", str(seed)]
 
         if override_hf_configs is not None:
-            aphrodite_serve_args = aphrodite_serve_args + [
+            sonar_serve_args = sonar_serve_args + [
                 "--hf-overrides",
                 json.dumps(override_hf_configs),
             ]
 
-        parser = FlexibleArgumentParser(description="Aphrodite's remote server.")
+        parser = FlexibleArgumentParser(description="Sonar's remote server.")
         subparsers = parser.add_subparsers(required=False, dest="subparser")
         parser = self._create_cli_subcommand().subparser_init(subparsers)
-        args = parser.parse_args(["--model", model, *aphrodite_serve_args])
+        args = parser.parse_args(["--model", model, *sonar_serve_args])
         self.uds = args.uds
         if args.uds:
             self.host = None
@@ -266,7 +266,7 @@ class RemoteAPHRODITEServer:
             pre_gb = self._pre_server_gpu_memory / 1e9
             print(f"[{type(self).__name__}] GPU memory before server start: {pre_gb:.2f} GB")
 
-        self._start_server(model, aphrodite_serve_args, env_dict)
+        self._start_server(model, sonar_serve_args, env_dict)
         self._register_active_server()
         max_wait_seconds = max_wait_seconds or 480
         try:
@@ -306,7 +306,7 @@ class RemoteAPHRODITEServer:
     @classmethod
     def _ensure_cleanup_hooks_registered(cls) -> None:
         """Register process-exit cleanup for detached server subprocesses."""
-        root_cls = RemoteAPHRODITEServer
+        root_cls = RemoteSONARServer
         with root_cls._active_servers_lock:
             if not root_cls._cleanup_hooks_registered:
                 atexit.register(root_cls._shutdown_active_servers)
@@ -320,17 +320,17 @@ class RemoteAPHRODITEServer:
 
     def _register_active_server(self) -> None:
         """Track this server so parent-process exits still clean it up."""
-        RemoteAPHRODITEServer._ensure_cleanup_hooks_registered()
-        with RemoteAPHRODITEServer._active_servers_lock:
-            RemoteAPHRODITEServer._active_servers.add(self)
+        RemoteSONARServer._ensure_cleanup_hooks_registered()
+        with RemoteSONARServer._active_servers_lock:
+            RemoteSONARServer._active_servers.add(self)
 
     def _unregister_active_server(self) -> None:
-        with RemoteAPHRODITEServer._active_servers_lock:
-            RemoteAPHRODITEServer._active_servers.discard(self)
+        with RemoteSONARServer._active_servers_lock:
+            RemoteSONARServer._active_servers.discard(self)
 
     @classmethod
     def _shutdown_active_servers(cls) -> None:
-        """Best-effort shutdown for all live RemoteAPHRODITEServer instances."""
+        """Best-effort shutdown for all live RemoteSONARServer instances."""
         with cls._active_servers_lock:
             servers = list(cls._active_servers)
 
@@ -400,10 +400,10 @@ class RemoteAPHRODITEServer:
         self._kill_process_group_survivors(pgid)
 
     @classmethod
-    def shutdown_many(cls, servers: Sequence["RemoteAPHRODITEServer"]) -> None:
+    def shutdown_many(cls, servers: Sequence["RemoteSONARServer"]) -> None:
         """Shut down multiple sibling servers and wait for GPU memory once.
 
-        Test fixtures that hold several ``RemoteAPHRODITEServer`` instances at
+        Test fixtures that hold several ``RemoteSONARServer`` instances at
         once must NOT shut them down by calling each server's ``__exit__``
         sequentially: every server measures total GPU memory across all
         visible devices in ``_wait_for_gpu_memory_release``, so the first
@@ -686,8 +686,8 @@ class RemoteAPHRODITEServer:
         return anthropic.AsyncAnthropic(base_url=self.url_for(), api_key=self.DUMMY_API_KEY, max_retries=0, **kwargs)
 
 
-class RemoteOpenAIServer(RemoteAPHRODITEServer):
-    """Launches ``aphrodite serve`` for testing OpenAI-compatible endpoints."""
+class RemoteOpenAIServer(RemoteSONARServer):
+    """Launches ``sonar serve`` for testing OpenAI-compatible endpoints."""
 
     def _get_process_termination_timeout(self) -> float:
         engine_timeout = get_engine_process_shutdown_timeout(
@@ -700,15 +700,15 @@ class RemoteOpenAIServer(RemoteAPHRODITEServer):
     def _create_cli_subcommand(self):
         return ServeSubcommand()
 
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
+    def _start_server(self, model: str, sonar_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         env = os.environ.copy()
         # the current process might initialize cuda,
         # to be safe, we should use spawn method
-        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        env["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
         if env_dict is not None:
             env.update(env_dict)
         _sanitize_pythonpath_env(env)
-        serve_cmd = ["aphrodite", "serve", model, *aphrodite_serve_args]
+        serve_cmd = ["sonar", "serve", model, *sonar_serve_args]
         redacted_serve_cmd = _redact_sensitive_cli_args(serve_cmd)
         print(f"Launching RemoteOpenAIServer with: {' '.join(redacted_serve_cmd)}")
         self.proc = subprocess.Popen(
@@ -722,19 +722,19 @@ class RemoteOpenAIServer(RemoteAPHRODITEServer):
         )
 
 
-class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
-    """Launches ``aphrodite launch render`` for GPU-less serving tests."""
+class RemoteLaunchRenderServer(RemoteSONARServer):
+    """Launches ``sonar launch render`` for GPU-less serving tests."""
 
     def _create_cli_subcommand(self):
         return ServeSubcommand()
 
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
+    def _start_server(self, model: str, sonar_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         env = os.environ.copy()
-        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        env["SONAR_WORKER_MULTIPROC_METHOD"] = "spawn"
         if env_dict is not None:
             env.update(env_dict)
         _sanitize_pythonpath_env(env)
-        serve_cmd = ["aphrodite", "launch", "render", model, *aphrodite_serve_args]
+        serve_cmd = ["sonar", "launch", "render", model, *sonar_serve_args]
         redacted_serve_cmd = _redact_sensitive_cli_args(serve_cmd)
         print(f"Launching RemoteLaunchRenderServer with: {' '.join(redacted_serve_cmd)}")
         self.proc = subprocess.Popen(
@@ -765,12 +765,12 @@ class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
 class RemoteOpenAIServerCustom(RemoteOpenAIServer):
     """Launch test server with custom child process."""
 
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
+    def _start_server(self, model: str, sonar_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         method = "spawn" if requires_spawn_multiprocessing() else "fork"
         ctx = get_context(method)
         self.proc: BaseProcess = cast(Any, ctx).Process(
             target=_run_in_new_process_group,
-            args=(self.child_process_fxn, env_dict, model, aphrodite_serve_args),
+            args=(self.child_process_fxn, env_dict, model, sonar_serve_args),
         )
         with _temporarily_sanitized_pythonpath_env():
             self.proc.start()
@@ -778,7 +778,7 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
     def __init__(
         self,
         model: str,
-        aphrodite_serve_args: list[str],
+        sonar_serve_args: list[str],
         child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
         *,
         env_dict: dict[str, str] | None = None,
@@ -791,7 +791,7 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
         self.child_process_fxn = child_process_fxn
         super().__init__(
             model=model,
-            aphrodite_serve_args=aphrodite_serve_args,
+            sonar_serve_args=sonar_serve_args,
             env_dict=env_dict,
             seed=seed,
             auto_port=auto_port,
@@ -1173,10 +1173,10 @@ def compare_all_settings(
             # usually we don't need real weights.
             # we force to use dummy weights by default,
             # and it should work for most of the cases.
-            # if not, we can use APHRODITE_TEST_FORCE_LOAD_FORMAT
+            # if not, we can use SONAR_TEST_FORCE_LOAD_FORMAT
             # environment variable to force the load format,
             # e.g. in quantization tests.
-            args = args + ["--load-format", envs.APHRODITE_TEST_FORCE_LOAD_FORMAT]
+            args = args + ["--load-format", envs.SONAR_TEST_FORCE_LOAD_FORMAT]
         compare_results: list = []
         results = ref_results if i == 0 else compare_results
         with RemoteOpenAIServer(model, args, env_dict=env, max_wait_seconds=max_wait_seconds) as server:
@@ -1245,33 +1245,33 @@ def compare_all_settings(
 
 
 @contextmanager
-def ensure_current_aphrodite_config():
-    """Ensures a aphrodite config is set for the duration of the context.
+def ensure_current_sonar_config():
+    """Ensures a sonar config is set for the duration of the context.
 
     If a config is already set, this is a no-op. Otherwise, it creates a default
-    AphroditeConfig and sets it for the duration of the context.
+    SonarConfig and sets it for the duration of the context.
 
-    Used for tests that call functions which require a aphrodite config but don't
+    Used for tests that call functions which require a sonar config but don't
     need a specific config.
 
     Example:
-        with ensure_current_aphrodite_config():
+        with ensure_current_sonar_config():
             init_distributed_environment(...)
             ensure_model_parallel_initialized(...)
 
     """
-    from aphrodite.config import (
-        AphroditeConfig,
-        get_current_aphrodite_config_or_none,
-        set_current_aphrodite_config,
+    from sonar.config import (
+        SonarConfig,
+        get_current_sonar_config_or_none,
+        set_current_sonar_config,
     )
 
-    if get_current_aphrodite_config_or_none() is not None:
+    if get_current_sonar_config_or_none() is not None:
         # Config already set, just yield
         yield
     else:
         # No config set, create a default one for the duration
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             yield
 
 
@@ -1287,19 +1287,19 @@ def init_test_distributed_environment(
     # Note: This function is often called from Ray worker processes, so we
     # can't rely on pytest fixtures to set the config. We check if the config
     # is already set and only create a default one if needed.
-    from aphrodite.config import (
-        AphroditeConfig,
-        get_current_aphrodite_config_or_none,
-        set_current_aphrodite_config,
+    from sonar.config import (
+        SonarConfig,
+        get_current_sonar_config_or_none,
+        set_current_sonar_config,
     )
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     distributed_init_method = f"tcp://localhost:{distributed_init_port}"
     backend = current_platform.dist_backend
 
     if data_parallel_size > 1:
         # For DP we need to set a common DP master port
-        from aphrodite.config.parallel import ParallelConfig
+        from sonar.config.parallel import ParallelConfig
 
         assert data_parallel_master_port is not None, (
             "data_parallel_master_port is required when data_parallel_size > 1"
@@ -1310,7 +1310,7 @@ def init_test_distributed_environment(
             data_parallel_rank=rank // tp_pp_world,
             _data_parallel_master_port_list=[int(data_parallel_master_port)],
         )
-        with set_current_aphrodite_config(AphroditeConfig(parallel_config=parallel_config)):
+        with set_current_sonar_config(SonarConfig(parallel_config=parallel_config)):
             init_distributed_environment(
                 world_size=tp_pp_world,
                 rank=rank % tp_pp_world,
@@ -1321,7 +1321,7 @@ def init_test_distributed_environment(
             ensure_model_parallel_initialized(tp_size, pp_size)
         return
 
-    if get_current_aphrodite_config_or_none() is not None:
+    if get_current_sonar_config_or_none() is not None:
         # Config already set, use it directly
         init_distributed_environment(
             world_size=pp_size * tp_size,
@@ -1333,7 +1333,7 @@ def init_test_distributed_environment(
         ensure_model_parallel_initialized(tp_size, pp_size)
     else:
         # No config set, create a default one for the test
-        with set_current_aphrodite_config(AphroditeConfig()):
+        with set_current_sonar_config(SonarConfig()):
             init_distributed_environment(
                 world_size=pp_size * tp_size,
                 rank=rank,
@@ -1358,7 +1358,7 @@ def multi_process_parallel(
     # PYTHONPATH is enough and avoids uploading the full source tree, which
     # exceeds Ray's working_dir package size limit on CI.
     env_vars = {
-        "PYTHONPATH": os.pathsep.join(filter(None, [str(APHRODITE_PATH), os.environ.get("PYTHONPATH")])),
+        "PYTHONPATH": os.pathsep.join(filter(None, [str(SONAR_PATH), os.environ.get("PYTHONPATH")])),
         **{env_var: "1" for env_var in current_platform.ray_noset_device_env_vars},
     }
     ray.init(
@@ -1405,7 +1405,7 @@ def assert_rocm_custom_allreduce_backend_state(
     use_aiter_custom_ar: bool,
     quick_reduce_quantization: str,
 ) -> None:
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.parallel_state import get_tp_group
 
     device_communicator = get_tp_group().device_communicator
     aiter_ar_comm = device_communicator.aiter_ar_comm
@@ -1413,12 +1413,12 @@ def assert_rocm_custom_allreduce_backend_state(
         assert aiter_ar_comm is not None, "AITER CustomAllreduce was not initialized."
         assert not aiter_ar_comm.disabled, "AITER CustomAllreduce is disabled."
         assert device_communicator.ca_comm is None, (
-            "Aphrodite CustomAllreduce should not be initialized when AITER CA is used."
+            "Sonar CustomAllreduce should not be initialized when AITER CA is used."
         )
     else:
         assert aiter_ar_comm is None, "AITER CustomAllreduce should not be initialized when disabled."
         assert device_communicator.ca_comm is not None, (
-            "Aphrodite CustomAllreduce should be initialized when AITER CA is disabled."
+            "Sonar CustomAllreduce should be initialized when AITER CA is disabled."
         )
 
     qr_comm = device_communicator.qr_comm
@@ -1517,7 +1517,7 @@ def wait_for_gpu_memory_to_clear(
         # ROCm can keep a small runtime/driver footprint resident even after
         # all model allocations are gone. On MI300 this has been observed
         # around 2.5 GiB, which is above a strict 1% idle threshold but nowhere
-        # near the amount of free memory needed by the next Aphrodite runner.
+        # near the amount of free memory needed by the next Sonar runner.
         min_threshold_b = 4 * 1024**3
         if threshold_bytes is None:
             threshold_bytes = {}
@@ -1633,7 +1633,7 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
             tempfile.NamedTemporaryFile(
                 delete=False,
                 mode="w+b",
-                prefix=f"aphrodite_test_{func.__name__}_{os.getpid()}_",
+                prefix=f"sonar_test_{func.__name__}_{os.getpid()}_",
                 suffix=".exc",
             ) as exc_file,
             ExitStack() as delete_after,
@@ -1739,7 +1739,7 @@ def _format_subprocess_exit(returncode: int) -> str:
 # Set on the spawn-child interpreter so the wrapper short-circuits when the
 # child resolves `module.qualname` back to its own decorated form, instead of
 # launching another subprocess.
-_SPAWN_CHILD_ENV = "APHRODITE_TEST_SPAWN_CHILD"
+_SPAWN_CHILD_ENV = "SONAR_TEST_SPAWN_CHILD"
 
 
 def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]:
@@ -1753,7 +1753,7 @@ def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]
     it up by qualified name, rather than reconstructing it from a cloudpickle
     blob. Pickling the function by value would also pickle its ``__globals__``
     by value — turning module-level singletons (e.g.
-    ``aphrodite.compilation.counter.compilation_counter``) into stale clones in
+    ``sonar.compilation.counter.compilation_counter``) into stale clones in
     the child, so increments performed by the production code in the child
     would never be observable to the test.
 
@@ -1806,7 +1806,7 @@ def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]
                 "    sys.exit(1)\n"
             )
 
-            repo_root = str(APHRODITE_PATH.resolve())
+            repo_root = str(SONAR_PATH.resolve())
             env = os.environ.copy()
             env["PYTHONPATH"] = repo_root + os.pathsep + env.get("PYTHONPATH", "")
             env[_SPAWN_CHILD_ENV] = "1"
@@ -2099,7 +2099,7 @@ class TestFP8Layer(torch.nn.Module):
         force_kernel: "type[_KernelT] | None" = None,
     ):
         super().__init__()
-        from aphrodite.model_executor.kernels.linear import init_fp8_linear_kernel
+        from sonar.model_executor.kernels.linear import init_fp8_linear_kernel
 
         self.input_size_per_partition = weight_shape[1]
         self.output_size_per_partition = weight_shape[0]

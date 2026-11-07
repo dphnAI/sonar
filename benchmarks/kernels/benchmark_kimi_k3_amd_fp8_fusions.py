@@ -11,10 +11,10 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.models.kimi_k3.amd.ops.attn_res import attn_res
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.models.kimi_k3.amd.ops.attn_res import attn_res
+from sonar.platforms import current_platform
 
 
 def capture(fn, repeats):
@@ -48,7 +48,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     dtype = current_platform.fp8_dtype()
     rows = []
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         weight = torch.randn(2112, 7168, device="cuda", dtype=torch.bfloat16) * 0.02
         weight, ws = rocm_aiter_ops.per_token_quant(weight, dtype)
         weight = rocm_aiter_ops.shuffle_weight(weight)

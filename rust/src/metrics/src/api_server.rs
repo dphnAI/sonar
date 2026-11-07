@@ -104,14 +104,14 @@ impl ApiServerMetrics {
         let weight_operation_duration_seconds =
             Family::new_with_constructor(weight_operation_duration_histogram as fn() -> Histogram);
         registry.register(
-            "aphrodite:rl_weight_update_operation_duration_seconds",
+            "sonar:rl_weight_update_operation_duration_seconds",
             "Duration of one weight-transfer operation.",
             weight_operation_duration_seconds.clone(),
         );
 
         let weight_operations_in_flight = WeightOperationGaugeFamily::default();
         registry.register(
-            "aphrodite:rl_weight_update_operations_in_flight",
+            "sonar:rl_weight_update_operations_in_flight",
             "Weight-transfer operations currently awaited.",
             weight_operations_in_flight.clone(),
         );
@@ -120,14 +120,14 @@ impl ApiServerMetrics {
             sleep_mode_operation_duration_histogram as fn() -> Histogram,
         );
         registry.register(
-            "aphrodite:sleep_mode_operation_duration_seconds",
+            "sonar:sleep_mode_operation_duration_seconds",
             "Duration of one sleep-mode operation.",
             sleep_mode_operation_duration_seconds.clone(),
         );
 
         let sleep_mode_operations_in_flight = SleepModeOperationGaugeFamily::default();
         registry.register(
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             "Sleep-mode operations currently awaited.",
             sleep_mode_operations_in_flight.clone(),
         );
@@ -219,34 +219,34 @@ mod tests {
             let recorder = metrics.record_sleep_mode_operation(operation);
             let active = rendered_metrics(&registry);
             assert!(active.contains(&format!(
-                "aphrodite:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 1"
+                "sonar:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 1"
             )));
 
             drop(recorder);
             let succeeded = rendered_metrics(&registry);
             assert!(succeeded.contains(&format!(
-                "aphrodite:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 0"
+                "sonar:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 0"
             )));
             assert!(succeeded.contains(&format!(
-                "aphrodite:sleep_mode_operation_duration_seconds_count{{operation=\"{operation}\"}} 1"
+                "sonar:sleep_mode_operation_duration_seconds_count{{operation=\"{operation}\"}} 1"
             )));
 
             let first = metrics.record_sleep_mode_operation(operation);
             let second = metrics.record_sleep_mode_operation(operation);
             assert!(rendered_metrics(&registry).contains(&format!(
-                "aphrodite:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 2"
+                "sonar:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 2"
             )));
             drop(first);
             assert!(rendered_metrics(&registry).contains(&format!(
-                "aphrodite:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 1"
+                "sonar:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 1"
             )));
             drop(second);
             let rendered = rendered_metrics(&registry);
             assert!(rendered.contains(&format!(
-                "aphrodite:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 0"
+                "sonar:sleep_mode_operations_in_flight{{operation=\"{operation}\"}} 0"
             )));
             assert!(rendered.contains(&format!(
-                "aphrodite:sleep_mode_operation_duration_seconds_count{{operation=\"{operation}\"}} 3"
+                "sonar:sleep_mode_operation_duration_seconds_count{{operation=\"{operation}\"}} 3"
             )));
         }
     }
@@ -258,20 +258,17 @@ mod tests {
 
         let recorder = metrics.record_weight_operation("update");
         assert!(
-            rendered_metrics(&registry).contains(
-                "aphrodite:rl_weight_update_operations_in_flight{operation=\"update\"} 1"
-            )
+            rendered_metrics(&registry)
+                .contains("sonar:rl_weight_update_operations_in_flight{operation=\"update\"} 1")
         );
         drop(recorder);
 
         let after = rendered_metrics(&registry);
         assert!(
-            after.contains(
-                "aphrodite:rl_weight_update_operations_in_flight{operation=\"update\"} 0"
-            )
+            after.contains("sonar:rl_weight_update_operations_in_flight{operation=\"update\"} 0")
         );
         assert!(after.contains(
-            "aphrodite:rl_weight_update_operation_duration_seconds_count{operation=\"update\"} 1"
+            "sonar:rl_weight_update_operation_duration_seconds_count{operation=\"update\"} 1"
         ));
     }
 }

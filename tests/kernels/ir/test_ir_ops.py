@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Meta-tests for Aphrodite IR op infrastructure.
+"""Meta-tests for Sonar IR op infrastructure.
 
 Ensures all registered ops have input generators defined.
 Per-op correctness tests live alongside their op definitions
@@ -9,8 +9,8 @@ Per-op correctness tests live alongside their op definitions
 
 import pytest
 
-import aphrodite.kernels  # noqa: F401 — registers provider implementations
-from aphrodite.ir.op import IrOp
+import sonar.kernels  # noqa: F401 — registers provider implementations
+from sonar.ir.op import IrOp
 
 pytestmark = pytest.mark.skip_global_cleanup
 

@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers import ChatParams
-from aphrodite.renderers.kimi_k3 import KimiK3Renderer, _merge_k3_media_io_kwargs
-from aphrodite.renderers.registry import RENDERER_REGISTRY
-from aphrodite.tokenizers.registry import TokenizerRegistry
+from sonar.exceptions import SonarValidationError
+from sonar.renderers import ChatParams
+from sonar.renderers.kimi_k3 import KimiK3Renderer, _merge_k3_media_io_kwargs
+from sonar.renderers.registry import RENDERER_REGISTRY
+from sonar.tokenizers.registry import TokenizerRegistry
 
 
 class StubTokenizer:
@@ -56,13 +56,13 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
 
 def _make_renderer(tokenizer: StubTokenizer) -> KimiK3Renderer:
-    config = MockAphroditeConfig(MockModelConfig(), MockParallelConfig())
+    config = MockSonarConfig(MockModelConfig(), MockParallelConfig())
     return KimiK3Renderer(config, tokenizer)
 
 
@@ -142,7 +142,7 @@ def test_apply_chat_template_rejects_unsupported_reasoning_effort(
     renderer = _make_renderer(tokenizer)
     params = ChatParams(chat_template_kwargs={"reasoning_effort": reasoning_effort})
 
-    with pytest.raises(AphroditeValidationError, match="thinking_effort") as exc_info:
+    with pytest.raises(SonarValidationError, match="thinking_effort") as exc_info:
         renderer._apply_chat_template([{"role": "user", "content": "hi"}], params)
 
     assert exc_info.value.parameter == "thinking_effort"
@@ -173,7 +173,7 @@ def test_apply_chat_template_rejects_unsupported_native_thinking_effort(
     renderer = _make_renderer(tokenizer)
     params = ChatParams(chat_template_kwargs={"thinking_effort": thinking_effort})
 
-    with pytest.raises(AphroditeValidationError, match="thinking_effort") as exc_info:
+    with pytest.raises(SonarValidationError, match="thinking_effort") as exc_info:
         renderer._apply_chat_template([{"role": "user", "content": "hi"}], params)
 
     assert exc_info.value.parameter == "thinking_effort"

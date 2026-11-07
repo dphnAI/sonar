@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-tokenizer"
+name = "sonar-tokenizer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

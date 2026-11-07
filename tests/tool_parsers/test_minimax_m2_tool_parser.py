@@ -5,11 +5,11 @@ import json
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tool_parsers.minimax_m2_tool_parser import (
+from sonar.tool_parsers.minimax_m2_tool_parser import (
     MinimaxM2ToolParser,
 )
 

@@ -14,7 +14,7 @@ from tests.models.language.pooling_mteb_test.mteb_score_utils import (
 )
 from tests.utils import RemoteOpenAIServer
 
-os.environ["APHRODITE_LOGGING_LEVEL"] = "WARNING"
+os.environ["SONAR_LOGGING_LEVEL"] = "WARNING"
 
 MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 st_main_score = 0.33457
@@ -31,26 +31,26 @@ def server():
 def test_mteb_score(server):
     url = server.url_for("score")
     encoder = ScoreClientMtebEncoder(MODEL_NAME, url)
-    aphrodite_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
+    sonar_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
 
-    print("APHRODITE main score: ", aphrodite_main_score)
+    print("SONAR main score: ", sonar_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - aphrodite_main_score)
+    print("Difference: ", st_main_score - sonar_main_score)
 
-    # We are not concerned that the aphrodite mteb results are better
+    # We are not concerned that the sonar mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - aphrodite_main_score < MTEB_RERANK_TOL
+    assert st_main_score - sonar_main_score < MTEB_RERANK_TOL
 
 
 def test_mteb_rerank(server):
     url = server.url_for("rerank")
     encoder = RerankClientMtebEncoder(MODEL_NAME, url)
-    aphrodite_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
+    sonar_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
 
-    print("APHRODITE main score: ", aphrodite_main_score)
+    print("SONAR main score: ", sonar_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - aphrodite_main_score)
+    print("Difference: ", st_main_score - sonar_main_score)
 
-    # We are not concerned that the aphrodite mteb results are better
+    # We are not concerned that the sonar mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - aphrodite_main_score < MTEB_RERANK_TOL
+    assert st_main_score - sonar_main_score < MTEB_RERANK_TOL

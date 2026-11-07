@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::{JsonToolCallConfig, JsonToolCallParser, JsonToolCallWhitespace};
 use crate::tool::{Result, StructuralTagBuilder, Tool, ToolParser, ToolParserOutput};
@@ -73,8 +73,8 @@ impl ToolParser for Qwen3JsonToolParser {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_tokenizer::DecodedText;
     use expect_test::expect;
+    use sonar_tokenizer::DecodedText;
     use thiserror_ext::AsReport;
 
     use super::Qwen3JsonToolParser;

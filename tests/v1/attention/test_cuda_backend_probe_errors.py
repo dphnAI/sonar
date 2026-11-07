@@ -13,11 +13,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.cuda import CudaPlatform
-from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.attention.selector import AttentionSelectorConfig
+from sonar.platforms import current_platform
+from sonar.platforms.cuda import CudaPlatform
+from sonar.platforms.interface import DeviceCapability
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.selector import AttentionSelectorConfig
 
 pytestmark = pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA-specific tests")
 
@@ -40,7 +40,7 @@ SM90 = DeviceCapability(major=9, minor=0)
     ],
 )
 def test_get_valid_backends_records_environment_failure(exc):
-    with patch("aphrodite.platforms.cuda._get_attn_backend_class", side_effect=exc):
+    with patch("sonar.platforms.cuda._get_attn_backend_class", side_effect=exc):
         valid, invalid_reasons = CudaPlatform.get_valid_backends(
             device_capability=SM90,
             attn_selector_config=SELECTOR_CONFIG,
@@ -62,7 +62,7 @@ def test_get_valid_backends_records_environment_failure(exc):
 )
 def test_get_valid_backends_propagates_unexpected_errors(exc):
     with (
-        patch("aphrodite.platforms.cuda._get_attn_backend_class", side_effect=exc),
+        patch("sonar.platforms.cuda._get_attn_backend_class", side_effect=exc),
         pytest.raises(type(exc)),
     ):
         CudaPlatform.get_valid_backends(
@@ -77,7 +77,7 @@ def test_get_valid_backends_keeps_probing_after_failure():
     healthy.validate_configuration.return_value = []
     side_effects = [OSError("probe failed")] + [healthy] * 32
 
-    with patch("aphrodite.platforms.cuda._get_attn_backend_class", side_effect=side_effects):
+    with patch("sonar.platforms.cuda._get_attn_backend_class", side_effect=side_effects):
         valid, invalid_reasons = CudaPlatform.get_valid_backends(
             device_capability=SM90,
             attn_selector_config=SELECTOR_CONFIG,
@@ -103,7 +103,7 @@ def test_sm90_nope_mla_prefers_flashinfer_without_changing_rope_order():
             use_sparse=True,
         )
         with patch(
-            "aphrodite.platforms.cuda._get_attn_backend_class",
+            "sonar.platforms.cuda._get_attn_backend_class",
             return_value=backend_cls,
         ):
             valid, _ = CudaPlatform.get_valid_backends(
@@ -128,7 +128,7 @@ def test_sm90_nope_mla_prefers_flashinfer_without_changing_rope_order():
 def test_selected_backend_probe_failure_raises_value_error_with_cause():
     exc = OSError("libcuda.so.1: cannot open shared object file")
     with (
-        patch("aphrodite.platforms.cuda._get_attn_backend_class", side_effect=exc),
+        patch("sonar.platforms.cuda._get_attn_backend_class", side_effect=exc),
         patch.object(CudaPlatform, "get_device_capability", return_value=SM90),
         pytest.raises(ValueError, match="OSError") as excinfo,
     ):

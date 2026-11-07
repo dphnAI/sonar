@@ -23,7 +23,7 @@
 #ifndef _compat_cuh
   #define _compat_cuh
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 // atomicAdd for half types, to support CC < 7.x
@@ -81,4 +81,4 @@ __device__ __forceinline__ void atomicAdd(half2* address, half2 val) {
 #endif
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar

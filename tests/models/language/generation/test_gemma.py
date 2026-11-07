@@ -7,19 +7,19 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CompilationConfig
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.models import gemma
-from aphrodite.model_executor.models.gemma3n import (
+from sonar.config import CompilationConfig, SonarConfig
+from sonar.config.compilation import CompilationMode
+from sonar.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
+from sonar.model_executor.models import gemma
+from sonar.model_executor.models.gemma3n import (
     Gemma3nTextModel,
     _kv_sharing_weights_mapper,
 )
-from aphrodite.model_executor.models.gemma4 import (
+from sonar.model_executor.models.gemma4 import (
     Gemma4ForCausalLM,
     _gemma4_layer_weights_mapper,
 )
-from aphrodite.model_executor.models.gemma4_dspark import (
+from sonar.model_executor.models.gemma4_dspark import (
     Gemma4DSparkForCausalLM,
     Gemma4DSparkModel,
 )
@@ -49,7 +49,7 @@ def test_gemma4_dspark_loads_confidence_head(monkeypatch, enabled, has_weights, 
         enable_confidence_head=enabled,
         confidence_head_with_markov=with_markov,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         compilation_config=CompilationConfig(mode=CompilationMode.NONE),
         model_config=SimpleNamespace(dtype=torch.bfloat16),
         speculative_config=SimpleNamespace(
@@ -57,7 +57,7 @@ def test_gemma4_dspark_loads_confidence_head(monkeypatch, enabled, has_weights, 
         ),
     )
     monkeypatch.setattr(Gemma4DSparkModel, "_build_fused_kv_buffers", lambda _: None)
-    model = Gemma4DSparkForCausalLM(aphrodite_config=cast(AphroditeConfig, aphrodite_config))
+    model = Gemma4DSparkForCausalLM(sonar_config=cast(SonarConfig, sonar_config))
     width = config.hidden_size + (config.markov_rank if with_markov else 0)
     weight = torch.arange(width, dtype=torch.bfloat16).reshape(1, -1) / 16
     bias = torch.tensor([-0.5], dtype=torch.bfloat16)
@@ -87,7 +87,7 @@ def test_checkpoint_lm_head_can_override_tied_config(monkeypatch) -> None:
     """A physical LM head must load after checkpoint-driven untying."""
 
     class StubGemmaModel(torch.nn.Module):
-        def __init__(self, *, aphrodite_config, prefix):
+        def __init__(self, *, sonar_config, prefix):
             super().__init__()
             self.embed_tokens = VocabParallelEmbedding(4, 2)
             self.make_empty_intermediate_tensors = None
@@ -98,11 +98,11 @@ def test_checkpoint_lm_head_can_override_tied_config(monkeypatch) -> None:
         hidden_size=2,
         tie_word_embeddings=False,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=config),
         quant_config=None,
     )
-    model = gemma.GemmaForCausalLM(aphrodite_config=cast(AphroditeConfig, aphrodite_config))
+    model = gemma.GemmaForCausalLM(sonar_config=cast(SonarConfig, sonar_config))
     embedding_weight = torch.full((4, 2), 1.0)
     lm_head_weight = torch.full((4, 2), 2.0)
 
@@ -173,9 +173,7 @@ def test_gemma4_expert_names_strip_language_model_prefix() -> None:
         )
     ]
 
-    mapped = [
-        (name, getattr(w, "shard_id", None)) for name, w in Gemma4ForCausalLM.hf_to_aphrodite_mapper.apply(weights)
-    ]
+    mapped = [(name, getattr(w, "shard_id", None)) for name, w in Gemma4ForCausalLM.hf_to_sonar_mapper.apply(weights)]
 
     assert mapped == [
         ("model.layers.0.experts.gate_up_proj", None),
@@ -189,7 +187,7 @@ def test_gemma3n_kv_shared_layer_mapper() -> None:
     """Only non-shared layers pack q/k/v into qkv_proj; KV-shared layers keep
     q_proj and drop the redundant K/V tensors original checkpoints ship."""
     config = SimpleNamespace(num_hidden_layers=4, num_kv_shared_layers=2)
-    mapper = Gemma3nTextModel.hf_to_aphrodite_mapper | _kv_sharing_weights_mapper(config)
+    mapper = Gemma3nTextModel.hf_to_sonar_mapper | _kv_sharing_weights_mapper(config)
     weights = [
         (f"layers.{i}.self_attn.{tensor}.weight", torch.empty(0))
         for i in (1, 3)
@@ -210,10 +208,10 @@ def test_gemma3n_kv_shared_layer_mapper() -> None:
 
 
 @pytest.mark.parametrize("model", MODELS)
-def test_dummy_loader(aphrodite_runner, monkeypatch, model: str) -> None:
+def test_dummy_loader(sonar_runner, monkeypatch, model: str) -> None:
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        with aphrodite_runner(
+        m.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+        with sonar_runner(
             model,
             load_format="dummy",
         ) as llm:

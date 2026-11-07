@@ -37,21 +37,21 @@ from openai_harmony import Role
 from pydantic import ValidationError
 from starlette.requests import Request
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.mcp.tool_server import ToolServer
-from aphrodite.entrypoints.openai.responses.context import (
+from sonar.entrypoints.mcp.tool_server import ToolServer
+from sonar.entrypoints.openai.responses.context import (
     ConversationContext,
     HarmonyContext,
     ParsableContext,
     SimpleContext,
 )
-from aphrodite.entrypoints.openai.responses.protocol import (
+from sonar.entrypoints.openai.responses.protocol import (
     ResponseCompletedEvent,
     ResponseCreatedEvent,
     ResponseIncompleteEvent,
@@ -60,25 +60,25 @@ from aphrodite.entrypoints.openai.responses.protocol import (
     ResponsesResponse,
     serialize_message,
 )
-from aphrodite.entrypoints.openai.responses.serving import (
+from sonar.entrypoints.openai.responses.serving import (
     OpenAIServingResponses,
     extract_tool_types,
 )
-from aphrodite.entrypoints.openai.responses.streaming_events import (
+from sonar.entrypoints.openai.responses.streaming_events import (
     StreamingState,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.inputs import tokens_input
-from aphrodite.logprobs import Logprob as SampleLogprob
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.parser.harmony import ChunkResult, HarmonyParser, Segment
-from aphrodite.renderers import TokenizeParams
-from aphrodite.renderers.online_renderer import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.inputs import tokens_input
+from sonar.logprobs import Logprob as SampleLogprob
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.parser.harmony import ChunkResult, HarmonyParser, Segment
+from sonar.renderers import TokenizeParams
+from sonar.renderers.online_renderer import (
     OnlineRenderer,
     _extract_allowed_tools_from_mcp_requests,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.metrics.stats import RequestStateStats
+from sonar.sampling_params import SamplingParams
+from sonar.v1.metrics.stats import RequestStateStats
 from tests.entrypoints.openai.chat_completion.test_serving_chat import MockModelConfig
 
 pytestmark = pytest.mark.skip_global_cleanup
@@ -164,17 +164,17 @@ def test_extract_tool_types(monkeypatch: pytest.MonkeyPatch) -> None:
             Mcp(type="mcp", server_label="web_search_preview", server_url=""),
         ]
     )
-    # When envs.APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS is not set,
+    # When envs.SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS is not set,
     # mcp tool types are all ignored.
     assert extract_tool_types(tools) == {"local_shell", "auto"}
 
     # container is allowed, it would be extracted
-    monkeypatch.setenv("APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "container")
+    monkeypatch.setenv("SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "container")
     assert extract_tool_types(tools) == {"local_shell", "auto", "container"}
 
     # code_interpreter and web_search_preview are allowed,
     # they would be extracted
-    monkeypatch.setenv("APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "code_interpreter,web_search_preview")
+    monkeypatch.setenv("SONAR_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "code_interpreter,web_search_preview")
     assert extract_tool_types(tools) == {
         "local_shell",
         "auto",
@@ -591,7 +591,7 @@ async def test_online_renderer_adjusts_harmony_tool_choice(
         get_tokenizer=lambda: tokenizer,
     )
     monkeypatch.setattr(
-        "aphrodite.renderers.online_renderer.render_for_completion",
+        "sonar.renderers.online_renderer.render_for_completion",
         lambda messages: [1],
     )
     request = ResponsesRequest(
@@ -622,7 +622,7 @@ async def test_online_renderer_applies_responses_token_budget_to_harmony_prompt(
     renderer.model_config = SimpleNamespace(max_model_len=5)
     renderer.renderer = SimpleNamespace(tokenizer=SimpleNamespace(truncation_side="left"))
     monkeypatch.setattr(
-        "aphrodite.renderers.online_renderer.render_for_completion",
+        "sonar.renderers.online_renderer.render_for_completion",
         lambda messages: [1, 2, 3, 4, 5, 6],
     )
     request = ResponsesRequest(
@@ -651,7 +651,7 @@ async def test_online_renderer_renders_harmony_continuation_with_call_linkage(
     renderer.model_config = SimpleNamespace(max_model_len=100)
     renderer.renderer = SimpleNamespace(tokenizer=SimpleNamespace(truncation_side="left"))
     monkeypatch.setattr(
-        "aphrodite.renderers.online_renderer.render_for_completion",
+        "sonar.renderers.online_renderer.render_for_completion",
         lambda messages: [1],
     )
     previous_messages = [
@@ -740,7 +740,7 @@ async def test_online_renderer_preserves_missing_harmony_builtin_tool_behavior(
     renderer.model_config = SimpleNamespace(max_model_len=100)
     renderer.renderer = SimpleNamespace(tokenizer=SimpleNamespace(truncation_side="left"))
     monkeypatch.setattr(
-        "aphrodite.renderers.online_renderer.render_for_completion",
+        "sonar.renderers.online_renderer.render_for_completion",
         lambda messages: [1],
     )
     request = ResponsesRequest(
@@ -1018,7 +1018,7 @@ class TestInitializeToolSessions:
         context = ToolCallingHarmonyContext()
         serving_responses_instance.engine_client.generate.side_effect = lambda *args, **kwargs: generate_output()
         monkeypatch.setattr(
-            "aphrodite.renderers.online_renderer.render_for_completion",
+            "sonar.renderers.online_renderer.render_for_completion",
             lambda messages: [1, 2, 3, 4],
         )
         online_renderer = serving_responses_instance.online_renderer
@@ -1321,7 +1321,7 @@ async def _run_full_generator(serving, request, context, tokenizer):
 async def test_reasoning_tokens_counted_for_text_reasoning_model(monkeypatch):
     """Ensure reasoning_tokens usage is derived from thinking token spans."""
     # Force non-harmony, SimpleContext path
-    monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+    monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
 
     serving, tokenizer = _make_qwen3_serving()
     request = ResponsesRequest(input="hi", tools=[], stream=False)
@@ -1458,7 +1458,7 @@ class TestHarmonyPreambleStreaming:
 
     def test_preamble_delta_emits_text_events(self) -> None:
         """Commentary + recipient=None should emit output_text.delta events."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_content_delta_events,
         )
 
@@ -1473,7 +1473,7 @@ class TestHarmonyPreambleStreaming:
 
     def test_preamble_delta_second_token_no_added(self) -> None:
         """Second preamble token should emit delta only, not added again."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_content_delta_events,
         )
 
@@ -1491,7 +1491,7 @@ class TestHarmonyPreambleStreaming:
 
     def test_commentary_with_function_recipient_not_preamble(self) -> None:
         """Commentary + recipient='functions.X' must NOT use preamble path."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_content_delta_events,
         )
 
@@ -1509,7 +1509,7 @@ class TestHarmonyPreambleStreaming:
     def test_preamble_done_emits_text_done_events(self) -> None:
         """Completed preamble should emit text done + content_part done +
         output_item done, same shape as final channel."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_previous_item_done_events,
         )
 
@@ -1530,7 +1530,7 @@ class TestHarmonyPreambleStreaming:
     def test_commentary_with_recipient_no_preamble_done(self) -> None:
         """Commentary + recipient='functions.X' should route to function call
         done, not preamble done."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_previous_item_done_events,
         )
 
@@ -1556,7 +1556,7 @@ class TestHarmonyPreambleStreaming:
         self,
     ) -> None:
         """Zero-delta Harmony items should still produce a coherent lifecycle."""
-        from aphrodite.entrypoints.openai.responses.streaming_events import (
+        from sonar.entrypoints.openai.responses.streaming_events import (
             emit_previous_item_done_events,
         )
 
@@ -1856,7 +1856,7 @@ class TestStreamingReasoningToContentTransition:
         chunk), the trailing reasoning text must be emitted as a
         ResponseReasoningTextDeltaEvent and included in the
         ResponseReasoningTextDoneEvent text."""
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
         serving = _make_serving_instance_with_reasoning()
 
         # Sequence of DeltaMessages the mock orchestrator will return
@@ -1919,7 +1919,7 @@ class TestStreamingReasoningToContentTransition:
     async def test_transition_without_mixed_delta_no_extra_reasoning_event(self, monkeypatch):
         """When the transition from reasoning to content is clean (no mixed
         delta), no extra reasoning delta event should be emitted."""
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
         serving = _make_serving_instance_with_reasoning()
 
         delta_sequence = [
@@ -1976,7 +1976,7 @@ class TestStreamingReasoningToContentTransition:
         """When the stream has only reasoning deltas and no content, the
         reasoning done event should be emitted at finalization with the
         full accumulated text, and no text delta events should appear."""
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
         serving = _make_serving_instance_with_reasoning()
 
         delta_sequence = [
@@ -2086,7 +2086,7 @@ class TestAutoToolStreaming:
     @pytest.mark.skip_global_cleanup
     @pytest.mark.asyncio
     async def test_auto_multi_tool_streaming_opens_one_item_per_tool(self, monkeypatch):
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
 
         delta_sequence = [
             DeltaMessage(
@@ -2167,7 +2167,7 @@ class TestAutoToolStreaming:
     @pytest.mark.skip_global_cleanup
     @pytest.mark.asyncio
     async def test_auto_tool_choice_first_delta_tool_call_does_not_duplicate_item(self, monkeypatch):
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
 
         delta_sequence = [
             DeltaMessage(
@@ -2210,7 +2210,7 @@ class TestAutoToolStreaming:
     @pytest.mark.skip_global_cleanup
     @pytest.mark.asyncio
     async def test_compound_content_and_tool_name_args_same_delta(self, monkeypatch):
-        monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+        monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
 
         tool_args = '{"location":"Berlin"}'
 
@@ -2261,7 +2261,7 @@ class TestAutoToolStreaming:
 async def test_stream_completed_response_reuses_streamed_items(monkeypatch):
     """response.completed must carry the streamed items (same ids,
     call_id, logprobs) rather than a reparse of the full output."""
-    monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+    monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
     serving = _make_serving_instance_with_reasoning()
     call = DeltaToolCall(
         id="chatcmpl-tool-parser-id",
@@ -2394,7 +2394,7 @@ async def test_harmony_stream_unstreamed_item_keeps_own_id():
 async def test_streaming_parallel_tool_calls(monkeypatch, parallel_tool_calls, num_calls):
     """parallel_tool_calls=False keeps only the first call even when the grammar
     does not limit the model; None keeps every call."""
-    monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
+    monkeypatch.setattr(envs, "SONAR_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
     serving = _make_serving_instance(tool_parser="hermes")
     request = ResponsesRequest(
         input="hi",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Check that aphrodite.platforms import does not initialize CUDA."""
+"""Check that sonar.platforms import does not initialize CUDA."""
 
 import os
 
@@ -12,7 +12,7 @@ import torch  # noqa: E402
 
 assert not torch.cuda.is_initialized(), "CUDA initialized before import"
 
-from aphrodite.platforms import current_platform  # noqa: E402
+from sonar.platforms import current_platform  # noqa: E402
 
-assert not torch.cuda.is_initialized(), f"CUDA was initialized during aphrodite.platforms import on {current_platform}"
+assert not torch.cuda.is_initialized(), f"CUDA was initialized during sonar.platforms import on {current_platform}"
 print("OK")

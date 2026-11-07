@@ -24,7 +24,7 @@
 
 Each file holds one model's distinct output grammars, each with the generations
 of the fixture variants that build it. Every grammar is compiled against the
-model tokenizer the same way as `aphrodite/v1/structured_output/backend_xgrammar.py`.
+model tokenizer the same way as `sonar/v1/structured_output/backend_xgrammar.py`.
 The generations of token-zero grammars are then replayed from the first
 generated token: each token must be allowed by the bitmask and accepted by the
 matcher, and the final stop token must terminate it.
@@ -45,7 +45,7 @@ CASES_DIR = Path(__file__).parent / "grammar_replay"
 
 @cache
 def load_tokenizer(model_id: str, vocab_size: int):
-    # Match Aphrodite's override for Step5's incorrect Llama tokenizer class on the Hub.
+    # Match Sonar's override for Step5's incorrect Llama tokenizer class on the Hub.
     tokenizer_cls = TokenizersBackend if model_id == "stepfun-ai/Step-5-Preview" else AutoTokenizer
     tokenizer = tokenizer_cls.from_pretrained(model_id, trust_remote_code=True)
     tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=vocab_size)

@@ -5,8 +5,8 @@ import gc
 from benchmark_utils import TimeCollector
 from tabulate import tabulate
 
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.core.block_pool import BlockPool
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.core.block_pool import BlockPool
 
 
 def main(args):

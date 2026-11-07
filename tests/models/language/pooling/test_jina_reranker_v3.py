@@ -6,10 +6,10 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
-from aphrodite.exceptions import AphroditeValidationError
+from sonar import PoolingParams
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from sonar.exceptions import SonarValidationError
 from tests.utils import RemoteOpenAIServer
 
 model_name = "jinaai/jina-reranker-v3"
@@ -47,10 +47,10 @@ INSTRUCTION = (
 )
 
 
-def test_offline(aphrodite_runner, monkeypatch):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(model_name, runner="pooling") as llm_runner:
-        assert llm_runner.llm.llm_engine.aphrodite_config.use_v2_model_runner
+def test_offline(sonar_runner, monkeypatch):
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(model_name, runner="pooling") as llm_runner:
+        assert llm_runner.llm.llm_engine.sonar_config.use_v2_model_runner
         llm = llm_runner.get_llm()
         _test_offline_1_v_1(llm)
         _test_offline_1_v_n(llm)
@@ -161,7 +161,7 @@ def _test_offline_truncation(llm):
                 (llm.score, (query, documents[:2]), {}),
             ):
                 with pytest.raises(
-                    AphroditeValidationError,
+                    SonarValidationError,
                     match="JinaForRanking does not support truncate_prompt_tokens",
                 ) as exc_info:
                     call(*args, **extra, tokenization_kwargs=kwargs)

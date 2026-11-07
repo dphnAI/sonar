@@ -4,7 +4,7 @@
 
 These tests directly validate AITER kernel correctness against PyTorch/reference
 implementations. They provide clear failure signals when AITER library updates
-introduce regressions, independent of Aphrodite's fusion/compilation passes.
+introduce regressions, independent of Sonar's fusion/compilation passes.
 
 Tested ops:
 - ``rms_norm`` and ``rms_norm2d_with_add`` vs PyTorch reference
@@ -23,9 +23,9 @@ import warnings
 import pytest
 import torch
 
-import aphrodite._aiter_ops  # noqa: F401 - ensure ops are registered
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+import sonar._aiter_ops  # noqa: F401 - ensure ops are registered
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import bf16_ulp_distance, fp8_ulp_distance
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
@@ -39,7 +39,7 @@ def setup_cuda_device():
 
 
 def require_aiter():
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     if not is_aiter_found_and_supported():
         pytest.skip("aiter is not found or not supported on this hardware")
@@ -193,7 +193,7 @@ def _assert_rel_error_quality(
 def test_rocm_aiter_rms_norm_vs_torch(dtype):
     """rocm_aiter_rms_norm matches PyTorch manual RMSNorm for float16 and bfloat16."""
     require_aiter()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 8, 128
     x = torch.randn(M, N, dtype=dtype)
@@ -217,7 +217,7 @@ def test_rocm_aiter_rms_norm_vs_torch(dtype):
 def test_rocm_aiter_rmsnorm_with_add_vs_torch():
     """rocm_aiter_rmsnorm2d_fwd_with_add matches manual residual+RMSNorm reference."""
     require_aiter()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 16, 256
     x = torch.randn(M, N, dtype=torch.bfloat16)
@@ -294,7 +294,7 @@ def test_rocm_aiter_triton_rotary_embedding_vs_torch():
     # AITER in-place RoPE (modifies query/key in-place)
     q_aiter = query.clone()
     k_aiter = key.clone()
-    torch.ops.aphrodite.rocm_aiter_triton_rotary_embedding(
+    torch.ops.sonar.rocm_aiter_triton_rotary_embedding(
         positions,
         q_aiter,
         k_aiter,
@@ -316,7 +316,7 @@ def test_rocm_aiter_act_mul_fp8_group_quant_roundtrip():
     group_size = 128
     x = torch.randn(M, N, dtype=torch.bfloat16)
 
-    x_quant, scale = torch.ops.aphrodite.rocm_aiter_act_mul_and_fp8_group_quant(x, group_size)
+    x_quant, scale = torch.ops.sonar.rocm_aiter_act_mul_and_fp8_group_quant(x, group_size)
 
     N_half = N // 2
     # Reference: SiLU(gate) * up
@@ -349,7 +349,7 @@ def test_rocm_aiter_rmsnorm_fused_dynamic_quant_vs_sequential():
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 32, 512
     x = torch.randn(M, N, dtype=torch.bfloat16)
@@ -363,7 +363,7 @@ def test_rocm_aiter_rmsnorm_fused_dynamic_quant_vs_sequential():
     ref_dequant = ref_q.float() * ref_scale.float()
 
     # Fused op
-    fused_q, fused_scale = torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_dynamic_quant(x, weight, eps, fp8_dtype)
+    fused_q, fused_scale = torch.ops.sonar.rocm_aiter_rmsnorm_fused_dynamic_quant(x, weight, eps, fp8_dtype)
     _assert_quant_shapes(fused_q, fused_scale, M, N, fp8_dtype)
     fused_dequant = fused_q.float() * fused_scale.float()
 
@@ -388,7 +388,7 @@ def test_rocm_aiter_rmsnorm_fused_add_dynamic_quant_vs_reference():
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 16, 256
     x = torch.randn(M, N, dtype=torch.bfloat16)
@@ -404,7 +404,7 @@ def test_rocm_aiter_rmsnorm_fused_add_dynamic_quant_vs_reference():
     ref_residual_out = h
 
     # Fused op: returns (x_quant, residual_out, scale)
-    fused_q, fused_res_out, fused_scale = torch.ops.aphrodite.rocm_aiter_rmsnorm_fused_add_dynamic_quant(
+    fused_q, fused_res_out, fused_scale = torch.ops.sonar.rocm_aiter_rmsnorm_fused_add_dynamic_quant(
         x, residual, weight, eps, fp8_dtype
     )
     _assert_quant_shapes(fused_q, fused_scale, M, N, fp8_dtype)
@@ -433,7 +433,7 @@ def test_rocm_aiter_rmsnorm_fp8_group_quant_vs_sequential():
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 32, 512
     group_size = 128
@@ -444,7 +444,7 @@ def test_rocm_aiter_rmsnorm_fp8_group_quant_vs_sequential():
     expected_groups = (N + group_size - 1) // group_size
 
     # Fused op: (x_quant, scales)
-    fused_q, fused_scales = torch.ops.aphrodite.rocm_aiter_rmsnorm_fp8_group_quant(x, weight, eps, group_size)
+    fused_q, fused_scales = torch.ops.sonar.rocm_aiter_rmsnorm_fp8_group_quant(x, weight, eps, group_size)
     _assert_quant_shapes(fused_q, fused_scales, M, N, fp8_dtype, expected_groups)
 
     # Dequantize and compare to reference: rms_norm -> group quant -> dequant
@@ -468,7 +468,7 @@ def test_rocm_aiter_rmsnorm_with_add_fp8_group_quant_residual_accuracy():
     """Fused rmsnorm_with_add_fp8_group_quant residual output matches x + residual."""
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 16, 256
     group_size = 128
@@ -477,7 +477,7 @@ def test_rocm_aiter_rmsnorm_with_add_fp8_group_quant_residual_accuracy():
     weight = torch.ones(N, dtype=torch.bfloat16)
     eps = 1e-5
 
-    fused_q, fused_res, fused_scales = torch.ops.aphrodite.rocm_aiter_rmsnorm_with_add_fp8_group_quant(
+    fused_q, fused_res, fused_scales = torch.ops.sonar.rocm_aiter_rmsnorm_with_add_fp8_group_quant(
         x, residual, weight, eps, group_size
     )
 
@@ -518,7 +518,7 @@ def test_rocm_aiter_mla_dual_rmsnorm_group_quant_vs_sequential(m):
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     nq, nk, group_size = 1536, 576, 128
     q = torch.randn(m, nq, dtype=torch.bfloat16)
@@ -559,7 +559,7 @@ def test_rocm_aiter_mla_dual_rmsnorm_group_quant_strided_split_view():
     contiguous inputs."""
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     m, nq, nk, group_size = 16, 1536, 576, 128
     qr_kv = torch.randn(m, nq + nk, dtype=torch.bfloat16)
@@ -593,7 +593,7 @@ def test_rocm_aiter_rms_norm_then_per_token_quant_e2e():
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     # Llama-style hidden dim
     M, N = 32, 4096
@@ -632,7 +632,7 @@ def test_rocm_aiter_rms_norm_then_group_fp8_quant_e2e(dtype):
     """
     require_aiter()
     require_fp8()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     M, N = 16, 512
     group_size = 128

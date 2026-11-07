@@ -3,12 +3,12 @@
 
 use std::collections::BTreeMap;
 
-use aphrodite_engine_core_client::EngineCoreClient;
 use serde_json::{Value, json};
+use sonar_engine_core_client::EngineCoreClient;
 
 use crate::config::Config;
 
-const SENSITIVE_APHRODITE_ENV_PATTERNS: &[&str] =
+const SENSITIVE_SONAR_ENV_PATTERNS: &[&str] =
     &["KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,22 +20,22 @@ pub(crate) enum ServerInfoConfigFormat {
 /// Snapshot returned by `/server_info`.
 #[derive(Debug, Clone)]
 pub(crate) struct ServerInfoSnapshot {
-    /// The engine's `AphroditeConfig` as seen from this frontend, or `None` if the
-    /// engine reports none (it was started without `APHRODITE_SERVER_DEV_MODE`).
-    aphrodite_config: Option<Value>,
+    /// The engine's `SonarConfig` as seen from this frontend, or `None` if the
+    /// engine reports none (it was started without `SONAR_SERVER_DEV_MODE`).
+    sonar_config: Option<Value>,
     /// The Rust frontend's own `Config`, which has no Python counterpart.
     rust_frontend_config: Value,
-    aphrodite_env: BTreeMap<String, String>,
+    sonar_env: BTreeMap<String, String>,
     system_env: BTreeMap<String, String>,
 }
 
 impl ServerInfoSnapshot {
     pub(crate) fn new(config: &Config, client: &EngineCoreClient) -> Self {
         Self {
-            aphrodite_config: engine_aphrodite_config(client),
+            sonar_config: engine_sonar_config(client),
             rust_frontend_config: serde_json::to_value(config)
                 .expect("server info value must serialize"),
-            aphrodite_env: collect_aphrodite_env(),
+            sonar_env: collect_sonar_env(),
             system_env: collect_system_env(),
         }
     }
@@ -47,21 +47,21 @@ impl ServerInfoSnapshot {
         };
 
         json!({
-            "aphrodite_config": self.aphrodite_config.as_ref().map(render),
+            "sonar_config": self.sonar_config.as_ref().map(render),
             "rust_frontend_config": render(&self.rust_frontend_config),
-            "aphrodite_env": self.aphrodite_env.clone(),
+            "sonar_env": self.sonar_env.clone(),
             "system_env": self.system_env.clone(),
         })
     }
 }
 
-/// The `AphroditeConfig` reported by the first engine, as seen from this frontend.
-fn engine_aphrodite_config(client: &EngineCoreClient) -> Option<Value> {
-    let engine_config = client.ready_response().aphrodite_config.clone()?;
-    Some(frontend_aphrodite_config(engine_config, client))
+/// The `SonarConfig` reported by the first engine, as seen from this frontend.
+fn engine_sonar_config(client: &EngineCoreClient) -> Option<Value> {
+    let engine_config = client.ready_response().sonar_config.clone()?;
+    Some(frontend_sonar_config(engine_config, client))
 }
 
-/// Replace the fields of one engine's `AphroditeConfig` that Python's `/server_info`
+/// Replace the fields of one engine's `SonarConfig` that Python's `/server_info`
 /// reports from the API server's view: values it syncs from every engine's
 /// ready response, and its own API process fields.
 ///
@@ -69,7 +69,7 @@ fn engine_aphrodite_config(client: &EngineCoreClient) -> Option<Value> {
 /// independent dense DP rank, its own `num_gpu_blocks`, and the launcher's API
 /// process fields. The DP size and rank match the gRPC `GetServerInfo`
 /// parallelism view, and this frontend is the only API process.
-fn frontend_aphrodite_config(mut aphrodite_config: Value, client: &EngineCoreClient) -> Value {
+fn frontend_sonar_config(mut sonar_config: Value, client: &EngineCoreClient) -> Value {
     let overrides = [
         ("/parallel_config/_api_process_count", json!(1)),
         ("/parallel_config/_api_process_rank", json!(0)),
@@ -92,11 +92,11 @@ fn frontend_aphrodite_config(mut aphrodite_config: Value, client: &EngineCoreCli
         ("/model_config/max_model_len", json!(client.max_model_len())),
     ];
     for (pointer, value) in overrides {
-        if let Some(field) = aphrodite_config.pointer_mut(pointer) {
+        if let Some(field) = sonar_config.pointer_mut(pointer) {
             *field = value;
         }
     }
-    aphrodite_config
+    sonar_config
 }
 
 fn render_config_text(config: &Value) -> String {
@@ -118,14 +118,14 @@ fn render_config_text_value(value: &Value) -> String {
     }
 }
 
-fn collect_aphrodite_env() -> BTreeMap<String, String> {
-    std::env::vars().filter(|(key, _)| is_public_aphrodite_env_key(key)).collect()
+fn collect_sonar_env() -> BTreeMap<String, String> {
+    std::env::vars().filter(|(key, _)| is_public_sonar_env_key(key)).collect()
 }
 
-fn is_public_aphrodite_env_key(key: &str) -> bool {
+fn is_public_sonar_env_key(key: &str) -> bool {
     let key = key.to_ascii_uppercase();
-    key.starts_with("APHRODITE_")
-        && !SENSITIVE_APHRODITE_ENV_PATTERNS.iter().any(|pattern| key.contains(pattern))
+    key.starts_with("SONAR_")
+        && !SENSITIVE_SONAR_ENV_PATTERNS.iter().any(|pattern| key.contains(pattern))
 }
 
 fn collect_system_env() -> BTreeMap<String, String> {
@@ -143,19 +143,19 @@ mod tests {
     use std::os::unix::net::UnixListener;
     use std::time::Duration;
 
-    use aphrodite_engine_core_client::mock_engine::{
+    use serde_json::{Value, json};
+    use sonar_engine_core_client::mock_engine::{
         MockEngineConfig, connect_to_bootstrapped_frontend, default_ready_response,
     };
-    use aphrodite_engine_core_client::test_utils::IpcNamespace;
-    use aphrodite_engine_core_client::{
+    use sonar_engine_core_client::test_utils::IpcNamespace;
+    use sonar_engine_core_client::{
         EngineCoreClient, EngineCoreClientConfig, EngineId, TransportMode,
     };
-    use serde_json::{Value, json};
 
-    use super::{engine_aphrodite_config, is_public_aphrodite_env_key, render_config_text};
+    use super::{engine_sonar_config, is_public_sonar_env_key, render_config_text};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn engine_aphrodite_config_reports_frontend_view() {
+    async fn engine_sonar_config_reports_frontend_view() {
         // Two dense DP ranks (4 and 5) of a DP=8 deployment, each reconfigured
         // to DP=1 on the engine side, behind one API server.
         let engine_config = json!({
@@ -203,7 +203,7 @@ mod tests {
             ready.max_model_len = max_model_len;
             ready.num_gpu_blocks = num_gpu_blocks;
             ready.effective_attention_block_size = Some(attention_block_size);
-            ready.aphrodite_config = Some(engine_config.clone());
+            ready.sonar_config = Some(engine_config.clone());
             engine_sockets.push(
                 connect_to_bootstrapped_frontend(
                     &input_address,
@@ -221,7 +221,7 @@ mod tests {
         let client = client_task.await.unwrap().expect("connect multi-engine client");
 
         assert_eq!(
-            engine_aphrodite_config(&client).expect("engine reports config"),
+            engine_sonar_config(&client).expect("engine reports config"),
             json!({
                 "model_config": {"model": "test-model", "max_model_len": 4096},
                 "cache_config": {
@@ -270,23 +270,23 @@ mod tests {
     }
 
     #[test]
-    fn server_info_env_filter_excludes_sensitive_aphrodite_keys() {
+    fn server_info_env_filter_excludes_sensitive_sonar_keys() {
         for key in [
-            "APHRODITE_API_KEY",
-            "APHRODITE_AUTH_TOKEN",
-            "APHRODITE_SECRET",
-            "APHRODITE_PASSWORD",
-            "APHRODITE_CREDENTIAL_FILE",
-            "aphrodite_token",
+            "SONAR_API_KEY",
+            "SONAR_AUTH_TOKEN",
+            "SONAR_SECRET",
+            "SONAR_PASSWORD",
+            "SONAR_CREDENTIAL_FILE",
+            "sonar_token",
         ] {
-            assert!(!is_public_aphrodite_env_key(key), "{key}");
+            assert!(!is_public_sonar_env_key(key), "{key}");
         }
     }
 
     #[test]
-    fn server_info_env_filter_includes_public_aphrodite_keys() {
-        assert!(is_public_aphrodite_env_key("APHRODITE_LOGGING_LEVEL"));
-        assert!(is_public_aphrodite_env_key("APHRODITE_USE_MODELSCOPE"));
-        assert!(!is_public_aphrodite_env_key("OTHER_ENV"));
+    fn server_info_env_filter_includes_public_sonar_keys() {
+        assert!(is_public_sonar_env_key("SONAR_LOGGING_LEVEL"));
+        assert!(is_public_sonar_env_key("SONAR_USE_MODELSCOPE"));
+        assert!(!is_public_sonar_env_key("OTHER_ENV"));
     }
 }

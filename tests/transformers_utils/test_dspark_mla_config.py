@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from aphrodite.config import ModelConfig, ParallelConfig, SpeculativeConfig
-from aphrodite.transformers_utils.config import get_config
-from aphrodite.transformers_utils.configs.k3_dspark import K3DSparkConfig
+from sonar.config import ModelConfig, ParallelConfig, SpeculativeConfig
+from sonar.transformers_utils.config import get_config
+from sonar.transformers_utils.configs.k3_dspark import K3DSparkConfig
 
 
 def _write_dspark_config(path, **overrides):

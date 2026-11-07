@@ -5,9 +5,9 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils import fp8_utils, int8_utils
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import get_fp8_min_max
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.utils import fp8_utils, int8_utils
+from sonar.model_executor.layers.quantization.utils.quant_utils import get_fp8_min_max
+from sonar.platforms import current_platform
 
 
 @pytest.mark.parametrize(
@@ -66,8 +66,8 @@ def test_per_token_group_quant_fp8(
 
     # triton ref
     with (
-        patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False),
-        patch("aphrodite.platforms.current_platform.is_xpu", return_value=False),
+        patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False),
+        patch("sonar.platforms.current_platform.is_xpu", return_value=False),
     ):
         ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(
             x,
@@ -202,7 +202,7 @@ def test_per_token_group_quant_fp8_packed(num_tokens, hidden_dim, group_size, po
         )
 
     # Triton reference (row-major float32 scales, UE8M0)
-    with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False):
         ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(
             x,
             group_size,
@@ -320,7 +320,7 @@ def test_per_token_group_quant_fp8_packed_mantissa_rounds_up():
         use_ue8m0=True,
     )
 
-    with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False):
         ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(
             x,
             group_size,
@@ -396,7 +396,7 @@ def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(num_tokens,
     torch.ops._C.per_token_group_fp8_quant_packed(x, out_q, out_s_packed, group_size, 1e-10, fp8_min, fp8_max)
 
     # Live rows must match the Triton reference.
-    with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False):
         ref_q, _ = fp8_utils.per_token_group_quant_fp8(x, group_size, use_ue8m0=True)
     assert torch.equal(out_q[:mn], ref_q), "Live region mismatch"
 
@@ -443,7 +443,7 @@ def test_per_token_group_quant_fp8_packed_large_mn():
         use_ue8m0=True,
     )
 
-    with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False):
         ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(x, group_size, use_ue8m0=True)
 
     assert torch.equal(out_q, ref_q), "Quantized output mismatch"
@@ -497,7 +497,7 @@ def test_per_token_group_quant_int8(shape, dtype, group_size: int):
     )
 
     # triton ref
-    with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda_alike", return_value=False):
         ref_q, ref_s = int8_utils.per_token_group_quant_int8(
             x,
             group_size,

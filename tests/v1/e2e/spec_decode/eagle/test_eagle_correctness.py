@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.platforms import current_platform
 from tests.utils import (
     get_attn_backend_list_based_on_platform,
     single_gpu_only,
@@ -52,7 +52,7 @@ def test_eagle_correctness_light(
     enable_chunked_prefill: bool,
     model_impl: str,
     attn_backend: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     _run_eagle_correctness(
         monkeypatch,
@@ -63,7 +63,7 @@ def test_eagle_correctness_light(
         enable_chunked_prefill,
         model_impl,
         attn_backend,
-        aphrodite_runner,
+        sonar_runner,
     )
 
 
@@ -155,7 +155,7 @@ def test_eagle_correctness_medium(
     enable_chunked_prefill: bool,
     model_impl: str,
     attn_backend: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     _run_eagle_correctness(
         monkeypatch,
@@ -166,5 +166,5 @@ def test_eagle_correctness_medium(
         enable_chunked_prefill,
         model_impl,
         attn_backend,
-        aphrodite_runner,
+        sonar_runner,
     )

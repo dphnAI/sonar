@@ -281,7 +281,7 @@ __device__ __forceinline__ floatx4 to_float_fp8x4(const _B8x4& inp) {
   // and fallback to
   // #if case for other platforms (# inst=4).
   #if defined(__gfx90a__)
-  float4 f32x4 = aphrodite::fp8::vec_conversion<float4, uint32_t>(
+  float4 f32x4 = sonar::fp8::vec_conversion<float4, uint32_t>(
       *reinterpret_cast<const uint32_t*>(&inp));
   return *reinterpret_cast<floatx4*>(&f32x4);
   #else  // MI3xx+ optimized builtins
@@ -359,7 +359,7 @@ __device__ __forceinline__ float warpReduceMax(float val) {
 // block (256)
 // clang-format off
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED, int GQA_RATIO, MFMAType MFMA_TYPE,
           bool USE_INTERLEAVED_V_CACHE>
 __global__
@@ -497,7 +497,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
     const _B16x8* q_fetch_ptr_16B =
         reinterpret_cast<const _B16x8*>(q_fetch_ptr);
     _B16x8 tmp = *q_fetch_ptr_16B;
-    if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {
+    if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {
       const int offset1 =
           lane16id /
           4;  // 16 contiguous chunks of head elems are spread across 4x4lanes
@@ -521,7 +521,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
             shared_logits[qkhe_depth][rowid][lane16id % GQA_RATIO]
                          [2 * qkratio + i];
   #if defined(__HIP__FP8MFMA__)
-        if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto &&
+        if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto &&
                       MFMA_TYPE == MFMAType::Fp8) {
           scalar_t* qptr =
               reinterpret_cast<scalar_t*>(&Qlocal[qkhe_depth][qkratio].xy[i]);
@@ -659,7 +659,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
 
   // calculate post qk mfma scale
   float scale2 = scale;
-  if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) {
+  if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto) {
     // multiply by k_scale if fp8 kv cache
     scale2 *= *k_scale;
   #if defined(__HIP__FP8MFMA__)
@@ -677,7 +677,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
   for (int token_depth = 0; token_depth < TLOOP; token_depth++) {
     d_out[token_depth] = {0};
     for (int qkhe_depth = 0; qkhe_depth < QKHELOOP; qkhe_depth++) {
-      if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {
+      if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {
         for (int qkratio = 0; qkratio < QK_SIZE_RATIO; qkratio++) {
           for (int i = 0; i < 2; i++) {
             d_out[token_depth] = gcn_mfma16x16x16_instr<scalar_t, 0, 0, 0>(
@@ -707,12 +707,12 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
                   &Qlocal[qkhe_depth][qkratio].xy[n]);
 
               Qtmp8x8.b16x4[n * 2] =
-                  aphrodite::fp8::scaled_vec_conversion<uint16_t, float2>(
+                  sonar::fp8::scaled_vec_conversion<uint16_t, float2>(
                       make_float2(to_float<scalar_t>(qptr[0]),
                                   to_float<scalar_t>(qptr[1])),
                       q_scale);
               Qtmp8x8.b16x4[n * 2 + 1] =
-                  aphrodite::fp8::scaled_vec_conversion<uint16_t, float2>(
+                  sonar::fp8::scaled_vec_conversion<uint16_t, float2>(
                       make_float2(to_float<scalar_t>(qptr[2]),
                                   to_float<scalar_t>(qptr[3])),
                       q_scale);
@@ -868,7 +868,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
   _B16x4 outelems[VHELOOP];
   // Softmax V mfma
   // v layout: 16he across lanes x 16 tokens per lane
-  if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {
+  if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {
     for (int vhe_depth = 0; vhe_depth < VHELOOP; vhe_depth++) {
       floatx4 tmp_out = {0};
       for (int vtoken_depth = 0; vtoken_depth < VTLOOP; vtoken_depth++) {
@@ -1034,7 +1034,7 @@ __launch_bounds__(NUM_THREADS, 4) void paged_attention_ll4mi_QKV_mfma16_kernel(
 // each WG handles 1 partition per sequence
 // clang-format off
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED,
           int GQA_RATIO,
           bool USE_INTERLEAVED_V_CACHE>
@@ -1189,13 +1189,13 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
 
     // each K fetch is for 8 elements of cache_t which are later dequantized to
     // scalar_t for fp8
-    if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {
+    if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {
       const _B16x8* k_ptrh8 = reinterpret_cast<const _B16x8*>(k_ptr);
       for (int d = 0; d < KHELOOP; d++) {
         Klocal[d] = k_ptrh8[d * BLOCK_SIZE + physical_block_offset];
       }
     } else {
-      // aphrodite defines X as 16 Bytes of elements of cache_t
+      // sonar defines X as 16 Bytes of elements of cache_t
       constexpr int X = 16 / sizeof(cache_t);
       const cache_t* k_ptr2 = k_ptr + physical_block_offset * X;
       for (int d = 0; d < KHELOOP; d++) {
@@ -1222,7 +1222,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
     constexpr int KX_V = 16 / sizeof(cache_t);
     const cache_t* v_ptr = v_cache + wg_start_kv_head_idx * kv_head_stride;
     // fetch vcache in kv cache auto case (bf16/fp16)
-    if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {
+    if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {
       const _B16x8* v_ptrh8 = reinterpret_cast<const _B16x8*>(v_ptr);
       for (int b = 0; b < VBLOCKS; b++) {
         const int64_t vphysical_block_number =
@@ -1256,9 +1256,9 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
           }
         }
       }
-    }  // if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto)
+    }  // if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto)
     // fetch vcache in fp8 case
-    else {  // if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto)
+    else {  // if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto)
       const _B8x8* v_ptrh8 = reinterpret_cast<const _B8x8*>(v_ptr);
       for (int b = 0; b < VBLOCKS; b++) {
         const int64_t vphysical_block_number =
@@ -1288,15 +1288,15 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
       }
     }
 
-  #define QK_mfma(x)                                                  \
-    if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) { \
-      Klocal[x] = convert_b8x8_custom<scalar_t>(Klocalb8[x]);         \
-    }                                                                 \
-    for (int h = 0; h < QHLOOP; h++) {                                \
-      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(              \
-          Qlocal[h].xy[0], Klocal[x].xy[0], d_out[h]);                \
-      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(              \
-          Qlocal[h].xy[1], Klocal[x].xy[1], d_out[h]);                \
+  #define QK_mfma(x)                                              \
+    if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto) { \
+      Klocal[x] = convert_b8x8_custom<scalar_t>(Klocalb8[x]);     \
+    }                                                             \
+    for (int h = 0; h < QHLOOP; h++) {                            \
+      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(          \
+          Qlocal[h].xy[0], Klocal[x].xy[0], d_out[h]);            \
+      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(          \
+          Qlocal[h].xy[1], Klocal[x].xy[1], d_out[h]);            \
     }
     // QK mfma with Q mfma block broadcast
     // Q values across head_size dimension stored across lanes
@@ -1324,7 +1324,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
   #undef QK_mfma
 
     float scale2 = scale;
-    if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) {
+    if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto) {
       // post mfma scaling for fp8
       scale2 *= *k_scale;
     }
@@ -1487,7 +1487,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
     }
 
   #define SV_mfma(x)                                                  \
-    if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) { \
+    if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto) {     \
       Vlocal[vh][x] = convert_b8x8_custom<scalar_t>(Vlocalb8[vh][x]); \
     }                                                                 \
     SV_mfma_value(x, Vlocal[vh][x])
@@ -1495,7 +1495,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
   #define SV_mfma_tail(x)                                                     \
     if (x * 8 < valid_warp_tokens) {                                          \
       _B16x8 Vtmp;                                                            \
-      if constexpr (KV_DTYPE == aphrodite::Fp8KVCacheDataType::kAuto) {       \
+      if constexpr (KV_DTYPE == sonar::Fp8KVCacheDataType::kAuto) {           \
         Vtmp = Vlocal[vh][x];                                                 \
         if ((x + 1) * 8 > valid_warp_tokens) {                                \
           Vtmp = mask_16b_v_cache_boundary(                                   \
@@ -1540,7 +1540,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
       }
 
       for (int qh = 0; qh < QHLOOP; qh++) {
-        if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) {
+        if constexpr (KV_DTYPE != sonar::Fp8KVCacheDataType::kAuto) {
           // post mfma v scale for fp8
           acc[qh] *= *v_scale;
         }
@@ -1790,9 +1790,9 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_reduce_kernel(
   OUTT* out_ptr = out + query_start_off * num_heads * HEAD_SIZE +
                   static_cast<int64_t>(head_idx) * HEAD_SIZE;
   if constexpr (std::is_same<OUTT, bit8_t>::value) {
-    out_ptr[threadIdx.x] = __hip_cvt_float_to_fp8(
-        acc, aphrodite::fp8::fp8_type::__default_saturation,
-        aphrodite::fp8::fp8_type::__default_interpret);
+    out_ptr[threadIdx.x] =
+        __hip_cvt_float_to_fp8(acc, sonar::fp8::fp8_type::__default_saturation,
+                               sonar::fp8::fp8_type::__default_interpret);
   } else {
     out_ptr[threadIdx.x] = from_float<scalar_t>(acc);
   }
@@ -1894,7 +1894,7 @@ __device__ __forceinline__ _B16x8 from_floatx8(const floatx8& inp) {
 
 // clang-format off
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED, int GQA_RATIO,
           MFMAType MFMA_TYPE,
           bool USE_INTERLEAVED_V_CACHE>
@@ -2350,7 +2350,7 @@ __launch_bounds__(NUM_THREADS, 3) void paged_attention_ll4mi_QKV_mfma16_kernel(
 }
 
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED, int GQA_RATIO,
           bool USE_INTERLEAVED_V_CACHE>
 __global__
@@ -2675,7 +2675,7 @@ __device__ __forceinline__ _B16x8 from_floatx8(const floatx8& inp) {
 
 // clang-format off
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED, int GQA_RATIO,
           MFMAType MFMA_TYPE,
           bool USE_INTERLEAVED_V_CACHE>
@@ -3096,7 +3096,7 @@ __launch_bounds__(NUM_THREADS, 3) void paged_attention_ll4mi_QKV_mfma16_kernel(
 }
 
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED, int GQA_RATIO,
           bool USE_INTERLEAVED_V_CACHE>
 __global__
@@ -3326,7 +3326,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_reduce_kernel(
 
 // clang-format off
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED,
           int GQA_RATIO, MFMAType MFMA_TYPE,
           bool USE_INTERLEAVED_V_CACHE>
@@ -3354,7 +3354,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma16_kernel(
 }
 
 template <typename scalar_t, typename cache_t,
-          aphrodite::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
+          sonar::Fp8KVCacheDataType KV_DTYPE, typename OUTT, int BLOCK_SIZE,
           int HEAD_SIZE, int NUM_THREADS, bool ALIBI_ENABLED,
           int GQA_RATIO,
           bool USE_INTERLEAVED_V_CACHE>
@@ -3430,7 +3430,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_reduce_kernel(
           out_ptr, exp_sums_ptr, max_logits_ptr, tmp_out_ptr, seq_lens_ptr, \
           query_start_loc_ptr, max_num_partitions, fp8_out_scale_ptr);
 
-template <typename T, typename KVT, aphrodite::Fp8KVCacheDataType KV_DTYPE,
+template <typename T, typename KVT, sonar::Fp8KVCacheDataType KV_DTYPE,
           int BLOCK_SIZE, int HEAD_SIZE, typename OUTT, int PARTITION_SIZE_OLD,
           bool ALIBI_ENABLED, MFMAType MFMA_TYPE, bool USE_INTERLEAVED_V_CACHE>
 void paged_attention_custom_launcher(
@@ -3586,7 +3586,7 @@ void paged_attention_custom_launcher(
   }
 }
 
-template <typename T, typename KVT, aphrodite::Fp8KVCacheDataType KV_DTYPE,
+template <typename T, typename KVT, sonar::Fp8KVCacheDataType KV_DTYPE,
           int BLOCK_SIZE, int HEAD_SIZE, typename OUTT, int PARTITION_SIZE_OLD,
           bool ALIBI_ENABLED, MFMAType MFMA_TYPE, bool USE_INTERLEAVED_V_CACHE>
 void paged_attention_custom_launcher_navi(

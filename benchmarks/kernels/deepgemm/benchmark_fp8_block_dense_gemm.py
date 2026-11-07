@@ -5,13 +5,13 @@ import time
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
     w8a8_triton_block_scaled_mm,
 )
-from aphrodite.triton_utils import triton
-from aphrodite.utils.deep_gemm import (
+from sonar.triton_utils import triton
+from sonar.utils.deep_gemm import (
     calc_diff,
     fp8_gemm_nt,
     get_col_major_tma_aligned_tensor,
@@ -42,7 +42,7 @@ def benchmark_shape(
     # Pre-quantize B for all implementations
     # (weights can be pre-quantized offline)
     B_deepgemm, B_scale_deepgemm = per_block_cast_to_fp8(B, [128, 128], use_ue8m0=True)
-    B_aphrodite, B_scale_aphrodite = per_block_cast_to_fp8(B, [128, 128], use_ue8m0=True)
+    B_sonar, B_scale_sonar = per_block_cast_to_fp8(B, [128, 128], use_ue8m0=True)
 
     # Block size configuration
     block_size = [128, 128]
@@ -51,34 +51,32 @@ def benchmark_shape(
     A_deepgemm, A_scale_deepgemm = per_token_group_quant_fp8(A, block_size[1])
     A_scale_deepgemm = get_col_major_tma_aligned_tensor(A_scale_deepgemm)
     C_deepgemm = torch.empty((m, n), device="cuda", dtype=torch.bfloat16)
-    A_aphrodite, A_scale_aphrodite = per_token_group_quant_fp8(A, block_size[1])
-    A_aphrodite_cutlass, A_scale_aphrodite_cutlass = per_token_group_quant_fp8(
-        A, block_size[1], column_major_scales=True
-    )
+    A_sonar, A_scale_sonar = per_token_group_quant_fp8(A, block_size[1])
+    A_sonar_cutlass, A_scale_sonar_cutlass = per_token_group_quant_fp8(A, block_size[1], column_major_scales=True)
 
     # === DeepGEMM Implementation ===
     def deepgemm_gemm():
         fp8_gemm_nt((A_deepgemm, A_scale_deepgemm), (B_deepgemm, B_scale_deepgemm), C_deepgemm)
         return C_deepgemm
 
-    # === Aphrodite Triton Implementation ===
-    def aphrodite_triton_gemm():
+    # === Sonar Triton Implementation ===
+    def sonar_triton_gemm():
         return w8a8_triton_block_scaled_mm(
-            A_aphrodite,
-            B_aphrodite,
-            A_scale_aphrodite,
-            B_scale_aphrodite,
+            A_sonar,
+            B_sonar,
+            A_scale_sonar,
+            B_scale_sonar,
             block_size,
             output_dtype=torch.bfloat16,
         )
 
-    # === Aphrodite CUTLASS Implementation ===
-    def aphrodite_cutlass_gemm():
+    # === Sonar CUTLASS Implementation ===
+    def sonar_cutlass_gemm():
         return ops.cutlass_scaled_mm(
-            A_aphrodite_cutlass,
-            B_aphrodite.T,
-            scale_a=A_scale_aphrodite_cutlass,
-            scale_b=B_scale_aphrodite.T,
+            A_sonar_cutlass,
+            B_sonar.T,
+            scale_a=A_scale_sonar_cutlass,
+            scale_b=B_scale_sonar.T,
             out_dtype=torch.bfloat16,
         )
 
@@ -86,25 +84,25 @@ def benchmark_shape(
     if verbose:
         print("Running correctness check...")
     C_deepgemm = deepgemm_gemm()
-    C_aphrodite_triton = aphrodite_triton_gemm()
-    C_aphrodite_cutlass = aphrodite_cutlass_gemm()
+    C_sonar_triton = sonar_triton_gemm()
+    C_sonar_cutlass = sonar_cutlass_gemm()
 
     deepgemm_diff = calc_diff(C_deepgemm, C_ref)
-    aphrodite_triton_diff = calc_diff(C_aphrodite_triton, C_ref)
-    aphrodite_cutlass_diff = calc_diff(C_aphrodite_cutlass, C_ref)
+    sonar_triton_diff = calc_diff(C_sonar_triton, C_ref)
+    sonar_cutlass_diff = calc_diff(C_sonar_cutlass, C_ref)
 
     if verbose:
         print(f"DeepGEMM vs Reference difference: {deepgemm_diff:.6f}")
-        print(f"Aphrodite Triton vs Reference difference: {aphrodite_triton_diff:.6f}")
-        print(f"Aphrodite CUTLASS vs Reference difference: {aphrodite_cutlass_diff:.6f}")
-        print(f"Aphrodite Triton vs DeepGEMM difference: {calc_diff(C_aphrodite_triton, C_deepgemm):.6f}")
-        print(f"Aphrodite CUTLASS vs DeepGEMM difference: {calc_diff(C_aphrodite_cutlass, C_deepgemm):.6f}")
+        print(f"Sonar Triton vs Reference difference: {sonar_triton_diff:.6f}")
+        print(f"Sonar CUTLASS vs Reference difference: {sonar_cutlass_diff:.6f}")
+        print(f"Sonar Triton vs DeepGEMM difference: {calc_diff(C_sonar_triton, C_deepgemm):.6f}")
+        print(f"Sonar CUTLASS vs DeepGEMM difference: {calc_diff(C_sonar_cutlass, C_deepgemm):.6f}")
 
     # Benchmark implementations
     implementations = {
         "DeepGEMM": deepgemm_gemm,
-        "Aphrodite Triton": aphrodite_triton_gemm,
-        "Aphrodite CUTLASS": aphrodite_cutlass_gemm,
+        "Sonar Triton": sonar_triton_gemm,
+        "Sonar CUTLASS": sonar_cutlass_gemm,
     }
 
     benchmark_results = {"shape": {"m": m, "n": n, "k": k}, "implementations": {}}
@@ -138,7 +136,7 @@ def benchmark_shape(
                 "DeepGEMM": 0.0 if name == "DeepGEMM" else calc_diff(func(), C_deepgemm),
                 "Reference": deepgemm_diff
                 if name == "DeepGEMM"
-                else (aphrodite_triton_diff if name == "Aphrodite Triton" else aphrodite_cutlass_diff),
+                else (sonar_triton_diff if name == "Sonar Triton" else sonar_cutlass_diff),
             },
         }
 
@@ -154,14 +152,14 @@ def benchmark_shape(
             if verbose:
                 print(f"DeepGEMM is {1 / speedup:.2f}x {'faster' if 1 / speedup > 1 else 'slower'} than {name}")
 
-    aphrodite_triton_time = benchmark_results["implementations"]["Aphrodite Triton"]["time_ms"]
-    aphrodite_cutlass_time = benchmark_results["implementations"]["Aphrodite CUTLASS"]["time_ms"]
-    cutlass_vs_triton = aphrodite_triton_time / aphrodite_cutlass_time
-    benchmark_results["implementations"]["Aphrodite CUTLASS"]["speedup_vs_triton"] = cutlass_vs_triton
+    sonar_triton_time = benchmark_results["implementations"]["Sonar Triton"]["time_ms"]
+    sonar_cutlass_time = benchmark_results["implementations"]["Sonar CUTLASS"]["time_ms"]
+    cutlass_vs_triton = sonar_triton_time / sonar_cutlass_time
+    benchmark_results["implementations"]["Sonar CUTLASS"]["speedup_vs_triton"] = cutlass_vs_triton
     if verbose:
         print(
-            f"Aphrodite CUTLASS is {cutlass_vs_triton:.2f}x "
-            f"{'faster' if cutlass_vs_triton > 1 else 'slower'} than Aphrodite Triton"
+            f"Sonar CUTLASS is {cutlass_vs_triton:.2f}x "
+            f"{'faster' if cutlass_vs_triton > 1 else 'slower'} than Sonar Triton"
         )
 
     return benchmark_results
@@ -287,12 +285,12 @@ def run_benchmarks(verbose: bool = False):
 
     print_table(deepgemm_headers, deepgemm_rows, title="DeepGEMM Implementation:")
 
-    # Print Aphrodite Triton table
+    # Print Sonar Triton table
     triton_headers = ["m", "n", "k", "Time (μs)", "TFLOPS", "GB/s", "vs DeepGEMM"]
     triton_rows = []
     for result in all_results:
         shape = result["shape"]
-        impl_data = result["implementations"]["Aphrodite Triton"]
+        impl_data = result["implementations"]["Sonar Triton"]
         speedup = impl_data.get("speedup_vs_deepgemm", 1.0)
         triton_rows.append(
             [
@@ -306,9 +304,9 @@ def run_benchmarks(verbose: bool = False):
             ]
         )
 
-    print_table(triton_headers, triton_rows, title="Aphrodite Triton Implementation:")
+    print_table(triton_headers, triton_rows, title="Sonar Triton Implementation:")
 
-    # Print Aphrodite CUTLASS table
+    # Print Sonar CUTLASS table
     cutlass_headers = [
         "m",
         "n",
@@ -322,7 +320,7 @@ def run_benchmarks(verbose: bool = False):
     cutlass_rows = []
     for result in all_results:
         shape = result["shape"]
-        impl_data = result["implementations"]["Aphrodite CUTLASS"]
+        impl_data = result["implementations"]["Sonar CUTLASS"]
         vs_deepgemm = impl_data.get("speedup_vs_deepgemm", 1.0)
         vs_triton = impl_data.get("speedup_vs_triton", 1.0)
         cutlass_rows.append(
@@ -338,12 +336,12 @@ def run_benchmarks(verbose: bool = False):
             ]
         )
 
-    print_table(cutlass_headers, cutlass_rows, title="Aphrodite CUTLASS Implementation:")
+    print_table(cutlass_headers, cutlass_rows, title="Sonar CUTLASS Implementation:")
 
     # Calculate and print averages
     print("\n===== AVERAGE PERFORMANCE =====")
 
-    implementations = ["DeepGEMM", "Aphrodite Triton", "Aphrodite CUTLASS"]
+    implementations = ["DeepGEMM", "Sonar Triton", "Sonar CUTLASS"]
     avg_metrics = {impl: {"tflops": 0, "gb_s": 0, "time_ms": 0} for impl in implementations}
 
     for result in all_results:
@@ -367,19 +365,19 @@ def run_benchmarks(verbose: bool = False):
 
     # Calculate average speedups
     avg_speedups = {
-        "DeepGEMM vs Aphrodite Triton": 0,
-        "DeepGEMM vs Aphrodite CUTLASS": 0,
-        "Aphrodite CUTLASS vs Aphrodite Triton": 0,
+        "DeepGEMM vs Sonar Triton": 0,
+        "DeepGEMM vs Sonar CUTLASS": 0,
+        "Sonar CUTLASS vs Sonar Triton": 0,
     }
 
     for result in all_results:
         deepgemm_time = result["implementations"]["DeepGEMM"]["time_ms"]
-        aphrodite_triton_time = result["implementations"]["Aphrodite Triton"]["time_ms"]
-        aphrodite_cutlass_time = result["implementations"]["Aphrodite CUTLASS"]["time_ms"]
+        sonar_triton_time = result["implementations"]["Sonar Triton"]["time_ms"]
+        sonar_cutlass_time = result["implementations"]["Sonar CUTLASS"]["time_ms"]
 
-        avg_speedups["DeepGEMM vs Aphrodite Triton"] += aphrodite_triton_time / deepgemm_time
-        avg_speedups["DeepGEMM vs Aphrodite CUTLASS"] += aphrodite_cutlass_time / deepgemm_time
-        avg_speedups["Aphrodite CUTLASS vs Aphrodite Triton"] += aphrodite_triton_time / aphrodite_cutlass_time
+        avg_speedups["DeepGEMM vs Sonar Triton"] += sonar_triton_time / deepgemm_time
+        avg_speedups["DeepGEMM vs Sonar CUTLASS"] += sonar_cutlass_time / deepgemm_time
+        avg_speedups["Sonar CUTLASS vs Sonar Triton"] += sonar_triton_time / sonar_cutlass_time
 
     print("\n===== AVERAGE SPEEDUPS =====")
     speedup_headers = ["Comparison", "Speedup"]

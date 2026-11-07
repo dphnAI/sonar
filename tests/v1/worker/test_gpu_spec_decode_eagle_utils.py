@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import _should_share
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import _should_share
 
 
 class _UnquantizedHead(torch.nn.Module):

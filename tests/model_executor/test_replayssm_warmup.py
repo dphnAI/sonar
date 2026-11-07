@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.mamba import MambaBackendEnum
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.model_executor.warmup import replayssm_warmup as warmup
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.config.mamba import MambaBackendEnum
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.model_executor.warmup import replayssm_warmup as warmup
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda() or not has_flashinfer(),
@@ -38,7 +38,7 @@ def _autotune_runner(
     backend: MambaBackendEnum = MambaBackendEnum.FLASHINFER,
 ) -> SimpleNamespace:
     return SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             cache_config=SimpleNamespace(use_replayssm=use_replayssm),
             mamba_config=SimpleNamespace(backend=backend),
             use_v2_model_runner=use_v2_model_runner,
@@ -136,7 +136,7 @@ def test_replayssm_autotune_slots_restore_state_and_trackers():
     block_table = SimpleNamespace(block_table=SimpleNamespace(np=block_ids))
     multi_group_block_table = SimpleNamespace(block_tables=[block_table], commit_block_table=Mock())
     runner = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(use_v2_model_runner=False),
+        sonar_config=SimpleNamespace(use_v2_model_runner=False),
         input_batch=SimpleNamespace(block_table=multi_group_block_table),
         get_model=lambda: SimpleNamespace(modules=lambda: (mixer,)),
     )

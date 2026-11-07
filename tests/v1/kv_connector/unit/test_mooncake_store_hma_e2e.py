@@ -13,31 +13,31 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store import (
     worker as mooncake_store_worker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (  # noqa: E501
     MooncakeStoreCoordinator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
     BoundaryPut,
     ChunkedTokenDatabase,
     LoadSpec,
     ReqMeta,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.layout import (  # noqa: E501
     KeyMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (  # noqa: E501
     _partial_tail_non_mamba_puts,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker import (  # noqa: E501
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker import (  # noqa: E501
     KVCacheStoreRecvingThread,
     KVCacheStoreSendingThread,
 )
-from aphrodite.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
-from aphrodite.v1.core.kv_cache_utils import BlockHash
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.kv_cache_planning import get_kv_cache_config_from_groups
+from sonar.v1.core.kv_cache_utils import BlockHash
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -47,8 +47,8 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
-from aphrodite.v1.worker.utils import allocate_kv_cache
+from sonar.v1.kv_cache_layout import KVCacheLayout
+from sonar.v1.worker.utils import allocate_kv_cache
 from tests.v1.attention.utils import dense_kv_cache_views
 
 
@@ -76,7 +76,7 @@ class _DictStore:
         return [0 if k in self._data else -1 for k in keys]
 
 
-def _minimal_aphrodite_config(cache_block_size=16):
+def _minimal_sonar_config(cache_block_size=16):
     cfg = MagicMock()
     cfg.cache_config.block_size = cache_block_size
     cfg.cache_config.num_gpu_blocks = 4
@@ -105,7 +105,7 @@ def _minimal_aphrodite_config(cache_block_size=16):
     return cfg
 
 
-def _build_worker_with_dict_store(aphrodite_config, kv_cache_config, store):
+def _build_worker_with_dict_store(sonar_config, kv_cache_config, store):
     """Build a MooncakeStoreWorker patching all distributed dependencies."""
     fake_mooncake_store = types.ModuleType("mooncake.store")
     fake_mooncake_store.MooncakeDistributedStore = lambda: store  # type: ignore[attr-defined]
@@ -124,25 +124,24 @@ def _build_worker_with_dict_store(aphrodite_config, kv_cache_config, store):
         sc.enable_offload = False
         with (
             patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-                ".store.worker.get_tensor_model_parallel_rank",
+                "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_tensor_model_parallel_rank",
                 return_value=0,
             ),
             patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
+                "sonar.distributed.kv_transfer.kv_connector.v1.mooncake"
                 ".store.worker.get_tensor_model_parallel_world_size",
                 return_value=1,
             ),
-            patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_pcp_group") as mock_pcp,
-            patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_dcp_group") as mock_dcp,
+            patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_pcp_group") as mock_pcp,
+            patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_dcp_group") as mock_dcp,
             patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_ip",
+                "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_ip",
                 return_value="127.0.0.1",
             ),
         ):
             mock_pcp.return_value.world_size = 1
             mock_dcp.return_value.world_size = 1
-            worker = mooncake_store_worker.MooncakeStoreWorker(aphrodite_config, kv_cache_config=kv_cache_config)
+            worker = mooncake_store_worker.MooncakeStoreWorker(sonar_config, kv_cache_config=kv_cache_config)
     return worker
 
 
@@ -208,10 +207,10 @@ def test_e2e_swa_plus_full_save_then_lookup_hits():
             KVCacheGroupSpec(["L1"], swa),
         ],
     )
-    aphrodite_config = _minimal_aphrodite_config(cache_block_size=16)
+    sonar_config = _minimal_sonar_config(cache_block_size=16)
     store = _DictStore()
 
-    worker = _build_worker_with_dict_store(aphrodite_config, cfg, store)
+    worker = _build_worker_with_dict_store(sonar_config, cfg, store)
     worker.tp_size = 1
     worker.pp_size = 1
     worker.num_kv_head = 8
@@ -325,7 +324,7 @@ def test_hybrid_mamba_values_hold_only_group_states():
             KVCacheGroupSpec(["M0", "M1"], mamba),
         ],
     )
-    worker = _build_worker_with_dict_store(_minimal_aphrodite_config(cache_block_size=16), cfg, _DictStore())
+    worker = _build_worker_with_dict_store(_minimal_sonar_config(cache_block_size=16), cfg, _DictStore())
     kv_caches = allocate_kv_cache(cfg, torch.device("cpu"), KVCacheLayout.LBNHC)
     # Like a Mamba backend, view each layer's page as its two states, here
     # with a gap between them.
@@ -457,7 +456,7 @@ def test_store_values_round_trip_every_layout(model, layout):
         kv_caches = allocate_kv_cache(cfg, torch.device("cpu"), layout)
     except (ValueError, AssertionError):
         pytest.skip(f"{layout.name} cannot express {model}")
-    worker = _build_worker_with_dict_store(_minimal_aphrodite_config(cache_block_size=16), cfg, _DictStore())
+    worker = _build_worker_with_dict_store(_minimal_sonar_config(cache_block_size=16), cfg, _DictStore())
     _register_with_fake_threads(worker, kv_caches)
 
     first = next(iter(kv_caches.values()))
@@ -562,7 +561,7 @@ def test_recv_skips_swa_blocks_before_window():
         token_len_chunk=64,
         block_ids=([0, 1, 2, 3], [0, 1, 2, 3]),
         block_hashes=hs,
-        load_spec=LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64),
+        load_spec=LoadSpec(sonar_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64),
     )
     recv.request_queue.put(req)
     recv._handle_request(recv.request_queue.get())
@@ -904,12 +903,12 @@ def test_worker_lookup_hits_sub_block_partial_tail():
         # The hit alignment the engine core resolves for this config.
         cache_hit_alignment_tokens=4,
     )
-    aphrodite_config = _minimal_aphrodite_config(cache_block_size=16)
+    sonar_config = _minimal_sonar_config(cache_block_size=16)
     # Hash unit 4 < mamba block 16 -> partial hash hits are enabled.
-    aphrodite_config.cache_config.prefix_match_unit = 4
+    sonar_config.cache_config.prefix_match_unit = 4
     store = _DictStore()
 
-    worker = _build_worker_with_dict_store(aphrodite_config, cfg, store)
+    worker = _build_worker_with_dict_store(sonar_config, cfg, store)
     worker.tp_size = 1
     worker.pp_size = 1
     worker.num_kv_head = 8
@@ -1007,13 +1006,13 @@ def test_worker_setup_tolerates_finer_scratch_group():
         # The hit alignment the engine core resolves for this config.
         cache_hit_alignment_tokens=8,
     )
-    aphrodite_config = _minimal_aphrodite_config(cache_block_size=16)
+    sonar_config = _minimal_sonar_config(cache_block_size=16)
     # Hash unit 8 divides the participating groups (16) but not the scratch
     # group (4); mamba block 16 > 8 keeps partial hash hits on.
-    aphrodite_config.cache_config.prefix_match_unit = 8
+    sonar_config.cache_config.prefix_match_unit = 8
     store = _DictStore()
 
-    worker = _build_worker_with_dict_store(aphrodite_config, cfg, store)
+    worker = _build_worker_with_dict_store(sonar_config, cfg, store)
     worker.tp_size = 1
     worker.pp_size = 1
     worker.num_kv_head = 8
@@ -1089,10 +1088,10 @@ def test_ring_scratch_group_is_never_stored_and_does_not_block_hits():
             KVCacheGroupSpec(["L1"], ring),
         ],
     )
-    aphrodite_config = _minimal_aphrodite_config(cache_block_size=16)
+    sonar_config = _minimal_sonar_config(cache_block_size=16)
     store = _DictStore()
 
-    worker = _build_worker_with_dict_store(aphrodite_config, cfg, store)
+    worker = _build_worker_with_dict_store(sonar_config, cfg, store)
     worker.tp_size = 1
     worker.pp_size = 1
     worker.num_kv_head = 8

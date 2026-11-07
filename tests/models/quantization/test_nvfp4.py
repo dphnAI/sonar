@@ -12,9 +12,9 @@ import pytest
 from transformers import AutoTokenizer
 
 from tests.quantization.utils import is_quant_method_supported
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
@@ -24,7 +24,7 @@ MODELS = ["nvidia/Llama-3.3-70B-Instruct-FP4"]
 
 EXPECTED_STRS_MAP = {
     "nvidia/Llama-3.3-70B-Instruct-FP4": [
-        "Aphrodite (Vectorized Large Language Model) is indeed a high-throughput and memory-efficient inference",
+        "Sonar (Vectorized Large Language Model) is indeed a high-throughput and memory-efficient inference",
         "Here are the major milestones in the development of artificial intelligence (AI) from 1950 to ",
         "Artificial intelligence (AI) and human intelligence (HI) are two distinct forms of intelligence that process",
         "A neural network is a type of machine learning model inspired by the structure and function of the human brain",
@@ -82,7 +82,7 @@ def test_models(example_prompts, model_name) -> None:
     for i in range(len(example_prompts)):
         generated_str = generations[i]
         expected_str = expected_strs[i]
-        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
+        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nSonar: {generated_str!r}"
 
 
 EAGER = [True, False]
@@ -109,14 +109,14 @@ SM_100_NVFP4_BACKENDS = [
         "torch",
     ],
 )
-def test_nvfp4(aphrodite_runner, model, eager, backend):
+def test_nvfp4(sonar_runner, model, eager, backend):
     if backend == "flashinfer_cutedsl" and not (current_platform.is_device_capability_family(100)):
         pytest.skip("The flashinfer_cutedsl backend is only supported on SM10x")
 
     if not current_platform.has_device_capability(100) and backend in SM_100_NVFP4_BACKENDS:
         pytest.skip(f"The backend {backend} is not supported with current_platform.has_device_capability(100) == False")
 
-    with aphrodite_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
+    with sonar_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
         output = llm.generate_greedy(["1 2 3 4 5"], max_tokens=2)
     assert output[0][1] == "1 2 3 4 5 6"
 
@@ -133,8 +133,8 @@ def test_nvfp4(aphrodite_runner, model, eager, backend):
     not current_platform.is_rocm(),
     reason="NVFP4 MOE emulation is only useful on AMD Instinct MI3xx",
 )
-def test_nvfp4_moe(aphrodite_runner, model, backend):
-    with aphrodite_runner(
+def test_nvfp4_moe(sonar_runner, model, backend):
+    with sonar_runner(
         model,
         moe_backend=backend,
         linear_backend=backend,

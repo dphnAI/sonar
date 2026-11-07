@@ -3,7 +3,7 @@
 """Test that platform imports do not prematurely initialize CUDA.
 
 This is critical for Ray-based multi-GPU setups where workers need to
-set CUDA_VISIBLE_DEVICES after importing Aphrodite but before CUDA is initialized.
+set CUDA_VISIBLE_DEVICES after importing Sonar but before CUDA is initialized.
 If CUDA is initialized during import, device_count() gets locked and ignores
 subsequent env var changes.
 """
@@ -28,7 +28,7 @@ def run_script(script_name: str) -> subprocess.CompletedProcess:
 
 
 def test_platform_import_does_not_init_cuda():
-    """Test that importing aphrodite.platforms does not initialize CUDA."""
+    """Test that importing sonar.platforms does not initialize CUDA."""
     result = run_script("check_platform_no_cuda_init.py")
     if result.returncode != 0:
         pytest.fail(f"Platform import initialized CUDA:\n{result.stderr}")

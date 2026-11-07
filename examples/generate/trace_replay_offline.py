@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Trace-replay with Aphrodite offline inference.
+"""Trace-replay with Sonar offline inference.
 
 Trace-replay lets you supply a known sequence of decode token IDs alongside
 the prompt.  Instead of sampling from the model distribution, the engine
@@ -38,7 +38,7 @@ Usage:
 
 import argparse
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 DEFAULT_PROMPT = "Hello, my name is"
 
@@ -126,7 +126,7 @@ def run_demo(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Trace-replay with Aphrodite offline inference")
+    parser = argparse.ArgumentParser(description="Trace-replay with Sonar offline inference")
     parser.add_argument(
         "--prompt",
         type=str,

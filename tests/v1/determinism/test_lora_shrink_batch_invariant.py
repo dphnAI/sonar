@@ -6,11 +6,11 @@ import pytest
 import torch
 from utils import skip_if_not_cuda_alike
 
-import aphrodite.lora.ops.triton_ops.lora_shrink_op as shrink_op
-import aphrodite.lora.ops.triton_ops.utils as lora_utils
-from aphrodite.lora.ops.triton_ops import LoRAKernelMeta, lora_shrink
-from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT
-from aphrodite.utils.torch_utils import set_random_seed
+import sonar.lora.ops.triton_ops.lora_shrink_op as shrink_op
+import sonar.lora.ops.triton_ops.utils as lora_utils
+from sonar.lora.ops.triton_ops import LoRAKernelMeta, lora_shrink
+from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT
+from sonar.utils.torch_utils import set_random_seed
 
 DEVICE = "cuda"
 

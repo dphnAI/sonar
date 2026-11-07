@@ -57,33 +57,33 @@ from typing import Any
 import torch
 from torch.utils._pytree import tree_flatten
 
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 try:
     from helion.autotuner.accuracy import assert_close as helion_assert_close
     from helion.autotuner.accuracy import is_fp8_dtype
 
-    from aphrodite.benchmarks.lib.utils import default_aphrodite_config
-    from aphrodite.kernels.helion import get_kernel_by_name, get_registered_kernels
-    from aphrodite.logger import init_logger
-    from aphrodite.utils.import_utils import has_helion
+    from sonar.benchmarks.lib.utils import default_sonar_config
+    from sonar.kernels.helion import get_kernel_by_name, get_registered_kernels
+    from sonar.logger import init_logger
+    from sonar.utils.import_utils import has_helion
 except ImportError as e:
-    print(f"Error importing Aphrodite: {e}")
-    print("Please ensure Aphrodite is installed and in your Python path")
+    print(f"Error importing Sonar: {e}")
+    print("Please ensure Sonar is installed and in your Python path")
     sys.exit(1)
 
 
 def import_all_kernels() -> None:
     """Trigger Helion op registration, tolerating cross-version name drift.
 
-    Current Aphrodite registers every Helion kernel as a side effect of importing
-    ``aphrodite.kernels.helion.ops``; some builds instead expose an explicit importer
+    Current Sonar registers every Helion kernel as a side effect of importing
+    ``sonar.kernels.helion.ops``; some builds instead expose an explicit importer
     whose name has drifted (``import_all_kernels`` / ``import_all_ops``). Call
     whichever exists; if none does, importing the module already registered
     them.
     """
     try:
-        import aphrodite.kernels.helion.ops as ops
+        import sonar.kernels.helion.ops as ops
     except ImportError:
         return
     for fn_name in ("import_all_kernels", "import_all_ops"):
@@ -93,7 +93,7 @@ def import_all_kernels() -> None:
             return
 
 
-logger = init_logger("aphrodite.scripts.benchmark_helion_kernels")
+logger = init_logger("sonar.scripts.benchmark_helion_kernels")
 
 
 # Maps a Helion kernel name to the CUDA op (attribute on ``torch.ops._C``) that
@@ -111,7 +111,7 @@ CUDA_BASELINE_OPS: dict[str, str] = {
 }
 
 # torch.compile options for the torch baseline, mirroring how these kernels are
-# compiled inside Aphrodite.
+# compiled inside Sonar.
 _TORCH_COMPILE_OPTIONS: dict[str, bool] = {
     "enable_auto_functionalized_v2": False,
     "size_asserts": False,
@@ -216,7 +216,7 @@ def make_cuda_baseline(kernel_name: str) -> Callable:
     cuda_op = getattr(torch.ops._C, cuda_op_name, None)
     if cuda_op is None:
         logger.error(
-            "torch.ops._C.%s is not available. Ensure the Aphrodite C extension is built and loaded.",
+            "torch.ops._C.%s is not available. Ensure the Sonar C extension is built and loaded.",
             cuda_op_name,
         )
         sys.exit(1)
@@ -613,7 +613,7 @@ def main() -> None:
     if not check_requirements():
         sys.exit(1)
 
-    with default_aphrodite_config():
+    with default_sonar_config():
         if args.baseline == "cuda":
             baseline_fn = make_cuda_baseline(args.kernel)
         else:

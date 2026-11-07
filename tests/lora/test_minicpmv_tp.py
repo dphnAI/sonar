@@ -3,10 +3,10 @@
 
 import pytest
 
-import aphrodite
-from aphrodite.assets.image import ImageAsset
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.assets.image import ImageAsset
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import multi_gpu_test
 
@@ -28,8 +28,8 @@ EXPECTED_OUTPUT = [
 ]
 
 
-def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
-    sampling_params = aphrodite.SamplingParams(
+def do_sample(llm: sonar.LLM, lora_path: str, lora_id: int) -> list[str]:
+    sampling_params = sonar.SamplingParams(
         temperature=0,
         max_tokens=5,
         stop_token_ids=[128001, 128009],  # eos_id, eot_id
@@ -59,7 +59,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
 
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 def test_minicpmv_lora(minicpmv_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_num_seqs=2,
         enable_lora=True,
@@ -81,7 +81,7 @@ def test_minicpmv_lora(minicpmv_lora_files):
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         enable_lora=True,
         max_num_seqs=2,
@@ -99,7 +99,7 @@ def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_fully_sharded_loras(minicpmv_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         enable_lora=True,
         max_num_seqs=2,

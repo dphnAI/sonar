@@ -2,7 +2,7 @@
 
 # benchmark the overhead of disaggregated prefill.
 # methodology:
-# - send all request to prefill Aphrodite instance. It will buffer KV cache.
+# - send all request to prefill Sonar instance. It will buffer KV cache.
 # - then send all request to decode instance.
 # - The TTFT of decode instance is the overhead.
 
@@ -12,12 +12,12 @@ kill_gpu_processes() {
   # kill all processes on GPU.
   pgrep pt_main_thread | xargs -r kill -9
   pgrep python3 | xargs -r kill -9
-  # Aphrodite now names the process with APHRODITE prefix after https://github.com/vllm-project/vllm/pull/21445
-  pgrep APHRODITE | xargs -r kill -9
+  # Sonar now names the process with SONAR prefix after https://github.com/vllm-project/vllm/pull/21445
+  pgrep SONAR | xargs -r kill -9
   sleep 10
 
-  # remove aphrodite config file
-  rm -rf ~/.config/aphrodite
+  # remove sonar config file
+  rm -rf ~/.config/sonar
 
   # Print the GPU memory usage
   # so that we know if all GPU processes are killed.
@@ -27,8 +27,8 @@ kill_gpu_processes() {
 }
 
 wait_for_server() {
-  # wait for aphrodite runr to start
-  # return 1 if aphrodite runr crashes
+  # wait for sonar runr to start
+  # return 1 if sonar runr crashes
   local port=$1
   timeout 1200 bash -c "
     until curl -s localhost:${port}/v1/completions > /dev/null; do
@@ -39,8 +39,8 @@ wait_for_server() {
 
 benchmark() {
 
-  export APHRODITE_LOGGING_LEVEL=DEBUG
-  export APHRODITE_HOST_IP=$(hostname -I | awk '{print $1}')
+  export SONAR_LOGGING_LEVEL=DEBUG
+  export SONAR_HOST_IP=$(hostname -I | awk '{print $1}')
 
   # compare chunked prefill with disaggregated prefill
 
@@ -55,7 +55,7 @@ benchmark() {
   output_len=$2
 
 
-  CUDA_VISIBLE_DEVICES=0 aphrodite run $model \
+  CUDA_VISIBLE_DEVICES=0 sonar run $model \
     --port 8100 \
     --max-model-len 10000 \
     --gpu-memory-utilization 0.6 \
@@ -63,7 +63,7 @@ benchmark() {
     '{"kv_connector":"P2pNcclConnector","kv_role":"kv_producer","kv_rank":0,"kv_parallel_size":2,"kv_buffer_size":5e9}' &
 
 
-  CUDA_VISIBLE_DEVICES=1 aphrodite run $model \
+  CUDA_VISIBLE_DEVICES=1 sonar run $model \
     --port 8200 \
     --max-model-len 10000 \
     --gpu-memory-utilization 0.6 \
@@ -74,8 +74,8 @@ benchmark() {
   wait_for_server 8200
 
   # let the prefill instance finish prefill
-  aphrodite bench run \
-    --backend aphrodite \
+  sonar bench run \
+    --backend sonar \
     --model $model \
     --dataset-name $dataset_name \
     --dataset-path $dataset_path \
@@ -92,8 +92,8 @@ benchmark() {
 
   # send the request to decode.
   # The TTFT of this command will be the overhead of disagg prefill impl.
-  aphrodite bench run \
-    --backend aphrodite \
+  sonar bench run \
+    --backend sonar \
     --model $model \
     --dataset-name $dataset_name \
     --dataset-path $dataset_path \

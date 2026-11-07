@@ -8,12 +8,12 @@
 
 mod unified;
 
-use aphrodite_parser::tool::test_utils::collect_stream;
-use aphrodite_parser::tool::{Tool, ToolParser, ToolParserOutput};
-use aphrodite_tokenizer::test_utils::TestTokenizer;
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use futures::FutureExt as _;
 use openai_protocol::common::{Function as OpenAiFunction, Tool as OpenAiTool};
+use sonar_parser::tool::test_utils::collect_stream;
+use sonar_parser::tool::{Tool, ToolParser, ToolParserOutput};
+use sonar_tokenizer::test_utils::TestTokenizer;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use tool_parser::traits::ToolParser as ExternalToolParser;
 pub(super) use unified::{attributed_chunks, feed_unified_parser};
 

@@ -5,18 +5,17 @@ import copy
 import pytest
 import torch._dynamo
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
-from aphrodite.compilation.passes.fusion.matcher_utils import QUANT_OPS
-from aphrodite.compilation.passes.fusion.mla_attn_quant_fusion import (
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
+from sonar.compilation.passes.fusion.matcher_utils import QUANT_OPS
+from sonar.compilation.passes.fusion.mla_attn_quant_fusion import (
     MLA_ATTN_OP,
     MLAAttnQuantFusionPass,
 )
-from aphrodite.compilation.passes.fx_utils import find_op_nodes
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.fx_utils import find_op_nodes
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
@@ -24,17 +23,18 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.model_executor.kernels.linear.scaled_mm.cutlass import (
     CutlassFp8BlockScaledMMKernel,
 )
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     create_fp8_quant_key,
@@ -42,10 +42,10 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionMetadata
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionMetadata
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import MLAAttentionSpec
 from tests.compile.backend import LazyInitPass, TestBackend
 from tests.utils import TestFP8Layer, flat_product
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
@@ -67,7 +67,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
         kv_lora_rank: int,
         kv_cache_dtype: torch.dtype,
         device: torch.device,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         **kwargs,
     ):
         super().__init__()
@@ -81,8 +81,8 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
         self.head_size = kv_lora_rank + qk_rope_head_dim
         self.kv_cache_dtype = kv_cache_dtype
         self.device = device
-        self.aphrodite_config = aphrodite_config
-        self.dtype = aphrodite_config.model_config.dtype
+        self.sonar_config = sonar_config
+        self.dtype = sonar_config.model_config.dtype
 
         kv_b_proj = ColumnParallelLinear(
             input_size=kv_lora_rank,
@@ -106,7 +106,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
             q_lora_rank=None,
             kv_lora_rank=kv_lora_rank,
             kv_b_proj=kv_b_proj,
-            cache_config=aphrodite_config.cache_config,
+            cache_config=sonar_config.cache_config,
             quant_config=self.quant_config,
             prefix="model.layers.0.self_attn.attn",
         )
@@ -128,7 +128,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
                 dtype=self.kv_cache_dtype,
             ),
             layer_names=[self.mla_attn.layer_name],
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             device=self.device,
         )
 
@@ -419,7 +419,7 @@ def test_mla_attention_quant_pattern(
     model_class: type[MLAAttentionQuantPatternModel],
     backend: AttentionBackendEnum,
     dist_init,
-    disable_aphrodite_compile_cache,
+    disable_sonar_compile_cache,
     workspace_init,
 ):
     """Test MLA AttentionQuantPattern fusion pass."""
@@ -437,7 +437,7 @@ def test_mla_attention_quant_pattern(
         max_model_len=2048,
         dtype=dtype,
     )
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         scheduler_config=SchedulerConfig(
             max_num_seqs=1024,
@@ -445,7 +445,7 @@ def test_mla_attention_quant_pattern(
             is_encoder_decoder=model_config.is_encoder_decoder,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops_list,
         ),
         cache_config=CacheConfig(cache_dtype="auto"),
@@ -464,10 +464,10 @@ def test_mla_attention_quant_pattern(
     torch._dynamo.mark_dynamic(k_pe, 0)
 
     # Run model without fusion
-    aphrodite_config_unfused = copy.deepcopy(aphrodite_config)
+    sonar_config_unfused = copy.deepcopy(sonar_config)
     with (
-        set_current_aphrodite_config(aphrodite_config_unfused),
-        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config_unfused),
+        set_current_sonar_config(sonar_config_unfused),
+        set_forward_context(attn_metadata=None, sonar_config=sonar_config_unfused),
     ):
         model_unfused = model_class(
             num_heads=num_heads,
@@ -477,7 +477,7 @@ def test_mla_attention_quant_pattern(
             kv_lora_rank=kv_lora_rank,
             kv_cache_dtype=dtype,
             device=device,
-            aphrodite_config=aphrodite_config_unfused,
+            sonar_config=sonar_config_unfused,
         )
         if (
             model_class is TestMLAAttentionFp8GroupQuantPatternModel
@@ -495,10 +495,10 @@ def test_mla_attention_quant_pattern(
         result_unfused = compiled_unfused(q, kv_c_normed, k_pe)
 
     # Run model with attn fusion enabled
-    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_attn_quant=True, eliminate_noops=True)
+    sonar_config.compilation_config.pass_config = PassConfig(fuse_attn_quant=True, eliminate_noops=True)
     with (
-        set_current_aphrodite_config(aphrodite_config),
-        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config),
+        set_current_sonar_config(sonar_config),
+        set_forward_context(attn_metadata=None, sonar_config=sonar_config),
     ):
         model_fused = model_class(
             num_heads=num_heads,
@@ -508,7 +508,7 @@ def test_mla_attention_quant_pattern(
             kv_lora_rank=kv_lora_rank,
             kv_cache_dtype=dtype,
             device=device,
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             w=model_unfused.w,
             kv_b_proj_weight=model_unfused.kv_b_proj_weight,
         )
@@ -518,9 +518,9 @@ def test_mla_attention_quant_pattern(
         forward_ctx.attn_metadata = model_fused.build_attn_metadata(batch_size)
 
         # Create test backend with fusion passes
-        noop_pass = NoOpEliminationPass(aphrodite_config)
-        attn_pass = LazyInitPass(MLAAttnQuantFusionPass, aphrodite_config)
-        cleanup_pass = PostCleanupPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(sonar_config)
+        attn_pass = LazyInitPass(MLAAttnQuantFusionPass, sonar_config)
+        cleanup_pass = PostCleanupPass(sonar_config)
 
         test_backend = TestBackend(noop_pass, attn_pass, cleanup_pass)
         # HACK: See https://github.com/vllm-project/vllm/issues/31044
@@ -534,7 +534,7 @@ def test_mla_attention_quant_pattern(
     quant_key: QuantKey = model_class.quant_key
     attn_fusion_supported = [
         layer.impl.fused_output_quant_supported(quant_key)
-        for key, layer in aphrodite_config.compilation_config.static_forward_context.items()
+        for key, layer in sonar_config.compilation_config.static_forward_context.items()
         if isinstance(layer, MLAAttention)
     ]
     assert sum(attn_fusion_supported) == len(attn_fusion_supported), "All MLA layers should support attention fusion"
@@ -545,7 +545,7 @@ def test_mla_attention_quant_pattern(
     if "-quant_fp8" in custom_ops_list:
         quant_op = torch.ops.aten.reciprocal
     elif aiter_quant or rocm_aiter_ops.is_linear_fp8_enabled():
-        quant_op = torch.ops.aphrodite.rocm_aiter_per_tensor_quant.default
+        quant_op = torch.ops.sonar.rocm_aiter_per_tensor_quant.default
     else:
         quant_op = QUANT_OPS[quant_key]
     test_backend.check_before_ops([quant_op], fully_replaced=is_per_group or aiter_quant)
@@ -587,11 +587,11 @@ def test_mla_attention_quant_pattern(
     not current_platform.is_rocm() or not is_aiter_found_and_supported(),
     reason="Requires ROCm AITER MLA attention and quantization",
 )
-def test_rocm_aiter_static_quant_mla_attention(dist_init, disable_aphrodite_compile_cache, workspace_init, monkeypatch):
+def test_rocm_aiter_static_quant_mla_attention(dist_init, disable_sonar_compile_cache, workspace_init, monkeypatch):
     """Fuse AITER's static FP8 quant into the AITER MLA attention output."""
     try:
         with monkeypatch.context() as patch:
-            patch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+            patch.setenv("SONAR_ROCM_USE_AITER", "1")
             rocm_aiter_ops.refresh_env_variables()
             test_mla_attention_quant_pattern(
                 *MLA_DIMS[0],
@@ -602,7 +602,7 @@ def test_rocm_aiter_static_quant_mla_attention(dist_init, disable_aphrodite_comp
                 model_class=TestMLAAttentionAiterFp8StaticQuantPatternModel,
                 backend=AttentionBackendEnum.ROCM_AITER_MLA,
                 dist_init=dist_init,
-                disable_aphrodite_compile_cache=disable_aphrodite_compile_cache,
+                disable_sonar_compile_cache=disable_sonar_compile_cache,
                 workspace_init=workspace_init,
             )
     finally:

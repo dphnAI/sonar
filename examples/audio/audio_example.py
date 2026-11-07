@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-This example shows how to use Aphrodite for running offline inference
+This example shows how to use Sonar for running offline inference
 with the correct prompt format on audio language models.
 
 For most models, the prompt format should follow corresponding examples
@@ -10,9 +10,9 @@ on HuggingFace model repository.
 
 from transformers import AutoTokenizer
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.audio import AudioAsset
-from aphrodite.utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.assets.audio import AudioAsset
+from sonar.utils import FlexibleArgumentParser
 
 # Input audio and question
 # audio_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -96,9 +96,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = FlexibleArgumentParser(
-        description="Demo on using Aphrodite for offline inference with audio language models"
-    )
+    parser = FlexibleArgumentParser(description="Demo on using Sonar for offline inference with audio language models")
     parser.add_argument(
         "--model-type",
         "-m",

@@ -35,7 +35,7 @@
 #include "quant/qdq_8.cuh"
 #include "q_gemm_kernel.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace exl2 {
 
 #define MAX_Q_GEMM_ROWS 32
@@ -117,11 +117,11 @@ void gemm_half_q_half_cuda(cublasHandle_t cublas_handle, const half* a,
 }
 
 }  // namespace exl2
-}  // namespace aphrodite
+}  // namespace sonar
 
 torch::Tensor exl2_gemm(torch::Tensor a, uintptr_t b) {
   const at::cuda::OptionalCUDAGuard device_guard(device_of(a));
-  aphrodite::exl2::QMatrix* qm = reinterpret_cast<aphrodite::exl2::QMatrix*>(b);
+  sonar::exl2::QMatrix* qm = reinterpret_cast<sonar::exl2::QMatrix*>(b);
 
   auto options = torch::TensorOptions().dtype(a.dtype()).device(a.device());
   at::Tensor c = torch::empty({a.size(0), qm->width}, options);
@@ -130,7 +130,7 @@ torch::Tensor exl2_gemm(torch::Tensor a, uintptr_t b) {
     temp_dq = torch::zeros({a.size(1), qm->width}, options);
   }
 
-  aphrodite::exl2::gemm_half_q_half_cuda(
+  sonar::exl2::gemm_half_q_half_cuda(
       at::cuda::getCurrentCUDABlasHandle(), (const half*)a.data_ptr(), qm,
       (half*)c.data_ptr(),
       c.size(0),  // m
@@ -150,7 +150,7 @@ uintptr_t make_q_matrix(torch::Tensor q_weight, torch::Tensor q_perm,
   int groups = q_scale.size(0);
   int height = q_perm.size(0);
 
-  aphrodite::exl2::QMatrix* m = new aphrodite::exl2::QMatrix(
+  sonar::exl2::QMatrix* m = new sonar::exl2::QMatrix(
       device, height, width, groups, (uint32_t*)q_weight.data_ptr(),
       (uint16_t*)q_perm.data_ptr(), (uint16_t*)q_invperm.data_ptr(),
       (uint32_t*)q_scale.data_ptr(), (half*)q_scale_max.data_ptr(),

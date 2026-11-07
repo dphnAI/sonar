@@ -8,7 +8,7 @@ setup(
     version="0.1",
     packages=["bge_m3_sparse_processor"],
     entry_points={
-        "aphrodite.io_processor_plugins": [
+        "sonar.io_processor_plugins": [
             "bge_m3_sparse_plugin = bge_m3_sparse_processor:register_bge_m3_sparse_embeddings_processor",  # noqa: E501
         ]
     },

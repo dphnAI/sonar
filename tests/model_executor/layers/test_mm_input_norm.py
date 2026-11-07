@@ -8,24 +8,24 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     ModelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.compilation import CompilationMode
-from aphrodite.config.load import LoadConfig
-from aphrodite.model_executor.layers.fusion.mm_input_norm import (
+from sonar.config.compilation import CompilationMode
+from sonar.config.load import LoadConfig
+from sonar.model_executor.layers.fusion.mm_input_norm import (
     FusedMMInputNorm,
     IdentityInputNorm,
     NormParams,
     fused_mm_input_norm_triton,
 )
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.torch_utils import set_random_seed
 
 # Module-level tests run on any platform: the CPU platform exercises
 # forward_native, accelerators exercise the fused kernel. Only the raw
@@ -37,7 +37,7 @@ requires_accelerator = pytest.mark.skipif(
     reason="fused Triton kernel requires a CUDA/XPU accelerator",
 )
 requires_triton = pytest.mark.skipif(not HAS_TRITON, reason="requires Triton")
-requires_aphrodite_config = pytest.mark.usefixtures("default_aphrodite_config")
+requires_sonar_config = pytest.mark.usefixtures("default_sonar_config")
 
 
 def _reference_input_norm(
@@ -92,7 +92,7 @@ def _check_against_reference(
 # ===========================================================================
 # Module-level behavior
 # ===========================================================================
-@requires_aphrodite_config
+@requires_sonar_config
 class TestFusedMMInputNormModule:
     def test_dummy_loading_preserves_image_normalization(self):
         """Dummy model weights must not overwrite processor-derived constants."""
@@ -128,7 +128,7 @@ class TestFusedMMInputNormModule:
 # ===========================================================================
 # dtype coverage
 # ===========================================================================
-@requires_aphrodite_config
+@requires_sonar_config
 class TestFusedMMInputNormDtypes:
     @pytest.mark.parametrize(
         "in_dtype,out_dtype",
@@ -163,7 +163,7 @@ class TestFusedMMInputNormDtypes:
 # ===========================================================================
 # Shape / channel coverage
 # ===========================================================================
-@requires_aphrodite_config
+@requires_sonar_config
 class TestFusedMMInputNormShapes:
     @pytest.mark.parametrize("channel", [1, 3, 4])
     def test_channel_variants(self, channel: int):
@@ -188,7 +188,7 @@ class TestFusedMMInputNormShapes:
 # ===========================================================================
 # Input handling: non-contiguous inputs
 # ===========================================================================
-@requires_aphrodite_config
+@requires_sonar_config
 class TestFusedMMInputNormInputHandling:
     def test_non_contiguous_input_matches_reference(self):
         set_random_seed(0)
@@ -266,19 +266,19 @@ class TestFusedMMInputNormKernel:
 # ===========================================================================
 # Construction / configuration
 # ===========================================================================
-@requires_aphrodite_config
+@requires_sonar_config
 class TestFusedMMInputNormConstruction:
     """Weight/bias buffer semantics at init time."""
 
     def test_input_norm_is_always_enabled(self):
-        config = AphroditeConfig(
+        config = SonarConfig(
             compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 compile_mm_encoder=True,
                 custom_ops=["none"],
             )
         )
-        with set_current_aphrodite_config(config):
+        with set_current_sonar_config(config):
             FusedMMInputNorm(_RGB_MEAN, _RGB_STD, _RGB_RESCALE)
             assert config.compilation_config.enabled_custom_ops["fused_mm_input_norm"] == 1
             assert not config.compilation_config.disabled_custom_ops["fused_mm_input_norm"]

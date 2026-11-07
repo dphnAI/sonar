@@ -8,21 +8,21 @@ import regex as re
 import torch
 from pydantic import TypeAdapter
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     ModelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.config.quantization import (
+from sonar.config.quantization import (
     QuantizationConfigArgs,
     QuantSpec,
     resolve_quantization_config,
 )
-from aphrodite.model_executor.layers.quantization import get_quantization_config
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization import get_quantization_config
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.platforms import current_platform
 
 
 def quant_spec(**kwargs: Any) -> QuantSpec:
@@ -62,15 +62,15 @@ def _limit_num_hidden_layers(model: torch.nn.Module, num_hidden_layers: int | No
     model.load_weights = load_weights
 
 
-def load_model_without_aphrodite_runner(
+def load_model_without_sonar_runner(
     model_path: str,
     *,
     dtype: str | torch.dtype = "bfloat16",
     quantization: str | None = None,
     model_config_kwargs: dict[str, Any] | None = None,
-    aphrodite_config_kwargs: dict[str, Any] | None = None,
+    sonar_config_kwargs: dict[str, Any] | None = None,
     model_loader_cls: type = DefaultModelLoader,
-) -> tuple[torch.nn.Module, AphroditeConfig]:
+) -> tuple[torch.nn.Module, SonarConfig]:
     """Instantiate a model, load weights, and process them for inference."""
     model_config = ModelConfig(
         model=model_path,
@@ -81,15 +81,15 @@ def load_model_without_aphrodite_runner(
     model_config.quantization_config = resolve_quantization_config(
         model_config.quantization, model_config.quantization_config
     )
-    aphrodite_config_args = dict(aphrodite_config_kwargs or {})
-    aphrodite_config_args.setdefault("compilation_config", CompilationConfig(mode=CompilationMode.NONE))
-    aphrodite_config = AphroditeConfig(model_config=model_config, **aphrodite_config_args)
+    sonar_config_args = dict(sonar_config_kwargs or {})
+    sonar_config_args.setdefault("compilation_config", CompilationConfig(mode=CompilationMode.NONE))
+    sonar_config = SonarConfig(model_config=model_config, **sonar_config_args)
     hf_overrides = (model_config_kwargs or {}).get("hf_overrides") or {}
     text_config_overrides = hf_overrides.get("text_config") or {}
     num_hidden_layers = text_config_overrides.get("num_hidden_layers", hf_overrides.get("num_hidden_layers"))
 
-    with set_current_aphrodite_config(aphrodite_config):
-        model_loader = model_loader_cls(aphrodite_config.load_config)
+    with set_current_sonar_config(sonar_config):
+        model_loader = model_loader_cls(sonar_config.load_config)
         if num_hidden_layers is not None:
             original_load_weights = model_loader.load_weights
 
@@ -98,9 +98,9 @@ def load_model_without_aphrodite_runner(
                 original_load_weights(model, model_config)
 
             model_loader.load_weights = load_weights
-        model = model_loader.load_model(aphrodite_config, model_config)
+        model = model_loader.load_model(sonar_config, model_config)
 
-    return model, aphrodite_config
+    return model, sonar_config
 
 
 def is_quant_method_supported(quant_method: str) -> bool:
@@ -128,17 +128,17 @@ def _test_online_quant_peak_mem_impl(
     quantization_arg_value,
     model_name,
     expected_model_memory_gib,
-    aphrodite_runner,
+    sonar_runner,
     caplog_mp_spawn,
     monkeypatch,
 ) -> None:
     # Force spawn to ensure caplog_mp_spawn works consistently
-    # (it relies on APHRODITE_LOGGING_CONFIG_PATH which spawn reads but fork ignores)
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    # (it relies on SONAR_LOGGING_CONFIG_PATH which spawn reads but fork ignores)
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
     with (
         caplog_mp_spawn(logging.DEBUG) as log_holder,
-        aphrodite_runner(
+        sonar_runner(
             model_name,
             quantization=quantization_arg_value,
             enforce_eager=True,

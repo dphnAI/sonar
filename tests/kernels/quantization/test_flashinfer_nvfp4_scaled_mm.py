@@ -10,24 +10,24 @@ from nvfp4_utils import (
     dequantize_nvfp4_to_dtype,
 )
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.linear.nvfp4 import NvFp4LinearLayerConfig
-from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.linear.nvfp4 import NvFp4LinearLayerConfig
+from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferCuteDslNvFp4LinearKernel,
     FlashInferCuteDslNvFp4W4A16LinearKernel,
     FlashInferCutlassNvFp4LinearKernel,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import QuantizedActivation
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.fusion.quant_activation import QuantizedActivation
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import kNvfp4Dynamic
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import (
     flashinfer_scaled_fp4_mm,
     has_flashinfer_b12x_gemm,
 )
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.has_device_capability(100):
     pytest.skip(

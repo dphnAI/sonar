@@ -77,7 +77,7 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st, bool w8,
 inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n,
                             bool has_perm) {
   static const int v = [] {
-    const char* e = std::getenv("APHRODITE_SWORDFISH_DENSE_M");
+    const char* e = std::getenv("SONAR_SWORDFISH_DENSE_M");
     return e != nullptr && e[0] != '\0' ? std::atoi(e) : 0;
   }();
   if (v != 0) return v;
@@ -93,13 +93,13 @@ inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n,
   return w8 ? 1024 : 4096;
 }
 
-// APHRODITE_SWORDFISH_DETERMINISTIC forces the run-stable decode paths:
+// SONAR_SWORDFISH_DETERMINISTIC forces the run-stable decode paths:
 // the smem-reduction epilogue replaces every atomic-window kernel, at the
 // decode window's cost. The tcgen05 prefill is deterministic either way.
 // The fused-MoE kernels keep their atomic merge regardless.
 inline bool force_deterministic() {
   static const bool v = [] {
-    const char* e = std::getenv("APHRODITE_SWORDFISH_DETERMINISTIC");
+    const char* e = std::getenv("SONAR_SWORDFISH_DETERMINISTIC");
     return e != nullptr && e[0] != '\0' && std::strcmp(e, "0") != 0;
   }();
   return v;
@@ -114,7 +114,7 @@ inline int cached_sm_count() {
   return sms;
 }
 
-template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP, bool W8 = false,
+template <sonar::ScalarTypeId type_id, int T, bool HAS_ZP, bool W8 = false,
           bool CTA_QUAD = false>
 void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
                              const void* z, void* c, int m, int k, int n,
@@ -164,7 +164,7 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
           m, k, n, group_size, m_groups);
 }
 
-template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP, bool W8 = false>
+template <sonar::ScalarTypeId type_id, int T, bool HAS_ZP, bool W8 = false>
 void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
                             const void* z, void* c, int m, int k, int n,
                             int group_size, cudaStream_t stream,
@@ -212,7 +212,7 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
           m, k, n, group_size);
 }
 
-template <aphrodite::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
+template <sonar::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
 void launch_decode_atomic(int T, const void* a, const int32_t* b, const void* s,
                           const void* z, void* c, int m, int k, int n,
                           int group_size, cudaStream_t stream,
@@ -229,7 +229,7 @@ void launch_decode_atomic(int T, const void* a, const int32_t* b, const void* s,
   }
 }
 
-template <aphrodite::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
+template <sonar::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
 void launch_decode(const void* a, const int32_t* b, const void* s,
                    const void* z, void* c, int m, int k, int n, int group_size,
                    cudaStream_t stream, bool c_zeroed = false) {
@@ -456,29 +456,29 @@ torch::stable::Tensor swordfish_mm(
 
   if (a_st == torch::headeronly::ScalarType::Half) {
     if (has_zp) {
-      launch_decode<aphrodite::kFloat16.id(), true>(
-          a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
-          stream, prep_perm);
+      launch_decode<sonar::kFloat16.id(), true>(a_ptr, b_ptr, s_ptr, z_ptr,
+                                                c_ptr, size_m, size_k, size_n,
+                                                group_size, stream, prep_perm);
     } else if (w8) {
-      launch_decode<aphrodite::kFloat16.id(), false, true>(
+      launch_decode<sonar::kFloat16.id(), false, true>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
           stream, prep_perm);
     } else {
-      launch_decode<aphrodite::kFloat16.id(), false>(
-          a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
-          stream, prep_perm);
+      launch_decode<sonar::kFloat16.id(), false>(a_ptr, b_ptr, s_ptr, z_ptr,
+                                                 c_ptr, size_m, size_k, size_n,
+                                                 group_size, stream, prep_perm);
     }
   } else {
     if (has_zp) {
-      launch_decode<aphrodite::kBFloat16.id(), true>(
-          a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
-          stream, prep_perm);
+      launch_decode<sonar::kBFloat16.id(), true>(a_ptr, b_ptr, s_ptr, z_ptr,
+                                                 c_ptr, size_m, size_k, size_n,
+                                                 group_size, stream, prep_perm);
     } else if (w8) {
-      launch_decode<aphrodite::kBFloat16.id(), false, true>(
+      launch_decode<sonar::kBFloat16.id(), false, true>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
           stream, prep_perm);
     } else {
-      launch_decode<aphrodite::kBFloat16.id(), false>(
+      launch_decode<sonar::kBFloat16.id(), false>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n, group_size,
           stream, prep_perm);
     }

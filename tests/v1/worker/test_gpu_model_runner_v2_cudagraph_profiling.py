@@ -18,11 +18,11 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.compilation.counter import compilation_counter
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.worker.gpu import cudagraph_utils as cgu
-from aphrodite.v1.worker.gpu import model_runner as mrv2
-from aphrodite.v1.worker.gpu.eplb_utils import EPLBController
+from sonar.compilation.counter import compilation_counter
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.worker.gpu import cudagraph_utils as cgu
+from sonar.v1.worker.gpu import model_runner as mrv2
+from sonar.v1.worker.gpu.eplb_utils import EPLBController
 from tests.utils import create_new_process_for_each_test
 
 GLOBAL_POOL = "global-pool"
@@ -60,7 +60,7 @@ def _make_profiling_runner(
     runner: Any = mrv2.GPUModelRunner.__new__(mrv2.GPUModelRunner)
     runner.compilation_config = SimpleNamespace(cudagraph_mode=cudagraph_mode)
     runner.cudagraph_manager = _FakeCudaGraphManager(needs_capture, num_full_descs, piecewise_only)
-    runner.aphrodite_config = SimpleNamespace()
+    runner.sonar_config = SimpleNamespace()
     runner.model_state = SimpleNamespace(
         supports_mm_inputs=encoder_only,
         encoder_runner=SimpleNamespace(has_cudagraph=lambda: encoder_only),
@@ -84,7 +84,7 @@ def _make_profiling_runner(
 
 class _FakePlatform:
     """Stands in for current_platform; the global graph pool is a class attr,
-    matching aphrodite.platforms.Platform's lazy singleton."""
+    matching sonar.platforms.Platform's lazy singleton."""
 
     _global_graph_pool: Any = GLOBAL_POOL
 
@@ -98,11 +98,11 @@ class _FakePlatform:
 
 def _patch_module(monkeypatch) -> None:
     @contextlib.contextmanager
-    def _fake_set_current_aphrodite_config(_cfg):
+    def _fake_set_current_sonar_config(_cfg):
         yield
 
     _FakePlatform._global_graph_pool = GLOBAL_POOL
-    monkeypatch.setattr(cgu, "set_current_aphrodite_config", _fake_set_current_aphrodite_config)
+    monkeypatch.setattr(cgu, "set_current_sonar_config", _fake_set_current_sonar_config)
     monkeypatch.setattr(cgu, "current_platform", _FakePlatform())
     monkeypatch.setattr(cgu, "_init_minimal_kv_cache_for_profiling", lambda r: r.events.append("init"))
     monkeypatch.setattr(cgu, "_teardown_profiling_state", lambda r: r.events.append("teardown"))
@@ -360,7 +360,7 @@ def test_profile_cudagraph_memory_frees_throwaway_pool(monkeypatch):
     """Profiling graph memory must be freed before teardown completes."""
 
     @contextlib.contextmanager
-    def _fake_set_current_aphrodite_config(_cfg):
+    def _fake_set_current_sonar_config(_cfg):
         yield
 
     runner = _make_profiling_runner(CUDAGraphMode.FULL_AND_PIECEWISE)
@@ -403,7 +403,7 @@ def test_profile_cudagraph_memory_frees_throwaway_pool(monkeypatch):
         memory["captured"] = torch.accelerator.memory_reserved()
         return memory["captured"] - memory["before"]
 
-    monkeypatch.setattr(cgu, "set_current_aphrodite_config", _fake_set_current_aphrodite_config)
+    monkeypatch.setattr(cgu, "set_current_sonar_config", _fake_set_current_sonar_config)
     monkeypatch.setattr(cgu, "_init_minimal_kv_cache_for_profiling", _init)
     runner.capture_model = _capture_model
 

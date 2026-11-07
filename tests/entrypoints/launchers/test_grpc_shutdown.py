@@ -12,7 +12,7 @@ import pytest
 grpc = pytest.importorskip("grpc")
 pytest.importorskip("smg_grpc_servicer")
 
-from aphrodite.entrypoints.launchers import grpc_server  # noqa: E402
+from sonar.entrypoints.launchers import grpc_server  # noqa: E402
 
 
 class FakeAsyncLLM:

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_text::{
+use indexmap::IndexMap;
+use itertools::Itertools as _;
+use sonar_text::{
     CollectedTextOutput, DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs,
     DecodedTokenLogprob,
 };
-use indexmap::IndexMap;
-use itertools::Itertools as _;
 
 use super::types::{
     ChatLogProbs, ChatLogProbsContent, LogProbs, PromptLogprob, PromptLogprobs, TopLogProb,
@@ -54,7 +54,7 @@ pub fn decoded_logprobs_to_openai(
 /// shape.
 ///
 /// The first prompt token is included with `None` logprob metadata, matching
-/// Python Aphrodite's echoed completions behavior.
+/// Python Sonar's echoed completions behavior.
 pub fn decoded_prompt_logprobs_to_openai(
     prompt_logprobs: &DecodedPromptLogprobs,
     initial_text_offset: u32,
@@ -101,7 +101,7 @@ pub fn decoded_prompt_logprobs_to_openai(
     })
 }
 
-/// Map decoded prompt logprobs into Aphrodite-style per-position maps, treating
+/// Map decoded prompt logprobs into Sonar-style per-position maps, treating
 /// a missing single-token payload as `[None]`.
 pub fn prompt_logprobs_to_maps(
     prompt_logprobs: Option<&DecodedPromptLogprobs>,
@@ -185,7 +185,7 @@ pub fn append_openai_logprobs(mut prefix: LogProbs, suffix: LogProbs) -> LogProb
 /// Build the non-stream completions `logprobs` payload from collected text
 /// output.
 ///
-/// When `echoed_prompt` is true, the returned payload matches Python Aphrodite's
+/// When `echoed_prompt` is true, the returned payload matches Python Sonar's
 /// echoed completions behavior by concatenating prompt and completion logprobs
 /// into one OpenAI `LogProbs` object.
 pub fn collected_logprobs_to_openai(
@@ -306,7 +306,7 @@ pub fn clamp_logprob(logprob: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedTokenLogprob};
+    use sonar_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedTokenLogprob};
 
     use super::{
         decoded_logprobs_to_openai, decoded_logprobs_to_openai_chat, prompt_logprobs_to_maps,
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn prompt_logprobs_maps_preserve_token_ids_and_metadata() {
-        let prompt_logprobs = aphrodite_text::DecodedPromptLogprobs {
+        let prompt_logprobs = sonar_text::DecodedPromptLogprobs {
             first_token_id: 10,
             first_token: "first".to_string(),
             scored_positions: sample_logprobs().positions,
@@ -346,7 +346,7 @@ mod tests {
         let mut scored_positions = sample_logprobs().positions;
         let prompt_token = scored_positions[0].entries[2].clone();
         scored_positions[0].entries.insert(0, prompt_token);
-        let prompt_logprobs = aphrodite_text::DecodedPromptLogprobs {
+        let prompt_logprobs = sonar_text::DecodedPromptLogprobs {
             first_token_id: 10,
             first_token: "first".to_string(),
             scored_positions,

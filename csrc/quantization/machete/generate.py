@@ -11,18 +11,18 @@ from dataclasses import dataclass, fields
 from functools import reduce
 
 import jinja2
-from aphrodite_cutlass_library_extension import (
-    APHRODITEDataType,
-    APHRODITEDataTypeAPHRODITEScalarTypeTag,
-    APHRODITEDataTypeNames,
-    APHRODITEDataTypeSize,
-    APHRODITEDataTypeTag,
-    APHRODITEDataTypeTorchDataTypeTag,
-    APHRODITEKernelScheduleTag,
+from sonar_cutlass_library_extension import (
     DataType,
     EpilogueScheduleTag,
     EpilogueScheduleType,
     MixedInputKernelScheduleType,
+    SONARDataType,
+    SONARDataTypeNames,
+    SONARDataTypeSize,
+    SONARDataTypeSONARScalarTypeTag,
+    SONARDataTypeTag,
+    SONARDataTypeTorchDataTypeTag,
+    SONARKernelScheduleTag,
     TileSchedulerTag,
     TileSchedulerType,
 )
@@ -85,7 +85,7 @@ torch::stable::Tensor mm_dispatch(MMArgs args) {
   {% for impl_config in impl_configs %}
   {% set t = impl_config.types -%}
   {% set type_sig = gen_type_sig(t) -%}
-  if (args.b_type == {{APHRODITEScalarTypeTag[t.b]}}
+  if (args.b_type == {{SONARScalarTypeTag[t.b]}}
       && a_type == {{TorchTypeTag[t.a]}}
       && out_type == {{TorchTypeTag[t.out]}}
       && {%if t.b_group_scale != void -%}
@@ -133,7 +133,7 @@ std::vector<std::string> supported_schedules_dispatch(
     {% for impl_config in impl_configs %}
     {% set t = impl_config.types -%}
     {% set schs = impl_config.schedules -%}
-    if (args.b_type == {{APHRODITEScalarTypeTag[t.b]}}
+    if (args.b_type == {{SONARScalarTypeTag[t.b]}}
         && args.a_type == {{TorchTypeTag[t.a]}}
         && out_type == {{TorchTypeTag[t.out]}}
         && {%if t.b_group_scale != void -%}
@@ -258,7 +258,7 @@ class ScheduleConfig:
 @dataclass(frozen=True)
 class TypeConfig:
     a: DataType
-    b: DataType | APHRODITEDataType
+    b: DataType | SONARDataType
     b_group_scale: DataType
     b_group_zeropoint: DataType
     b_channel_scale: DataType
@@ -289,7 +289,7 @@ def generate_sch_sig(schedule_config: ScheduleConfig) -> str:
         f"x{schedule_config.cluster_shape_mnk[1]}"
         f"x{schedule_config.cluster_shape_mnk[2]}"
     )
-    kernel_schedule = APHRODITEKernelScheduleTag[schedule_config.kernel_schedule].split("::")[-1]
+    kernel_schedule = SONARKernelScheduleTag[schedule_config.kernel_schedule].split("::")[-1]
     epilogue_schedule = EpilogueScheduleTag[schedule_config.epilogue_schedule].split("::")[-1]
     tile_scheduler = TileSchedulerTag[schedule_config.tile_scheduler].split("::")[-1]
 
@@ -312,14 +312,13 @@ def generate_terse_sch_sig(schedule_config: ScheduleConfig) -> str:
 
 # unique type_name
 def generate_type_signature(kernel_types: TypeConfig):
-    return str("".join([APHRODITEDataTypeNames[getattr(kernel_types, field.name)] for field in fields(TypeConfig)]))
+    return str("".join([SONARDataTypeNames[getattr(kernel_types, field.name)] for field in fields(TypeConfig)]))
 
 
 def generate_type_option_name(kernel_types: TypeConfig):
     return ", ".join(
         [
-            f"{field.name.replace('b_', 'with_') + '_type'}="
-            + APHRODITEDataTypeNames[getattr(kernel_types, field.name)]
+            f"{field.name.replace('b_', 'with_') + '_type'}=" + SONARDataTypeNames[getattr(kernel_types, field.name)]
             for field in fields(TypeConfig)
         ]
     )
@@ -359,10 +358,10 @@ def unsigned_type_with_bitwidth(num_bits):
 
 template_globals = {
     "void": DataType.void,
-    "DataTypeTag": APHRODITEDataTypeTag,
-    "APHRODITEScalarTypeTag": APHRODITEDataTypeAPHRODITEScalarTypeTag,
-    "TorchTypeTag": APHRODITEDataTypeTorchDataTypeTag,
-    "KernelScheduleTag": APHRODITEKernelScheduleTag,
+    "DataTypeTag": SONARDataTypeTag,
+    "SONARScalarTypeTag": SONARDataTypeSONARScalarTypeTag,
+    "TorchTypeTag": SONARDataTypeTorchDataTypeTag,
+    "KernelScheduleTag": SONARKernelScheduleTag,
     "EpilogueScheduleTag": EpilogueScheduleTag,
     "TileSchedulerTag": TileSchedulerTag,
     "to_cute_constant": to_cute_constant,
@@ -403,7 +402,7 @@ def create_sources(impl_configs: list[ImplConfig], num_impl_files=8):
         prepack_types.append(
             PrepackTypeConfig(
                 a=impl_config.types.a,
-                b_num_bits=APHRODITEDataTypeSize[impl_config.types.b],
+                b_num_bits=SONARDataTypeSize[impl_config.types.b],
                 convert=convert_type,
                 accumulator=impl_config.types.accumulator,
             )
@@ -541,7 +540,7 @@ def generate():
             out=a,
             accumulator=DataType.f32,
         )
-        for b in (APHRODITEDataType.u4b8, APHRODITEDataType.u8b128)
+        for b in (SONARDataType.u4b8, SONARDataType.u8b128)
         for a in (DataType.f16, DataType.bf16)
     )
 
@@ -625,7 +624,7 @@ def generate():
     # QQQ_kernel_types = [
     #     *(TypeConfig(
     #         a=DataType.s8,
-    #         b=APHRODITEDataType.u4b8,
+    #         b=SONARDataType.u4b8,
     #         b_group_scale=b_group_scale,
     #         b_group_zeropoint=DataType.void,
     #         b_channel_scale=DataType.f32,
@@ -635,7 +634,7 @@ def generate():
     #     ) for b_group_scale in (DataType.f16, DataType.void)),
     #     *(TypeConfig(
     #         a=DataType.e4m3,
-    #         b=APHRODITEDataType.u4b8,
+    #         b=SONARDataType.u4b8,
     #         b_group_scale=b_group_scale,
     #         b_group_zeropoint=DataType.void,
     #         b_channel_scale=DataType.f32,

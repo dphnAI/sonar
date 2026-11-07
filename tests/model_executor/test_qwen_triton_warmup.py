@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-import aphrodite.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp as mtp_ops  # noqa: E501
-from aphrodite.model_executor.warmup.qwen_triton_warmup import (
+import sonar.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp as mtp_ops  # noqa: E501
+from sonar.model_executor.warmup.qwen_triton_warmup import (
     _FLA_POST_CONV_WARMUP_LENGTHS,
     _QwenGDNWarmupConfig,
     _warm_causal_conv1d_fwd_kernel,
@@ -16,8 +16,8 @@ from aphrodite.model_executor.warmup.qwen_triton_warmup import (
     _warm_fused_post_conv_kernel,
     _warm_gated_rms_norm_kernel,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.platform_utils import num_compute_units
+from sonar.platforms import current_platform
+from sonar.utils.platform_utils import num_compute_units
 
 
 def _cuda_gdn_config() -> _QwenGDNWarmupConfig:

@@ -4,9 +4,9 @@
 # NOTE To avoid overloading the CI pipeline, this test script will not
 # be triggered on CI and is primarily intended for local testing and verification.
 
-import aphrodite
-from aphrodite.assets.image import ImageAsset
-from aphrodite.lora.request import LoRARequest
+import sonar
+from sonar.assets.image import ImageAsset
+from sonar.lora.request import LoRARequest
 
 from ..utils import multi_gpu_test
 
@@ -29,7 +29,7 @@ EXPECTED_OUTPUTS_VISION = [
 ]
 
 
-def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
+def generate_and_test(llm: sonar.LLM, lora_path: str, lora_id: int) -> None:
     prompts = [
         {
             "prompt": PROMPT_TEMPLATE,
@@ -37,7 +37,7 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
         }
         for asset in TEST_IMAGES
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=128)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=128)
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -50,7 +50,7 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
 
 
 def test_gemma4_lora(gemma4_vision_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -68,7 +68,7 @@ def test_gemma4_lora(gemma4_vision_lora_files):
 
 @multi_gpu_test(num_gpus=2)
 def test_gemma4_lora_tp2(gemma4_vision_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enforce_eager=True,
@@ -87,7 +87,7 @@ def test_gemma4_lora_tp2(gemma4_vision_lora_files):
 
 @multi_gpu_test(num_gpus=4)
 def test_gemma4_lora_tp4(gemma4_vision_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enforce_eager=True,

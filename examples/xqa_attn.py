@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from aphrodite._custom_ops import xqa_paged_attention
+from sonar._custom_ops import xqa_paged_attention
 
 
 def print_cuda_info():

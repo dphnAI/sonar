@@ -22,8 +22,8 @@ from pathlib import Path
 import requests
 from prometheus_client.parser import text_string_to_metric_families
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer
 
 _ROOT = Path(__file__).resolve().parents[3]
@@ -133,7 +133,7 @@ def run_rocm_pd_accuracy(connector, model, prefill_tp, decode_tp, monkeypatch):
         connector_name = "MooncakeConnector"
         extra = {"mooncake_protocol": "hip", "device_name": ""}
     else:
-        from aphrodite.distributed.nixl_utils import NixlWrapper
+        from sonar.distributed.nixl_utils import NixlWrapper
 
         assert NixlWrapper is not None, "NIXL ROCm bindings must import"
         connector_name = "NixlConnector"
@@ -164,16 +164,16 @@ def run_rocm_pd_accuracy(connector, model, prefill_tp, decode_tp, monkeypatch):
     ]
     common_env = {
         "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
-        "APHRODITE_HOST_IP": "127.0.0.1",
-        "APHRODITE_WORKER_MULTIPROC_METHOD": "spawn",
-        "APHRODITE_USE_V2_MODEL_RUNNER": "1",
-        "APHRODITE_ROCM_USE_AITER": "1",
-        "APHRODITE_KV_CACHE_LAYOUT": "HND",
+        "SONAR_HOST_IP": "127.0.0.1",
+        "SONAR_WORKER_MULTIPROC_METHOD": "spawn",
+        "SONAR_USE_V2_MODEL_RUNNER": "1",
+        "SONAR_ROCM_USE_AITER": "1",
+        "SONAR_KV_CACHE_LAYOUT": "HND",
     }
     with contextlib.ExitStack() as stack:
         bootstrap_port = 0
         if connector == "mooncake":
-            from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_utils import (  # noqa: E501
+            from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_utils import (  # noqa: E501
                 MooncakeBootstrapServer,
             )
 
@@ -197,8 +197,8 @@ def run_rocm_pd_accuracy(connector, model, prefill_tp, decode_tp, monkeypatch):
             env = {
                 **common_env,
                 selector: ",".join(assigned),
-                "APHRODITE_PORT": str(get_open_port()),
-                "APHRODITE_NIXL_SIDE_CHANNEL_PORT": str(side_channel_ports.pop()),
+                "SONAR_PORT": str(get_open_port()),
+                "SONAR_NIXL_SIDE_CHANNEL_PORT": str(side_channel_ports.pop()),
             }
             servers.append(
                 RemoteOpenAIServer(
@@ -227,12 +227,12 @@ def run_rocm_pd_accuracy(connector, model, prefill_tp, decode_tp, monkeypatch):
             totals = {
                 "external_tokens": _metric_total(
                     decode,
-                    "aphrodite:prompt_tokens_by_source_total",
+                    "sonar:prompt_tokens_by_source_total",
                     source="external_kv_transfer",
                 )
             }
             if connector == "nixl":
-                totals["nixl_bytes"] = _metric_total(decode, "aphrodite:nixl_bytes_transferred_sum")
+                totals["nixl_bytes"] = _metric_total(decode, "sonar:nixl_bytes_transferred_sum")
             return totals
 
         simple_evaluate = accuracy.lm_eval.simple_evaluate

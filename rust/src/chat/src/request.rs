@@ -3,13 +3,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
-pub use aphrodite_parser::tool::Tool as ChatTool;
-use aphrodite_text::TextDecodeOptions;
-pub use aphrodite_text::{PromptTruncation, SamplingParams};
 use llm_multimodal::ImageDetail;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sonar_engine_core_client::protocol::lora::LoraRequest;
+pub use sonar_parser::tool::Tool as ChatTool;
+use sonar_text::TextDecodeOptions;
+pub use sonar_text::{PromptTruncation, SamplingParams};
 
 use crate::error::{Error, Result};
 use crate::event::{AssistantContentBlock, AssistantMessage};
@@ -385,7 +385,7 @@ pub enum GenerationPromptMode {
 /// Chat-template-related request options.
 ///
 /// These are the small subset of chat controls that currently affect prompt
-/// rendering in `aphrodite-chat`.
+/// rendering in `sonar-chat`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatOptions {
     /// Controls whether rendering starts a new assistant turn, continues the
@@ -444,7 +444,7 @@ impl ChatOptions {
     }
 }
 
-/// Tool-choice semantics supported by `aphrodite-chat`.
+/// Tool-choice semantics supported by `sonar-chat`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatToolChoice {
@@ -574,7 +574,7 @@ pub struct ChatRequest {
     pub request_id: String,
     /// Ordered chat history to render.
     pub messages: Vec<ChatMessage>,
-    /// User-facing sampling parameters accepted by `aphrodite-chat`.
+    /// User-facing sampling parameters accepted by `sonar-chat`.
     pub sampling_params: SamplingParams,
     /// Chat-specific rendering options.
     pub chat_options: ChatOptions,
@@ -657,7 +657,7 @@ impl ChatRequest {
         }
         if self.has_multimodal() && self.prompt_truncation.is_some() {
             return Err(Error::Text(
-                aphrodite_text::Error::TruncateUnsupportedWithMultimodal,
+                sonar_text::Error::TruncateUnsupportedWithMultimodal,
             ));
         }
         Ok(())

@@ -13,18 +13,18 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.kv_cache_interface import (
+from sonar.config.sonar import SonarConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
 )
-from aphrodite.v1.worker.gpu.warmup import (
+from sonar.v1.worker.gpu.warmup import (
     _reserved_block_count,
     run_mixed_prefill_decode_warmup,
     warmup_kernels,
@@ -100,7 +100,7 @@ def _make_runner(
         model_state=SimpleNamespace(max_encoder_len=0),
         scheduler_config=SimpleNamespace(max_num_seqs=4, max_num_batched_tokens=2048),
         kv_cache_config=SimpleNamespace(kv_cache_groups=kv_cache_groups, num_blocks=1024),
-        aphrodite_config=SimpleNamespace(num_lookahead_tokens=num_lookahead_tokens, is_mm_encoder_only=False),
+        sonar_config=SimpleNamespace(num_lookahead_tokens=num_lookahead_tokens, is_mm_encoder_only=False),
         kv_block_zeroer=None,
         kv_connector=SimpleNamespace(set_disabled=lambda disabled: None),
     )
@@ -305,11 +305,11 @@ def test_reserved_block_count_matches_real_kv_cache_manager():
 
 def _config_without_post_init(
     speculative_config: SpeculativeConfig | None,
-) -> AphroditeConfig:
-    """A real `AphroditeConfig` built without `__post_init__`, which would otherwise
+) -> SonarConfig:
+    """A real `SonarConfig` built without `__post_init__`, which would otherwise
     require a resolvable draft model. The lookahead properties only read
     `speculative_config` and `diffusion_config`."""
-    config = object.__new__(AphroditeConfig)
+    config = object.__new__(SonarConfig)
     object.__setattr__(config, "speculative_config", speculative_config)
     object.__setattr__(config, "diffusion_config", None)
     return config
@@ -334,7 +334,7 @@ def _config_without_post_init(
     ],
 )
 def test_num_lookahead_tokens_per_method(method: str, draft_hf_config: dict | None, expected: int):
-    """`AphroditeConfig.num_lookahead_tokens` is the single source of the reservation.
+    """`SonarConfig.num_lookahead_tokens` is the single source of the reservation.
 
     Both the scheduler and the warmup read it, so a wrong answer here silently
     changes how many blocks every request holds. Exercises the real property

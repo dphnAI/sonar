@@ -4,7 +4,7 @@ This directory contains GPQA evaluation tests using the GPT-OSS evaluation packa
 
 ## Usage
 
-### Run tests with pytest (like buildkite)
+### Run tests with pytest
 
 ```bash
 # H200
@@ -30,7 +30,7 @@ env:                             # Environment variables (optional)
   SOME_VAR: "value"
 ```
 
-The `server_args` field accepts any arguments that can be passed to `aphrodite serve`.
+The `server_args` field accepts any arguments that can be passed to `sonar serve`.
 
 The `env` field accepts a dictionary of environment variables to set for the server process.
 

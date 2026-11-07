@@ -18,18 +18,18 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.models.interfaces import SupportsEncoderCudaGraph
-from aphrodite.multimodal.inputs import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.models.interfaces import SupportsEncoderCudaGraph
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,
     PlaceholderRange,
 )
-from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
-from aphrodite.v1.worker.gpu.mm.encoder_runner import EncoderRunner
-from aphrodite.v1.worker.gpu.model_states.interface import ModelState
+from sonar.v1.worker.gpu.mm.encoder_cache import EncoderCache
+from sonar.v1.worker.gpu.mm.encoder_runner import EncoderRunner
+from sonar.v1.worker.gpu.model_states.interface import ModelState
 
 pytestmark = pytest.mark.cpu_test
 
@@ -56,14 +56,14 @@ def test_encoder_graph_configuration(enabled, enforce_eager, supported, expected
     config.compilation_config.cudagraph_mm_encoder = enabled
     model = MagicMock(spec=SupportsEncoderCudaGraph) if supported else torch.nn.Module()
     state = _model_state(EncoderCache())
-    with patch("aphrodite.v1.worker.gpu.model_states.interface.EncoderCudaGraphManager"):
+    with patch("sonar.v1.worker.gpu.model_states.interface.EncoderCudaGraphManager"):
         ModelState.__init__(state, config, model, state.encoder_cache, state.device)
     assert state.encoder_runner.has_cudagraph() is expected
 
 
 def test_encoder_graph_unsupported_modality_uses_eager_output():
     """An image graph must not intercept another modality's encoder output."""
-    from aphrodite.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
+    from sonar.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
 
     runner = _make_runner([], [])
     output = torch.ones(2, HIDDEN)
@@ -77,7 +77,7 @@ def test_encoder_graph_unsupported_modality_uses_eager_output():
     )
     runner.cudagraph_manager = manager
     with patch(
-        "aphrodite.v1.worker.gpu.mm.encoder_runner.group_and_batch_mm_kwargs",
+        "sonar.v1.worker.gpu.mm.encoder_runner.group_and_batch_mm_kwargs",
         return_value=[("audio", 1, {"audio_values": torch.zeros(2)})],
     ):
         result = runner.execute_mm_encoder([("audio", MagicMock())])
@@ -322,7 +322,7 @@ def test_execute_mm_encoder_sorts_by_modality():
     runner.model = MagicMock()
     runner.model.embed_multimodal.side_effect = lambda x: [torch.full((1, 1), x)]
     with patch(
-        "aphrodite.v1.worker.gpu.mm.encoder_runner.group_and_batch_mm_kwargs",
+        "sonar.v1.worker.gpu.mm.encoder_runner.group_and_batch_mm_kwargs",
         side_effect=lambda items, **_: [(m, 1, {"x": x}) for m, x in items],
     ) as group:
         outputs = runner.execute_mm_encoder(mm_kwargs)

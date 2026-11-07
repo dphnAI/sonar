@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from aphrodite.renderers.params import TokenizeParams
+from sonar.renderers.params import TokenizeParams
 
 
 @pytest.fixture
@@ -27,12 +27,12 @@ def _make_base_renderer_with(tokenizer):
     """Build a minimal BaseRenderer subclass that exposes the tokenizer so we
     can call ``_tokenize_prompt`` directly. BaseRenderer is abstract because of
     ``render_messages``; we just need a stub."""
-    from aphrodite.renderers.base import BaseRenderer
+    from sonar.renderers.base import BaseRenderer
 
     class _StubRenderer(BaseRenderer):
         def __init__(self, tok):
-            # Bypass BaseRenderer.__init__ — we don't need a AphroditeConfig.
-            from aphrodite.utils.async_utils import make_async
+            # Bypass BaseRenderer.__init__ — we don't need a SonarConfig.
+            from sonar.utils.async_utils import make_async
 
             self.tokenizer = tok
             self._executor = None
@@ -92,7 +92,7 @@ class TestTokenizePromptOffsets:
         """A renderer that does not override ``_can_produce_offsets`` never
         emits offsets, even with a fast tokenizer and the flag set. This locks
         in the base-default-False / subclass-override design."""
-        from aphrodite.renderers.base import BaseRenderer
+        from sonar.renderers.base import BaseRenderer
 
         class _BareRenderer(BaseRenderer):
             def __init__(self, tok):

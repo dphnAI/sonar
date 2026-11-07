@@ -96,14 +96,14 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
   
   ### pip (Intel Xeon 6 CPUs)
   For Intel and AMD x86 CPUs, follow the [CPU pre-built wheels](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/#pre-built-wheels) installation instructions.
 
   ### TPU (Trillium / v6e)
-  Use the official Aphrodite TPU image. The 4B model fits on a single v6e chip (`v6e-1`, `--topology 1x1`).
+  Use the official Sonar TPU image. The 4B model fits on a single v6e chip (`v6e-1`, `--topology 1x1`).
   ```bash
   export HF_HOME=/dev/shm
   export HF_TOKEN=<your HF token>
@@ -118,7 +118,7 @@ guide: |
   export HF_TOKEN=<your HF token>
   export TP=1
   export MAX_MODEL_LEN=4096
-  aphrodite serve Qwen/Qwen3-4B \
+  sonar serve Qwen/Qwen3-4B \
     --seed 42 \
     --gpu-memory-utilization 0.98 \
     --max-num-batched-tokens 1024 \
@@ -129,14 +129,14 @@ guide: |
 
   ### Single GPU (BF16)
   ```bash
-  aphrodite serve Qwen/Qwen3-4B \
+  sonar serve Qwen/Qwen3-4B \
     --host 0.0.0.0 \
     --port 8000
   ```
 
   ### Intel Xeon 6 Deployment via Docker
 
-  Launch the x86 CPU Aphrodite Docker container for `Qwen/Qwen3-4B`:
+  Launch the x86 CPU Sonar Docker container for `Qwen/Qwen3-4B`:
 
   ```bash
   docker run \
@@ -152,7 +152,7 @@ guide: |
   ## Configuration Tips
 
   - `--max-model-len 4096` is the TPU-recipe default; native context is 40K — raise it if you have headroom.
-  - Aphrodite uses 90% of device memory by default; the TPU recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
+  - Sonar uses 90% of device memory by default; the TPU recipe pushes `--gpu-memory-utilization 0.98` to maximize KV cache.
   - For thinking mode Qwen recommends `temperature=0.6, top_p=0.95, top_k=20`; for non-thinking, `temperature=0.7, top_p=0.8`.
 
   ## Benchmarking
@@ -160,7 +160,7 @@ guide: |
   Launch the server with `--no-enable-prefix-caching` for consistent measurements.
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen3-4B \

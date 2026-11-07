@@ -8,16 +8,16 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import (
+from sonar import LLM, SamplingParams
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
     PassConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 from tests.quantization.utils import is_quant_method_supported
 
 from ...utils import create_new_process_for_each_test, wait_for_memory_to_settle
@@ -54,7 +54,7 @@ def models_list(*, all: bool = True, keywords: list[str] | None = None):
 
 @pytest.mark.parametrize(
     "compilation_mode",
-    [CompilationMode.DYNAMO_TRACE_ONCE, CompilationMode.APHRODITE_COMPILE],
+    [CompilationMode.DYNAMO_TRACE_ONCE, CompilationMode.SONAR_COMPILE],
 )
 @pytest.mark.parametrize("model, model_kwargs", models_list(all=True))
 @create_new_process_for_each_test("spawn")
@@ -76,7 +76,7 @@ def test_full_graph(
     [
         # additional compile sizes, only some of the models
         (
-            CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, compile_sizes=[1, 2]),
+            CompilationConfig(mode=CompilationMode.SONAR_COMPILE, compile_sizes=[1, 2]),
             *model_info,
         )
         for model_info in models_list(all=False)
@@ -85,7 +85,7 @@ def test_full_graph(
         # RMSNorm + quant fusion, only 8-bit quant models
         (
             CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 custom_ops=["+rms_norm"],
                 pass_config=PassConfig(fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True),
             ),
@@ -97,7 +97,7 @@ def test_full_graph(
         # graph inductor partition
         (
             CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 # inductor graph partition uses
                 # torch._C.Tag.cudagraph_unsafe to specify splitting ops
                 use_inductor_graph_partition=True,
@@ -115,7 +115,7 @@ def test_full_graph(
         # patch in torch 2.9 and without patch in torch 2.10+
         (
             CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE,
+                mode=CompilationMode.SONAR_COMPILE,
                 compile_sizes=[1, 2],  # Triggers autotune which uses get_raw_stream
                 cudagraph_mode=CUDAGraphMode.NONE,
             ),
@@ -139,16 +139,16 @@ def test_custom_compile_config(
 
 
 @create_new_process_for_each_test()
-def test_depyf_integration(disable_aphrodite_compile_cache):
+def test_depyf_integration(disable_sonar_compile_cache):
     """Compile with depyf's debugging hooks installed.
 
-    ``disable_aphrodite_compile_cache`` is what makes this a test rather than a
+    ``disable_sonar_compile_cache`` is what makes this a test rather than a
     formality: depyf only ever sees a compilation that actually runs, so served
     from a warm cache this exercises none of its hooks.
     """
     run_model(
         CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             debug_dump_path=Path(tempfile.gettempdir()),
         ),
         "facebook/opt-125m",
@@ -177,7 +177,7 @@ def run_model(compile_config: CompilationMode | CompilationConfig, model: str, *
 
     # V1 startup requires free_memory >= total * gpu_memory_utilization, so a
     # device that is not free yet fails engine init rather than waiting for it.
-    # AphroditeRunner guards this; building LLM directly does not. No-op off ROCm.
+    # SonarRunner guards this; building LLM directly does not. No-op off ROCm.
     wait_for_memory_to_settle(
         threshold_ratio=1.0 - model_kwargs.get("gpu_memory_utilization", CacheConfig.gpu_memory_utilization)
     )

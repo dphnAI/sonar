@@ -249,7 +249,7 @@ pub mod kv_connector {
     /// Mooncake connector transfer telemetry.
     ///
     /// Original Python definition: `MooncakeKVConnectorStats` in
-    /// `aphrodite/distributed/kv_transfer/kv_connector/v1/mooncake/stats.py`.
+    /// `sonar/distributed/kv_transfer/kv_connector/v1/mooncake/stats.py`.
     #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
     pub struct MooncakeTransferStats {
         /// Time spent transferring each successful request.
@@ -354,7 +354,7 @@ pub mod kv_connector {
     /// UMBP store connector telemetry grouped by operation.
     ///
     /// Original Python definition: `UMBPStoreConnectorStats` in
-    /// `aphrodite/distributed/kv_transfer/kv_connector/v1/umbp/stats.py`.
+    /// `sonar/distributed/kv_transfer/kv_connector/v1/umbp/stats.py`.
     #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
     #[serde(transparent)]
     pub struct UmbpStats(pub BTreeMap<UmbpOperation, UmbpOperationCounts>);

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from aphrodite.tool_parsers.utils import (
+from sonar.tool_parsers.utils import (
     UnexpectedAstError,
     coerce_to_schema_type,
     contains_broken_string_literal,

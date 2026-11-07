@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.models.muse_spark.amd.ops.router_bf16x3 import (
+from sonar.models.muse_spark.amd.ops.router_bf16x3 import (
     router_bf16x3_gemm,
     split_fp32_to_bf16x3,
     supports_router_bf16x3,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="requires a ROCm GPU")
 

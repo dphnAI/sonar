@@ -10,9 +10,9 @@ the shape.
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, AttentionConfig, set_current_aphrodite_config
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.config import AttentionConfig, SonarConfig, set_current_sonar_config
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 HEAD_DIM = 192
 V_HEAD_DIM = 128
@@ -39,10 +39,10 @@ def restore_diffkv_head_size_v():
     Leaving it modified would make these tests order dependent, so snapshot and
     restore it on every backend that can be selected here.
     """
-    from aphrodite.v1.attention.backends.flash_attn_diffkv import (
+    from sonar.v1.attention.backends.flash_attn_diffkv import (
         FlashAttentionDiffKVBackend,
     )
-    from aphrodite.v1.attention.backends.triton_attn_diffkv import (
+    from sonar.v1.attention.backends.triton_attn_diffkv import (
         TritonAttentionDiffKVBackend,
     )
 
@@ -54,10 +54,10 @@ def restore_diffkv_head_size_v():
 
 
 def _build_attention(backend: AttentionBackendEnum | None, v_head_dim: int = V_HEAD_DIM):
-    from aphrodite.model_executor.models.mimo_v2 import MiMoV2Attention
+    from sonar.model_executor.models.mimo_v2 import MiMoV2Attention
 
-    config = AphroditeConfig(attention_config=AttentionConfig(backend=backend))
-    with set_current_aphrodite_config(config):
+    config = SonarConfig(attention_config=AttentionConfig(backend=backend))
+    with set_current_sonar_config(config):
         layer = MiMoV2Attention(
             hidden_size=512,
             num_heads=4,
@@ -80,7 +80,7 @@ def test_default_backend_is_diffkv(dist_init) -> None:
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCM_AITER_UNIFIED_ATTN is ROCm only")
 def test_explicit_unified_attention_is_honored(dist_init) -> None:
-    from aphrodite._aiter_ops import IS_AITER_FOUND
+    from sonar._aiter_ops import IS_AITER_FOUND
 
     if not IS_AITER_FOUND:
         pytest.skip("aiter is not installed")
@@ -113,7 +113,7 @@ def test_layer_v_head_dim_reaches_the_backend(dist_init) -> None:
     model's geometry. That attribute is what the metadata builder and forward
     read, so assert it carries the layer's width instead of the default.
     """
-    from aphrodite.v1.attention.backends.triton_attn_diffkv import (
+    from sonar.v1.attention.backends.triton_attn_diffkv import (
         TritonAttentionDiffKVBackend,
     )
 
@@ -123,13 +123,13 @@ def test_layer_v_head_dim_reaches_the_backend(dist_init) -> None:
 
 def test_only_backends_that_can_serve_v_head_size_are_admitted() -> None:
     """`supports_head_size_v` is what the model's gate consults."""
-    from aphrodite.v1.attention.backends.flash_attn_diffkv import (
+    from sonar.v1.attention.backends.flash_attn_diffkv import (
         FlashAttentionDiffKVBackend,
     )
-    from aphrodite.v1.attention.backends.rocm_aiter_unified_attn import (
+    from sonar.v1.attention.backends.rocm_aiter_unified_attn import (
         RocmAiterUnifiedAttentionBackend,
     )
-    from aphrodite.v1.attention.backends.triton_attn_diffkv import (
+    from sonar.v1.attention.backends.triton_attn_diffkv import (
         TritonAttentionDiffKVBackend,
     )
 
@@ -149,7 +149,7 @@ def test_cache_write_matches_pytorch_reference(dist_init) -> None:
     as the aiter FA check in tests/kernels/attention/test_rocm_aiter_fa.py, for
     the asymmetric case those backends cannot serve.
     """
-    from aphrodite._aiter_ops import IS_AITER_FOUND
+    from sonar._aiter_ops import IS_AITER_FOUND
 
     if not IS_AITER_FOUND:
         pytest.skip("aiter is not installed")

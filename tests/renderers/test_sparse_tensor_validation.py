@@ -7,7 +7,7 @@ operations.
 A sparse tensor carries its own declared shape, so the two failure modes are
 independent: invalid *indices* are what the invariant checks catch, while a
 valid tensor with an enormous declared *shape* passes those checks and is
-bounded by `APHRODITE_MAX_EMBED_DECODE_BYTES` instead.
+bounded by `SONAR_MAX_EMBED_DECODE_BYTES` instead.
 """
 
 import io
@@ -17,18 +17,18 @@ import pybase64 as base64
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.multimodal.media import AudioEmbeddingMediaIO, ImageEmbeddingMediaIO
-from aphrodite.multimodal.media.video import VideoEmbeddingMediaIO
-from aphrodite.renderers.embed_utils import safe_load_prompt_embeds
-from aphrodite.utils.sparse_utils import safe_to_dense
+import sonar.envs as envs
+from sonar.exceptions import SonarValidationError
+from sonar.multimodal.media import AudioEmbeddingMediaIO, ImageEmbeddingMediaIO
+from sonar.multimodal.media.video import VideoEmbeddingMediaIO
+from sonar.renderers.embed_utils import safe_load_prompt_embeds
+from sonar.utils.sparse_utils import safe_to_dense
 
 
 @pytest.fixture
 def model_config():
     """Mock ModelConfig for testing."""
-    from aphrodite.config import ModelConfig
+    from sonar.config import ModelConfig
 
     return ModelConfig(
         model="facebook/opt-125m",
@@ -116,7 +116,7 @@ class TestPromptEmbedsValidation:
         # The invariant check raises RuntimeError from inside torch.load;
         # safe_load_prompt_embeds now reports that as a client error so the
         # caller gets a 400 rather than the 500 a bare RuntimeError produced.
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             safe_load_prompt_embeds(model_config, encoded)
 
         # Error should indicate sparse tensor validation failure
@@ -133,7 +133,7 @@ class TestPromptEmbedsValidation:
         malicious_tensor = torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32, check_invariants=False)
         encoded = _encode_tensor(malicious_tensor)
 
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_negative_indices_rejected(self, model_config):
@@ -146,7 +146,7 @@ class TestPromptEmbedsValidation:
         malicious_tensor = torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32, check_invariants=False)
         encoded = _encode_tensor(malicious_tensor)
 
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_hidden_size_mismatch_rejected(self, model_config):
@@ -156,7 +156,7 @@ class TestPromptEmbedsValidation:
         wrong_hidden = torch.randn(10, 512, dtype=torch.float32)
         encoded = _encode_tensor(wrong_hidden)
 
-        with pytest.raises(AphroditeValidationError, match="hidden_size"):
+        with pytest.raises(SonarValidationError, match="hidden_size"):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_float_dtype_mismatch_cast_to_model_dtype(self, model_config):
@@ -179,7 +179,7 @@ class TestPromptEmbedsValidation:
         non_float = torch.randint(0, 100, (10, 768), dtype=torch.int32)
         encoded = _encode_tensor(non_float)
 
-        with pytest.raises(AphroditeValidationError, match="floating-point"):
+        with pytest.raises(SonarValidationError, match="floating-point"):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_non_2d_tensor_rejected(self, model_config):
@@ -189,7 +189,7 @@ class TestPromptEmbedsValidation:
         bad = torch.randn(768, dtype=torch.float32)
         encoded = _encode_tensor(bad)
 
-        with pytest.raises(AphroditeValidationError, match="2D tensor"):
+        with pytest.raises(SonarValidationError, match="2D tensor"):
             safe_load_prompt_embeds(model_config, encoded)
 
     def test_non_tensor_payload_rejected(self, model_config):
@@ -202,7 +202,7 @@ class TestPromptEmbedsValidation:
         buffer.seek(0)
         encoded = base64.b64encode(buffer.read())
 
-        with pytest.raises(AphroditeValidationError, match="torch.Tensor"):
+        with pytest.raises(SonarValidationError, match="torch.Tensor"):
             safe_load_prompt_embeds(model_config, encoded)
 
 
@@ -369,7 +369,7 @@ class TestSparseTensorValidationIntegration:
         attack_payload = _encode_tensor(_create_malicious_sparse_tensor())
 
         # Step 3-4: Server processes and should reject, as a client error
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             safe_load_prompt_embeds(model_config, attack_payload)
 
     def test_attack_scenario_chat_api_image(self):
@@ -400,7 +400,7 @@ class TestSparseTensorValidationIntegration:
 BOMB_SHAPE = (2**20, 2**20)
 
 # What the size-limit tests below actually build. Each of them also lowers
-# `APHRODITE_MAX_EMBED_DECODE_BYTES` to `TEST_LIMIT_BYTES`, so the guard still has
+# `SONAR_MAX_EMBED_DECODE_BYTES` to `TEST_LIMIT_BYTES`, so the guard still has
 # something to reject while nothing here can allocate more than 4 MiB even if
 # the guard regressed. Keeping the 4 TiB shape in these tests would make the
 # outcome depend on the runner: with `vm.overcommit_memory=0` the allocator
@@ -429,7 +429,7 @@ def _create_oversized_sparse_tensor(shape: tuple[int, int]) -> torch.Tensor:
 
 @pytest.fixture
 def small_decode_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("APHRODITE_MAX_EMBED_DECODE_BYTES", str(TEST_LIMIT_BYTES))
+    monkeypatch.setenv("SONAR_MAX_EMBED_DECODE_BYTES", str(TEST_LIMIT_BYTES))
 
 
 class TestEmbeddingDecodeSizeLimit:
@@ -440,13 +440,13 @@ class TestEmbeddingDecodeSizeLimit:
     """
 
     def test_oversized_sparse_tensor_rejected(self, small_decode_limit):
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             safe_to_dense(
                 _create_oversized_sparse_tensor(OVERSIZED_SHAPE),
                 parameter="prompt_embeds",
             )
 
-        assert "APHRODITE_MAX_EMBED_DECODE_BYTES" in str(exc_info.value)
+        assert "SONAR_MAX_EMBED_DECODE_BYTES" in str(exc_info.value)
         assert "prompt_embeds" in str(exc_info.value)
 
     def test_default_limit_would_reject_the_real_payload(self):
@@ -454,7 +454,7 @@ class TestEmbeddingDecodeSizeLimit:
         shrunken shape used above. Checked arithmetically so no test ever asks
         the allocator for 4 TiB."""
         dense_bytes = BOMB_SHAPE[0] * BOMB_SHAPE[1] * 4
-        assert dense_bytes > envs.APHRODITE_MAX_EMBED_DECODE_BYTES > 0
+        assert dense_bytes > envs.SONAR_MAX_EMBED_DECODE_BYTES > 0
 
     def test_attack_payload_is_tiny(self):
         """The payload really is small - this is amplification, not an upload."""
@@ -469,17 +469,17 @@ class TestEmbeddingDecodeSizeLimit:
 
     def test_limit_is_configurable(self, monkeypatch: pytest.MonkeyPatch):
         # 32 x 32 float32 == 4096 bytes, exactly at the limit.
-        monkeypatch.setenv("APHRODITE_MAX_EMBED_DECODE_BYTES", str(TEST_LIMIT_BYTES))
+        monkeypatch.setenv("SONAR_MAX_EMBED_DECODE_BYTES", str(TEST_LIMIT_BYTES))
 
         at_limit = _create_oversized_sparse_tensor((32, 32))
         assert safe_to_dense(at_limit, parameter="image_embeds").shape == (32, 32)
 
         over_limit = _create_oversized_sparse_tensor((33, 32))
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             safe_to_dense(over_limit, parameter="image_embeds")
 
     def test_limit_can_be_disabled(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setenv("APHRODITE_MAX_EMBED_DECODE_BYTES", "0")
+        monkeypatch.setenv("SONAR_MAX_EMBED_DECODE_BYTES", "0")
         tensor = _create_oversized_sparse_tensor(OVERSIZED_SHAPE)
 
         assert safe_to_dense(tensor, parameter="image_embeds").shape == OVERSIZED_SHAPE
@@ -488,7 +488,7 @@ class TestEmbeddingDecodeSizeLimit:
     def test_media_io_rejects_oversized_base64(self, io_cls, parameter, small_decode_limit):
         encoded = _encode_tensor(_create_oversized_sparse_tensor(OVERSIZED_SHAPE))
 
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             io_cls().load_base64("", encoded.decode("utf-8"))
 
         assert parameter in str(exc_info.value)
@@ -498,7 +498,7 @@ class TestEmbeddingDecodeSizeLimit:
         path = tmp_path / "embeds.pt"
         torch.save(_create_oversized_sparse_tensor(OVERSIZED_SHAPE), path)
 
-        with pytest.raises(AphroditeValidationError):
+        with pytest.raises(SonarValidationError):
             io_cls().load_file(path)
 
     @pytest.mark.parametrize("io_cls,parameter", EMBEDDING_MEDIA_IO)
@@ -509,7 +509,7 @@ class TestEmbeddingDecodeSizeLimit:
         torch.save({"not": "a tensor"}, buffer)
         encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-        with pytest.raises(AphroditeValidationError) as exc_info:
+        with pytest.raises(SonarValidationError) as exc_info:
             io_cls().load_base64("", encoded)
 
         assert "torch.Tensor" in str(exc_info.value)

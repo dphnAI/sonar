@@ -8,7 +8,7 @@
 // TODO(luka/varun):refactor common.cuh to use this file instead
 #include "quantization/w8a8/fp8/common.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // TODO(luka/varun): combine into common utilities for int8
 //  (with int8_quant_kernels.cu)
@@ -76,4 +76,4 @@ struct ScaledQuant<quant_type_t, is_scale_inverted,
   }
 };
 
-}  // namespace aphrodite
+}  // namespace sonar

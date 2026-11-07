@@ -17,7 +17,7 @@
 #include <vector>
 #include <unistd.h>
 
-namespace aphrodite::pcie_pull {
+namespace sonar::pcie_pull {
 using Word = unsigned long long;
 static_assert(sizeof(Word) == sizeof(int64_t));
 constexpr int kRanks = 4;
@@ -1325,7 +1325,7 @@ void close_ipc_handle(int64_t pointer) {
   require_outside_capture(get_current_cuda_stream(device));
   STD_CUDA_CHECK(cudaIpcCloseMemHandle(reinterpret_cast<void*>(pointer)));
 }
-}  // namespace aphrodite::pcie_pull
+}  // namespace sonar::pcie_pull
 
 STABLE_TORCH_LIBRARY_FRAGMENT(_C_pcie_pull, ops) {
   ops.def("buffer_size(int capacity, int max_blocks, int transport=2) -> int");
@@ -1344,21 +1344,20 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C_pcie_pull, ops) {
 }
 
 STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CUDA, ops) {
-  ops.impl("init", TORCH_BOX(&aphrodite::pcie_pull::init));
-  ops.impl("all_reduce", TORCH_BOX(&aphrodite::pcie_pull::all_reduce));
-  ops.impl("all_gather", TORCH_BOX(&aphrodite::pcie_pull::all_gather));
-  ops.impl("close_step", TORCH_BOX(&aphrodite::pcie_pull::close_step));
+  ops.impl("init", TORCH_BOX(&sonar::pcie_pull::init));
+  ops.impl("all_reduce", TORCH_BOX(&sonar::pcie_pull::all_reduce));
+  ops.impl("all_gather", TORCH_BOX(&sonar::pcie_pull::all_gather));
+  ops.impl("close_step", TORCH_BOX(&sonar::pcie_pull::close_step));
 }
 
 STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CompositeExplicitAutograd, ops) {
-  ops.impl("buffer_size", TORCH_BOX(&aphrodite::pcie_pull::buffer_size));
+  ops.impl("buffer_size", TORCH_BOX(&sonar::pcie_pull::buffer_size));
   ops.impl("register_host_buffer",
-           TORCH_BOX(&aphrodite::pcie_pull::register_host_buffer));
+           TORCH_BOX(&sonar::pcie_pull::register_host_buffer));
   ops.impl("unregister_host_buffer",
-           TORCH_BOX(&aphrodite::pcie_pull::unregister_host_buffer));
-  ops.impl("bind_stream", TORCH_BOX(&aphrodite::pcie_pull::bind_stream));
-  ops.impl("local_status", TORCH_BOX(&aphrodite::pcie_pull::local_status));
-  ops.impl("dispose", TORCH_BOX(&aphrodite::pcie_pull::dispose));
-  ops.impl("close_ipc_handle",
-           TORCH_BOX(&aphrodite::pcie_pull::close_ipc_handle));
+           TORCH_BOX(&sonar::pcie_pull::unregister_host_buffer));
+  ops.impl("bind_stream", TORCH_BOX(&sonar::pcie_pull::bind_stream));
+  ops.impl("local_status", TORCH_BOX(&sonar::pcie_pull::local_status));
+  ops.impl("dispose", TORCH_BOX(&sonar::pcie_pull::dispose));
+  ops.impl("close_ipc_handle", TORCH_BOX(&sonar::pcie_pull::close_ipc_handle));
 }

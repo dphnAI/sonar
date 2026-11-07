@@ -13,13 +13,13 @@ everywhere else (e.g. SM120), for both the decode and prefill scorers.
 import pytest
 import torch
 
-from aphrodite.models.minimax_m3.common.ops.index_topk import (
+from sonar.models.minimax_m3.common.ops.index_topk import (
     SPARSE_BLOCK_SIZE,
     minimax_m3_index_decode,
     minimax_m3_index_score,
     minimax_m3_index_topk,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 FP8_CUDA_SUPPORTED = current_platform.is_cuda() and current_platform.supports_fp8()
 PAGE = SPARSE_BLOCK_SIZE

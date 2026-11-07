@@ -44,13 +44,13 @@ strategy_overrides: {}
 guide: |
   ## Overview
 
-  Whisper Large v3 is OpenAI's speech recognition model. Aphrodite exposes
+  Whisper Large v3 is OpenAI's speech recognition model. Sonar exposes
   transcription through the OpenAI-compatible audio transcription endpoint.
 
   ## Prerequisites
 
   - Hardware: Intel Xeon 6/Xeon 5 CPUs
-  - Aphrodite >= 0.7.0
+  - Sonar >= 0.7.0
 
   ### Docker (Intel Xeon 6 CPUs)
 
@@ -61,11 +61,11 @@ guide: |
   ## Intel Xeon 6
 
   ```bash
-  aphrodite serve openai/whisper-large-v3 \
+  sonar serve openai/whisper-large-v3 \
     --tensor-parallel-size 1
   ```
 
-  Docker (the image entrypoint is `aphrodite serve`):
+  Docker (the image entrypoint is `sonar serve`):
 
   ```bash
   docker run \
@@ -86,7 +86,7 @@ guide: |
   - `--max-num-seqs`: concurrency and scheduler-capacity tuning.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
 
   These settings may still appear in validated hardware-specific overrides. Tune
   them at deployment time based on platform resources, workload shape, and
@@ -95,5 +95,5 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/openai/whisper-large-v3)
-  - [Aphrodite Whisper implementation](https://docs.vllm.ai/en/latest/api/vllm/model_executor/models/whisper/)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar Whisper implementation](https://docs.vllm.ai/en/latest/api/vllm/model_executor/models/whisper/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

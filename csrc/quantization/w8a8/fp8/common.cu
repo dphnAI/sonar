@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-namespace aphrodite {
+namespace sonar {
 
 namespace {
 
@@ -28,7 +28,7 @@ bool ptr_vec_aligned(const T* ptr) {
 __device__ __forceinline__ float warp_reduce_max(float v) {
 #pragma unroll
   for (int offset = WARP_SIZE / 2; offset > 0; offset >>= 1) {
-    v = fmaxf(v, APHRODITE_SHFL_XOR_SYNC(v, offset));
+    v = fmaxf(v, SONAR_SHFL_XOR_SYNC(v, offset));
   }
   return v;
 }
@@ -244,7 +244,7 @@ __global__ void dynamic_per_token_scaled_fp8_quant_kernel_strided(
       });
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void static_scaled_fp8_quant(
     torch::stable::Tensor& out,          // [..., d]
@@ -380,22 +380,21 @@ void static_scaled_fp8_quant(
   const cudaStream_t stream = get_current_cuda_stream();
 
   // Dispatch to template-specialized kernel based on stride pattern
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "scaled_fp8_quant_kernel_scalar_type", [&] {
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+        SONAR_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
-              APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
-                APHRODITE_STABLE_DISPATCH_BOOL(
-                    scale_stride_j == 0, S1_ZERO, [&] {
-                      aphrodite::scaled_fp8_quant_kernel_strided_group_shape<
-                          scalar_t, fp8_t, S0_ZERO, S1_ZERO>
-                          <<<grid, block, 0, stream>>>(
-                              out.mutable_data_ptr<fp8_t>(),
-                              input.const_data_ptr<scalar_t>(),
-                              scale.const_data_ptr<float>(), hidden_size,
-                              in_row_stride, out_row_stride, group_m, group_n,
-                              scale_stride_i, scale_stride_j);
-                    });
+              SONAR_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
+                SONAR_STABLE_DISPATCH_BOOL(scale_stride_j == 0, S1_ZERO, [&] {
+                  sonar::scaled_fp8_quant_kernel_strided_group_shape<
+                      scalar_t, fp8_t, S0_ZERO, S1_ZERO>
+                      <<<grid, block, 0, stream>>>(
+                          out.mutable_data_ptr<fp8_t>(),
+                          input.const_data_ptr<scalar_t>(),
+                          scale.const_data_ptr<float>(), hidden_size,
+                          in_row_stride, out_row_stride, group_m, group_n,
+                          scale_stride_i, scale_stride_j);
+                });
               });
             });
       });
@@ -412,7 +411,7 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
 
   const int hidden_size = input.size(-1);
   const int num_tokens = input.numel() / hidden_size;
-  const int block_size = aphrodite::kFp8QuantBlockSize;
+  const int block_size = sonar::kFp8QuantBlockSize;
   dim3 grid(num_tokens);
   dim3 block(block_size);
 
@@ -427,18 +426,17 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
   STD_CUDA_CHECK(cudaMemsetAsync(scale.mutable_data_ptr<float>(), 0,
                                  sizeof(float), stream));
 
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "scaled_fp8_quant_kernel_scalar_type", [&] {
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+        SONAR_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
               const scalar_t* in_ptr = input.const_data_ptr<scalar_t>();
-              const bool flat =
-                  in_row_stride == hidden_size &&
-                  hidden_size % aphrodite::kFp8QuantVecSize == 0 &&
-                  aphrodite::ptr_vec_aligned(in_ptr);
+              const bool flat = in_row_stride == hidden_size &&
+                                hidden_size % sonar::kFp8QuantVecSize == 0 &&
+                                sonar::ptr_vec_aligned(in_ptr);
               if (flat) {
                 const int64_t num_vecs =
-                    input.numel() / aphrodite::kFp8QuantVecSize;
+                    input.numel() / sonar::kFp8QuantVecSize;
                 const int64_t max_blocks =
                     static_cast<int64_t>(
                         get_device_prop()->multiProcessorCount) *
@@ -447,18 +445,17 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
                     1,
                     std::min<int64_t>(
                         max_blocks, (num_vecs + block_size - 1) / block_size));
-                aphrodite::absmax_reduction_flat<scalar_t, fp8_t>
+                sonar::absmax_reduction_flat<scalar_t, fp8_t>
                     <<<num_blocks, block, 0, stream>>>(
                         scale.mutable_data_ptr<float>(), in_ptr, num_vecs);
               } else {
-                aphrodite::segmented_max_reduction_strided<scalar_t, fp8_t>
+                sonar::segmented_max_reduction_strided<scalar_t, fp8_t>
                     <<<grid, block, 0, stream>>>(
                         scale.mutable_data_ptr<float>(), in_ptr, hidden_size,
                         in_row_stride, static_cast<int64_t>(num_tokens));
               }
 
-              aphrodite::scaled_fp8_quant_kernel_strided_dynamic<scalar_t,
-                                                                 fp8_t>
+              sonar::scaled_fp8_quant_kernel_strided_dynamic<scalar_t, fp8_t>
                   <<<grid, block, 0, stream>>>(out.mutable_data_ptr<fp8_t>(),
                                                input.const_data_ptr<scalar_t>(),
                                                scale.const_data_ptr<float>(),
@@ -490,20 +487,21 @@ void dynamic_per_token_scaled_fp8_quant(
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(),
       "dynamic_per_token_scaled_fp8_quant_kernel_scalar_type", [&] {
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
+        SONAR_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(),
             "dynamic_per_token_scaled_fp8_quant_kernel_fp8_type", [&] {
-              aphrodite::dynamic_per_token_scaled_fp8_quant_kernel_strided<
-                  scalar_t, fp8_t><<<grid, block, 0, stream>>>(
-                  out.mutable_data_ptr<fp8_t>(),
-                  scales.mutable_data_ptr<float>(),
-                  input.const_data_ptr<scalar_t>(),
-                  scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
-                                       : nullptr,
-                  hidden_size, in_row_stride, out_row_stride);
+              sonar::dynamic_per_token_scaled_fp8_quant_kernel_strided<scalar_t,
+                                                                       fp8_t>
+                  <<<grid, block, 0, stream>>>(
+                      out.mutable_data_ptr<fp8_t>(),
+                      scales.mutable_data_ptr<float>(),
+                      input.const_data_ptr<scalar_t>(),
+                      scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
+                                           : nullptr,
+                      hidden_size, in_row_stride, out_row_stride);
             });
       });
 }

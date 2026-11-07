@@ -5,10 +5,10 @@
 import pytest
 import torch
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig, CacheConfig, LoadConfig, ModelConfig
-from aphrodite.distributed.device_communicators.xpu_communicator import XpuCommunicator
-from aphrodite.platforms import current_platform
+from sonar import envs
+from sonar.config import CacheConfig, LoadConfig, ModelConfig, SonarConfig
+from sonar.distributed.device_communicators.xpu_communicator import XpuCommunicator
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_xpu(), reason="XPU batch-invariance tests")
 
@@ -60,7 +60,7 @@ def test_rejects_weight_quantization(tiny_qwen3_moe_path, source):
     )
     assert model_config.quantization == "fp8"
     with pytest.raises(ValueError, match="supports only unquantized models"):
-        AphroditeConfig(
+        SonarConfig(
             model_config=model_config,
             load_config=LoadConfig(load_format="dummy"),
         )
@@ -69,18 +69,18 @@ def test_rejects_weight_quantization(tiny_qwen3_moe_path, source):
 @pytest.mark.parametrize("cache_dtype", ["fp8", "int8_per_token_head", "nvfp4"])
 def test_rejects_quantized_kv_cache(cache_dtype):
     with pytest.raises(ValueError, match="does not support quantized KV caches"):
-        AphroditeConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
+        SonarConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
 
 
 @pytest.mark.parametrize("cache_dtype", ["auto", "float16", "bfloat16"])
 def test_accepts_unquantized_kv_cache(cache_dtype):
-    config = AphroditeConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
+    config = SonarConfig(cache_config=CacheConfig(cache_dtype=cache_dtype))
     assert config.cache_config.cache_dtype == cache_dtype
 
 
 def test_quantized_kv_cache_allowed_without_batch_invariance(monkeypatch):
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", False)
-    config = AphroditeConfig(cache_config=CacheConfig(cache_dtype="fp8"))
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", False)
+    config = SonarConfig(cache_config=CacheConfig(cache_dtype="fp8"))
     assert config.cache_config.cache_dtype == "fp8"
 
 
@@ -112,13 +112,13 @@ def test_residual_norm_preserves_batch_invariance(
     input_seed,
     input_pattern,
     monkeypatch,
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     """Residual norm output must not change when its row changes batch position."""
-    from aphrodite.model_executor.determinism.batch_invariant import init_batch_invariance
-    from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
+    from sonar.model_executor.determinism.batch_invariant import init_batch_invariance
+    from sonar.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
 
-    monkeypatch.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    monkeypatch.setattr(envs, "SONAR_BATCH_INVARIANT", True)
     init_batch_invariance()
     norm_cls = RMSNorm if norm_name == "rms" else GemmaRMSNorm
     norm = norm_cls(hidden_size, eps=1e-6).to(device="xpu", dtype=torch.bfloat16)
@@ -153,7 +153,7 @@ def test_residual_norm_preserves_batch_invariance(
 @pytest.mark.parametrize("rank", range(4))
 def test_collectives_preserve_rank_order_and_partition(monkeypatch, operation, rank):
     """Cancellation exposes reordered sums; mock ranks require no extra XPUs."""
-    from aphrodite.distributed.device_communicators import xpu_communicator
+    from sonar.distributed.device_communicators import xpu_communicator
 
     inputs = [torch.full((8, 3), value, dtype=torch.float32, device="xpu") for value in (1e20, -1e20, 3.0, 0.0)]
     inputs[2].add_(torch.arange(24, device="xpu").reshape(8, 3))
@@ -189,11 +189,11 @@ def test_collectives_preserve_rank_order_and_partition(monkeypatch, operation, r
 @pytest.mark.parametrize("position", [0, 128, 255])
 def test_seeded_sampler_preserves_full_distribution_and_rng(position, monkeypatch):
     """Moving a request must preserve its distribution and per-request RNG."""
-    from aphrodite.triton_utils import HAS_TRITON
-    from aphrodite.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
+    from sonar.triton_utils import HAS_TRITON
+    from sonar.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
 
     assert HAS_TRITON, "XPU sampling must exercise the Triton top-k/top-p path"
-    monkeypatch.setattr(envs, "APHRODITE_XPU_USE_SAMPLER_KERNEL", True)
+    monkeypatch.setattr(envs, "SONAR_XPU_USE_SAMPLER_KERNEL", True)
     sampler = TopKTopPSampler(logprobs_mode="processed_logprobs")
     torch.manual_seed(42)
     logits = torch.randn(256, 8192, device="xpu", dtype=torch.float32)

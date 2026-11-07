@@ -19,8 +19,8 @@
 #   MODEL_NAMES              - model to test (default: Qwen/Qwen3-0.6B)
 #   KV_CACHE_MEMORY_BYTES    - GPU KV cache size in bytes (default: 268435456 = 256 MiB)
 #   BLOCK_SIZE               - KV cache block size (default: 128)
-#   ATTENTION_BACKEND        - optional attention backend for aphrodite serve
-#   APHRODITE_SERVE_EXTRA_ARGS    - comma-separated extra args for aphrodite serve
+#   ATTENTION_BACKEND        - optional attention backend for sonar serve
+#   SONAR_SERVE_EXTRA_ARGS    - comma-separated extra args for sonar serve
 set -xe
 
 # ── Configuration ────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ KV_CACHE_MEMORY_BYTES=${KV_CACHE_MEMORY_BYTES:-268435456}  # 256 MiB
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-2048}
 BLOCK_SIZE=${BLOCK_SIZE:-128}
 ATTENTION_BACKEND=${ATTENTION_BACKEND:-}
-APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
+SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../.." && pwd -P)}"
@@ -70,7 +70,7 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running Sonar instances and proxy..."
-  pkill -f "aphrodite serve" || true
+  pkill -f "sonar serve" || true
   pkill -f "toy_proxy_server.py" || true
   sleep 2
 }
@@ -95,10 +95,10 @@ run_tests_for_model() {
   # ── Start prefill instance ──
   echo "Starting prefill instance on GPU $PREFILL_GPU, port $PREFILL_PORT"
   BASE_CMD="CUDA_VISIBLE_DEVICES=$PREFILL_GPU \
-    APHRODITE_KV_CACHE_LAYOUT='LBHNC' \
+    SONAR_KV_CACHE_LAYOUT='LBHNC' \
     UCX_NET_DEVICES=all \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$PREFILL_SIDE_CHANNEL_PORT \
-    aphrodite serve \"$model_name\" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$PREFILL_SIDE_CHANNEL_PORT \
+    sonar serve \"$model_name\" \
     --port $PREFILL_PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \
@@ -107,8 +107,8 @@ run_tests_for_model() {
     --tensor-parallel-size 1 \
     --kv-transfer-config '$KV_CONFIG'"
 
-  if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-    IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+  if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+    IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
     for arg in "${extra_args[@]}"; do
       BASE_CMD="${BASE_CMD} $arg"
     done
@@ -121,10 +121,10 @@ run_tests_for_model() {
   # ── Start decode instance ──
   echo "Starting decode instance on GPU $DECODE_GPU, port $DECODE_PORT"
   BASE_CMD="CUDA_VISIBLE_DEVICES=$DECODE_GPU \
-    APHRODITE_KV_CACHE_LAYOUT='LBHNC' \
+    SONAR_KV_CACHE_LAYOUT='LBHNC' \
     UCX_NET_DEVICES=all \
-    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$DECODE_SIDE_CHANNEL_PORT \
-    aphrodite serve \"$model_name\" \
+    SONAR_NIXL_SIDE_CHANNEL_PORT=$DECODE_SIDE_CHANNEL_PORT \
+    sonar serve \"$model_name\" \
     --port $DECODE_PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \
@@ -133,8 +133,8 @@ run_tests_for_model() {
     --tensor-parallel-size 1 \
     --kv-transfer-config '$KV_CONFIG'"
 
-  if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-    IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+  if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+    IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
     for arg in "${extra_args[@]}"; do
       BASE_CMD="${BASE_CMD} $arg"
     done

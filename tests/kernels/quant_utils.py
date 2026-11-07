@@ -4,13 +4,13 @@
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
     group_broadcast,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import _ceil_to_ue8m0, is_deep_gemm_e8m0_used
-from aphrodite.utils.math_utils import round_up
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import _ceil_to_ue8m0, is_deep_gemm_e8m0_used
+from sonar.utils.math_utils import round_up
 
 FP8_DTYPE = current_platform.fp8_dtype()
 DEVICE = current_platform.device_type

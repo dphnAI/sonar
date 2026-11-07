@@ -27,7 +27,7 @@ model:
   base_args:
     - "--trust-remote-code"
     - "--logits-processors"
-    - "aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor"
+    - "sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor"
     - "--mm-processor-cache-gb"
     - "0"
   base_env: {}
@@ -61,7 +61,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -76,24 +76,24 @@ guide: |
   ## Prerequisites
 
   - **Hardware**: Single GPU with >=8 GB VRAM (CUDA, MI300X / MI325X / MI355X, or Intel XPU B60 / B70)
-  - **Aphrodite**: Current stable release
+  - **Sonar**: Current stable release
   - **Python**: 3.10+ (CUDA) or 3.12 (ROCm)
 
   ### CUDA
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### ROCm (MI300X, MI325X, MI355X)
   Requires Python 3.12, ROCm 7.2.1, and glibc >= 2.35. Use the Docker flow from the
-  [Aphrodite installation guide](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/#pre-built-images)
+  [Sonar installation guide](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/#pre-built-images)
   if your host environment does not meet those requirements.
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ### Intel XPU (B60 / B70)
@@ -106,8 +106,8 @@ guide: |
   ### Offline OCR (Python)
 
   ```python
-  from aphrodite import LLM, SamplingParams
-  from aphrodite.model_executor.models.deepseek_ocr import NGramPerReqLogitsProcessor
+  from sonar import LLM, SamplingParams
+  from sonar.model_executor.models.deepseek_ocr import NGramPerReqLogitsProcessor
   from PIL import Image
 
   llm = LLM(
@@ -145,18 +145,18 @@ guide: |
 
   **CUDA**
   ```bash
-  aphrodite serve deepseek-ai/DeepSeek-OCR \
-    --logits-processors aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
+  sonar serve deepseek-ai/DeepSeek-OCR \
+    --logits-processors sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
     --mm-processor-cache-gb 0
   ```
 
   **ROCm (MI300X / MI325X / MI355X)**
   ```bash
   export SAFETENSORS_FAST_GPU=1
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve deepseek-ai/DeepSeek-OCR \
-    --logits-processors aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
+  sonar serve deepseek-ai/DeepSeek-OCR \
+    --logits-processors sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
     --mm-processor-cache-gb 0
   ```
 
@@ -169,7 +169,7 @@ guide: |
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai-xpu:latest \
     deepseek-ai/DeepSeek-OCR \
-    --logits-processors aphrodite.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
+    --logits-processors sonar.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor \
     --mm-processor-cache-gb 0
   ```
 
@@ -199,7 +199,7 @@ guide: |
       temperature=0.0,
       extra_body={
           "skip_special_tokens": False,
-          "aphrodite_xargs": {
+          "sonar_xargs": {
               "ngram_size": 30,
               "window_size": 90,
               "whitelist_token_ids": [128821, 128822],
@@ -223,4 +223,4 @@ guide: |
   ## References
 
   - [DeepSeek-OCR on Hugging Face](https://huggingface.co/deepseek-ai/DeepSeek-OCR)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html#offline-inference)

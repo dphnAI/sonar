@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ROLE,
     LayerTransferPlan,
     MoRIIOConnectorMetadata,
@@ -24,14 +24,14 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common impo
     WriteTask,
     get_port_offset,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnectorScheduler,
     MoRIIOConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_tp_mapping import (
     MoRIIOWriteTPMapping,
     compute_write_tp_mapping,
 )

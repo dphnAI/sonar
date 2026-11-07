@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 # Test parameters
 NUM_ROWS = [1, 32, 2050]
@@ -29,7 +29,7 @@ def _has_cooperative_topk() -> bool:
 def _on_gfx950() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -594,8 +594,8 @@ def test_top_k_per_row_decode_gfx950_k512_masked_graph_replay() -> None:
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="This test requires ROCm")
 @torch.inference_mode()
 def test_aiter_c4a_prefill_topk_returns_sequence_local_indices() -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _launch_aiter_top_k_per_row_prefill,
     )
 
@@ -637,7 +637,7 @@ def test_aiter_c4a_prefill_topk_returns_sequence_local_indices() -> None:
 def test_aiter_c4a_decode_topk_uses_exact_mtp_lengths(
     num_speculative_tokens: int,
 ) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     query_tokens = num_speculative_tokens + 1
     offsets = torch.arange(query_tokens, dtype=torch.int32, device="cuda")
@@ -683,7 +683,7 @@ def test_aiter_decode_topk_matches_per_row_under_mtp() -> None:
     launching, so next_n > 1 must agree with the in-tree kernel, including
     the rows that clamp to a zero-length prefix.
     """
-    from aphrodite.model_executor.layers.indexer_topk import get_indexer_topk
+    from sonar.model_executor.layers.indexer_topk import get_indexer_topk
 
     next_n = 4
     top_k = 512
@@ -734,7 +734,7 @@ def _distinct_logits(rows: int, num_columns: int) -> torch.Tensor:
 def test_aiter_dsa_decode_topk_matches_per_row(num_columns: int, next_n: int) -> None:
     """DeepSeek-V3.2 / GLM-5 decode (uncompressed, k=2048): AITER must select
     the in-tree kernel's indices, in the leading slots of each row."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     top_k = 2048
     if not rocm_aiter_ops.is_indexer_top_k_enabled():
@@ -779,8 +779,8 @@ def test_aiter_dsa_decode_topk_matches_per_row(num_columns: int, next_n: int) ->
 def test_aiter_dsa_prefill_topk_matches_per_row() -> None:
     """DeepSeek-V3.2 / GLM-5 prefill (k=2048): two sequences packed in one
     chunk; AITER's localized indices must match the in-tree kernel's."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _launch_aiter_top_k_per_row_prefill,
     )
 
@@ -816,13 +816,13 @@ def test_aiter_dsa_prefill_topk_matches_per_row() -> None:
 
 
 def _enable_aiter_topk(monkeypatch, enabled: bool = True) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     monkeypatch.setattr(rocm_aiter_ops, "is_indexer_top_k_enabled", lambda: enabled, raising=True)
 
 
 def test_aiter_c4a_topk_kernel_selection(monkeypatch) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _enable_aiter_topk(monkeypatch)
     is_supported = rocm_aiter_ops.is_indexer_top_k_supported
@@ -867,7 +867,7 @@ def test_aiter_dsa_topk_kernel_selection(monkeypatch) -> None:
     """The uncompressed DSA indexer takes AITER for k=2048 on every decode
     shape, including FULL-graph decode bounded only by max_model_len, and on
     prefill chunks whose rows reach 32K tokens."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _enable_aiter_topk(monkeypatch)
     is_supported = rocm_aiter_ops.is_indexer_top_k_supported
@@ -910,7 +910,7 @@ def test_aiter_dsa_topk_kernel_selection(monkeypatch) -> None:
 def test_dsv4_native_top_k_window() -> None:
     """The in-tree decode kernel's measured advantage band over AITER, which
     applies to the DSV4 indexer only."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     prefers_native = rocm_aiter_ops.dsv4_indexer_prefers_native_top_k
     assert prefers_native(num_rows=128, num_columns=524_288, topk_tokens=512) is True
@@ -2302,7 +2302,7 @@ def test_deep_select_topk(
     top_k: int,
 ) -> None:
     """DeepSelect wrapper vs torch.topk with variable per-row ends."""
-    from aphrodite.model_executor.layers import indexer_topk
+    from sonar.model_executor.layers import indexer_topk
 
     set_random_seed(0)
     torch.set_default_device("cuda:0")
@@ -2341,7 +2341,7 @@ def test_deep_select_topk(
 @torch.inference_mode()
 def test_deep_select_topk_preallocated_output() -> None:
     """DeepSelect writes into a preallocated aligned buffer (no `end`)."""
-    from aphrodite.model_executor.layers import indexer_topk
+    from sonar.model_executor.layers import indexer_topk
 
     set_random_seed(0)
     torch.set_default_device("cuda:0")
@@ -2351,7 +2351,7 @@ def test_deep_select_topk_preallocated_output() -> None:
     top_k = 2048
     logits = torch.randn(batch_size, vocab_size, dtype=torch.float32, device="cuda")
 
-    # Mimic Aphrodite's topk_indices_buffer: slice of a wider contiguous buffer,
+    # Mimic Sonar's topk_indices_buffer: slice of a wider contiguous buffer,
     # whose stride(0) is 32B-aligned.
     buffer = torch.full((batch_size, 4096), -2, dtype=torch.int32, device="cuda")
     output_idx = buffer[:, :top_k]
@@ -2413,8 +2413,8 @@ def test_sparse_indexer_decode_topk_explicit_backends(backend: str, next_n: int,
     """Every explicit sparse-indexer decode top-k backend must restrict each
     row to its seq_len (dirty data past the end must never be selected) and
     match torch.topk on the valid region."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.indexer_topk import SparseIndexerTopk
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.indexer_topk import SparseIndexerTopk
 
     set_random_seed(0)
     torch.set_default_device("cuda:0")
@@ -2439,8 +2439,8 @@ def test_sparse_indexer_decode_topk_explicit_backends(backend: str, next_n: int,
     logits[col_idx[None, :] >= row_ends[:, None]] = 1e30  # dirty tail
 
     indices = torch.full((num_rows, top_k), -2, dtype=torch.int32, device="cuda")
-    cfg = AphroditeConfig(kernel_config={"sparse_indexer_topk_backend": backend})
-    with set_current_aphrodite_config(cfg):
+    cfg = SonarConfig(kernel_config={"sparse_indexer_topk_backend": backend})
+    with set_current_sonar_config(cfg):
         SparseIndexerTopk()(logits, seq_lens, next_n, indices, top_k, max_seq_len)
     torch.accelerator.synchronize()
 
@@ -2476,8 +2476,8 @@ def test_sparse_indexer_decode_topk_explicit_backends(backend: str, next_n: int,
 def test_sparse_indexer_decode_topk_short_seq_lens(backend: str, workspace_init) -> None:
     """seq_len < next_n: derived per-row ends must clamp at 0 (the reference
     kernels do max(0, ...)); negative ends are OOB for the ragged kernels."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.indexer_topk import SparseIndexerTopk
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.indexer_topk import SparseIndexerTopk
 
     set_random_seed(0)
     next_n = 4
@@ -2490,8 +2490,8 @@ def test_sparse_indexer_decode_topk_short_seq_lens(backend: str, workspace_init)
     logits = torch.randn(num_rows, vocab, dtype=torch.float32, device="cuda")
     indices = torch.full((num_rows, top_k), -2, dtype=torch.int32, device="cuda")
 
-    cfg = AphroditeConfig(kernel_config={"sparse_indexer_topk_backend": backend})
-    with set_current_aphrodite_config(cfg):
+    cfg = SonarConfig(kernel_config={"sparse_indexer_topk_backend": backend})
+    with set_current_sonar_config(cfg):
         SparseIndexerTopk()(logits, seq_lens, next_n, indices, top_k, vocab)
     torch.accelerator.synchronize()
 
@@ -2510,8 +2510,8 @@ def test_sparse_indexer_decode_topk_short_seq_lens(backend: str, workspace_init)
 @torch.inference_mode()
 def test_sparse_indexer_topk_backend_resolution() -> None:
     """Auto heuristic chain and fail-fast validation of explicit backends."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.indexer_topk import SparseIndexerTopk
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.indexer_topk import SparseIndexerTopk
 
     # 1024B-aligned stride: 131072 * 4 bytes.
     logits = torch.randn(64, 131072, dtype=torch.float32, device="cuda")
@@ -2525,8 +2525,8 @@ def test_sparse_indexer_topk_backend_resolution() -> None:
         k: int = 2048,
         num_rows: int = 64,
     ) -> str:
-        cfg = AphroditeConfig(kernel_config={"sparse_indexer_topk_backend": backend})
-        with set_current_aphrodite_config(cfg):
+        cfg = SonarConfig(kernel_config={"sparse_indexer_topk_backend": backend})
+        with set_current_sonar_config(cfg):
             return SparseIndexerTopk().resolve_backend(t, k, num_rows)
 
     is_sm100 = current_platform.is_device_capability_family(100)
@@ -2537,7 +2537,7 @@ def test_sparse_indexer_topk_backend_resolution() -> None:
     # cooperative/persistent switch at cooperative_topk's cluster-wave row
     # limit. It must never select the opt-in backends by itself.
     if has_coop:
-        from aphrodite.model_executor.layers.indexer_topk import (
+        from sonar.model_executor.layers.indexer_topk import (
             AUTO_COOPERATIVE_MAX_ROWS,
         )
 
@@ -2584,7 +2584,7 @@ def test_sparse_indexer_topk_backend_resolution() -> None:
 
 
 def _patch_aiter_topk(monkeypatch, decode_kernel, enabled: bool = True) -> None:
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _enable_aiter_topk(monkeypatch, enabled=enabled)
     monkeypatch.setattr(rocm_aiter_ops, "is_enabled", lambda: enabled, raising=True)
@@ -2592,11 +2592,11 @@ def _patch_aiter_topk(monkeypatch, decode_kernel, enabled: bool = True) -> None:
 
 
 def _make_topk(backend: str):
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.indexer_topk import SparseIndexerTopk
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.indexer_topk import SparseIndexerTopk
 
-    cfg = AphroditeConfig(kernel_config={"sparse_indexer_topk_backend": backend})
-    with set_current_aphrodite_config(cfg):
+    cfg = SonarConfig(kernel_config={"sparse_indexer_topk_backend": backend})
+    with set_current_sonar_config(cfg):
         return SparseIndexerTopk()
 
 
@@ -2633,7 +2633,7 @@ def test_sparse_indexer_topk_backend_resolution_aiter(monkeypatch) -> None:
 
     _patch_aiter_topk(monkeypatch, decode_kernel, enabled=False)
     assert _make_topk("auto").resolve_backend(logits, 2048, 8) == "per_row"
-    with pytest.raises(RuntimeError, match="APHRODITE_ROCM_USE_AITER"):
+    with pytest.raises(RuntimeError, match="SONAR_ROCM_USE_AITER"):
         _make_topk("aiter").resolve_backend(logits, 2048, 8)
 
 
@@ -2643,7 +2643,7 @@ def test_sparse_indexer_topk_aiter_applies_no_shape_gate(monkeypatch) -> None:
     """Shape-dependent perf gating belongs to the call site: once "aiter" is
     requested the dispatcher must run it for every supported k, including the
     k=512 band the in-tree kernel wins on DSV4's compressed-KV logits."""
-    from aphrodite.model_executor.layers import indexer_topk
+    from sonar.model_executor.layers import indexer_topk
 
     calls: list[tuple] = []
     _patch_aiter_topk(monkeypatch, lambda *args: calls.append(args))
@@ -2670,7 +2670,7 @@ def test_sparse_indexer_topk_aiter_applies_no_shape_gate(monkeypatch) -> None:
 def test_sparse_indexer_topk_auto_stays_on_per_row(monkeypatch) -> None:
     """The "auto" chain must not reach AITER on its own: the decode top-k runs
     through top_k_per_row_decode unless the caller asks for the aiter backend."""
-    from aphrodite.model_executor.layers import indexer_topk
+    from sonar.model_executor.layers import indexer_topk
 
     def decode_kernel(*args, **kwargs) -> None:
         pytest.fail("AITER is opt-in only")
@@ -2693,7 +2693,7 @@ def test_sparse_indexer_topk_auto_stays_on_per_row(monkeypatch) -> None:
 def test_sparse_indexer_topk_aiter_expands_mtp_row_ends(monkeypatch) -> None:
     """AITER's decode kernel only implements the next_n == 1 form, so spec
     decode batches must be handed the equivalent expanded per-row ends."""
-    from aphrodite.model_executor.layers import indexer_topk
+    from sonar.model_executor.layers import indexer_topk
 
     recorded: dict = {}
 

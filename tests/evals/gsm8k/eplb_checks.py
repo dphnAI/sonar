@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from aphrodite.distributed import get_ep_group
+from sonar.distributed import get_ep_group
 
 if TYPE_CHECKING:
-    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+    from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 
 class EplbCheckExtension:

@@ -8,10 +8,10 @@ import partial_json_parser
 import pytest
 from partial_json_parser.core.options import Allow
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage, FunctionCall, ToolCall
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
-from aphrodite.tool_parsers.jamba_tool_parser import JambaToolParser
+from sonar.entrypoints.generate.base.protocol import DeltaMessage, FunctionCall, ToolCall
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.detokenizer_utils import detokenize_incrementally
+from sonar.tool_parsers.jamba_tool_parser import JambaToolParser
 
 MODEL = "ai21labs/Jamba-tiny-dev"
 

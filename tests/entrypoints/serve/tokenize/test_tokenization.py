@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.tokenizers import get_tokenizer
+from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer
 
 # any model with a chat template should work here
@@ -55,7 +55,7 @@ async def test_tokenize_completions(
     tokenizer = get_tokenizer(tokenizer_name=tokenizer_name)
 
     for add_special in [False, True]:
-        prompt = "aphrodite1 This is a test prompt."
+        prompt = "sonar1 This is a test prompt."
         tokens = tokenizer.encode(prompt, add_special_tokens=add_special)
 
         response = requests.post(
@@ -93,7 +93,7 @@ async def test_tokenize_chat(
             conversation = [
                 {"role": "user", "content": "Hi there!"},
                 {"role": "assistant", "content": "Nice to meet you!"},
-                {"role": "user", "content": "Can I ask a question? aphrodite1"},
+                {"role": "user", "content": "Can I ask a question? sonar1"},
             ]
             for continue_final in [False, True]:
                 if add_generation and continue_final:
@@ -211,7 +211,7 @@ async def test_tokenize_with_return_token_strs(
 ):
     tokenizer = get_tokenizer(tokenizer_name=tokenizer_name)
 
-    prompt = "This is a token_strs test prompt! aphrodite1"
+    prompt = "This is a token_strs test prompt! sonar1"
     response = requests.post(
         server.url_for("tokenize"),
         json={"prompt": prompt, "model": model_name, "return_token_strs": True},
@@ -241,7 +241,7 @@ async def test_detokenize(
 ):
     tokenizer = get_tokenizer(tokenizer_name=tokenizer_name)
 
-    prompt = "This is a test prompt. aphrodite1"
+    prompt = "This is a test prompt. sonar1"
     tokens = tokenizer.encode(prompt, add_special_tokens=False)
 
     response = requests.post(server.url_for("detokenize"), json={"model": model_name, "tokens": tokens})

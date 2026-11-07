@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.step5.amd.csa_cache import Step5CSAMetadataBuilder
-from aphrodite.platforms import current_platform
+from sonar.models.step5.amd.csa_cache import Step5CSAMetadataBuilder
+from sonar.platforms import current_platform
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 REGION = 8

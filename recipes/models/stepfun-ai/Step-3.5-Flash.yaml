@@ -85,11 +85,11 @@ compatible_strategies:
 hardware_overrides:
   amd:
     # Step-3.5 uses a custom SWIGLUSTEP activation that AITER MoE doesn't
-    # support in Aphrodite 0.17.1 — keep AITER on for attention, MoE off.
+    # support in Sonar 0.17.1 — keep AITER on for attention, MoE off.
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MOE: "0"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MOE: "0"
 
 strategy_overrides: {}
 
@@ -107,19 +107,19 @@ guide: |
 
   - [stepfun-ai/Step-3.5-Flash](https://huggingface.co/stepfun-ai/Step-3.5-Flash) (BF16)
   - [stepfun-ai/Step-3.5-Flash-FP8](https://huggingface.co/stepfun-ai/Step-3.5-Flash-FP8)
-  - [stepfun-ai/Step-3.5-Flash-Int4](https://huggingface.co/stepfun-ai/Step-3.5-Flash-Int4) (not yet supported by Aphrodite)
+  - [stepfun-ai/Step-3.5-Flash-Int4](https://huggingface.co/stepfun-ai/Step-3.5-Flash-Int4) (not yet supported by Sonar)
 
   ## Prerequisites
 
-  - **Aphrodite version:** latest stable
+  - **Sonar version:** latest stable
   - **Hardware:** 4x H200/H20/B200
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launching the Server
@@ -127,7 +127,7 @@ guide: |
   ### Tensor Parallel
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.5-Flash \
+  sonar serve stepfun-ai/Step-3.5-Flash \
       --tensor-parallel-size 4 \
       --reasoning-parser step3p5 \
       --tool-call-parser step3p5 \
@@ -140,7 +140,7 @@ guide: |
   ### Data Parallel + Expert Parallel (recommended for FP8)
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.5-Flash \
+  sonar serve stepfun-ai/Step-3.5-Flash \
       --data-parallel-size 4 \
       --enable-expert-parallel \
       --reasoning-parser step3p5 \
@@ -152,7 +152,7 @@ guide: |
   ### Enabling MTP Speculative Decoding
 
   ```bash
-  aphrodite serve stepfun-ai/Step-3.5-Flash \
+  sonar serve stepfun-ai/Step-3.5-Flash \
       --tensor-parallel-size 4 \
       --reasoning-parser step3p5 \
       --tool-call-parser step3p5 \
@@ -165,8 +165,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model stepfun-ai/Step-3.5-Flash \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -182,7 +182,7 @@ guide: |
     to tune Triton kernels for your hardware.
   - **FP8 DeepGEMM:** For FP8, install DeepGEMM via [install_deepgemm.sh](https://github.com/vllm-project/vllm/blob/v0.16.0rc0/tools/install_deepgemm.sh).
   - **B200 FlashInfer FP8 MoE error:** The `routing_logits must be bfloat16`
-    error on B200 was fixed in Aphrodite v0.28.0 — no workaround is needed.
+    error on B200 was fixed in Sonar v0.28.0 — no workaround is needed.
   - **FP8 + TP4 incompatibility:** Use DP4+EP instead.
 
   ## References

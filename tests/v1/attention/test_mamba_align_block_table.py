@@ -17,8 +17,8 @@ it), so a column stride of 1 must not be assumed.
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.utils import mamba_get_block_table_tensor
-from aphrodite.v1.kv_cache_interface import MambaSpec
+from sonar.v1.attention.backends.utils import mamba_get_block_table_tensor
+from sonar.v1.kv_cache_interface import MambaSpec
 
 WIDTH = 64
 

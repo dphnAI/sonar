@@ -13,9 +13,9 @@ import pytest
 from transformers import DiffusionGemmaConfig, PreTrainedConfig
 from transformers.models.gemma4.configuration_gemma4 import Gemma4TextConfig
 
-from aphrodite.config import ModelConfig, ParallelConfig, SpeculativeConfig
-from aphrodite.config.model_arch import ModelArchitectureConfig
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.config import ModelConfig, ParallelConfig, SpeculativeConfig
+from sonar.config.model_arch import ModelArchitectureConfig
+from sonar.transformers_utils.model_arch_config_convertor import (
     MODEL_ARCH_CONFIG_CONVERTORS,
     Gemma4ModelArchConfigConvertor,
     ModelArchConfigConvertorBase,
@@ -192,7 +192,7 @@ def test_qk_rope_head_dim_recovery_uses_model_revision(monkeypatch: pytest.Monke
     get_hf_file_to_dict = Mock(return_value={"qk_rope_head_dim": 64})
 
     monkeypatch.setattr(
-        "aphrodite.transformers_utils.repo_utils.get_hf_file_to_dict",
+        "sonar.transformers_utils.repo_utils.get_hf_file_to_dict",
         get_hf_file_to_dict,
     )
 
@@ -317,7 +317,7 @@ def test_layer_view_follows_later_edits_to_the_whole_model_config():
 
 
 def test_uniform_layers_stay_homogeneous():
-    """A checkpoint can vary attributes Aphrodite never reads."""
+    """A checkpoint can vary attributes Sonar never reads."""
     arch = ModelArchitectureConfig.from_layers([_layer()] * 3)
 
     assert arch.per_layer_overrides is None
@@ -379,7 +379,7 @@ def test_gemma4_head_dims_vary_by_layer_type():
     assert (arch.head_size, arch.total_num_kv_heads) == (32, 8)
     assert [arch[i].head_size for i in range(6)] == [16] * 5 + [32]
     assert [arch[i].total_num_kv_heads for i in range(6)] == [4] * 5 + [8]
-    # The model files read the same per-layer configs, so the KV cache Aphrodite
+    # The model files read the same per-layer configs, so the KV cache Sonar
     # allocates and the projections the model builds cannot disagree.
     assert [text_config.per_layer_config[i].head_dim for i in range(6)] == [arch[i].head_size for i in range(6)]
 
@@ -418,7 +418,7 @@ def test_gemma4_uniform_head_dims_are_homogeneous():
 class _HeterogeneousConfig(PreTrainedConfig):
     """A heterogeneous config with no convertor of its own.
 
-    Mirrors the parts Aphrodite uses: per-layer configs are shallow copies with the
+    Mirrors the parts Sonar uses: per-layer configs are shallow copies with the
     varying attributes applied and heterogeneity stripped, so they do not recurse."""
 
     is_heterogeneous = True
@@ -455,7 +455,7 @@ def test_transformers_heterogeneous_config_is_resolved_per_layer():
     assert [arch[i].total_num_kv_heads for i in range(3)] == [4, 4, 8]
 
 
-def test_heterogeneous_config_varying_nothing_aphrodite_reads():
+def test_heterogeneous_config_varying_nothing_sonar_reads():
     """Transformers prunes nothing for us: the diff has to notice."""
     hf_config = _HeterogeneousConfig(
         per_layer={"bos_token_id": [1, 2, 3]},
@@ -509,7 +509,7 @@ def test_deepseek_v4_convertor_splits_vision_architecture():
     raw attribute)."""
     from transformers import DeepseekV4Config
 
-    from aphrodite.transformers_utils.model_arch_config_convertor import (
+    from sonar.transformers_utils.model_arch_config_convertor import (
         DeepseekV4ModelArchConfigConvertor,
     )
 

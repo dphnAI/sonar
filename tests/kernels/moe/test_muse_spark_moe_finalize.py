@@ -5,14 +5,14 @@
 import pytest
 import torch
 
-from aphrodite.models.muse_spark.common.ops.fused_finalize import (
+from sonar.models.muse_spark.common.ops.fused_finalize import (
     fused_post_expert_finalize,
 )
-from aphrodite.models.muse_spark.nvidia.ops.cute_dsl.moe_finalize_rmsnorm import (
+from sonar.models.muse_spark.nvidia.ops.cute_dsl.moe_finalize_rmsnorm import (
     moe_finalize_with_rmsnorm,
     supports_moe_finalize,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 requires_cutedsl_finalize = pytest.mark.skipif(
     not (current_platform.has_device_capability(100) and supports_moe_finalize(torch.bfloat16, 4096)),

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Universal Aphrodite Attention Benchmark.
+"""Universal Sonar Attention Benchmark.
 
 Benchmark any attention backend with the extended grammar.
 Supports standard attention (Flash/Triton/FlashInfer) and MLA backends.
@@ -51,8 +51,8 @@ from common import (
     is_mla_backend,
 )
 
-from aphrodite.config.cache import CacheDType
-from aphrodite.v1.worker.workspace import init_workspace_manager
+from sonar.config.cache import CacheDType
+from sonar.v1.worker.workspace import init_workspace_manager
 
 
 def _str2bool(v) -> bool:
@@ -442,7 +442,7 @@ def generate_batch_specs_from_ranges(ranges: list[dict]) -> list[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Universal Aphrodite attention benchmark",
+        description="Universal Sonar attention benchmark",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -610,7 +610,7 @@ def main():
     args = parser.parse_args()
 
     console = Console()
-    console.print("[bold cyan]Aphrodite Attention Benchmark[/]")
+    console.print("[bold cyan]Sonar Attention Benchmark[/]")
 
     # Load config from YAML if provided
     if args.config:

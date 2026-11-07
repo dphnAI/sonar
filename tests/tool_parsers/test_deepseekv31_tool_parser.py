@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tool_parsers.deepseekv31_tool_parser import (
+from sonar.tokenizers import get_tokenizer
+from sonar.tool_parsers.deepseekv31_tool_parser import (
     DeepSeekV31ToolParser,
 )
 from tests.tool_parsers.utils import run_tool_extraction

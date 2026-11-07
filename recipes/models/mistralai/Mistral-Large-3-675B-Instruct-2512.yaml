@@ -95,7 +95,7 @@ hardware_overrides:
     extra_args:
       - "--no-enable-prefix-caching"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 strategy_overrides: {}
 
@@ -108,7 +108,7 @@ guide: |
   - **NVFP4** (`mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4`): best for <64K context, 4xB200
 
   NVFP4 gives significant speed-up on B200 (native FP4 support). On older GPUs (A100/H100),
-  Aphrodite falls back to Marlin FP4, which matches FP8 speed while saving memory.
+  Sonar falls back to Marlin FP4, which matches FP8 speed while saving memory.
 
   For large contexts (>64K) we observed a performance regression on NVFP4 — use FP8 in
   those cases. A minor regression on vision datasets is expected with NVFP4 (calibration
@@ -117,14 +117,14 @@ guide: |
   ## Prerequisites
 
   - Hardware: 8xH200 for FP8, 4xB200 for NVFP4
-  - Aphrodite >= 0.11.0
+  - Sonar >= 0.11.0
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ## Launch commands
@@ -132,7 +132,7 @@ guide: |
   FP8 on 8xH200:
 
   ```bash
-  aphrodite serve mistralai/Mistral-Large-3-675B-Instruct-2512 \
+  sonar serve mistralai/Mistral-Large-3-675B-Instruct-2512 \
     --tensor-parallel-size 8 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral
@@ -141,7 +141,7 @@ guide: |
   NVFP4 on 4xB200:
 
   ```bash
-  aphrodite serve mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4 \
+  sonar serve mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4 \
     --tensor-parallel-size 4 \
     --tokenizer_mode mistral --config_format mistral --load_format mistral \
     --enable-auto-tool-choice --tool-call-parser mistral

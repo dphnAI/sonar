@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
 
-def test_gpu_memory_utilization(aphrodite_runner):
+def test_gpu_memory_utilization(sonar_runner):
     prompts = [
         "Hello, my name is",
         "The president of the United States is",
@@ -16,17 +16,17 @@ def test_gpu_memory_utilization(aphrodite_runner):
     # makes sure gpu_memory_utilization is per-instance limit,
     # not a global limit
     with (
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             gpu_memory_utilization=0.3,
             enforce_eager=True,
         ) as runner_0,
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             gpu_memory_utilization=0.3,
             enforce_eager=True,
         ) as runner_1,
-        aphrodite_runner(
+        sonar_runner(
             "facebook/opt-125m",
             gpu_memory_utilization=0.3,
             enforce_eager=True,

@@ -33,11 +33,11 @@ version="${major}.${minor}.$((patch + 1)).dev${timestamp}+${PLATFORM_VERSION_LOC
 mkdir -p "$output_dir"
 find "$output_dir" -maxdepth 1 -type f -name '*.whl' -delete
 if [[ "$PLATFORM_BACKEND" == "cuda" ]]; then
-  APHRODITE_VERSION_OVERRIDE="$version" ./docker/export_wheels.sh
+  SONAR_VERSION_OVERRIDE="$version" ./docker/export_wheels.sh
   wheel="$(find wheels/main -maxdepth 1 -type f -name '*.whl' -print -quit)"
 else
   : "${PLATFORM_BUILD_SCRIPT:?PLATFORM_BUILD_SCRIPT is required for non-CUDA wheels}"
-  APHRODITE_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
+  SONAR_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
   wheel="$(find "$output_dir" -maxdepth 1 -type f -name '*.whl' -print -quit)"
 fi
 if [[ -z "$wheel" ]]; then
@@ -67,18 +67,21 @@ printf '%s\t%s\t%s\n' \
   "$wheel_name" "${public_root}/wheels/${encoded_name}" "$digest" >"$entries"
 
 index_dir="${index_root}/whl/pr/${PR_WHEEL_NUMBER}/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
-package_dir="${index_dir}/simple/aphrodite-engine"
+package_dir="${index_dir}/simple/sonar"
 mkdir -p "$package_dir"
+install_command="uv pip install sonar --extra-index-url ${public_root}/simple --index-strategy first-index"
+if [[ "$PLATFORM_BACKEND" == cuda ]]; then
+  install_command+=" --torch-backend cu130"
+fi
 python3 .github/scripts/generate_nightly_index.py \
   --entry-file "$entries" \
   --commit "$target_commit" \
   --title "Sonar PR #${PR_WHEEL_NUMBER} ${PLATFORM_BACKEND} wheel" \
   --description "Temporary ${PLATFORM_ARCHITECTURE} test wheel for PR #${PR_WHEEL_NUMBER}." \
-  --install-command \
-  "uv pip install aphrodite-engine --extra-index-url ${public_root}/simple --index-strategy first-index" \
+  --install-command "$install_command" \
   --output "${index_dir}/index.html"
 cp "${index_dir}/index.html" "${package_dir}/index.html"
 "$rclone" copyto "${index_dir}/index.html" "${remote_root}/index.html"
-"$rclone" copyto "${package_dir}/index.html" "${remote_root}/simple/aphrodite-engine/index.html"
+"$rclone" copyto "${package_dir}/index.html" "${remote_root}/simple/sonar/index.html"
 
-echo "PR wheel index: ${public_root}/simple/aphrodite-engine/"
+echo "PR wheel index: ${public_root}/simple/sonar/"

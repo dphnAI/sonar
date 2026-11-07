@@ -14,8 +14,8 @@ import numpy as np
 import torch
 from safetensors.torch import save_file
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.lora.request import LoRARequest
+from sonar import LLM, SamplingParams
+from sonar.lora.request import LoRARequest
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
 HIDDEN_SIZE = 1024

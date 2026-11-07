@@ -9,7 +9,7 @@ These utilities enable efficient batched tensor transfer over NCCL.
 import pytest
 import torch
 
-from aphrodite.distributed.weight_transfer.packed_tensor import (
+from sonar.distributed.weight_transfer.packed_tensor import (
     pack_tensors,
     packed_ipc_consumer,
     packed_ipc_producer,

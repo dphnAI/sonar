@@ -13,10 +13,10 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite import PoolingParams
-from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.multimodal.cache import (
+from sonar import PoolingParams
+from sonar.config import ModelConfig, ParallelConfig, SonarConfig
+from sonar.config.multimodal import MultiModalConfig
+from sonar.multimodal.cache import (
     BaseMultiModalReceiverCache,
     LruKeyReplicatedReceiverCache,
     LruKeyReplicatedSenderCache,
@@ -27,14 +27,14 @@ from aphrodite.multimodal.cache import (
     engine_receiver_cache_from_config,
     processor_cache_from_config,
 )
-from aphrodite.multimodal.cache.base import (
+from sonar.multimodal.cache.base import (
     MultiModalCache,
     MultiModalProcessorCacheInItem,
     MultiModalProcessorCacheItem,
     MultiModalProcessorCacheItemMetadata,
 )
-from aphrodite.multimodal.hasher import MultiModalHasher
-from aphrodite.multimodal.inputs import (
+from sonar.multimodal.hasher import MultiModalHasher
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFeatureSpec,
     MultiModalFieldElem,
@@ -43,22 +43,22 @@ from aphrodite.multimodal.inputs import (
     MultiModalSharedField,
     PlaceholderRange,
 )
-from aphrodite.multimodal.processing import PromptInsertion
-from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.renderers import renderer_from_config
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.utils.async_utils import make_async
-from aphrodite.utils.mem_constants import GiB_bytes, MiB_bytes
-from aphrodite.v1.engine import (
+from sonar.multimodal.processing import PromptInsertion
+from sonar.outputs import PoolingRequestOutput
+from sonar.renderers import renderer_from_config
+from sonar.sampling_params import RequestOutputKind
+from sonar.utils.async_utils import make_async
+from sonar.utils.mem_constants import GiB_bytes, MiB_bytes
+from sonar.v1.engine import (
     EngineCoreOutput,
     EngineCoreOutputs,
     EngineCoreRequest,
     FinishReason,
 )
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.llm_engine import LLMEngine
-from aphrodite.v1.engine.output_processor import OutputProcessor, RequestOutputCollector
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.llm_engine import LLMEngine
+from sonar.v1.engine.output_processor import OutputProcessor, RequestOutputCollector
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
 from ..models.utils import build_model_context
 from ..utils import create_new_process_for_each_test
@@ -126,12 +126,12 @@ def test_cache_item_size(item, expected_size):
     assert cache.currsize == expected_size
 
 
-def _create_aphrodite_config(
+def _create_sonar_config(
     *,
     mm_processor_cache_gb: float,
     enable_ipc: bool,
 ):
-    return AphroditeConfig(
+    return SonarConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_gb=mm_processor_cache_gb,
@@ -141,8 +141,8 @@ def _create_aphrodite_config(
 
 
 def _compare_caches(
-    config_0: AphroditeConfig,
-    config_1: AphroditeConfig,
+    config_0: SonarConfig,
+    config_1: SonarConfig,
     *,
     item_capacity: int = 8,
     hit_rate: float = 0.5,
@@ -222,32 +222,32 @@ def _compare_caches(
 def test_ipc_enable_disable_consistency(is_cached_calls_per_iter):
     cache_size_gb = 1 / (1 << 20)
 
-    aphrodite_config_ipc_enabled = _create_aphrodite_config(
+    sonar_config_ipc_enabled = _create_sonar_config(
         mm_processor_cache_gb=cache_size_gb,
         enable_ipc=True,
     )
-    aphrodite_config_ipc_disabled = _create_aphrodite_config(
+    sonar_config_ipc_disabled = _create_sonar_config(
         mm_processor_cache_gb=0,
         enable_ipc=False,
     )
-    aphrodite_config_cache_disabled = _create_aphrodite_config(
+    sonar_config_cache_disabled = _create_sonar_config(
         mm_processor_cache_gb=cache_size_gb,
         enable_ipc=True,
     )
 
     _compare_caches(
-        aphrodite_config_ipc_enabled,
-        aphrodite_config_ipc_disabled,
+        sonar_config_ipc_enabled,
+        sonar_config_ipc_disabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
     _compare_caches(
-        aphrodite_config_ipc_disabled,
-        aphrodite_config_cache_disabled,
+        sonar_config_ipc_disabled,
+        sonar_config_cache_disabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
     _compare_caches(
-        aphrodite_config_cache_disabled,
-        aphrodite_config_ipc_enabled,
+        sonar_config_cache_disabled,
+        sonar_config_ipc_enabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
 
@@ -434,13 +434,13 @@ def test_shm_receiver_handles_prefix_covered_items(monkeypatch):
     (https://github.com/vllm-project/vllm/issues/54994). The address item must still be resolved and
     acknowledged so the object stays reclaimable.
     """
-    monkeypatch.setenv("APHRODITE_OBJECT_STORAGE_SHM_BUFFER_NAME", "test_shm_prefix_covered_items")
-    aphrodite_config = SimpleNamespace(
+    monkeypatch.setenv("SONAR_OBJECT_STORAGE_SHM_BUFFER_NAME", "test_shm_prefix_covered_items")
+    sonar_config = SimpleNamespace(
         parallel_config=SimpleNamespace(world_size=1),
         model_config=_StubModelConfig(mm_processor_cache_gb=4 * MiB_bytes / GiB_bytes),
     )
-    p0 = ShmObjectStoreSenderCache(aphrodite_config)
-    p1 = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    p0 = ShmObjectStoreSenderCache(sonar_config)
+    p1 = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
 
     def _feature(mm_hash: str, data: MultiModalKwargsItem | None) -> MultiModalFeatureSpec:
         return MultiModalFeatureSpec(
@@ -748,7 +748,7 @@ def _run_test_cache_eviction_shm(
 
 
 def test_cache_eviction_shm_cache():
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_type="shm",
@@ -756,14 +756,14 @@ def test_cache_eviction_shm_cache():
             mm_processor_cache_gb=15.2 * MiB_bytes / GiB_bytes,
         ),
     )
-    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
-    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    sender_cache = ShmObjectStoreSenderCache(sonar_config)
+    receiver_cache = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
 
     _run_test_cache_eviction_shm(sender_cache, receiver_cache, base_item_size=MiB_bytes)
 
 
 def test_shm_receiver_requires_sender_handle_for_current_cache_key():
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_type="shm",
@@ -771,8 +771,8 @@ def test_shm_receiver_requires_sender_handle_for_current_cache_key():
             mm_processor_cache_gb=2 * MiB_bytes / GiB_bytes,
         ),
     )
-    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
-    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    sender_cache = ShmObjectStoreSenderCache(sonar_config)
+    receiver_cache = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
     mm_hash = "image_A"
     item = MultiModalKwargsItem.dummy(1024)
 
@@ -822,7 +822,7 @@ def test_shm_receiver_requires_sender_handle_for_current_cache_key():
 
 
 def test_shm_sender_handle_survives_engine_msgpack_round_trip():
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_type="shm",
@@ -830,8 +830,8 @@ def test_shm_sender_handle_survives_engine_msgpack_round_trip():
             mm_processor_cache_gb=2 * MiB_bytes / GiB_bytes,
         ),
     )
-    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
-    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    sender_cache = ShmObjectStoreSenderCache(sonar_config)
+    receiver_cache = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
     mm_hash = "image_A"
     item = MultiModalKwargsItem.dummy(1024)
 
@@ -855,8 +855,8 @@ def test_shm_sender_handle_survives_engine_msgpack_round_trip():
         sender_cache.close()
 
 
-def _small_shm_aphrodite_config() -> AphroditeConfig:
-    return AphroditeConfig(
+def _small_shm_sonar_config() -> SonarConfig:
+    return SonarConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_type="shm",
@@ -873,7 +873,7 @@ def _with_elem(item: MultiModalKwargsItem, key: str, data) -> MultiModalKwargsIt
 
 
 def test_shm_sender_validates_client_supplied_handles():
-    sender_cache = ShmObjectStoreSenderCache(_small_shm_aphrodite_config())
+    sender_cache = ShmObjectStoreSenderCache(_small_shm_sonar_config())
     mm_hash = "image_A"
 
     try:
@@ -906,9 +906,9 @@ def test_shm_sender_validates_client_supplied_handles():
 
 
 def test_shm_receiver_rejects_out_of_range_handle_fields():
-    aphrodite_config = _small_shm_aphrodite_config()
-    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
-    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    sonar_config = _small_shm_sonar_config()
+    sender_cache = ShmObjectStoreSenderCache(sonar_config)
+    receiver_cache = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
     mm_hash = "image_A"
 
     try:
@@ -929,9 +929,9 @@ def test_shm_receiver_rejects_out_of_range_handle_fields():
 
 
 def test_shm_handle_issued_before_cache_clear():
-    aphrodite_config = _small_shm_aphrodite_config()
-    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
-    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
+    sonar_config = _small_shm_sonar_config()
+    sender_cache = ShmObjectStoreSenderCache(sonar_config)
+    receiver_cache = ShmObjectStoreReceiverCache(sonar_config, mp.Lock())
     mm_hash = "image_A"
     item = MultiModalKwargsItem.dummy(1024)
 
@@ -1033,7 +1033,7 @@ async def test_release_kv_cache_resends_mm_payload(use_async, release_error):
     assert receiver.get_and_update_item(payload, mm_hash) is item
     assert sender.get_and_update_item(None, mm_hash)[0] is None
 
-    renderer = renderer_from_config(AphroditeConfig(model_config=model_config))
+    renderer = renderer_from_config(SonarConfig(model_config=model_config))
     renderer._mm_processor_cache = sender
 
     def release():
@@ -1079,7 +1079,7 @@ def mm_cache_renderer():
         max_model_len=2048,
         mm_processor_cache_gb=1,
     )
-    renderer = renderer_from_config(AphroditeConfig(model_config=model_config))
+    renderer = renderer_from_config(SonarConfig(model_config=model_config))
     prompt = {
         "prompt": "<|vision_start|><|image_pad|><|vision_end|>Describe.",
         "multi_modal_data": {"image": Image.new("RGB", (56, 56))},
@@ -1277,9 +1277,9 @@ _SLEEP_VISION_PROMPT = (
 )
 def test_sleep_wake_preserves_mm_cache_consistency():
     """Regression for https://github.com/vllm-project/vllm/issues/42995."""
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.assets.image import ImageAsset
-    from aphrodite.inputs import TextPrompt
+    from sonar import LLM, SamplingParams
+    from sonar.assets.image import ImageAsset
+    from sonar.inputs import TextPrompt
 
     image = ImageAsset("stop_sign").pil_image
     prompt: TextPrompt = {

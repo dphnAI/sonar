@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-only aiter path")
 
@@ -17,9 +17,9 @@ def _rows_from_ragged(indices: torch.Tensor, indptr: torch.Tensor) -> list[list[
 
 
 def test_triton_sparse_mla_gate(monkeypatch) -> None:
-    import aphrodite._aiter_ops as aiter_ops
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.platforms.rocm import on_gfx950
+    import sonar._aiter_ops as aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.platforms.rocm import on_gfx950
 
     warnings: list[str] = []
     monkeypatch.setattr(
@@ -29,15 +29,15 @@ def test_triton_sparse_mla_gate(monkeypatch) -> None:
     )
 
     def enabled(aiter: bool, flag: bool) -> bool:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", str(int(aiter)))
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA", str(int(flag)))
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", str(int(aiter)))
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA", str(int(flag)))
         rocm_aiter_ops.refresh_env_variables()
         return bool(rocm_aiter_ops.is_triton_sparse_mla_enabled())
 
     try:
         assert not enabled(aiter=True, flag=False) and not warnings
         assert not enabled(aiter=False, flag=True)
-        assert "APHRODITE_ROCM_USE_AITER is off" in warnings.pop()
+        assert "SONAR_ROCM_USE_AITER is off" in warnings.pop()
         # On gfx950 the flag takes effect; elsewhere it warns and falls back.
         assert enabled(aiter=True, flag=True) == on_gfx950()
         if not on_gfx950():
@@ -57,8 +57,8 @@ def test_triton_sparse_mla_gate(monkeypatch) -> None:
 def test_forward_mqa_prepares_triton_sparse_mla_inputs(monkeypatch, rope_dim: int, kv_cache_dtype: str) -> None:
     """What forward_mqa hands aiter: global slots built from the request-local
     top-k rows, q quantized with the layer's scale, and the cache as stored."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseImpl,
     )
 
@@ -150,15 +150,15 @@ def test_paged_prefill_indices_match_gathered_prefill(monkeypatch, model: str, c
     dequantize-and-gather prefill does."""
     import importlib
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         build_prefill_topk_ragged_indices,
     )
-    from aphrodite.v1.kv_cache_interface import SlidingWindowMLASpec
-    from tests.v1.attention.utils import create_aphrodite_config
+    from sonar.v1.kv_cache_interface import SlidingWindowMLASpec
+    from tests.v1.attention.utils import create_sonar_config
 
-    rocm = importlib.import_module(f"aphrodite.models.{model}.amd.rocm")
+    rocm = importlib.import_module(f"sonar.models.{model}.amd.rocm")
     builder_cls = (
         rocm.DeepseekV41ROCMAiterSparseSWAMetadataBuilder
         if model == "deepseek_v41"
@@ -181,7 +181,7 @@ def test_paged_prefill_indices_match_gathered_prefill(monkeypatch, model: str, c
     swa_bt = torch.randperm(32, generator=gen)[:16].view(4, 4).to(device, torch.int32)
     comp_bt = torch.randperm(32, generator=gen)[:16].view(4, 4).to(device, torch.int32)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="facebook/opt-125m",
         max_model_len=max_model_len,
         block_size=block_size,
@@ -220,7 +220,7 @@ def test_paged_prefill_indices_match_gathered_prefill(monkeypatch, model: str, c
 
     def build(enabled: bool):
         monkeypatch.setattr(rocm_aiter_ops, "is_triton_sparse_mla_enabled", lambda: enabled)
-        return builder_cls(swa_spec, ["swa"], aphrodite_config, device).build(0, common)
+        return builder_cls(swa_spec, ["swa"], sonar_config, device).build(0, common)
 
     assert build(enabled=False).prefill_swa_ragged_indices is None
     md = build(enabled=True)
@@ -301,9 +301,9 @@ def test_paged_prefill_indices_match_gathered_prefill(monkeypatch, model: str, c
 def test_aiter_sparse_mla_stays_off_with_kv_connector(monkeypatch, model) -> None:
     import importlib
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
-    rocm = importlib.import_module(f"aphrodite.models.{model}.amd.rocm")
+    rocm = importlib.import_module(f"sonar.models.{model}.amd.rocm")
     monkeypatch.setattr(rocm_aiter_ops, "is_triton_sparse_mla_enabled", lambda: True)
     assert rocm._aiter_sparse_mla_enabled(has_kv_transfer=False)
     assert not rocm._aiter_sparse_mla_enabled(has_kv_transfer=True)
@@ -314,14 +314,14 @@ def _swa_forward_mqa_case(monkeypatch, rocm, builder_cls, layer_cls, num_heads: 
     with a real fp8_ds_mla cache and ``builder_cls`` metadata. Returns the
     layer, the builder, q, positions and the torch reference: attention with
     the sink over each token's window, before the inverse RoPE."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.models.deepseek_v4.common.ops import dequantize_and_gather_k_cache
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.models.deepseek_v4.common.ops import dequantize_and_gather_k_cache
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         quantize_and_insert_k_cache,
     )
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.kv_cache_interface import SlidingWindowMLASpec
-    from tests.v1.attention.utils import create_aphrodite_config
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.kv_cache_interface import SlidingWindowMLASpec
+    from tests.v1.attention.utils import create_sonar_config
 
     device = torch.device("cuda")
     head_dim, nope_dim, rope_dim = 512, 448, 64
@@ -348,7 +348,7 @@ def _swa_forward_mqa_case(monkeypatch, rocm, builder_cls, layer_cls, num_heads: 
         pos = torch.arange(seq_len, device=device)
         quantize_and_insert_k_cache(k.bfloat16(), swa_cache, slots(req, pos), block_size=block_size)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="facebook/opt-125m",
         max_model_len=max_model_len,
         block_size=block_size,
@@ -359,7 +359,7 @@ def _swa_forward_mqa_case(monkeypatch, rocm, builder_cls, layer_cls, num_heads: 
             "sliding_window": window,
         },
     )
-    aphrodite_config.model_config.model_arch_config.total_num_attention_heads = num_heads
+    sonar_config.model_config.model_arch_config.total_num_attention_heads = num_heads
     swa_spec = SlidingWindowMLASpec(
         block_size=block_size,
         num_kv_heads=1,
@@ -386,7 +386,7 @@ def _swa_forward_mqa_case(monkeypatch, rocm, builder_cls, layer_cls, num_heads: 
         causal=True,
     )
     monkeypatch.setattr(rocm_aiter_ops, "is_triton_sparse_mla_enabled", lambda: True)
-    swa_builder = builder_cls(swa_spec, ["swa"], aphrodite_config, device)
+    swa_builder = builder_cls(swa_spec, ["swa"], sonar_config, device)
     swa_metadata = swa_builder.build(0, common)
     monkeypatch.setattr(
         rocm,
@@ -470,9 +470,9 @@ def test_deepseek_v4_forward_mqa_matches_reference(
     whichever kernels serve it: each row comes out inverse-RoPE'd exactly once,
     by the store of the kernel that wrote it or by the standalone pass. With an
     fp8 wo_a no row is rotated here (inverse_rope_group_quant does it later)."""
-    import aphrodite.models.deepseek_v4.amd.rocm as rocm
-    from aphrodite.platforms.rocm import on_gfx950
-    from aphrodite.utils.torch_utils import set_random_seed
+    import sonar.models.deepseek_v4.amd.rocm as rocm
+    from sonar.platforms.rocm import on_gfx950
+    from sonar.utils.torch_utils import set_random_seed
 
     if not on_gfx950():
         pytest.skip("the aiter sparse MLA kernel is gfx950-only")
@@ -501,9 +501,9 @@ def test_deepseek_v4_forward_mqa_matches_reference(
 def test_deepseek_v41_forward_mqa_mxfp8_matches_reference(monkeypatch, workspace_init) -> None:
     """V4.1's forward_mqa into the MXFP8 wo_a input: aiter's store applies the
     inverse RoPE and quantizes every decode and prefill row."""
-    import aphrodite.models.deepseek_v41.amd.rocm as rocm
-    from aphrodite.platforms.rocm import on_gfx950
-    from aphrodite.utils.torch_utils import set_random_seed
+    import sonar.models.deepseek_v41.amd.rocm as rocm
+    from sonar.platforms.rocm import on_gfx950
+    from sonar.utils.torch_utils import set_random_seed
 
     if not on_gfx950():
         pytest.skip("the aiter sparse MLA kernel is gfx950-only")
@@ -534,13 +534,13 @@ def test_sparse_mla_store_epilogue_matches_standalone_passes(output: str) -> Non
     """The inverse RoPE (and MXFP8 quantization) aiter applies in its store
     matches running the kernel without it and then the standalone passes it
     replaces: rocm_inverse_rope_rows_ / rocm_inverse_rope_mxfp8_rows."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.models.deepseek_v4.common.ops.cache_utils import (
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.models.deepseek_v4.common.ops.cache_utils import (
         quantize_and_insert_k_cache,
     )
-    from aphrodite.platforms.rocm import on_gfx950
-    from aphrodite.utils.torch_utils import set_random_seed
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.platforms.rocm import on_gfx950
+    from sonar.utils.torch_utils import set_random_seed
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         rocm_inverse_rope_mxfp8_rows,
         rocm_inverse_rope_rows_,
     )

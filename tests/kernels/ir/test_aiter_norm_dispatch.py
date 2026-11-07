@@ -11,8 +11,8 @@ through to a provider that handles arbitrary strides.
 import pytest
 import torch
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.kernels.aiter_ops import flatten_to_2d_is_free
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.kernels.aiter_ops import flatten_to_2d_is_free
 
 pytestmark = pytest.mark.skipif(
     not is_aiter_found_and_supported(),

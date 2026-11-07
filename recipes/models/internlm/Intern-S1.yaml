@@ -74,12 +74,12 @@ compatible_strategies:
 
 hardware_overrides:
   amd:
-    # APHRODITE_ROCM_USE_AITER_MOE=0 is required on MI300X/MI325X (FP8 checkpoint).
+    # SONAR_ROCM_USE_AITER_MOE=0 is required on MI300X/MI325X (FP8 checkpoint).
     # On MI355X, unset this env for faster AITER MoE kernels.
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_MOE: "0"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_MOE: "0"
 strategy_overrides: {}
 
 guide: |
@@ -92,20 +92,20 @@ guide: |
   ## Prerequisites
 
   - Hardware: 8xH800 (80GB) for BF16, 4xH800 for FP8, or 4-8x MI300X/MI325X/MI355X
-  - Aphrodite >= 0.10.2
+  - Sonar >= 0.10.2
 
-  ### Install Aphrodite (CUDA)
+  ### Install Sonar (CUDA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/0.14.1/rocm700
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch commands
@@ -113,7 +113,7 @@ guide: |
   BF16 on 8xH800:
 
   ```bash
-  aphrodite serve internlm/Intern-S1 \
+  sonar serve internlm/Intern-S1 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-auto-tool-choice \
@@ -124,7 +124,7 @@ guide: |
   FP8 on 4xH800:
 
   ```bash
-  aphrodite serve internlm/Intern-S1-FP8 \
+  sonar serve internlm/Intern-S1-FP8 \
     --trust-remote-code \
     --tensor-parallel-size 4 \
     --enable-auto-tool-choice \
@@ -135,14 +135,14 @@ guide: |
   FP8 on 8xMI300X/MI325X:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=0
-  aphrodite serve internlm/Intern-S1-FP8 \
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=0
+  sonar serve internlm/Intern-S1-FP8 \
     --trust-remote-code --tensor-parallel-size 8 \
     --enable-auto-tool-choice --reasoning-parser deepseek_r1 --tool-call-parser internlm
   ```
 
-  FP8 on 8xMI355X: set only `APHRODITE_ROCM_USE_AITER=1` (no need to disable AITER MoE).
+  FP8 on 8xMI355X: set only `SONAR_ROCM_USE_AITER=1` (no need to disable AITER MoE).
 
   ## Switching Between Thinking and Non-Thinking Modes
 

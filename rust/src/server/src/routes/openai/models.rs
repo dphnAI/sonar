@@ -10,8 +10,8 @@ use axum::extract::State;
 use crate::routes::openai::utils::types::{ListModelsResponse, ModelObject};
 use crate::state::AppState;
 
-// Frontend marker; Python uses "aphrodite".
-const OWNED_BY: &str = "aphrodite-frontend-rs";
+// Frontend marker; Python uses "sonar".
+const OWNED_BY: &str = "sonar-frontend-rs";
 
 /// Base cards carry `max_model_len` and `root` = model path; LoRA cards carry
 /// `root` = adapter path and `parent` = base model. LoRA cards follow load order.

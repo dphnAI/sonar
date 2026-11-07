@@ -10,7 +10,7 @@ import pytest
 import torch
 import torch.distributed as dist
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..utils import multi_process_parallel
 
@@ -22,7 +22,7 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
     dist.init_process_group(
         "gloo", init_method=f"tcp://127.0.0.1:{distributed_init_port}", rank=rank, world_size=tp_size
     )
-    import aphrodite._custom_ops  # noqa: F401
+    import sonar._custom_ops  # noqa: F401
 
     ops = torch.ops._C_pcie_pull
     capacity = 64 * 5120

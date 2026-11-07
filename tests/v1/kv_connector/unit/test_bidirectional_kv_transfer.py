@@ -31,25 +31,25 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import (
     NixlConnector,
     NixlConnectorMetadata,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.v1.outputs import (
+from sonar.forward_context import ForwardContext
+from sonar.v1.outputs import (
     EMPTY_MODEL_RUNNER_OUTPUT,
     KVConnectorOutput,
 )
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.request import RequestStatus
 
 from .test_nixl_connector import FakeNixlConnectorWorker, FakeNixlWrapper
 from .utils import (
     assert_scheduler_empty,
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
     make_kv_cache_config,
     maybe_update_block_size,
 )
@@ -86,11 +86,11 @@ def _make_p_node_turn2_request(request_id, block_size, num_tokens, num_remote_bl
 def _make_connector_with_fake_worker(hand_shake_latency=0, cycles_before_done=0, do_handshake=True):
     """Create a NixlConnector with FakeNixlConnectorWorker."""
     block_size = maybe_update_block_size(32)
-    aphrodite_config = create_aphrodite_config(kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG, block_size=block_size)
+    sonar_config = create_sonar_config(kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG, block_size=block_size)
     kv_cache_config = make_kv_cache_config(block_size=block_size, num_blocks=2)
-    connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     connector.connector_worker = FakeNixlConnectorWorker(
-        aphrodite_config,
+        sonar_config,
         connector.engine_id,
         hand_shake_latency=hand_shake_latency,
         kv_cache_config=kv_cache_config,
@@ -146,11 +146,11 @@ def test_multiturn_lifecycle():
     Turn 2: P receives remote_block_ids from D. P pulls KV from D because
     remote_block_ids is not None and external tokens > 0. Computes only
     new tokens, finishes LENGTH_CAPPED."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
 
     t1 = create_request(request_id=100, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(t1)
@@ -190,11 +190,11 @@ def test_multiturn_lifecycle():
 def test_first_turn_no_remote_blocks():
     """First turn: P has no remote_block_ids from D yet.
     Standard local prefill, returns kv_transfer_params for future turns."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -235,7 +235,7 @@ _REMOTE = FakeNixlConnectorWorker.REMOTE_ENGINE_ID
     ],
 )
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_turn2_deadline_gate(dist_init, offset, expiry_delta, expect_declined):
@@ -272,7 +272,7 @@ def test_turn2_deadline_gate(dist_init, offset, expiry_delta, expect_declined):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_turn2_full_prefix_hit_with_expired_deadline_skips_gate(dist_init):
@@ -306,9 +306,9 @@ def test_turn2_full_prefix_hit_with_expired_deadline_skips_gate(dist_init):
 
 def test_d_node_request_finished_exports_blocks_expiry_time():
     """D-node (do_remote_prefill request) exports a future float expiry time."""
-    aphrodite_config = create_aphrodite_config(kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG)
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    sonar_config = create_sonar_config(kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG)
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=600, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -331,12 +331,12 @@ def test_handshake_listener_appends_perf_counter_frame():
     import msgspec
     import zmq
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
         NixlBaseConnectorScheduler,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import GET_META_MSG
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import zmq_ctx
-    from aphrodite.utils.network_utils import get_open_port, make_zmq_path
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import GET_META_MSG
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import zmq_ctx
+    from sonar.utils.network_utils import get_open_port, make_zmq_path
 
     encoded_data = {(0, 0): b"payload-rank-0"}
     ready_event = threading.Event()
@@ -372,11 +372,11 @@ def test_handshake_listener_appends_perf_counter_frame():
 
 def test_abort_p_side_during_send():
     """P-side do_remote_decode=True: blocks held until finished_sending."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=42, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -396,11 +396,11 @@ def test_abort_p_side_during_send():
 
 def test_abort_p_side_non_length_capped():
     """P-side abort with non-LENGTH_CAPPED → immediate block free."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=44, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     assert req.sampling_params is not None
     req.sampling_params.max_tokens = 100
@@ -424,11 +424,11 @@ def test_abort_p_side_non_length_capped():
 def test_remote_blocks_exceed_prompt_tokens():
     """D provides more remote tokens than P's prompt needs.
     P caps external tokens to prompt length."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     NUM_TOKENS = int(BS * 2.5)
     req = _make_p_node_turn2_request(300, BS, NUM_TOKENS, num_remote_blocks=5, remote_num_tokens=5 * BS)
     scheduler.add_request(req)
@@ -458,11 +458,11 @@ def test_p_node_pulls_partial_last_block_from_d():
     """D sends remote_block_ids with partially filled last block.
     remote_num_tokens < len(remote_block_ids) * block_size.
     P pulls only remote_num_tokens worth of external tokens."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     num_remote_blocks = 3
     remote_num_tokens = int(BS * 2.5)
     assert remote_num_tokens < num_remote_blocks * BS
@@ -531,11 +531,11 @@ def test_add_new_req_to_recv_populates_remote_meta():
 def test_build_connector_meta_recv_entries():
     """P-node scheduler: do_remote_decode=True + remote_block_ids →
     _reqs_need_recv populated, build_connector_meta produces reqs_to_recv."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = _make_p_node_turn2_request(1, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id
@@ -551,11 +551,11 @@ def test_build_connector_meta_recv_entries():
 
 def test_build_connector_meta_clears_reqs_need_recv():
     """After build_connector_meta, _reqs_need_recv is cleared."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = _make_p_node_turn2_request(2, BS, int(BS * 2.5))
     scheduler.add_request(req)
     assert isinstance(scheduler.connector, NixlConnector)
@@ -567,11 +567,11 @@ def test_build_connector_meta_clears_reqs_need_recv():
 
 def test_build_connector_meta_multiple_requests():
     """Multiple P-node requests all included in reqs_to_recv."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     reqs = [_make_p_node_turn2_request(10 + i, BS, int(BS * 2.5)) for i in range(3)]
     for r in reqs:
         scheduler.add_request(r)
@@ -587,7 +587,7 @@ def test_build_connector_meta_multiple_requests():
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_p_node_pull_kv_from_d(dist_init):
@@ -601,7 +601,7 @@ def test_p_node_pull_kv_from_d(dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_p_node_pull_then_send_kv(dist_init):
@@ -623,7 +623,7 @@ def test_p_node_pull_then_send_kv(dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_p_node_deferred_pull_on_no_handshake(dist_init):
@@ -652,11 +652,11 @@ def test_d_node_request_finished_returns_kv_params():
     """D-node request_finished returns kv_transfer_params with
     do_remote_decode=True, remote_block_ids, remote_num_tokens
     for P to pull. These params go directly to P node."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=1, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -676,11 +676,11 @@ def test_d_node_request_finished_returns_kv_params():
 
 def test_d_node_request_finished_delays_block_free():
     """D-node holds blocks (delay_free=True) until P reads them."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=2, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -697,11 +697,11 @@ def test_d_node_request_finished_delays_block_free():
 
 def test_d_node_request_finished_remote_num_tokens():
     """D-node kv_transfer_params includes correct remote_num_tokens."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -718,11 +718,11 @@ def test_d_node_request_finished_remote_num_tokens():
 def test_d_node_partial_last_block_remote_num_tokens():
     """D-node: remote_num_tokens < len(remote_block_ids) * block_size
     when last block is partially filled."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(request_id=5, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
@@ -747,11 +747,11 @@ def test_no_double_read_blocks_after_reschedule():
     WAITING_FOR_REMOTE_KVS → reschedule). The _remote_blocks_processed
     flag must prevent the request from being added to _reqs_need_recv
     twice, which would cause P to read D's blocks twice."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = _make_p_node_turn2_request(500, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id
@@ -802,11 +802,11 @@ def test_remote_num_tokens_bounded_by_blocks():
     remote_num_tokens <= len(remote_block_ids) * block_size.
     request.num_tokens includes the last sampled token which has no KV
     in the cache, so remote_num_tokens must use num_computed_tokens."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(
         request_id=501,
         block_size=BS,
@@ -834,14 +834,14 @@ def test_kv_recompute_threshold_skips_small_transfer():
     P should skip the remote pull and compute locally instead of
     entering WAITING_FOR_REMOTE_KVS."""
     threshold = 256
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config={
             "bidirectional_kv_xfer": True,
             "kv_recompute_threshold": threshold,
         },
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
 
     # Create request where remote tokens (48) < threshold (256)
     req = _make_p_node_turn2_request(
@@ -875,11 +875,11 @@ def test_p_node_finished_holds_blocks_for_d():
     do_remote_decode=True. P must hold blocks (delay_free=True) and
     return kv_transfer_params with do_remote_prefill=True so D can
     read P's blocks."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(
         request_id=503,
         block_size=BS,
@@ -916,11 +916,11 @@ def test_cache_miss_first_turn_no_remote_pull():
     """Edge case 5: First turn with do_remote_decode=True but no
     remote_block_ids (cache MISS). P should prefill locally with
     num_external_tokens=0 and not enter WAITING_FOR_REMOTE_KVS."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = create_request(
         request_id=504,
         block_size=BS,
@@ -952,11 +952,11 @@ def test_partial_remote_tokens_less_than_prompt():
     """Edge case 6: D's remote_num_tokens covers only part of P's
     prompt. P should pull remote_num_tokens worth of external tokens
     and compute the rest locally."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     NUM_TOKENS = int(BS * 4.5)  # 72 tokens
     # D provides only 2 blocks (32 tokens) out of 72
     req = _make_p_node_turn2_request(
@@ -997,11 +997,11 @@ def test_remote_blocks_processed_flag_persists():
     """Edge case 7: After recv completes and request is rescheduled,
     the _remote_blocks_processed flag in kv_transfer_params prevents
     the bidirectional path from re-entering _reqs_need_recv."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(aphrodite_config)
-    BS = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(sonar_config)
+    BS = sonar_config.cache_config.block_size
     req = _make_p_node_turn2_request(506, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id

@@ -6,12 +6,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use aphrodite_text::Prompt;
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_tokenizer::Tokenizer;
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use expect_test::{expect, expect_file};
 use serde_json::json;
+use sonar_text::Prompt;
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_tokenizer::Tokenizer;
+use sonar_tokenizer::test_utils::TestTokenizer;
 
 use super::KimiK3ChatRenderer;
 use crate::ChatRenderer;

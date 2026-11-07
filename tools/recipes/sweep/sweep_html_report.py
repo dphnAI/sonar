@@ -176,7 +176,7 @@ def _sla_reason(
 
 def _scheduler_value(candidate: dict[str, Any], key: str) -> str:
     value = candidate.get(key)
-    return "Aphrodite default" if value is None else str(value)
+    return "Sonar default" if value is None else str(value)
 
 
 def _selected_settings(
@@ -500,7 +500,7 @@ footer { color: #607486; font-size: 12px; text-align: center; }
 </head>
 <body><main>
 <header>
-  <div class="sub">Aphrodite recipe sweep report</div>
+  <div class="sub">Sonar recipe sweep report</div>
   <h1>{escape(title)}</h1>
   <div class="sub">{_text(meta["model"])} | {_text(meta["input_tokens"])}
   input / {_text(meta["output_tokens"])} output tokens |
@@ -651,7 +651,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--title",
-        default="Aphrodite Recipe Sweep",
+        default="Sonar Recipe Sweep",
         help="Report title.",
     )
     parser.add_argument(

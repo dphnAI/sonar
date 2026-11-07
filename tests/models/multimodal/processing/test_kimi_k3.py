@@ -7,10 +7,10 @@ import torch
 from PIL import Image
 from transformers import AutoImageProcessor
 
-from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.processors.kimi_k25_vision_fused import (
+from sonar.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.platforms import current_platform
+from sonar.transformers_utils.processors.kimi_k25_vision_fused import (
     KimiK25FusedVisionProcessor,
 )
 
@@ -51,7 +51,7 @@ def test_fused_image_processor_matches_hf(image_processors, width: int, height: 
     )
 
 
-@pytest.mark.usefixtures("default_aphrodite_config")
+@pytest.mark.usefixtures("default_sonar_config")
 def test_mm_device_do_normalize():
     device = current_platform.device_type
     ctx = build_model_context(_MODEL_ID, limit_mm_per_prompt={"image": 2})

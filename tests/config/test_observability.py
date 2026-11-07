@@ -5,7 +5,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.config.observability import ObservabilityConfig
+from sonar.config.observability import ObservabilityConfig
 
 
 def test_custom_histogram_buckets_default_none():

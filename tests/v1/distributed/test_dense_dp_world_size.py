@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 import pytest
 import requests
 
-from aphrodite.platforms import current_platform
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.platforms import current_platform
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
 if TYPE_CHECKING:
     import torch
 
-    from aphrodite.config import ParallelConfig
+    from sonar.config import ParallelConfig
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 DP_SIZE = int(os.getenv("DP_SIZE", "2"))
@@ -31,8 +31,8 @@ class NumaBindingWorkerExtension:
         import psutil
         import torch.distributed as dist
 
-        from aphrodite.distributed import get_pcp_group, get_world_group
-        from aphrodite.utils.cpu_resource_utils import parse_id_list
+        from sonar.distributed import get_pcp_group, get_world_group
+        from sonar.utils.cpu_resource_utils import parse_id_list
 
         parallel = self.parallel_config
         assert parallel.numa_bind and parallel._numa_bind_auto
@@ -90,7 +90,7 @@ def test_dense_dp_world_size():
         str(TP_SIZE),
     ]
     env_dict = {
-        "APHRODITE_SERVER_DEV_MODE": "1",
+        "SONAR_SERVER_DEV_MODE": "1",
         current_platform.device_control_env_var: ",".join(
             str(current_platform.device_id_to_physical_device_id(i)) for i in range(DP_SIZE * TP_SIZE)
         ),
@@ -115,7 +115,7 @@ def test_pcp_dp_with_auto_numa():
     """Automatic binding must cover both PCP workers in both local DP shards."""
     from shutil import which
 
-    from aphrodite.utils import numa_utils
+    from sonar.utils import numa_utils
 
     if not current_platform.is_cuda() or current_platform.device_count() < 4:
         pytest.skip("PCP+DP NUMA smoke test requires four NVIDIA GPUs")
@@ -149,9 +149,9 @@ def test_pcp_dp_with_auto_numa():
         "deepseek-ai/DeepSeek-V2-Lite-Chat",
         server_args,
         env_dict={
-            "APHRODITE_SERVER_DEV_MODE": "1",
-            "APHRODITE_WORKER_MULTIPROC_METHOD": "spawn",
-            "PYTHONPATH": os.pathsep.join(filter(None, [str(APHRODITE_PATH), os.environ.get("PYTHONPATH")])),
+            "SONAR_SERVER_DEV_MODE": "1",
+            "SONAR_WORKER_MULTIPROC_METHOD": "spawn",
+            "PYTHONPATH": os.pathsep.join(filter(None, [str(SONAR_PATH), os.environ.get("PYTHONPATH")])),
         },
         max_wait_seconds=1200,
     ) as server:

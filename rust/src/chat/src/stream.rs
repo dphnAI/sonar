@@ -5,10 +5,10 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_llm::{RequestTimestamps, WeightVersionSpan};
-use aphrodite_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs};
 use futures::Stream;
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_llm::{RequestTimestamps, WeightVersionSpan};
+use sonar_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs};
 use trait_set::trait_set;
 
 use crate::FinishReason;
@@ -171,12 +171,12 @@ trait_set! {
 #[cfg(test)]
 mod tests {
 
-    use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-    use aphrodite_llm::FinishReason;
-    use aphrodite_text::{
+    use futures::stream;
+    use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+    use sonar_llm::FinishReason;
+    use sonar_text::{
         DecodedLogprobs, DecodedPositionLogprobs, DecodedPromptLogprobs, DecodedTokenLogprob,
     };
-    use futures::stream;
 
     use super::{ChatEventStream, CollectedAssistantMessage};
     use crate::error::Error;
@@ -235,7 +235,7 @@ mod tests {
                 }),
                 Ok(ChatEvent::Done {
                     message: Default::default(),
-                    usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                    usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                         prompt_token_count: 2,
                         output_token_count: 1,
                         prompt_cache_usage: Default::default(),
@@ -286,7 +286,7 @@ mod tests {
                     }],
                 }),
                 token_ids: vec![],
-                usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+                usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                     prompt_token_count: 2,
                     output_token_count: 1,
                     prompt_cache_usage: Default::default(),

@@ -9,15 +9,15 @@ from unittest.mock import MagicMock
 import pytest
 from xgrammar import StructuralTag
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionNamedFunction,
     ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tool_parsers import ToolParserManager
-from aphrodite.tool_parsers.deepseekv4_engine_tool_parser import (
+from sonar.tool_parsers import ToolParserManager
+from sonar.tool_parsers.deepseekv4_engine_tool_parser import (
     DeepSeekV4EngineToolParser,
 )
 
@@ -142,7 +142,7 @@ def test_function_calls_wrapper_is_not_recognized():
     # The V3.2 wrapper is not a V4 terminal, so it passes through as content,
     # but the invoke inside it is still parsed (tool calls anchor on the invoke).
     parser = make_parser()
-    model_output = build_tool_call("search", {"query": "aphrodite"}).replace("tool_calls", "function_calls")
+    model_output = build_tool_call("search", {"query": "sonar"}).replace("tool_calls", "function_calls")
 
     result = parser.extract_tool_calls(model_output, make_request())
 
@@ -155,20 +155,20 @@ def test_missing_tool_calls_wrapper_is_recovered():
     # Regression for #48931: at long context the model omits the
     # <｜DSML｜tool_calls> START token but still emits a complete invoke.
     parser = make_parser()
-    model_output = build_tool_call("search", {"query": "aphrodite"}).replace(TC_START + "\n", "")
+    model_output = build_tool_call("search", {"query": "sonar"}).replace(TC_START + "\n", "")
     assert TC_START not in model_output
 
     result = parser.extract_tool_calls(model_output, make_request())
 
     assert result.tools_called
     assert result.tool_calls[0].function.name == "search"
-    assert json.loads(result.tool_calls[0].function.arguments) == {"query": "aphrodite"}
+    assert json.loads(result.tool_calls[0].function.arguments) == {"query": "sonar"}
     assert result.content is None
 
     deltas = stream(make_parser(), model_output, chunk_size=3)
     names = [tc.function.name for d in deltas if d.tool_calls for tc in d.tool_calls if tc.function.name]
     assert names == ["search"]
-    assert json.loads(reconstruct_args(deltas)) == {"query": "aphrodite"}
+    assert json.loads(reconstruct_args(deltas)) == {"query": "sonar"}
     assert not any(d.content and "DSML" in d.content for d in deltas)
 
 
@@ -329,7 +329,7 @@ def _with_strict(
     ]
 
 
-def test_get_aphrodite_registry_structural_tag_returns_structural_tag(
+def test_get_sonar_registry_structural_tag_returns_structural_tag(
     sample_tools: list[ChatCompletionToolsParam],
 ) -> None:
     parser = make_parser()

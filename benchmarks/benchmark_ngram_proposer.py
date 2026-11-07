@@ -8,21 +8,21 @@ import numpy as np
 from benchmark_utils import TimeCollector
 from tabulate import tabulate
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     LoadConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
     SpeculativeConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.v1.spec_decode.ngram_proposer import NgramProposer
-from aphrodite.v1.worker.gpu_input_batch import InputBatch
-from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from sonar.platforms import current_platform
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.v1.spec_decode.ngram_proposer import NgramProposer
+from sonar.v1.worker.gpu_input_batch import InputBatch
+from sonar.v1.worker.gpu_model_runner import GPUModelRunner
 
 
 def benchmark_propose(args):
@@ -41,7 +41,7 @@ def benchmark_propose(args):
             trust_remote_code=False,
         )
         proposer = NgramProposer(
-            aphrodite_config=AphroditeConfig(
+            sonar_config=SonarConfig(
                 model_config=model_config,
                 speculative_config=SpeculativeConfig(
                     prompt_lookup_min=args.min_ngram,
@@ -98,7 +98,7 @@ def benchmark_batched_propose(args):
         prompt_lookup_min=PROMPT_LOOKUP_MIN,
     )
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -108,11 +108,11 @@ def benchmark_batched_propose(args):
         scheduler_config=SchedulerConfig(),
     )
 
-    # monkey patch aphrodite.v1.worker.gpu_model_runner.get_pp_group
+    # monkey patch sonar.v1.worker.gpu_model_runner.get_pp_group
     mock_pp_group = mock.MagicMock()
     mock_pp_group.world_size = 1
-    with mock.patch("aphrodite.v1.worker.gpu_model_runner.get_pp_group", return_value=mock_pp_group):
-        runner = GPUModelRunner(aphrodite_config, DEVICE)
+    with mock.patch("sonar.v1.worker.gpu_model_runner.get_pp_group", return_value=mock_pp_group):
+        runner = GPUModelRunner(sonar_config, DEVICE)
 
         # hack max model len
         runner.max_model_len = MAX_MODEL_LEN

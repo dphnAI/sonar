@@ -15,10 +15,10 @@ import pytest
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mhc import HCHeadOp
-from aphrodite.model_executor.models.deepseek_mtp import SharedHead
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.mhc import HCHeadOp
+from sonar.model_executor.models.deepseek_mtp import SharedHead
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip(
@@ -26,7 +26,7 @@ if not current_platform.is_rocm():
         allow_module_level=True,
     )
 
-from aphrodite.models.deepseek_v4.amd.mtp import (  # noqa: E402
+from sonar.models.deepseek_v4.amd.mtp import (  # noqa: E402
     DeepSeekV4MTP,
     DeepSeekV4MultiTokenPredictor,
 )
@@ -37,7 +37,7 @@ HIDDEN_SIZE = 4096
 HC_MULT = 4
 RMS_NORM_EPS = 1e-6
 HC_EPS = 1e-6
-_EMBEDDING = "aphrodite.model_executor.layers.vocab_parallel_embedding"
+_EMBEDDING = "sonar.model_executor.layers.vocab_parallel_embedding"
 
 
 def _make_predictor(vocab_size: int) -> DeepSeekV4MultiTokenPredictor:
@@ -111,7 +111,7 @@ def _assert_selects_max_logit(top: torch.Tensor, logits: torch.Tensor) -> None:
     assert torch.equal(selected, logits.max(dim=-1).values)
 
 
-def test_get_top_tokens_matches_full_argmax(default_aphrodite_config):
+def test_get_top_tokens_matches_full_argmax(default_sonar_config):
     """Same draft token as the path taken when the reduction is off.
 
     ``get_top_tokens`` has to run the same pre-head transform as
@@ -131,7 +131,7 @@ def test_get_top_tokens_matches_full_argmax(default_aphrodite_config):
         _assert_selects_max_logit(top, logits)
 
 
-def test_get_top_tokens_honors_padded_vocab(default_aphrodite_config):
+def test_get_top_tokens_honors_padded_vocab(default_sonar_config):
     """Padding entries above ``org_vocab_size`` must never win the argmax."""
     vocab_size = 500
     predictor = _make_predictor(vocab_size)

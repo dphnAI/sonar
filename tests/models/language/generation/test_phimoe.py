@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ....utils import large_gpu_test
 from ...utils import check_logprobs_close
@@ -14,7 +14,7 @@ MODELS = [
 
 
 def test_phimoe_routing_function():
-    from aphrodite.model_executor.models.phimoe import phimoe_routing_function
+    from sonar.model_executor.models.phimoe import phimoe_routing_function
 
     test_case = {
         0: {
@@ -67,7 +67,7 @@ def test_phimoe_routing_function():
 )
 @pytest.mark.skipif(
     condition=current_platform.is_cpu(),
-    reason="This test takes a lot time to run on CPU, and aphrodite CI's disk space is not enough for this model.",
+    reason="This test takes a lot time to run on CPU, and sonar CI's disk space is not enough for this model.",
 )
 @large_gpu_test(min_gb=80)
 @pytest.mark.parametrize("model", MODELS)
@@ -76,7 +76,7 @@ def test_phimoe_routing_function():
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -86,11 +86,11 @@ def test_models(
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
-    with aphrodite_runner(model, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with sonar_runner(model, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )

@@ -11,12 +11,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite.model_executor.models.qwen3_dflash import (
+from sonar.model_executor.models.qwen3_dflash import (
     _dflash_layer_causal,
     _get_dflash_fc_input_size,
     dflash_has_any_non_causal,
 )
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     get_eagle3_aux_layers_from_config,
 )
 
@@ -83,28 +83,28 @@ def test_dflash_layer_causal_honors_top_level_override():
     assert _dflash_layer_causal(config, 1) is False
 
 
-def _aphrodite_config(**draft_config):
+def _sonar_config(**draft_config):
     config = SimpleNamespace(**draft_config)
     return SimpleNamespace(speculative_config=SimpleNamespace(draft_model_config=SimpleNamespace(hf_config=config)))
 
 
 def test_dflash_fc_uses_aux_layer_count():
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         num_hidden_layers=5,
         hidden_size=4096,
         target_hidden_size=None,
         target_layer_ids=[1, 17, 32],
     )
 
-    assert _get_dflash_fc_input_size(aphrodite_config) == 3 * 4096
+    assert _get_dflash_fc_input_size(sonar_config) == 3 * 4096
 
 
 def test_dflash_target_layers_map_to_post_layer_boundaries():
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         dflash_config={"target_layer_ids": [0, 16, 31]},
     )
 
-    assert get_eagle3_aux_layers_from_config(aphrodite_config.speculative_config) == (
+    assert get_eagle3_aux_layers_from_config(sonar_config.speculative_config) == (
         1,
         17,
         32,
@@ -114,8 +114,8 @@ def test_dflash_target_layers_map_to_post_layer_boundaries():
 @pytest.mark.parametrize("config_name", ["dflash_config", "eagle_config"])
 def test_eagle_aux_layers_preserves_legacy_layer_ids(config_name):
     layer_ids = [1, 17, 32]
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         **{config_name: {"layer_ids": layer_ids}},
     )
 
-    assert get_eagle3_aux_layers_from_config(aphrodite_config.speculative_config) == tuple(layer_ids)
+    assert get_eagle3_aux_layers_from_config(sonar_config.speculative_config) == tuple(layer_ids)

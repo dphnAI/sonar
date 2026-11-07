@@ -29,7 +29,7 @@ model:
 
 dependencies:
   - note: "Optional: DeepGEMM FP8 MoE kernels for throughput (skip on B200 — known FlashInfer FP8 MoE error)"
-    command: "export APHRODITE_USE_DEEP_GEMM=1"
+    command: "export SONAR_USE_DEEP_GEMM=1"
     optional: true
 
 features:
@@ -85,8 +85,8 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -115,27 +115,27 @@ guide: |
   - **NVIDIA:** compute capability >= 7.0; ~220 GB for weights + 240 GB per 1M context tokens
   - **AMD:** MI300X / MI325X / MI350X / MI355X with ROCm 7.0+
 
-  ### Install Aphrodite (NVIDIA, stable)
+  ### Install Sonar (NVIDIA, stable)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (NVIDIA, nightly)
+  ### Install Sonar (NVIDIA, nightly)
 
   If you hit corrupted output, upgrade to a nightly after commit
   `cf3eacfe58fa9e745c2854782ada884a9f992cf7`:
 
   ```bash
-  uv pip install -U aphrodite-engine --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   ```
 
-  ### Install Aphrodite (AMD ROCm)
+  ### Install Sonar (AMD ROCm)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ### Docker (NVIDIA, dedicated M2 image)
@@ -158,7 +158,7 @@ guide: |
   ### NVIDIA — TP4 (4x H200/H20/H100 or 4x A100/A800)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2 \
+  sonar serve MiniMaxAI/MiniMax-M2 \
     --tensor-parallel-size 4 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -171,7 +171,7 @@ guide: |
   ### TP4+EP (recommended for H100)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2 \
+  sonar serve MiniMaxAI/MiniMax-M2 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -182,7 +182,7 @@ guide: |
   ### DP8+EP
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2 \
+  sonar serve MiniMaxAI/MiniMax-M2 \
     --data-parallel-size 8 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -193,7 +193,7 @@ guide: |
   ### AMD ROCm — TP2
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve MiniMaxAI/MiniMax-M2 \
+  SONAR_ROCM_USE_AITER=1 sonar serve MiniMaxAI/MiniMax-M2 \
     --tensor-parallel-size 2 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -204,8 +204,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model MiniMaxAI/MiniMax-M2 \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -217,12 +217,12 @@ guide: |
 
   ## Troubleshooting
 
-  - **MiniMax QK norm fusion:** Latest Aphrodite applies the fusion automatically at
-    runtime when the fused CUDA op is available; older Aphrodite builds used an
+  - **MiniMax QK norm fusion:** Latest Sonar applies the fusion automatically at
+    runtime when the fused CUDA op is available; older Sonar builds used an
     explicit `fuse_minimax_qk_norm` compile pass.
   - **Corrupted output on stable release:** Upgrade to a nightly after commit
     `cf3eacfe58fa9e745c2854782ada884a9f992cf7`.
-  - **DeepGEMM:** Aphrodite uses DeepGEMM by default; install via
+  - **DeepGEMM:** Sonar uses DeepGEMM by default; install via
     [install_deepgemm.sh](https://github.com/vllm-project/vllm/blob/main/tools/install_deepgemm.sh)
     when missing.
   - **AITER first launch:** AMD initial launch JIT-compiles CK-based FP8 MoE, RMSNorm,
@@ -232,13 +232,13 @@ guide: |
 
   [`RedHatAI/MiniMax-M2-NVFP4`](https://huggingface.co/RedHatAI/MiniMax-M2-NVFP4) is an NVFP4 (4-bit)
   checkpoint — roughly half the VRAM of the native FP8 checkpoint. Select the **nvfp4** variant
-  above (it sets `--kv-cache-dtype fp8`; on Aphrodite v0.28.0+ the FlashInfer NVFP4 MoE
+  above (it sets `--kv-cache-dtype fp8`; on Sonar v0.28.0+ the FlashInfer NVFP4 MoE
   kernels are selected automatically), or pass the repo id
-  directly to `aphrodite serve`. NVFP4 requires a Blackwell GPU (compute capability 10.0+).
+  directly to `sonar serve`. NVFP4 requires a Blackwell GPU (compute capability 10.0+).
 
   ## References
 
   - [Model card](https://huggingface.co/MiniMaxAI/MiniMax-M2)
   - [NVFP4 variant](https://huggingface.co/RedHatAI/MiniMax-M2-NVFP4)
   - [MiniMax](https://www.minimax.io/)
-  - [Aphrodite PR #43410 (automatic MiniMax QK norm fusion)](https://github.com/vllm-project/vllm/pull/43410)
+  - [Sonar PR #43410 (automatic MiniMax QK norm fusion)](https://github.com/vllm-project/vllm/pull/43410)

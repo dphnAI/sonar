@@ -92,7 +92,7 @@ strategy_overrides: {}
 guide: |
   ## Overview
 
-  [Qwen3](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507) is the flagship instruct MoE model in the Qwen3 series, with 235B total parameters and 22B active parameters. This guide covers deploying the model efficiently with Aphrodite on NVIDIA and AMD GPUs.
+  [Qwen3](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507) is the flagship instruct MoE model in the Qwen3 series, with 235B total parameters and 22B active parameters. This guide covers deploying the model efficiently with Sonar on NVIDIA and AMD GPUs.
 
   ## Prerequisites
 
@@ -100,15 +100,15 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### AMD ROCm (pip)
-  > Note: The Aphrodite wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. Use the Docker flow if your environment is incompatible.
+  > Note: The Sonar wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. Use the Docker flow if your environment is incompatible.
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/0.14.1/rocm700
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Deployment Configurations
@@ -117,10 +117,10 @@ guide: |
 
   ```bash
   HIP_VISIBLE_DEVICES="4,5,6,7" \
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_MHA=0 \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_MHA=0 \
   SAFETENSORS_FAST_GPU=1 \
-  aphrodite serve Qwen/Qwen3-235B-A22B \
+  sonar serve Qwen/Qwen3-235B-A22B \
     --trust-remote-code \
     -tp 4 \
     --swap-space 32 \
@@ -135,10 +135,10 @@ guide: |
 
   ```bash
   HIP_VISIBLE_DEVICES="4,5,6,7" \
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_MHA=0 \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_MHA=0 \
   SAFETENSORS_FAST_GPU=1 \
-  aphrodite serve Qwen/Qwen3-235B-A22B-FP8 \
+  sonar serve Qwen/Qwen3-235B-A22B-FP8 \
     --trust-remote-code \
     -tp 4 \
     --swap-space 16 \
@@ -157,7 +157,7 @@ guide: |
   ## Client Usage
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model "Qwen/Qwen3-235B-A22B-FP8" \
     --dataset-name random \
     --random-input-len 8192 \
@@ -172,10 +172,10 @@ guide: |
 
   - Use `--max-num-batched-tokens` and `--max-model-len` to fit memory constraints on smaller nodes.
   - If OOM at startup, lower `--gpu-memory-utilization` (e.g. 0.8) and disable prefix caching.
-  - AMD builds require `APHRODITE_ROCM_USE_AITER=1` for best performance.
+  - AMD builds require `SONAR_ROCM_USE_AITER=1` for best performance.
 
   ## References
 
   - [Model card](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507)
   - [FP8 checkpoint](https://huggingface.co/Qwen/Qwen3-235B-A22B-FP8)
-  - [Aphrodite documentation](https://docs.vllm.ai/)
+  - [Sonar documentation](https://docs.vllm.ai/)

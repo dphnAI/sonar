@@ -6,26 +6,26 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.model_executor.layers.fused_moe.config import RoutingMethodType
-from aphrodite.model_executor.layers.fused_moe.router.base_router import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.model_executor.layers.fused_moe.config import RoutingMethodType
+from sonar.model_executor.layers.fused_moe.router.base_router import (
     eplb_map_to_physical_and_record,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     FusedTopKBiasRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.fused_topk_router import (
     FusedTopKRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     GroupedTopKRouter,
 )
-from aphrodite.model_executor.layers.fused_moe.router.router_factory import (
+from sonar.model_executor.layers.fused_moe.router.router_factory import (
     create_fused_moe_router,
 )
-from aphrodite.model_executor.models.llama4 import Llama4MoE
-from aphrodite.platforms import current_platform
+from sonar.model_executor.models.llama4 import Llama4MoE
+from sonar.platforms import current_platform
 
 DEVICE = current_platform.device_type
 
@@ -35,7 +35,7 @@ def _is_aiter_capable() -> bool:
     if not current_platform.is_rocm():
         return False
     try:
-        from aphrodite.platforms.rocm import get_cdna_version
+        from sonar.platforms.rocm import get_cdna_version
 
         return get_cdna_version() > 2
     except ImportError:
@@ -329,7 +329,7 @@ def baseline_fused_topk(
     3. Optionally renormalize the weights
     """
     scores = torch.softmax(router_logits, dim=-1, dtype=torch.float32)
-    # Use sorted=False to match aphrodite implementation (aphrodite_is_batch_invariant
+    # Use sorted=False to match sonar implementation (sonar_is_batch_invariant
     # defaults to False)
     topk_weights, topk_ids = torch.topk(scores, top_k, dim=-1, sorted=False)
 
@@ -562,7 +562,7 @@ def test_fused_grouped_topk_accepts_idle_rank(scoring_func):
     """Zero-token routing must leave CUDA ready for the next batch."""
     if not current_platform.is_cuda():
         pytest.skip("CUDA required")
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     scores = torch.empty((0, 8), device="cuda", dtype=torch.float32)
     bias = torch.zeros(8, device="cuda")
@@ -637,7 +637,7 @@ def test_grouped_topk(
 
     # Test 1: Python/Triton path against baseline (exact match)
     with patch(
-        "aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router.rocm_aiter_ops.is_fused_moe_enabled",
+        "sonar.model_executor.layers.fused_moe.router.grouped_topk_router.rocm_aiter_ops.is_fused_moe_enabled",
         return_value=False,
     ):
         py_weights, py_ids = router.select_experts(hidden_states, router_logits)
@@ -721,7 +721,7 @@ def test_custom(
 # ):
 #     eplb_state = setup_eplb_state(enable_eplb)
 
-#     monkeypatch.setenv("APHRODITE_MOE_ROUTING_SIMULATION_STRATEGY", strategy)
+#     monkeypatch.setenv("SONAR_MOE_ROUTING_SIMULATION_STRATEGY", strategy)
 #     router = create_fused_moe_router(
 #         top_k=top_k,
 #         global_num_experts=global_num_experts,

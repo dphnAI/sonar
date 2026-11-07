@@ -1,30 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# This Dockerfile builds AMD Zen CPU images for Aphrodite with zentorch.
+# This Dockerfile builds AMD Zen CPU images for Sonar with zentorch.
 # It layers on top of the CPU image produced by docker/Dockerfile.cpu.
 #
 # Supported platforms:
 #   - linux/amd64 (Zen2 and newer; Zen5 is the canonical CI target)
 #
 # Build targets:
-#   aphrodite-openai-zen (default): Aphrodite + zentorch for serving
-#   aphrodite-zen-test            : aphrodite-openai-zen + test deps for CI
+#   sonar-openai-zen (default): Sonar + zentorch for serving
+#   sonar-zen-test            : sonar-openai-zen + test deps for CI
 #
-# Build workflow (see .buildkite/image_build/image_build_zen_cpu.sh):
-#   1. Obtain a CPU base image that already has Aphrodite installed. In CI this is the
+# Build workflow:
+#   1. Obtain a CPU base image that already has Sonar installed. In CI this is the
 #      shared `<repo>:<commit>-cpu` image (docker/Dockerfile.cpu --target
-#      aphrodite-test); either the aphrodite-test or aphrodite-openai target works as the base
-#      since both install Aphrodite into the same venv this stage extends.
+#      sonar-test); either the sonar-test or sonar-openai target works as the base
+#      since both install Sonar into the same venv this stage extends.
 #   2. docker build -f docker/Dockerfile.zen --build-arg BASE_IMAGE=<base>:<tag> \
-#                    --target aphrodite-zen-test -t <out>:<tag> .
+#                    --target sonar-zen-test -t <out>:<tag> .
 
 ARG BASE_IMAGE
 ARG PYTHON_VERSION=3.12
 ARG ZENTORCH_VERSION
 
 ######################### ZEN OPENAI IMAGE #########################
-FROM ${BASE_IMAGE} AS aphrodite-openai-zen
+FROM ${BASE_IMAGE} AS sonar-openai-zen
 
 ARG TARGETARCH
 ARG ZENTORCH_VERSION
@@ -34,29 +34,31 @@ RUN if [ "${TARGETARCH}" != "amd64" ]; then \
         exit 1; \
     fi
 
-WORKDIR /aphrodite-workspace
+WORKDIR /sonar-workspace
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -n "${ZENTORCH_VERSION}" ]; then \
         uv pip install "zentorch==${ZENTORCH_VERSION}"; \
     else \
-        uv pip install "aphrodite-engine[zen]"; \
+        uv pip install "sonar[zen]" \
+            --extra-index-url https://sonar.dphn.ai/whl/release/cpu/x86_64/simple \
+            --index-strategy first-index; \
     fi
 
-LABEL org.opencontainers.image.title="Aphrodite Zen CPU"
-LABEL org.opencontainers.image.description="Aphrodite with zentorch for AMD Zen CPUs"
-LABEL org.opencontainers.image.vendor="Aphrodite Project"
-LABEL org.opencontainers.image.source="https://github.com/aphrodite-engine/aphrodite-engine"
-LABEL ai.aphrodite.build.target-arch="${TARGETARCH}"
-LABEL ai.aphrodite.build.python-version="${PYTHON_VERSION}"
-LABEL ai.aphrodite.build.zentorch-version="${ZENTORCH_VERSION:-unpinned}"
+LABEL org.opencontainers.image.title="Sonar Zen CPU"
+LABEL org.opencontainers.image.description="Sonar with zentorch for AMD Zen CPUs"
+LABEL org.opencontainers.image.vendor="Sonar Project"
+LABEL org.opencontainers.image.source="https://github.com/dphnAI/sonar"
+LABEL ai.sonar.build.target-arch="${TARGETARCH}"
+LABEL ai.sonar.build.python-version="${PYTHON_VERSION}"
+LABEL ai.sonar.build.zentorch-version="${ZENTORCH_VERSION:-unpinned}"
 
-ENTRYPOINT ["aphrodite", "run"]
+ENTRYPOINT ["sonar", "run"]
 
 ######################### ZEN TEST IMAGE #########################
-FROM aphrodite-openai-zen AS aphrodite-zen-test
+FROM sonar-openai-zen AS sonar-zen-test
 
-WORKDIR /aphrodite-workspace
+WORKDIR /sonar-workspace
 
 COPY requirements/common.txt requirements/common.txt
 COPY requirements/test/cuda.in requirements/test/zen.in
@@ -65,7 +67,7 @@ RUN sed -i '/mamba_ssm/d'                  requirements/test/zen.in && \
     sed -i 's/^torch==.*/torch==2.14.0/g'  requirements/test/zen.in && \
     sed -i 's/torchaudio.*/torchaudio/g'   requirements/test/zen.in && \
     sed -i 's/torchvision.*/torchvision/g' requirements/test/zen.in && \
-    # zentorch parity: keep sentence-transformers pinned where aphrodite-test-deps did.
+    # zentorch parity: keep sentence-transformers pinned where sonar-test-deps did.
     sed -i 's/^sentence-transformers.*/sentence-transformers==5.3.0/g' requirements/test/zen.in && \
     uv pip compile requirements/test/zen.in \
        -o requirements/test/zen.txt \
@@ -79,18 +81,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -n "${ZENTORCH_VERSION}" ]; then \
         uv pip install --force-reinstall --no-deps "zentorch==${ZENTORCH_VERSION}"; \
     else \
-        uv pip install --force-reinstall --no-deps "aphrodite-engine[zen]"; \
+        uv pip install --force-reinstall --no-deps "sonar[zen]" \
+            --extra-index-url https://sonar.dphn.ai/whl/release/cpu/x86_64/simple \
+            --index-strategy first-index; \
     fi
 
 ADD ./tests/ ./tests/
 ADD ./examples/ ./examples/
 ADD ./benchmarks/ ./benchmarks/
-ADD ./aphrodite/collect_env.py .
+ADD ./sonar/collect_env.py .
 ADD ./docker/ ./docker/
-ADD ./.buildkite/ ./.buildkite/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -e tests/aphrodite_test_utils
+    uv pip install -e tests/sonar_test_utils
 
 ENV HF_XET_HIGH_PERFORMANCE=1
 ENV HF_HUB_DOWNLOAD_TIMEOUT=60

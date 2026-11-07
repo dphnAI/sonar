@@ -8,20 +8,20 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
     CUDAGraphMode,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.v1.worker.gpu import cudagraph_utils as gpu_cudagraph_utils
-from aphrodite.v1.worker.utils import get_uniform_decode_token_count
+from sonar.v1.worker.gpu import cudagraph_utils as gpu_cudagraph_utils
+from sonar.v1.worker.utils import get_uniform_decode_token_count
 
 pytestmark = pytest.mark.cpu_test
 
 
-def _create_aphrodite_config_for_dsd(
+def _create_sonar_config_for_dsd(
     max_num_seqs: int,
     max_spec_tokens: int,
     *,
@@ -49,17 +49,17 @@ def _create_aphrodite_config_for_dsd(
     compilation_config.max_cudagraph_capture_size = max_capture_tokens
     compilation_config.post_init_cudagraph_sizes()
 
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.compilation_config = compilation_config
-    aphrodite_config.scheduler_config = SchedulerConfig.default_factory(
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.compilation_config = compilation_config
+    sonar_config.scheduler_config = SchedulerConfig.default_factory(
         max_num_seqs=max_num_seqs,
     )
-    aphrodite_config.parallel_config = ParallelConfig()
+    sonar_config.parallel_config = ParallelConfig()
     # num_speculative_tokens is the max K (num_speculative_steps). The manager
     # recovers num_new_sampled_tokens_per_step as
     # decode_query_len - num_speculative_tokens; with decode_query_len =
     # max_spec_tokens + 1 this yields the normal per-step bonus of 1.
-    aphrodite_config.num_speculative_tokens = max_spec_tokens
+    sonar_config.num_speculative_tokens = max_spec_tokens
 
     speculative_config = MagicMock()
     speculative_config.uses_dynamic_speculative_decoding.return_value = use_dynamic_sd
@@ -74,9 +74,9 @@ def _create_aphrodite_config_for_dsd(
         speculative_config.num_speculative_tokens_per_batch_size = num_spec_per_batch_size
     else:
         speculative_config.num_speculative_tokens_per_batch_size = None
-    aphrodite_config.speculative_config = speculative_config
+    sonar_config.speculative_config = speculative_config
 
-    return aphrodite_config
+    return sonar_config
 
 
 def test_dynamic_sd_full_cudagraph_covers_all_uniform_decode_shapes(monkeypatch):
@@ -98,12 +98,12 @@ def test_dynamic_sd_full_cudagraph_covers_all_uniform_decode_shapes(monkeypatch)
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=max_num_seqs,
         max_spec_tokens=max_spec_tokens,
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=max_decode_query_len,
@@ -158,13 +158,13 @@ def test_dynamic_sd_cudagraphs_use_clamped_query_length(monkeypatch):
         lambda: None,
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=16,
         max_spec_tokens=3,
         num_spec_per_batch_size=[(1, 16, 5)],
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=4,
@@ -184,14 +184,14 @@ def test_dynamic_sd_non_uniform_batch_falls_back_to_piecewise(monkeypatch):
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=512,
         max_spec_tokens=max_spec_tokens,
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         use_dynamic_sd=True,
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=max_spec_tokens + 1,
@@ -230,13 +230,13 @@ def test_prompt_chunks_shaped_like_spec_decode_miss_the_full_graph(monkeypatch):
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=64,
         max_spec_tokens=max_spec_tokens,
         use_dynamic_sd=False,
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=decode_query_len,
@@ -294,14 +294,14 @@ def test_basic_sd_does_not_capture_shorter_full_decode_shapes(monkeypatch):
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=max_num_seqs,
         max_spec_tokens=max_spec_tokens,
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         use_dynamic_sd=False,
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=max_decode_query_len,
@@ -360,7 +360,7 @@ def test_dynamic_sd_only_captures_scheduled_query_lengths(monkeypatch):
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
 
-    aphrodite_config = _create_aphrodite_config_for_dsd(
+    sonar_config = _create_sonar_config_for_dsd(
         max_num_seqs=max_num_seqs,
         max_spec_tokens=max_spec_tokens,
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
@@ -368,7 +368,7 @@ def test_dynamic_sd_only_captures_scheduled_query_lengths(monkeypatch):
         num_spec_per_batch_size=num_spec_per_batch_size,
     )
     manager = gpu_cudagraph_utils.CudaGraphManager(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=torch.device("cpu"),
         cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
         decode_query_len=max_decode_query_len,

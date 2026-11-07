@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.assets.audio import AudioAsset
+from sonar.assets.audio import AudioAsset
 from tests.models.registry import HF_EXAMPLE_MODELS
 
 MODELS = {
@@ -36,7 +36,7 @@ def ragged_clips():
 @pytest.mark.parametrize("arch", sorted(MODELS))
 @pytest.mark.parametrize("max_tokens", [8])
 def test_variable_length_audio_batching(
-    aphrodite_runner,
+    sonar_runner,
     ragged_clips,
     arch: str,
     max_tokens: int,
@@ -77,15 +77,15 @@ def test_variable_length_audio_batching(
         add_generation_prompt=True,
     )
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         dtype="bfloat16",
         enforce_eager=True,
         limit_mm_per_prompt={"audio": 1},
-    ) as aphrodite_model:
+    ) as sonar_model:
         # One call so the clips are scheduled into the same forward pass;
         # issued separately they never reach the ragged path.
-        outputs = aphrodite_model.generate_greedy(
+        outputs = sonar_model.generate_greedy(
             [prompt] * len(ragged_clips),
             max_tokens,
             audios=[[clip] for clip in ragged_clips],

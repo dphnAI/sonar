@@ -1,11 +1,11 @@
 [package]
-name = "aphrodite-mock-engine"
+name = "sonar-mock-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "aphrodite-mock-engine"
+name = "sonar-mock-engine"
 path = "src/main.rs"
 
 [dependencies]
@@ -20,11 +20,11 @@ tokio = { workspace = true, features = ["signal"] }
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-aphrodite-engine-core-client.workspace = true
+sonar-engine-core-client.workspace = true
 zeromq.workspace = true
 
 [dev-dependencies]
-aphrodite-engine-core-client = { workspace = true, features = ["test-util"] }
+sonar-engine-core-client = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

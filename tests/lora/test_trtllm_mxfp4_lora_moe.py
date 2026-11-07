@@ -8,20 +8,20 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
     TrtLlmMxfp4LoRAExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     Mxfp4MoeBackend,
     _requested_kernel_cls,
     backend_to_kernel_cls,
     convert_weight_to_mxfp4_moe_kernel_format,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import has_flashinfer_trtllm_fused_moe
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config
 
 # FlashInfer's TRTLLM MoE LoRA kernels only run on SM100-family GPUs.

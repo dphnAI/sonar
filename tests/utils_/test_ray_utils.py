@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.v1.executor.ray_utils import get_bundles_sorted_by_node
+from sonar.v1.executor.ray_utils import get_bundles_sorted_by_node
 
 NODE_A = "node_a"
 NODE_B = "node_b"
@@ -85,11 +85,11 @@ def test_get_bundles_sorted_by_node(bundles_to_node_id, bundle_specs, expected):
 
     with (
         patch(
-            "aphrodite.v1.executor.ray_utils.placement_group_table",
+            "sonar.v1.executor.ray_utils.placement_group_table",
             return_value={"bundles_to_node_id": bundles_to_node_id},
         ),
-        patch("aphrodite.v1.executor.ray_utils.ray") as mock_ray,
-        patch("aphrodite.v1.executor.ray_utils.current_platform") as mock_platform,
+        patch("sonar.v1.executor.ray_utils.ray") as mock_ray,
+        patch("sonar.v1.executor.ray_utils.current_platform") as mock_platform,
     ):
         mock_ray.get_runtime_context.return_value = mock_ctx
         mock_ray.nodes.return_value = MOCK_RAY_NODES

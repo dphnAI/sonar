@@ -5,11 +5,11 @@
 import pytest
 import torch
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
@@ -17,7 +17,7 @@ import helion
 import helion.language as hl
 from helion.autotuner.base_search import BaseSearch
 
-from aphrodite.kernels.helion.register import create_helion_decorated_kernel
+from sonar.kernels.helion.register import create_helion_decorated_kernel
 from tests.kernels.helion.helpers import dummy_kernel_registry
 
 
@@ -46,13 +46,13 @@ class TestAutotuneDisabledKernel:
     """Test autotuning flow on disabled kernels (no platform configs)."""
 
     def setup_method(self):
-        from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
+        from sonar.kernels.helion.register import _REGISTERED_KERNELS
 
         self._saved_registry = dict(_REGISTERED_KERNELS)
         _REGISTERED_KERNELS.clear()
 
     def teardown_method(self):
-        from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
+        from sonar.kernels.helion.register import _REGISTERED_KERNELS
 
         _REGISTERED_KERNELS.clear()
         _REGISTERED_KERNELS.update(self._saved_registry)

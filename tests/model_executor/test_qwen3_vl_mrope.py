@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.model_executor.models.qwen3_vl import Qwen3VLForConditionalGeneration
-from aphrodite.multimodal.inputs import (
+from sonar.model_executor.models.qwen3_vl import Qwen3VLForConditionalGeneration
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,

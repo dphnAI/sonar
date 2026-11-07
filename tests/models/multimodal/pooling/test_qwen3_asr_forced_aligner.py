@@ -19,7 +19,7 @@ def build_prompt(words: list[str]) -> str:
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @torch.inference_mode()
 def test_qwen3_forced_aligner(
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
@@ -29,14 +29,14 @@ def test_qwen3_forced_aligner(
     # 5-second silent audio at 16kHz
     audio = np.zeros(16000 * 5, dtype=np.float32)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
         enforce_eager=True,
         max_model_len=512,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.llm.encode(
+    ) as sonar_model:
+        outputs = sonar_model.llm.encode(
             [{"prompt": prompt, "multi_modal_data": {"audio": audio}}],
             pooling_task="token_classify",
         )

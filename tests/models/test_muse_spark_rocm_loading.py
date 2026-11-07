@@ -8,19 +8,19 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.models.muse_spark.amd.model as amd_model
-from aphrodite.models.muse_spark.amd.model import (
+import sonar.models.muse_spark.amd.model as amd_model
+from sonar.models.muse_spark.amd.model import (
     MuseSpark1xForCausalLM,
     MuseSpark1xModel,
 )
-from aphrodite.models.muse_spark.amd.multimodal import MuseSparkForConditionalGeneration
-from aphrodite.models.muse_spark.amd.muse_moe_runner import (
+from sonar.models.muse_spark.amd.multimodal import MuseSparkForConditionalGeneration
+from sonar.models.muse_spark.amd.muse_moe_runner import (
     MuseSparkRoutedExperts,
     _track_quark_expert_weights,
     _validate_quark_expert_weights,
 )
-from aphrodite.models.muse_spark.common.moe import MuseSparkConsolidatedRoutedExperts
-from aphrodite.platforms import current_platform
+from sonar.models.muse_spark.common.moe import MuseSparkConsolidatedRoutedExperts
+from sonar.platforms import current_platform
 
 
 def test_rocm_mapper_retains_quark_dense_and_individual_expert_scales() -> None:
@@ -31,7 +31,7 @@ def test_rocm_mapper_retains_quark_dense_and_individual_expert_scales() -> None:
     stacked_dense_scale = f"{layer}.self_attn.q_proj.weight_scale"
 
     amd_mapped = list(
-        MuseSparkForConditionalGeneration.hf_to_aphrodite_mapper.apply(
+        MuseSparkForConditionalGeneration.hf_to_sonar_mapper.apply(
             [
                 (expert_scale, torch.ones(1)),
                 (dense_scale, torch.ones(1)),
@@ -113,7 +113,7 @@ def test_rocm_nested_mapper_preserves_individual_expert_projections() -> None:
         ("layers.0.self_attn.q_proj.weight", torch.ones(1)),
     ]
 
-    mapped = list(MuseSpark1xModel.hf_to_aphrodite_mapper.apply(weights))
+    mapped = list(MuseSpark1xModel.hf_to_sonar_mapper.apply(weights))
 
     assert [name for name, _ in mapped] == [
         "layers.0.feed_forward.experts.7.gate_proj.weight",
@@ -124,7 +124,7 @@ def test_rocm_nested_mapper_preserves_individual_expert_projections() -> None:
 
 
 def test_public_entry_point_selects_rocm_model(monkeypatch) -> None:
-    import aphrodite.models.muse_spark as muse_spark
+    import sonar.models.muse_spark as muse_spark
 
     original_model = muse_spark.MuseSpark1xForCausalLM
     original_omni_model = muse_spark.MuseSparkForConditionalGeneration
@@ -198,7 +198,7 @@ def test_unquantized_loader_routes_per_expert_names_to_expert_mapping(
 
     monkeypatch.setattr(MuseSparkConsolidatedRoutedExperts, "load_weights", _consolidated)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.fused_moe.routed_experts.RoutedExperts.load_weights",
+        "sonar.model_executor.layers.fused_moe.routed_experts.RoutedExperts.load_weights",
         _per_expert,
     )
     experts = MuseSparkRoutedExperts.__new__(MuseSparkRoutedExperts)
@@ -216,8 +216,8 @@ def test_unquantized_loader_routes_per_expert_names_to_expert_mapping(
 
 
 def test_router_weight_reload_refolds_and_preserves_planes(monkeypatch) -> None:
-    from aphrodite.model_executor.layers.linear import ReplicatedLinear
-    from aphrodite.models.muse_spark.amd.model import MuseSpark1xMoE
+    from sonar.model_executor.layers.linear import ReplicatedLinear
+    from sonar.models.muse_spark.amd.model import MuseSpark1xMoE
 
     moe = MuseSpark1xMoE.__new__(MuseSpark1xMoE)
     torch.nn.Module.__init__(moe)
@@ -252,13 +252,13 @@ def test_router_weight_reload_refolds_and_preserves_planes(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("sharing, bypass", [(False, False), (True, False), (False, True)])
-def test_aiter_kv_workspace_only_for_cache_readers(monkeypatch, default_aphrodite_config, sharing, bypass) -> None:
-    from aphrodite.model_executor.layers.attention import Attention
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import (
+def test_aiter_kv_workspace_only_for_cache_readers(monkeypatch, default_sonar_config, sharing, bypass) -> None:
+    from sonar.model_executor.layers.attention import Attention
+    from sonar.v1.attention.backends.rocm_aiter_fa import (
         AiterFlashAttentionImpl,
         AiterFlashAttentionMetadataBuilder,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec
 
     layer = Attention.__new__(Attention)
     torch.nn.Module.__init__(layer)
@@ -269,12 +269,12 @@ def test_aiter_kv_workspace_only_for_cache_readers(monkeypatch, default_aphrodit
     layer.kv_sharing_target_layer_name = "source" if sharing else None
     layer.kv_cache_update_bypass = bypass
     monkeypatch.setattr(
-        default_aphrodite_config.compilation_config,
+        default_sonar_config.compilation_config,
         "static_forward_context",
         {"attn": layer},
     )
     monkeypatch.setattr(
-        default_aphrodite_config,
+        default_sonar_config,
         "model_config",
         SimpleNamespace(
             dtype=torch.bfloat16,
@@ -284,5 +284,5 @@ def test_aiter_kv_workspace_only_for_cache_readers(monkeypatch, default_aphrodit
         ),
     )
     spec = FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=64, dtype=torch.bfloat16)
-    builder = AiterFlashAttentionMetadataBuilder(spec, ["attn"], default_aphrodite_config, torch.device("cpu"))
+    builder = AiterFlashAttentionMetadataBuilder(spec, ["attn"], default_sonar_config, torch.device("cpu"))
     assert (builder.kv_sharing_workspace is not None) == (sharing or bypass)

@@ -4,52 +4,52 @@
 import pytest
 import torch
 
-import aphrodite.config
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.compilation.passes.fusion.mla_rope_kvcache_cat_fusion import (
+import sonar.config
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.compilation.passes.fusion.mla_rope_kvcache_cat_fusion import (
     MLARoPEKVCacheCatFusionPass,
 )
-from aphrodite.compilation.passes.utility.fix_functionalization import (
+from sonar.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
+    SonarConfig,
 )
-from aphrodite.config.cache import CacheDType
-from aphrodite.forward_context import get_forward_context, set_forward_context
-from aphrodite.model_executor.layers.attention import MLAAttention
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.model_executor.layers.rotary_embedding import (
+from sonar.config.cache import CacheDType
+from sonar.forward_context import get_forward_context, set_forward_context
+from sonar.model_executor.layers.attention import MLAAttention
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.model_executor.layers.rotary_embedding import (
     DeepseekScalingRotaryEmbedding,
     RotaryEmbedding,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import _encode_layer_name
-from aphrodite.v1.attention.backend import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import _encode_layer_name
+from sonar.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.fa_utils import flash_attn_supports_mla
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 from tests.compile.backend import TestBackend
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 INDEX_SELECT_OP = torch.ops.aten.index.Tensor
-APHRODITE_UNIFIED_MLA_KV_CACHE_UPDATE_OP = torch.ops.aphrodite.unified_mla_kv_cache_update
+SONAR_UNIFIED_MLA_KV_CACHE_UPDATE_OP = torch.ops.sonar.unified_mla_kv_cache_update
 FP8_DTYPE = current_platform.fp8_dtype()
 
 
 class MLARoPEKVCacheCatTestModel(torch.nn.Module):
     def __init__(
         self,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         attn_backend: AttentionBackendEnum,
         use_deepseek_scaling_rope: bool,
         num_heads: int,
@@ -77,7 +77,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
 
         self.num_kv_heads = 1
         self.head_size = kv_lora_rank + qk_rope_head_dim
-        self.block_size = aphrodite_config.cache_config.block_size
+        self.block_size = sonar_config.cache_config.block_size
         self.scale = self.qk_head_dim**-0.5
 
         if use_deepseek_scaling_rope:
@@ -132,8 +132,8 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
             q_lora_rank=self.q_lora_rank,
             kv_lora_rank=self.kv_lora_rank,
             kv_b_proj=self.kv_b_proj,
-            cache_config=aphrodite_config.cache_config,
-            quant_config=aphrodite_config.quant_config,
+            cache_config=sonar_config.cache_config,
+            quant_config=sonar_config.quant_config,
             prefix=prefix,
             attn_backend=attn_backend.get_class(),
         )
@@ -142,14 +142,14 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
         self.mla_attn._v_scale = self.mla_attn._v_scale.to(device)
 
         # Keep both the string dtype (for ops) and torch dtype (for tensors)
-        self.kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
+        self.kv_cache_dtype_str = sonar_config.cache_config.cache_dtype
         self.kv_cache_dtype = FP8_DTYPE if self.kv_cache_dtype_str.startswith("fp8") else self.dtype
 
         # Initialize attn MetadataBuilder
         self.builder = self.attn_backend.get_builder_cls()(
-            kv_cache_spec=self.mla_attn.get_kv_cache_spec(aphrodite_config),
+            kv_cache_spec=self.mla_attn.get_kv_cache_spec(sonar_config),
             layer_names=[self.mla_attn.layer_name],
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             device=device,
         )
 
@@ -194,7 +194,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
 
         q[..., self.qk_nope_head_dim :], k_pe = self.rotary_emb(positions, q[..., self.qk_nope_head_dim :], k_pe)
 
-        dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
+        dummy = torch.ops.sonar.unified_mla_kv_cache_update(
             kv_c,
             k_pe,
             _encode_layer_name(self.layer_name),
@@ -206,12 +206,12 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
         ops = [
             INDEX_SELECT_OP,
-            torch.ops.aphrodite.unified_mla_kv_cache_update.default,
+            torch.ops.sonar.unified_mla_kv_cache_update.default,
         ]
         return ops
 
     def ops_in_model_after(self) -> list[torch._ops.OpOverload]:
-        return [torch.ops.aphrodite.fused_rope_unified_mla_kv_cache_update.default]
+        return [torch.ops.sonar.fused_rope_unified_mla_kv_cache_update.default]
 
 
 MLA_BACKENDS = [AttentionBackendEnum.TRITON_MLA]
@@ -256,7 +256,7 @@ def test_mla_rope_kvcache_cat_fusion(
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         model_config=ModelConfig(
             model="deepseek-ai/DeepSeek-V2-Lite",
             dtype=dtype,
@@ -266,7 +266,7 @@ def test_mla_rope_kvcache_cat_fusion(
             cache_dtype=kv_cache_dtype,
         ),
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             pass_config=PassConfig(
                 fuse_rope_kvcache_cat_mla=True,
                 eliminate_noops=True,
@@ -274,13 +274,13 @@ def test_mla_rope_kvcache_cat_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
+    with sonar.config.set_current_sonar_config(sonar_config), monkeypatch.context() as m:
         if not torch.distributed.is_initialized():
-            from aphrodite.distributed.parallel_state import (
+            from sonar.distributed.parallel_state import (
                 init_distributed_environment,
                 initialize_model_parallel,
             )
-            from aphrodite.utils.system_utils import update_environment_variables
+            from sonar.utils.system_utils import update_environment_variables
 
             update_environment_variables(
                 {
@@ -295,11 +295,11 @@ def test_mla_rope_kvcache_cat_fusion(
             initialize_model_parallel()
 
         if attn_backend == AttentionBackendEnum.ROCM_AITER_MLA:
-            m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+            m.setenv("SONAR_ROCM_USE_AITER", "1")
             rocm_aiter_ops.refresh_env_variables()
 
         model = MLARoPEKVCacheCatTestModel(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             attn_backend=attn_backend,
             use_deepseek_scaling_rope=use_deepseek_scaling_rope,
             num_heads=num_heads,
@@ -313,7 +313,7 @@ def test_mla_rope_kvcache_cat_fusion(
             device=torch.get_default_device(),
         )
 
-        fusion_pass = MLARoPEKVCacheCatFusionPass(aphrodite_config)
+        fusion_pass = MLARoPEKVCacheCatFusionPass(sonar_config)
         # note: FixFunctionalizationPass is required to correctly lower
         # the fused op to its inplace version with auto-functionalization v1.
         # Without it, decompose_auto_functionalized calls clone_preserve_strides
@@ -323,10 +323,10 @@ def test_mla_rope_kvcache_cat_fusion(
         # tensor (_all_bases) and reconstructs the slice as a view, so the
         # offset is never passed through as_strided lowering.
         passes = [
-            NoOpEliminationPass(aphrodite_config),
+            NoOpEliminationPass(sonar_config),
             fusion_pass,
-            PostCleanupPass(aphrodite_config),
-            FixFunctionalizationPass(aphrodite_config),
+            PostCleanupPass(sonar_config),
+            FixFunctionalizationPass(sonar_config),
         ]
         backend = TestBackend(*passes)
 
@@ -343,7 +343,7 @@ def test_mla_rope_kvcache_cat_fusion(
         pos_unfused = pos.clone()
 
         # Run unfused version
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
@@ -355,7 +355,7 @@ def test_mla_rope_kvcache_cat_fusion(
         # Run fused version (compiled)
         torch._dynamo.mark_dynamic(qkv_lora, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)

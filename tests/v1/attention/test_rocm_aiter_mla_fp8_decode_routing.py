@@ -17,13 +17,13 @@ query-head nor its long-context pipeline limits.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm AITER MLA tests", allow_module_level=True)
 
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper  # noqa: E402
+from sonar.v1.attention.backends.mla import rocm_aiter_mla  # noqa: E402
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import AiterMLAHelper  # noqa: E402
 
 FP8_DTYPES = ["fp8", "fp8_e4m3", "fp8_e5m2"]
 UNQUANTIZED_DTYPES = ["auto", "bfloat16"]
@@ -33,7 +33,7 @@ UNQUANTIZED_DTYPES = ["auto", "bfloat16"]
 def gluon_available(monkeypatch):
     """Pin the arch gate and the mode knob so only the dtype rules are in play.
 
-    Gluon ships a gfx950 build only, and APHRODITE_ROCM_AITER_MLA_ASM_PADDING can
+    Gluon ships a gfx950 build only, and SONAR_ROCM_AITER_MLA_ASM_PADDING can
     force the asm path on any arch. Without pinning both, the expectations that
     bf16 *keeps* Gluon would pass on a gfx950 host and fail on gfx942 for
     reasons that have nothing to do with what these tests cover.
@@ -60,7 +60,7 @@ def test_non_dcp_fp8_never_routes_to_gluon(kv_cache_dtype, num_heads, max_qo_len
 @pytest.mark.parametrize("num_heads", [1, 2, 4, 8, 12])
 @pytest.mark.parametrize("mode", ["auto", "gluon", "asm"])
 def test_fp8_never_routes_to_gluon_under_any_mode(monkeypatch, kv_cache_dtype, num_heads, mode):
-    """APHRODITE_ROCM_AITER_MLA_ASM_PADDING cannot force a non-DCP fp8 cache onto Gluon.
+    """SONAR_ROCM_AITER_MLA_ASM_PADDING cannot force a non-DCP fp8 cache onto Gluon.
 
     The dtype guard deliberately precedes the mode knob: honouring an explicit
     "gluon" request under fp8 would hand Gluon the batch it asserts against, so

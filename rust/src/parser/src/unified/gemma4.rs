@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use serde_json::{Map, Number, Value};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use winnow::ascii::multispace0 as ws0;
 use winnow::combinator::{alt, delimited, eof, opt, separated, seq, terminated};
 use winnow::error::{ContextError, ErrMode, ModalResult};
@@ -577,9 +577,9 @@ fn parse_gemma4_scalar(value: &str) -> Value {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
-    use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
     use serde_json::{Value, json};
+    use sonar_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
     use thiserror_ext::AsReport;
     use winnow::combinator::{eof, terminated};
     use winnow::error::ErrMode;

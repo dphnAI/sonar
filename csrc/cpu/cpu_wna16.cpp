@@ -12,12 +12,12 @@
 #endif
 #include "cpu/micro_gemm/cpu_micro_gemm_vec.hpp"
 
-#define APHRODITE_DISPATCH_CASE_16B_TYPES(...)            \
+#define SONAR_DISPATCH_CASE_16B_TYPES(...)                \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)
 
-#define APHRODITE_DISPATCH_16B_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, APHRODITE_DISPATCH_CASE_16B_TYPES(__VA_ARGS__))
+#define SONAR_DISPATCH_16B_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, SONAR_DISPATCH_CASE_16B_TYPES(__VA_ARGS__))
 
 template <typename T>
 void print_logits(const char* name, T* ptr, int32_t row, int32_t col,
@@ -316,7 +316,7 @@ void cpu_gemm_wna16(
   int32_t* zeros_ptr = has_zp ? zeros->data_ptr<int32_t>() : nullptr;
   const int64_t zeros_group_stride = has_zp ? zeros->stride(0) : 0;
 
-  APHRODITE_DISPATCH_16B_TYPES(input.scalar_type(), "cpu_gemm_wna16", [&]() {
+  SONAR_DISPATCH_16B_TYPES(input.scalar_type(), "cpu_gemm_wna16", [&]() {
     if (isa == ISA::AMX) {
       using gemm_t = cpu_micro_gemm::MicroGemm<ISA::AMX, scalar_t>;
       if (has_zp) {

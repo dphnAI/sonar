@@ -7,18 +7,18 @@ bytes included, and qkv left untouched."""
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm (gfx950) FlyDSL kernel", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip("gfx950 instructions", allow_module_level=True)
 
-from aphrodite import _custom_ops as ops  # noqa: E402
-from aphrodite.models.minimax_m3.amd.ops.norm_rope_nvfp4_insert.host import (  # noqa: E402
+from sonar import _custom_ops as ops  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.norm_rope_nvfp4_insert.host import (  # noqa: E402
     minimax_m3_norm_rope_nvfp4_insert,
 )
 from tests.kernels.attention.minimax_m3_nvfp4_ref import (  # noqa: E402
@@ -33,7 +33,7 @@ ROT = 64
 
 
 def _request_slots(starts, lens, num_pages, gen):
-    """APHRODITE's slot mapping: request r's tokens at positions starts[r].. of its
+    """SONAR's slot mapping: request r's tokens at positions starts[r].. of its
     own random pages."""
     perm = torch.randperm(num_pages, generator=gen)
     out, p = [], 0

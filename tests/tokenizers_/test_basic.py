@@ -13,10 +13,10 @@ from transformers import (
     tokenization_utils_base,
 )
 
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
-from aphrodite.tokenizers.hf import HfTokenizer
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.tokenizers.registry import (
+from sonar.tokenizers import TokenizerLike, get_tokenizer
+from sonar.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.registry import (
     cached_tokenizer_from_config,
     resolve_tokenizer_args,
     tokenizer_args_from_config,
@@ -160,7 +160,7 @@ def test_tokenizer_config_code_revision(code_revision):
     revision = "c8ae8a2e5845fc3ad4e5237e4346e5a9ba1e87d2"
 
     with patch(
-        "aphrodite.tokenizers.registry.CachedHfTokenizer.from_pretrained",
+        "sonar.tokenizers.registry.CachedHfTokenizer.from_pretrained",
         return_value=SimpleNamespace(is_fast=True),
     ) as load_tokenizer:
         get_tokenizer(

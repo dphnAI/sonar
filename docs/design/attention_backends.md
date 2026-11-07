@@ -20,19 +20,19 @@ There are two ways to specify the backend from the command line:
 **Option 1: Using `--attention-backend` (simple)**
 
 ```bash
-aphrodite serve <model> --attention-backend FLASH_ATTN
+sonar serve <model> --attention-backend FLASH_ATTN
 ```
 
 **Option 2: Using `--attention-config.backend` / `-ac.backend` (structured config)**
 
 ```bash
 # Dot notation
-aphrodite serve <model> --attention-config.backend FLASH_ATTN
-aphrodite serve <model> -ac.backend FLASH_ATTN
+sonar serve <model> --attention-config.backend FLASH_ATTN
+sonar serve <model> -ac.backend FLASH_ATTN
 
 # JSON format
-aphrodite serve <model> --attention-config '{"backend": "FLASH_ATTN"}'
-aphrodite serve <model> -ac '{"backend": "FLASH_ATTN"}'
+sonar serve <model> --attention-config '{"backend": "FLASH_ATTN"}'
+sonar serve <model> -ac '{"backend": "FLASH_ATTN"}'
 ```
 
 > **Note:** `--attention-backend` and `--attention-config.backend` are mutually
@@ -43,9 +43,9 @@ aphrodite serve <model> -ac '{"backend": "FLASH_ATTN"}'
 Use `AttentionConfig` with the `LLM` class:
 
 ```python
-from aphrodite import LLM
-from aphrodite.config import AttentionConfig
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar import LLM
+from sonar.config import AttentionConfig
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 # Method 1: Using AttentionConfig with enum
 llm = LLM(
@@ -83,7 +83,7 @@ Reason: ['compute capability not supported']
 
 When no backend is specified (the default):
 
-1. Aphrodite iterates through backends in **priority order** (see tables below)
+1. Sonar iterates through backends in **priority order** (see tables below)
 2. Each backend is validated against your configuration
 3. The **first compatible backend** is selected
 4. If no backend is compatible, an error is raised listing all backends and
@@ -91,7 +91,7 @@ When no backend is specified (the default):
 
 ## Backend Priority (CUDA)
 
-When no backend is explicitly selected, Aphrodite chooses the first
+When no backend is explicitly selected, Sonar chooses the first
 compatible backend from these priority-ordered lists.
 
 Priority is **1 = highest** (tried first).

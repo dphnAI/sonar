@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
-from aphrodite.lora.peft_helper import PEFTHelper
+from sonar.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
+from sonar.lora.peft_helper import PEFTHelper
 
 RANK, ALPHA = 16, 32
 # PEFTHelper stores alpha/sqrt(r) for use_rslora adapters.

@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import uuid
 
-import aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
-from aphrodite.config.ec_transfer import ECRole
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.common import (
+import sonar.distributed.ec_transfer.ec_connector.cpu.scheduler as sched_mod
+from sonar.config.ec_transfer import ECRole
+from sonar.distributed.ec_transfer.ec_connector.cpu.common import (
     ECCPUWorkerMetadata,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.ec_shared_region import (
     ECSharedRegion,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from sonar.distributed.ec_transfer.ec_connector.cpu.scheduler import ECCPUScheduler
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 _N = 16
 _BS = 64
@@ -75,7 +75,7 @@ def _make_scheduler(
     monkeypatch.setattr(sched_mod, "create_ec_shared_region", lambda cfg: region)
 
     return ECCPUScheduler(
-        create_ec_aphrodite_config(
+        create_ec_sonar_config(
             ec_role=ec_role,
             tensor_parallel_size=tensor_parallel_size,
         )

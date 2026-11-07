@@ -8,4 +8,4 @@ server_args: >-
   --quantization humming
   --linear-backend humming
 env:
-  APHRODITE_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'
+  SONAR_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'

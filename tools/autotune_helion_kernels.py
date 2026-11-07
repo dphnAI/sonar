@@ -31,21 +31,21 @@ from torch._subclasses.fake_tensor import FakeTensorMode
 try:
     import helion
 
-    from aphrodite.kernels.helion import (
+    from sonar.kernels.helion import (
         ConfigManager,
         get_kernel_by_name,
         get_registered_kernels,
     )
-    from aphrodite.kernels.helion.ops import import_all_kernels
-    from aphrodite.kernels.helion.utils import get_canonical_gpu_name
-    from aphrodite.logger import init_logger
-    from aphrodite.utils.import_utils import has_helion
+    from sonar.kernels.helion.ops import import_all_kernels
+    from sonar.kernels.helion.utils import get_canonical_gpu_name
+    from sonar.logger import init_logger
+    from sonar.utils.import_utils import has_helion
 except ImportError as e:
-    print(f"Error importing Aphrodite: {e}")
-    print("Please ensure Aphrodite is installed and in your Python path")
+    print(f"Error importing Sonar: {e}")
+    print("Please ensure Sonar is installed and in your Python path")
     sys.exit(1)
 
-logger = init_logger("aphrodite.scripts.autotune_helion_kernels")
+logger = init_logger("sonar.scripts.autotune_helion_kernels")
 
 
 @dataclass
@@ -339,7 +339,7 @@ def main():
     parser.add_argument(
         "--config-dir",
         type=str,
-        help="Config directory for config files (default: Aphrodite helion configs dir)",
+        help="Config directory for config files (default: Sonar helion configs dir)",
     )
 
     parser.add_argument(
@@ -375,11 +375,11 @@ def main():
     import logging
 
     if args.verbose:
-        logging.getLogger("aphrodite").setLevel(logging.DEBUG)
+        logging.getLogger("sonar").setLevel(logging.DEBUG)
         logger.debug("Verbose mode enabled")
         logger.debug("Arguments: %s", vars(args))
     else:
-        logging.getLogger("aphrodite").setLevel(logging.INFO)
+        logging.getLogger("sonar").setLevel(logging.INFO)
 
     if args.list:
         list_kernels()

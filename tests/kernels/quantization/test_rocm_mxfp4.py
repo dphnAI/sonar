@@ -4,7 +4,7 @@
 
 This file keeps the ROCm-specific FP4 coverage:
 - ROCm AITER FP4 env and enablement gates
-- large-shape MXFP4 wrapper checks through Aphrodite's public helper op
+- large-shape MXFP4 wrapper checks through Sonar's public helper op
 - AITER Triton MXFP4 quant format and determinism
 - FP4 GEMM, preshuffled-scale, hardware-quant, and skinny decode
   paths
@@ -19,8 +19,8 @@ import warnings
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx950
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx950
 from tests.kernels.utils import _assert_accurate, _assert_deterministic
 from tests.quantization.reference_mxfp4 import dq_mxfp4_torch, qdq_mxfp4_torch
 
@@ -53,7 +53,7 @@ PRESHUFFLED_SHAPES = [
 
 
 def _reload_envs():
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
     return importlib.reload(envs)
 
@@ -63,13 +63,13 @@ def _restore_rocm_env_state():
     """Restore global env + AITER flag state after every test."""
     yield
     _reload_envs()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.refresh_env_variables()
 
 
 def _assert_aiter_supported() -> None:
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
+    from sonar._aiter_ops import is_aiter_found_and_supported
 
     assert is_aiter_found_and_supported(), "aiter is required on supported ROCm hardware for this test"
 
@@ -141,9 +141,9 @@ def _print_close_stats(
 
 def test_fp4_env_defaults():
     """ROCm FP4 env defaults should stay stable for the AITER gates."""
-    import aphrodite.envs as envs
+    import sonar.envs as envs
 
-    assert envs.APHRODITE_ROCM_USE_AITER_FP4BMM is False
+    assert envs.SONAR_ROCM_USE_AITER_FP4BMM is False
 
 
 @pytest.mark.parametrize(
@@ -162,7 +162,7 @@ def test_rocm_aiter_fp4_enablement_follows_env_and_arch(
     arch (gfx950 -> MI355, gfx942 -> MI300). A failure in this group therefore
     points straight at the hardware it ran on instead of a mocked value.
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     _assert_aiter_supported()
 
@@ -171,8 +171,8 @@ def test_rocm_aiter_fp4_enablement_follows_env_and_arch(
     expected_fp4bmm = use_aiter and use_fp4bmm and on_gfx950_value
 
     with monkeypatch.context() as mp:
-        mp.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_aiter else "0")
-        mp.setenv("APHRODITE_ROCM_USE_AITER_FP4BMM", "1" if use_fp4bmm else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER", "1" if use_aiter else "0")
+        mp.setenv("SONAR_ROCM_USE_AITER_FP4BMM", "1" if use_fp4bmm else "0")
         _reload_envs()
         rocm_aiter_ops.refresh_env_variables()
 
@@ -185,10 +185,10 @@ def test_rocm_aiter_fp4_enablement_follows_env_and_arch(
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.parametrize("shape", LLAMA_SHAPES)
-def test_aphrodite_quant_dequant_mxfp4_matches_reference_on_large_shapes(shape, dtype):
-    """The public Aphrodite MXFP4 QDQ helper should stay exact against the torch
+def test_sonar_quant_dequant_mxfp4_matches_reference_on_large_shapes(shape, dtype):
+    """The public Sonar MXFP4 QDQ helper should stay exact against the torch
     reference even on larger Llama-like shapes."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         quant_dequant_mxfp4,
     )
 
@@ -205,9 +205,9 @@ def test_aphrodite_quant_dequant_mxfp4_matches_reference_on_large_shapes(shape, 
     torch.testing.assert_close(out, ref, atol=0.0, rtol=0.0)
 
 
-def test_aphrodite_quant_dequant_mxfp4_is_deterministic():
-    """The public Aphrodite MXFP4 QDQ helper should stay bitwise deterministic."""
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+def test_sonar_quant_dequant_mxfp4_is_deterministic():
+    """The public Sonar MXFP4 QDQ helper should stay bitwise deterministic."""
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         quant_dequant_mxfp4,
     )
 
@@ -319,7 +319,7 @@ def test_aiter_fp4_gemm_a4w4_accuracy(shape):
     from aiter.ops.triton.gemm_afp4wfp4 import gemm_afp4wfp4
     from aiter.ops.triton.quant import dynamic_mxfp4_quant
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         quant_dequant_mxfp4,
     )
 
@@ -375,7 +375,7 @@ def test_aiter_fp4_gemm_a4w4_accuracy(shape):
 )
 def test_aiter_fp4_gemm_preshuffled_tuned_shapes(shape):
     """The preshuffled FP4 GEMM path should run on tuned shapes with the same
-    packed inputs Aphrodite uses in production.
+    packed inputs Sonar uses in production.
 
     This kernel only advertises a narrow tuned `(N, K)` set on gfx950. The
     important contract here is that those tuned shapes execute with the
@@ -389,7 +389,7 @@ def test_aiter_fp4_gemm_preshuffled_tuned_shapes(shape):
     )
     from aiter.ops.triton.quant import dynamic_mxfp4_quant
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     torch.set_default_device("cuda")
     torch.manual_seed(1)
@@ -448,7 +448,7 @@ def test_aiter_fp4_preshuffled_tuned_gate_uses_logical_k():
     """AITER ships N=16384-K=16384 but not N=16384-K=8192, so a K=8192 layer
     has no tuned preshuffled config even though twice its K does."""
     _assert_aiter_supported()
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     rocm_aiter_ops.is_triton_gemm_afp4wfp4_presh_ws_tuned.cache_clear()
     assert rocm_aiter_ops.is_triton_gemm_afp4wfp4_presh_ws_tuned(16384, 16384 // 2)
@@ -585,7 +585,7 @@ def test_aiter_fp4_gemm_skinny_shapes(M, N, K):
     from aiter.ops.triton.gemm_afp4wfp4 import gemm_afp4wfp4
     from aiter.ops.triton.quant import dynamic_mxfp4_quant
 
-    from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+    from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
         quant_dequant_mxfp4,
     )
 
@@ -643,7 +643,7 @@ def test_aiter_fp4_gemm_skinny_shapes(M, N, K):
 )
 def test_asm_fp4_scale_swizzle_supported_shape_rules(shape, supported):
     """The ASM swizzle needs rows % 32 == 0 and columns % 8 == 0."""
-    from aphrodite.model_executor.kernels.linear.mxfp4.aiter import (
+    from sonar.model_executor.kernels.linear.mxfp4.aiter import (
         _asm_fp4_scale_swizzle_supported,
     )
 
@@ -653,7 +653,7 @@ def test_asm_fp4_scale_swizzle_supported_shape_rules(shape, supported):
 
 @pytest.mark.skipif(not on_gfx950(), reason="gfx950 ROCm only")
 def test_asm_fp4_scale_swizzle_rejects_non_2d():
-    from aphrodite.model_executor.kernels.linear.mxfp4.aiter import (
+    from sonar.model_executor.kernels.linear.mxfp4.aiter import (
         _asm_fp4_scale_swizzle_supported,
     )
 
@@ -681,8 +681,8 @@ def test_aiter_mxfp4_asm_layout_follows_aiter_tuned_configs(
     Otherwise it stays on the Triton layout."""
     from torch.nn.parameter import Parameter
 
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.model_executor.kernels.linear.mxfp4.aiter import AiterMxfp4LinearKernel
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.model_executor.kernels.linear.mxfp4.aiter import AiterMxfp4LinearKernel
 
     monkeypatch.setattr(rocm_aiter_ops, "is_asm_fp4_gemm_tuned", lambda n, k: asm_tuned)
     monkeypatch.setattr(

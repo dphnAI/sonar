@@ -8,8 +8,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     CompilationConfig,
     DeviceConfig,
@@ -17,20 +16,21 @@ from aphrodite.config import (
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    SonarConfig,
 )
-from aphrodite.config.model import ModelDType
-from aphrodite.v1.attention.backend import (
+from sonar.config.model import ModelDType
+from sonar.v1.attention.backend import (
     AttentionImplBase,
     AttentionMetadataBuilder,
     AttentionType,
     CommonAttentionMetadata,
 )
-from aphrodite.v1.attention.backends.mamba_attn import (
+from sonar.v1.attention.backends.mamba_attn import (
     BaseMambaAttentionMetadata,
     BaseMambaAttentionMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.kv_cache_interface import (
     EncoderOnlyAttentionSpec,
     FullAttentionSpec,
     KVCacheLayout,
@@ -142,31 +142,31 @@ def try_backend_includes_kv_cache_update(
 
 
 def create_standard_kv_cache_spec(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     attn_type: AttentionType = AttentionType.DECODER,
 ) -> FullAttentionSpec | EncoderOnlyAttentionSpec:
-    """Create an AttentionSpec from AphroditeConfig.
+    """Create an AttentionSpec from SonarConfig.
 
     Returns an EncoderOnlyAttentionSpec for encoder-only attention (no KV
     cache), and a FullAttentionSpec otherwise.
     """
     if attn_type == AttentionType.ENCODER_ONLY:
         return EncoderOnlyAttentionSpec(
-            block_size=aphrodite_config.cache_config.block_size,
-            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
-            head_size=aphrodite_config.model_config.get_head_size(),
-            dtype=aphrodite_config.model_config.dtype,
+            block_size=sonar_config.cache_config.block_size,
+            num_kv_heads=sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config),
+            head_size=sonar_config.model_config.get_head_size(),
+            dtype=sonar_config.model_config.dtype,
         )
     return FullAttentionSpec(
-        block_size=aphrodite_config.cache_config.block_size,
-        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
-        head_size=aphrodite_config.model_config.get_head_size(),
-        dtype=aphrodite_config.model_config.dtype,
-        sliding_window=aphrodite_config.model_config.get_sliding_window(),
+        block_size=sonar_config.cache_config.block_size,
+        num_kv_heads=sonar_config.model_config.get_num_kv_heads(sonar_config.parallel_config),
+        head_size=sonar_config.model_config.get_head_size(),
+        dtype=sonar_config.model_config.dtype,
+        sliding_window=sonar_config.model_config.get_sliding_window(),
     )
 
 
-def create_aphrodite_config(
+def create_sonar_config(
     model_name: str = "Qwen/Qwen3-0.6B",
     tensor_parallel_size: int = 1,
     max_model_len: int = 1024,
@@ -177,8 +177,8 @@ def create_aphrodite_config(
     max_num_batched_tokens: int = 8192,
     enable_chunked_prefill: bool = True,
     hf_config_override: dict | None = None,
-) -> AphroditeConfig:
-    """Create a AphroditeConfig for testing with reasonable defaults."""
+) -> SonarConfig:
+    """Create a SonarConfig for testing with reasonable defaults."""
     model_config = ModelConfig(
         model=model_name,
         tokenizer=model_name,
@@ -219,12 +219,12 @@ def create_aphrodite_config(
     if hf_config_override:
         model_config.hf_config.update(hf_config_override)
 
-    # AphroditeConfig() auto-enables breakable cudagraphs process-wide via
-    # APHRODITE_USE_BREAKABLE_CUDAGRAPH for breakable-by-default models; keep
+    # SonarConfig() auto-enables breakable cudagraphs process-wide via
+    # SONAR_USE_BREAKABLE_CUDAGRAPH for breakable-by-default models; keep
     # that from leaking into unrelated tests sharing this process.
-    breakable_env = os.environ.get("APHRODITE_USE_BREAKABLE_CUDAGRAPH")
+    breakable_env = os.environ.get("SONAR_USE_BREAKABLE_CUDAGRAPH")
     try:
-        return AphroditeConfig(
+        return SonarConfig(
             model_config=model_config,
             cache_config=cache_config,
             parallel_config=parallel_config,
@@ -235,9 +235,9 @@ def create_aphrodite_config(
         )
     finally:
         if breakable_env is None:
-            os.environ.pop("APHRODITE_USE_BREAKABLE_CUDAGRAPH", None)
+            os.environ.pop("SONAR_USE_BREAKABLE_CUDAGRAPH", None)
         else:
-            os.environ["APHRODITE_USE_BREAKABLE_CUDAGRAPH"] = breakable_env
+            os.environ["SONAR_USE_BREAKABLE_CUDAGRAPH"] = breakable_env
 
 
 @dataclass
@@ -350,17 +350,17 @@ class MockMambaBuilder(BaseMambaAttentionMetadataBuilder[BaseMambaAttentionMetad
     @classmethod
     def build_mamba_metadata(
         cls,
-        aphrodite_config: AphroditeConfig,
+        sonar_config: SonarConfig,
         seq_lens: list[int],
         query_lens: list[int],
         is_prefilling: list[bool],
         *,
         device: torch.device | None = None,
     ) -> BaseMambaAttentionMetadata:
-        block_size = aphrodite_config.cache_config.block_size
+        block_size = sonar_config.cache_config.block_size
         device = device or torch.device("cpu")
         mamba_spec = MambaSpec(block_size=block_size, shapes=((1,), (1,)), dtypes=(torch.float32,))
-        builder = cls(mamba_spec, ["layer0"], aphrodite_config, device)
+        builder = cls(mamba_spec, ["layer0"], sonar_config, device)
         batch_spec = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
         common_metadata = create_common_attn_metadata(
             batch_spec, block_size=block_size, device=device, arange_block_indices=True

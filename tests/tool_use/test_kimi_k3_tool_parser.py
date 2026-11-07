@@ -7,18 +7,18 @@ from typing import cast
 
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.protocol import DeltaMessage
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.openai.responses.utils import build_response_output_items
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.parser.kimi_k3 import KimiK3Parser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
-from aphrodite.tokenizers.protocol import TokenizerLike
-from aphrodite.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.utils import build_response_output_items
+from sonar.exceptions import SonarValidationError
+from sonar.parser.kimi_k3 import KimiK3Parser
+from sonar.parser.parser_manager import ParserManager
+from sonar.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
+from sonar.tokenizers.protocol import TokenizerLike
+from sonar.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
 
 OPEN = "<|open|>"
 CLOSE = "<|close|>"
@@ -466,7 +466,7 @@ def test_adjust_request_required_uses_xtml_parser_not_json_guidance():
 def test_adjust_request_rejects_named_tool_choice(tool_request):
     parser = KimiK3ToolParser(_dummy_tokenizer())
 
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         parser.adjust_request(tool_request)
 
     assert exc_info.value.parameter == "tool_choice"

@@ -39,8 +39,8 @@ namespace MARLIN_NAMESPACE_NAME {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 750
 
 template <typename scalar_t,  // compute dtype, half or nv_float16
-          const aphrodite::ScalarTypeId b_type_id,  // weight MarlinScalarType
-                                                    // id
+          const sonar::ScalarTypeId b_type_id,  // weight MarlinScalarType
+                                                // id
           const int threads,          // number of threads in a threadblock
           const int thread_m_blocks,  // number of 16x16 blocks in the m
                                       // dimension (batchsize) of the
@@ -84,7 +84,7 @@ __global__ void Marlin(
 
 // Instruction for loading a full 16x16 matrix fragment of operand A from shared
 // memory, directly in tensor core layout.
-template <int count, aphrodite::ScalarTypeId type_id>
+template <int count, sonar::ScalarTypeId type_id>
 __device__ inline void ldsm(typename MarlinScalarType<type_id>::FragA& frag_a,
                             const void* smem_ptr) {
   uint32_t* a = reinterpret_cast<uint32_t*>(&frag_a);
@@ -109,7 +109,7 @@ __device__ inline void ldsm(typename MarlinScalarType<type_id>::FragA& frag_a,
 
 // Multiply dequantized values by the corresponding quantization scale; used
 // only for grouped quantization.
-template <aphrodite::ScalarTypeId type_id>
+template <sonar::ScalarTypeId type_id>
 __device__ inline void scale(typename MarlinScalarType<type_id>::FragB& frag_b,
                              typename MarlinScalarType<type_id>::FragS& frag_s,
                              int i) {
@@ -121,7 +121,7 @@ __device__ inline void scale(typename MarlinScalarType<type_id>::FragB& frag_b,
   frag_b[1] = __hmul2(frag_b[1], s);
 }
 
-template <aphrodite::ScalarTypeId type_id>
+template <sonar::ScalarTypeId type_id>
 __device__ inline void scale_and_sub(
     typename MarlinScalarType<type_id>::FragB& frag_b,
     typename MarlinScalarType<type_id>::scalar_t s,
@@ -134,7 +134,7 @@ __device__ inline void scale_and_sub(
   frag_b[1] = __hfma2(frag_b[1], s2, __hneg2(zp2));
 }
 
-template <aphrodite::ScalarTypeId type_id>
+template <sonar::ScalarTypeId type_id>
 __device__ inline void sub_zp(
     typename MarlinScalarType<type_id>::FragB& frag_b,
     typename MarlinScalarType<type_id>::scalar_t2& frag_zp, int i) {
@@ -147,7 +147,7 @@ __device__ inline void sub_zp(
 }
 
 // Given 2 floats multiply by 2 scales (halves)
-template <aphrodite::ScalarTypeId type_id>
+template <sonar::ScalarTypeId type_id>
 __device__ inline void scale_float(
     float* c, typename MarlinScalarType<type_id>::FragS& s) {
   using scalar_t = typename MarlinScalarType<type_id>::scalar_t;
@@ -205,10 +205,10 @@ __device__ inline void wait_negative_and_add(int* lock) {
   __syncthreads();
 }
 
-template <const aphrodite::ScalarTypeId a_type_id,  // A ScalarType id
-          const aphrodite::ScalarTypeId b_type_id,  // B ScalarType id
-          const aphrodite::ScalarTypeId c_type_id,  // C ScalarType id
-          const aphrodite::ScalarTypeId s_type_id,  // B_SCALE ScalarType id
+template <const sonar::ScalarTypeId a_type_id,  // A ScalarType id
+          const sonar::ScalarTypeId b_type_id,  // B ScalarType id
+          const sonar::ScalarTypeId c_type_id,  // C ScalarType id
+          const sonar::ScalarTypeId s_type_id,  // B_SCALE ScalarType id
           const int threads,          // number of threads in a threadblock
           const int thread_m_blocks,  // number of 16x16 blocks in the m
                                       // dimension (batchsize) of the
@@ -267,13 +267,13 @@ __global__ void Marlin(
 
   #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 890
   // FP8 computation is only supported for Ada Lovelace or newer architectures.
-  if constexpr (a_type_id == aphrodite::kFE4M3fn.id()) return;
+  if constexpr (a_type_id == sonar::kFE4M3fn.id()) return;
   #endif
 
   #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 750
   // Turing TensorCore only supports fp16 and int8
-  if constexpr (a_type_id != aphrodite::kFloat16.id() &&
-                a_type_id != aphrodite::kS8.id())
+  if constexpr (a_type_id != sonar::kFloat16.id() &&
+                a_type_id != sonar::kS8.id())
     return;
   #endif
 
@@ -282,12 +282,12 @@ __global__ void Marlin(
 
   #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 750
   static constexpr auto num_bits =
-      aphrodite::ScalarType::from_id(b_type_id).size_bits();
+      sonar::ScalarType::from_id(b_type_id).size_bits();
   // Disable use_fp16_accum for NVFP4 and cases when group_size == -1 &&
   // num_bits == 4
-  constexpr bool use_fp16_accum = a_type_id == aphrodite::kFloat16.id() &&
-                                  (!(b_type_id == aphrodite::kFE2M1f.id() &&
-                                     s_type_id == aphrodite::kFE4M3fn.id()) &&
+  constexpr bool use_fp16_accum = a_type_id == sonar::kFloat16.id() &&
+                                  (!(b_type_id == sonar::kFE2M1f.id() &&
+                                     s_type_id == sonar::kFE4M3fn.id()) &&
                                    !(group_blocks == -1 && num_bits == 4));
   #else
   constexpr bool use_fp16_accum = false;
@@ -309,39 +309,39 @@ __global__ void Marlin(
   using FragZP = typename MarlinScalarType<c_type_id>::FragZP;
 
   extern __shared__ int4 sh[];
-  static constexpr auto a_type = aphrodite::ScalarType::from_id(a_type_id);
-  static constexpr auto b_type = aphrodite::ScalarType::from_id(b_type_id);
-  static constexpr auto c_type = aphrodite::ScalarType::from_id(c_type_id);
-  static constexpr auto s_type = aphrodite::ScalarType::from_id(s_type_id);
-  if constexpr (b_type == aphrodite::kFE2M1f) {
-    static_assert(s_type == aphrodite::kFE4M3fn && group_blocks == 1 ||
-                  s_type == aphrodite::kFE8M0fnu && group_blocks == 2);
-  } else if constexpr (b_type == aphrodite::kFE4M3fn &&
-                       s_type == aphrodite::kFE8M0fnu) {
+  static constexpr auto a_type = sonar::ScalarType::from_id(a_type_id);
+  static constexpr auto b_type = sonar::ScalarType::from_id(b_type_id);
+  static constexpr auto c_type = sonar::ScalarType::from_id(c_type_id);
+  static constexpr auto s_type = sonar::ScalarType::from_id(s_type_id);
+  if constexpr (b_type == sonar::kFE2M1f) {
+    static_assert(s_type == sonar::kFE4M3fn && group_blocks == 1 ||
+                  s_type == sonar::kFE8M0fnu && group_blocks == 2);
+  } else if constexpr (b_type == sonar::kFE4M3fn &&
+                       s_type == sonar::kFE8M0fnu) {
     static_assert(group_blocks == 2);
   } else if constexpr (std::is_same<scalar_t, nv_bfloat16>::value) {
-    static_assert(s_type == aphrodite::kBFloat16);
+    static_assert(s_type == sonar::kBFloat16);
   } else if constexpr (std::is_same<scalar_t, half>::value) {
-    static_assert(s_type == aphrodite::kFloat16);
+    static_assert(s_type == sonar::kFloat16);
   }
 
   constexpr bool is_a_8bit = a_type.size_bits() == 8;
   if constexpr (!is_a_8bit) {
     static_assert(std::is_same<scalar_t, c_scalar_t>::value);
   }
-  constexpr bool has_zp = b_type == aphrodite::kU4 || b_type == aphrodite::kU8;
-  constexpr bool is_int_type =
-      b_type == aphrodite::kU4 || b_type == aphrodite::kU8 ||
-      b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
-      b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128;
+  constexpr bool has_zp = b_type == sonar::kU4 || b_type == sonar::kU8;
+  constexpr bool is_int_type = b_type == sonar::kU4 || b_type == sonar::kU8 ||
+                               b_type == sonar::kS4 || b_type == sonar::kS8 ||
+                               b_type == sonar::kU4B8 ||
+                               b_type == sonar::kU8B128;
   constexpr bool is_8bit_scale = s_type.size_bits() == 8;
   // see comments of dequant.h for more details
   constexpr bool dequant_skip_flop =
       is_a_8bit ||
-      (b_type == aphrodite::kFE4M3fn && !(s_type == aphrodite::kFE8M0fnu)) ||
-      b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn ||
+      (b_type == sonar::kFE4M3fn && !(s_type == sonar::kFE8M0fnu)) ||
+      b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn ||
       has_zp && !is_zp_float && !std::is_same<scalar_t, nv_bfloat16>::value ||
-      has_zp && !is_zp_float && !(b_type == aphrodite::kU8);
+      has_zp && !is_zp_float && !(b_type == sonar::kU8);
 
   float global_scale_f32 = 1.0f;
 
@@ -494,8 +494,7 @@ __global__ void Marlin(
       if (mul_topk_weights) {
         idx = idx < prob_m_top_k ? idx : 0;
         float topk_weight_tmp = topk_weights_ptr[idx];
-        if constexpr (b_type == aphrodite::kFE2M1f &&
-                      s_type == aphrodite::kFE4M3fn) {
+        if constexpr (b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn) {
           topk_weight_tmp *= global_scale_f32;
         }
         c_scalar_t2 topk_weight_val =
@@ -519,8 +518,7 @@ __global__ void Marlin(
     block_id = par_id;
     expert_id = expert_ids_ptr[block_id];
 
-    if constexpr (b_type == aphrodite::kFE2M1f &&
-                  s_type == aphrodite::kFE4M3fn) {
+    if constexpr (b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn) {
       global_scale_f32 = global_scale_ptr[expert_id];
     }
 
@@ -1149,8 +1147,7 @@ __global__ void Marlin(
       }
     }
 
-    if constexpr (s_type == aphrodite::kFE4M3fn ||
-                  s_type == aphrodite::kFE8M0fnu) {
+    if constexpr (s_type == sonar::kFE4M3fn || s_type == sonar::kFE8M0fnu) {
       int s_quant_0 = reinterpret_cast<int*>(frag_s[k2])[0];
       int s_quant_1 = reinterpret_cast<int*>(frag_s[k2])[1];
 
@@ -1168,7 +1165,7 @@ __global__ void Marlin(
       FragB frag_b1;
       int b_quant_0, b_quant_1;
 
-      if constexpr (b_type_id == aphrodite::kFE2M1f.id()) {
+      if constexpr (b_type_id == sonar::kFE2M1f.id()) {
         b_quant_1 = frag_b_quant[k2][0][j];
         b_quant_0 = b_quant_1 << 8;
       } else if constexpr (b_type.size_bits() == 4) {
@@ -1263,7 +1260,7 @@ __global__ void Marlin(
 
       if constexpr (group_blocks != -1) {
         if (group_blocks == 2 || k == 1) {
-          if constexpr (a_type == aphrodite::kS8) {
+          if constexpr (a_type == sonar::kS8) {
             int2 s_vals[2];
             s_vals[0] = {
                 (int)reinterpret_cast<uint16_t*>(&frag_s[k2][j * 2][0])[0],
@@ -1294,7 +1291,7 @@ __global__ void Marlin(
             }
           } else {
             float2 s_vals[2];
-            if constexpr (s_type_id != aphrodite::kFE8M0fnu.id()) {
+            if constexpr (s_type_id != sonar::kFE8M0fnu.id()) {
               static_assert(a_type.size_bits() == 16 ||
                             s_type.size_bits() == 16);
               s_vals[0] = Cdtype::num22float2(frag_s[k2][j * 2][0]);
@@ -1593,8 +1590,7 @@ __global__ void Marlin(
     // We first reorder in shared memory to guarantee the most efficient final
     // global write patterns
     auto write = [&](int idx, float c0, float c1, FragS& s, FragS& b_bias) {
-      if constexpr (b_type == aphrodite::kFE2M1f &&
-                    s_type == aphrodite::kFE4M3fn) {
+      if constexpr (b_type == sonar::kFE2M1f && s_type == sonar::kFE4M3fn) {
         if (!mul_topk_weights) {
           c0 *= global_scale_f32;
           c1 *= global_scale_f32;
@@ -1803,7 +1799,7 @@ __global__ void Marlin(
             for (int g = 0; g < 4; g++) {
               float c_val = frag_c[i][j][0][g];
 
-              if constexpr (a_type == aphrodite::kS8) {
+              if constexpr (a_type == sonar::kS8) {
                 c_val = __int2float_rn(*reinterpret_cast<int32_t*>(&c_val));
               }
               float s_val = frag_a_s[i * 2 + g / 2];
@@ -1813,7 +1809,7 @@ __global__ void Marlin(
             for (int g = 0; g < 4; g++) {
               float c_val = frag_c[i][j][1][g];
 
-              if constexpr (a_type == aphrodite::kS8) {
+              if constexpr (a_type == sonar::kS8) {
                 c_val = __int2float_rn(*reinterpret_cast<int32_t*>(&c_val));
               }
               float s_val = frag_a_s[i * 2 + g / 2];

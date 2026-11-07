@@ -5,7 +5,7 @@
 //!
 //! This module is inlined from SMG's tokenizer crate with local adaptations:
 //! - thinking-related detection/state is removed
-//! - special tokens are wired to `aphrodite_text::backends::hf::HfSpecialTokens`
+//! - special tokens are wired to `sonar_text::backends::hf::HfSpecialTokens`
 
 use std::collections::HashMap;
 use std::error::Error as _;
@@ -14,10 +14,10 @@ use std::fs;
 use std::iter;
 use std::path::Path;
 
-use aphrodite_text::backend::hf::HfSpecialTokens;
 use minijinja::{Environment, Error as MinijinjaError, ErrorKind, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
+use sonar_text::backend::hf::HfSpecialTokens;
 use thiserror::Error as ThisError;
 
 use super::error::TemplateError;
@@ -37,7 +37,7 @@ type Result<T> = std::result::Result<T, TemplateError>;
 const DEFAULT_TEMPLATE_FUEL: u64 = 500_000;
 
 /// Fuel budget for request-supplied templates from the value of
-/// `APHRODITE_CHAT_TEMPLATE_FUEL`, if set. `0` disables the limit.
+/// `SONAR_CHAT_TEMPLATE_FUEL`, if set. `0` disables the limit.
 pub(super) fn request_template_fuel(value: Option<&OsStr>) -> Result<Option<u64>> {
     let fuel = match value {
         None => DEFAULT_TEMPLATE_FUEL,
@@ -208,8 +208,8 @@ impl CompiledChatTemplate {
 mod tests {
     use std::fs;
 
-    use aphrodite_text::backend::hf::{HfSpecialTokens, NamedSpecialToken};
     use expect_test::expect;
+    use sonar_text::backend::hf::{HfSpecialTokens, NamedSpecialToken};
     use tempfile::TempDir;
     use thiserror_ext::AsReport as _;
 
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn test_long_conversation_exceeds_default_fuel() {
         let error = render_turns(20_000, Some(DEFAULT_TEMPLATE_FUEL)).unwrap_err();
-        expect!["chat template exceeded its fuel budget; adjust APHRODITE_CHAT_TEMPLATE_FUEL to override: engine ran out of fuel (in chat:1)"].assert_eq(&error.to_report_string());
+        expect!["chat template exceeded its fuel budget; adjust SONAR_CHAT_TEMPLATE_FUEL to override: engine ran out of fuel (in chat:1)"].assert_eq(&error.to_report_string());
     }
 
     #[test]
@@ -377,7 +377,7 @@ mod tests {
         );
         assert_eq!(request_template_fuel(Some("0".as_ref())).unwrap(), None);
         let error = request_template_fuel(Some("-1".as_ref())).unwrap_err();
-        expect![[r#"APHRODITE_CHAT_TEMPLATE_FUEL must be a non-negative integer, got "-1""#]]
+        expect![[r#"SONAR_CHAT_TEMPLATE_FUEL must be a non-negative integer, got "-1""#]]
             .assert_eq(&error.to_report_string());
     }
 

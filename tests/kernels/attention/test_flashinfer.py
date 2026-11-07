@@ -4,15 +4,15 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.kv_cache_layout import KVCacheLayout
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.kv_cache_layout import KVCacheLayout
 
 try:
     import flashinfer
 except ImportError:
     if current_platform.is_rocm():
-        pytest.skip("flashinfer is not supported for Aphrodite on ROCm.", allow_module_level=True)
+        pytest.skip("flashinfer is not supported for Sonar on ROCm.", allow_module_level=True)
 
 import torch
 
@@ -151,10 +151,10 @@ def test_fast_decode_plan_importable() -> None:
 @torch.inference_mode
 def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
     """On the first call fast_plan_decode must route through self.plan() and
-    flip aphrodite_first_call to False on the wrapper object."""
+    flip sonar_first_call to False on the wrapper object."""
     from unittest.mock import patch
 
-    from aphrodite.v1.attention.backends.flashinfer import fast_plan_decode
+    from sonar.v1.attention.backends.flashinfer import fast_plan_decode
 
     torch.set_default_device("cuda")
     set_random_seed(0)
@@ -170,7 +170,7 @@ def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
     workspace = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
     wrapper = _make_cg_decode_wrapper(num_seqs, kv_indices.clone(), workspace)
 
-    assert getattr(wrapper, "aphrodite_first_call", True) is True
+    assert getattr(wrapper, "sonar_first_call", True) is True
 
     with patch.object(wrapper, "plan", wraps=wrapper.plan) as mock_plan:
         fast_plan_decode(
@@ -188,9 +188,7 @@ def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
         )
         mock_plan.assert_called_once()
 
-    assert wrapper.aphrodite_first_call is False, (
-        "aphrodite_first_call should be False after the first fast_plan_decode call"
-    )
+    assert wrapper.sonar_first_call is False, "sonar_first_call should be False after the first fast_plan_decode call"
 
 
 @pytest.mark.parametrize("kv_lens", [[1328, 18, 463], [1, 54, 293, 70]])
@@ -213,7 +211,7 @@ def test_fast_plan_decode_matches_full_plan(
     Both the warmup call (self.plan) and the subsequent fast call
     (fast_decode_plan) are verified against the same reference.
     """
-    from aphrodite.v1.attention.backends.flashinfer import fast_plan_decode
+    from sonar.v1.attention.backends.flashinfer import fast_plan_decode
 
     torch.set_default_device("cuda")
     set_random_seed(0)
@@ -668,8 +666,8 @@ def test_flashinfer_decode_with_paged_fp8_kv(
     reason="NVFP4 fa2 path",
 )
 @pytest.mark.parametrize("layout", ["LBNHC", "LBHNC", "BLNHC", "BLHNC"])
-def test_flashinfer_nvfp4_kv_cache_update(default_aphrodite_config, layout):
-    from aphrodite.v1.attention.backends import flashinfer as fi
+def test_flashinfer_nvfp4_kv_cache_update(default_sonar_config, layout):
+    from sonar.v1.attention.backends import flashinfer as fi
 
     torch.set_default_device("cuda")
     order = KVCacheLayout[layout].stride_order

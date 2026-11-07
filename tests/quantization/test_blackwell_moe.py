@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
 
 if not current_platform.is_device_capability_family(100):
@@ -18,7 +18,7 @@ if not current_platform.is_device_capability_family(100):
 def set_test_environment():
     """Sets environment variables required for this test module."""
     # Make sure TRTLLM attention is available
-    os.environ["APHRODITE_HAS_FLASHINFER_CUBIN"] = "1"
+    os.environ["SONAR_HAS_FLASHINFER_CUBIN"] = "1"
     # Set compilation threads to 16 to speed up startup
     os.environ["FLASHINFER_NVCC_THREADS"] = "16"
 
@@ -125,7 +125,7 @@ def test_deepseek_fp8_block_moe_deep_gemm(monkeypatch: pytest.MonkeyPatch):
     )
 
 
-def test_deepseek_fp8_block_moe_aphrodite_triton(monkeypatch: pytest.MonkeyPatch):
+def test_deepseek_fp8_block_moe_sonar_triton(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "deepseek-ai/DeepSeek-V3.1",
         hf_overrides=HF_OVERRIDE_TEXT,
@@ -150,7 +150,7 @@ def test_deepseek_fp8_block_moe_flashinfer_trtllm(monkeypatch: pytest.MonkeyPatc
     )
 
 
-def test_deepseek_nvfp4_moe_flashinfer_aphrodite(monkeypatch: pytest.MonkeyPatch):
+def test_deepseek_nvfp4_moe_flashinfer_sonar(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "nvidia/DeepSeek-R1-0528-FP4-v2",
         hf_overrides=HF_OVERRIDE_TEXT,
@@ -268,7 +268,7 @@ def test_nemotron_fp8_moe_flashinfer_latency(monkeypatch: pytest.MonkeyPatch):
         "no act_and_mul MLP layer."
     )
 )
-def test_nemotron_fp8_moe_aphrodite_triton(monkeypatch: pytest.MonkeyPatch):
+def test_nemotron_fp8_moe_sonar_triton(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
         hf_overrides=HF_OVERRIDE_TEXT,
@@ -305,20 +305,20 @@ def test_nemotron_nvfp4_per_token_moe_flashinfer_trtllm(
     )
 
 
-def test_modelopt_nvfp4_dummy_scales(tmp_path, monkeypatch, aphrodite_runner):
+def test_modelopt_nvfp4_dummy_scales(tmp_path, monkeypatch, sonar_runner):
     """Dummy NVFP4 MoE weights load with valid scales and produce finite logits."""
     import math
 
     import torch
     from transformers import Qwen3MoeConfig
 
-    from aphrodite import SamplingParams
-    from aphrodite.model_executor.layers.fused_moe import RoutedExperts
-    from aphrodite.model_executor.layers.quantization.modelopt import (
+    from sonar import SamplingParams
+    from sonar.model_executor.layers.fused_moe import RoutedExperts
+    from sonar.model_executor.layers.quantization.modelopt import (
         ModelOptNvFp4FusedMoE,
     )
 
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
     config = Qwen3MoeConfig(
         vocab_size=128,
         hidden_size=512,
@@ -354,7 +354,7 @@ def test_modelopt_nvfp4_dummy_scales(tmp_path, monkeypatch, aphrodite_runner):
                 assert torch.isfinite(values).all(), name
                 assert (values > 0).all(), name
 
-    with aphrodite_runner(
+    with sonar_runner(
         str(tmp_path),
         dtype="bfloat16",
         load_format="dummy",
@@ -379,18 +379,18 @@ def test_modelopt_nvfp4_dummy_scales(tmp_path, monkeypatch, aphrodite_runner):
 
 
 @pytest.mark.parametrize("nvfp4", [False, True])
-def test_muse_megamoe_dummy_loading(tmp_path, monkeypatch, aphrodite_runner, nvfp4):
+def test_muse_megamoe_dummy_loading(tmp_path, monkeypatch, sonar_runner, nvfp4):
     """Dummy-loaded Muse experts generate finite outputs in both weight formats."""
     import math
 
-    from aphrodite import SamplingParams
-    from aphrodite.model_executor.models import ModelRegistry
+    from sonar import SamplingParams
+    from sonar.model_executor.models import ModelRegistry
 
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
     ModelRegistry.register_model(
         "MuseSpark1xForCausalLM",
-        "aphrodite.models.muse_spark.nvidia.model:MuseSpark1xForCausalLM",
+        "sonar.models.muse_spark.nvidia.model:MuseSpark1xForCausalLM",
     )
     config = dict(
         architectures=["MuseSpark1xForCausalLM"],
@@ -434,7 +434,7 @@ def test_muse_megamoe_dummy_loading(tmp_path, monkeypatch, aphrodite_runner, nvf
         }
     (tmp_path / "config.json").write_text(json.dumps(config))
 
-    with aphrodite_runner(
+    with sonar_runner(
         str(tmp_path),
         dtype="bfloat16",
         load_format="dummy",

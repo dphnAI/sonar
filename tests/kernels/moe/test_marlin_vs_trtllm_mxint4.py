@@ -5,22 +5,22 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
     fused_marlin_moe,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxint4_moe import (
+from sonar.model_executor.layers.fused_moe.experts.trtllm_mxint4_moe import (
     TrtLlmMxint4ExpertsMonolithic,
 )
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     grouped_topk,
 )
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
+from sonar.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
     prepare_static_weights_for_trtllm_mxint4_moe,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
+from sonar.utils.torch_utils import set_random_seed
 
 
 def mxint4_quantize(x: torch.Tensor, sf_vec_size: int = 32) -> tuple[torch.Tensor, torch.Tensor]:
@@ -77,7 +77,7 @@ __all__ = [
 ]
 
 
-def test_trtllm_mxint4_activation_supports_aphrodite_gated_silu():
+def test_trtllm_mxint4_activation_supports_sonar_gated_silu():
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SILU)
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SWIGLUOAI)
     assert not TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.RELU2_NO_MUL)
@@ -95,7 +95,7 @@ def marlin_quantize_moe_weights(weights_bf16: torch.Tensor, group_size: int = 32
         - scales_marlin: Marlin quantization scales [e, k//group_size, n] bf16
 
     """
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils_test import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils_test import (
         marlin_quantize,
     )
 
@@ -134,7 +134,7 @@ def test_marlin_vs_trtllm_mxint4_moe_kimik2(monkeypatch, m, n, k, e, topk, group
     then runs both Marlin and TRT-LLM kernels and compares outputs.
     """
     pytest.importorskip("flashinfer")
-    monkeypatch.setenv("APHRODITE_USE_FLASHINFER_MOE_INT4", "1")
+    monkeypatch.setenv("SONAR_USE_FLASHINFER_MOE_INT4", "1")
 
     set_random_seed(0)
 
@@ -282,7 +282,7 @@ def test_flashinfer_trtllm_mxint4_moe_wrapper(m, n, k, e, topk):
     from flashinfer import RoutingMethodType
     from flashinfer.fused_moe import trtllm_mxint4_block_scale_moe
 
-    from aphrodite.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
+    from sonar.model_executor.layers.quantization.utils.flashinfer_mxint4_moe import (
         flashinfer_trtllm_mxint4_moe,
     )
 

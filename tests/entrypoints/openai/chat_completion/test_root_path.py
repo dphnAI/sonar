@@ -31,7 +31,7 @@ def server():
     ]
     envs = os.environ.copy()
 
-    envs["APHRODITE_API_KEY"] = API_KEY
+    envs["SONAR_API_KEY"] = API_KEY
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=envs) as remote_server:
         yield remote_server
 

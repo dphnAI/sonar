@@ -9,11 +9,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import fused_topk
-from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+from sonar.model_executor.layers.fused_moe import fused_topk
+from sonar.model_executor.layers.fused_moe.expert_map_manager import (
     determine_expert_map,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
+from sonar.model_executor.layers.fused_moe.moe_permute_unpermute import (
     MoEPermuteScratch,
     get_moe_permute_scratch,
     moe_permute,
@@ -21,9 +21,9 @@ from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
     moe_prepare_scatter,
     moe_unpermute,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.worker.workspace import current_workspace_manager
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.worker.workspace import current_workspace_manager
 
 NUM_EXPERTS = [16, 64, 256]
 TOP_KS = [2, 6, 8]
@@ -323,7 +323,7 @@ def test_moe_permute_scratch_isolated_across_execution_slots(monkeypatch) -> Non
     if not moe_permute_unpermute_supported():
         pytest.skip("moe_permute_unpermute is not supported on this platform.")
 
-    from aphrodite.v1.worker import workspace
+    from sonar.v1.worker import workspace
 
     device = torch.device("cuda:0")
     manager = workspace.WorkspaceManager(device, num_ubatches=2, num_lanes=2)
@@ -374,7 +374,7 @@ def test_moe_permute_scratch_without_manager(monkeypatch) -> None:
     if not moe_permute_unpermute_supported():
         pytest.skip("moe_permute_unpermute is not supported on this platform.")
 
-    from aphrodite.v1.worker import workspace
+    from sonar.v1.worker import workspace
 
     monkeypatch.setattr(workspace, "_manager", None)
     config = dict(

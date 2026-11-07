@@ -11,17 +11,17 @@ fill distributions.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.fused_globalize_align_block_size import (
+from sonar.model_executor.layers.fused_moe.fused_globalize_align_block_size import (
     fused_globalize_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_deep_ep_v2
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_deep_ep_v2
 
 if current_platform.is_cuda() and has_deep_ep_v2():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
         _globalize_recv_topk_idx,
     )
 else:

@@ -4,8 +4,8 @@
 
 from concurrent.futures import Future
 
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.v1.structured_output.request import StructuredOutputRequest
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.v1.structured_output.request import StructuredOutputRequest
 
 
 def _request_with_future(fut: Future) -> StructuredOutputRequest:

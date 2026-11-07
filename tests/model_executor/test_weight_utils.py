@@ -9,15 +9,15 @@ import pytest
 import torch
 from huggingface_hub.utils import LocalEntryNotFoundError
 
-import aphrodite.model_executor.model_loader.weight_utils as weight_utils
-from aphrodite.model_executor.model_loader.weight_utils import (
+import sonar.model_executor.model_loader.weight_utils as weight_utils
+from sonar.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     drop_checkpoint_cache,
     initialize_single_dummy_weight,
     load_attention_sink,
     maybe_remap_kv_scale_name,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 @pytest.mark.parametrize(
@@ -224,7 +224,7 @@ class TestMaybeRemapKvScaleName:
 
 
 def test_checkpoint_weight_mapper_discards_serialized_g_idx():
-    from aphrodite.model_executor.layers.quantization.base_config import (
+    from sonar.model_executor.layers.quantization.base_config import (
         QuantizationConfig,
     )
 
@@ -238,12 +238,12 @@ class TestKvCacheScaleMapper:
     """The `WeightsMapper` returned by `get_cache_scale_mapper` replaces the
     per-model `maybe_remap_kv_scale_name` calls. It must remap the same set of
     checkpoint formats (the non-`params_dict`-dependent ones) and be idempotent
-    so it composes safely with a model's own qkv/gate_up `hf_to_aphrodite_mapper`."""
+    so it composes safely with a model's own qkv/gate_up `hf_to_sonar_mapper`."""
 
     def _mapper(self):
         # `get_cache_scale_mapper` does not use `self`; call it on the base
         # class to get the default (non-config-specific) mapper.
-        from aphrodite.model_executor.layers.quantization.base_config import (
+        from sonar.model_executor.layers.quantization.base_config import (
             QuantizationConfig,
         )
 
@@ -287,7 +287,7 @@ class TestKvCacheScaleMapper:
                 "model.layers.0.mixer.k_proj.k_scale",
                 "model.layers.0.mixer.attn.k_scale",
             ),
-            # already in Aphrodite form -> unchanged (idempotent)
+            # already in Sonar form -> unchanged (idempotent)
             (
                 "model.layers.0.self_attn.attn.k_scale",
                 "model.layers.0.self_attn.attn.k_scale",
@@ -329,7 +329,7 @@ class TestKvCacheScaleMapper:
         """Applied together with a model's qkv/gate_up mapper, the regex scale
         rules run before the substr rename, so scales are normalized to `.attn.`
         and regular projections are still fused correctly."""
-        from aphrodite.model_executor.models.utils import WeightsMapper
+        from sonar.model_executor.models.utils import WeightsMapper
 
         model_mapper = WeightsMapper(
             orig_to_new_substr={
@@ -401,9 +401,9 @@ def test_dummy_wide_integer_param_is_untouched():
     assert torch.equal(param, torch.arange(16, dtype=torch.int32))
 
 
-def test_dummy_norm_weights_are_neutral(default_aphrodite_config):
+def test_dummy_norm_weights_are_neutral(default_sonar_config):
     """Dummy norms stay identity-like, keeping activations at a realistic scale."""
-    from aphrodite.model_executor.layers.layernorm import (
+    from sonar.model_executor.layers.layernorm import (
         GemmaRMSNorm,
         LayerNorm,
         RMSNorm,

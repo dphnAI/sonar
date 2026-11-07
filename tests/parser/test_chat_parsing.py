@@ -27,9 +27,9 @@ import random
 import unittest
 from typing import Any
 
-from aphrodite.parser.chat_parsing import ResponseParser, parse_response
-from aphrodite.parser.chat_parsing.response_parser import _coerce, _schema_types
-from aphrodite.parser.chat_parsing.response_templates import load_response_template
+from sonar.parser.chat_parsing import ResponseParser, parse_response
+from sonar.parser.chat_parsing.response_parser import _coerce, _schema_types
+from sonar.parser.chat_parsing.response_templates import load_response_template
 
 
 cohere_template = {

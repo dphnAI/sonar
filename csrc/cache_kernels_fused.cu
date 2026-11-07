@@ -15,7 +15,7 @@
 typedef __hip_bfloat16 __nv_bfloat16;
 #endif
 
-namespace aphrodite {
+namespace sonar {
 
 // NOTE Be EXTRA careful with raw_kv_scalar_t, for __half and __nv_bfloat16 it's
 // using u16 as the backing type.
@@ -57,9 +57,8 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
 
     // NOTE: Would be nice to have interleaved sin/cos so we could just load
     // both at the same time.
-    qk_t cos = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx));
-    qk_t sin =
-        static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
+    qk_t cos = static_cast<qk_t>(SONAR_LDG(cos_sin_ptr + pair_idx));
+    qk_t sin = static_cast<qk_t>(SONAR_LDG(cos_sin_ptr + pair_idx + embed_dim));
 
     qk_t* q_pe_head_ptr =
         q_pe + token_idx * q_pe_stride_token + head_idx * q_pe_stride_head;
@@ -92,9 +91,8 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
   for (int i = threadIdx.x; i < embed_dim; i += blockDim.x) {
     int pair_idx = i;
 
-    qk_t cos = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx));
-    qk_t sin =
-        static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
+    qk_t cos = static_cast<qk_t>(SONAR_LDG(cos_sin_ptr + pair_idx));
+    qk_t sin = static_cast<qk_t>(SONAR_LDG(cos_sin_ptr + pair_idx + embed_dim));
 
     qk_t* k_pe_head_ptr = k_pe + token_idx * k_pe_stride;
 
@@ -162,19 +160,19 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 #define CALL_CONCAT_AND_CACHE_MLA_ROPE_FUSED(RAW_KV_T, CACHE_T, KV_DTYPE)  \
   do {                                                                     \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                              \
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                  \
         q_pe.scalar_type(), "qk_scalar_type", [&] {                        \
           using qk_t = scalar_t;                                           \
-          APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                        \
+          SONAR_STABLE_DISPATCH_FLOATING_TYPES(                            \
               rope_cos_sin_cache.scalar_type(),                            \
               "rope_cos_sin_cache_scalar_type", [&] {                      \
                 using cos_sin_t = scalar_t;                                \
                 if (rope_is_neox) {                                        \
-                  aphrodite::concat_and_cache_mla_rope_fused_kernel<       \
+                  sonar::concat_and_cache_mla_rope_fused_kernel<           \
                       qk_t, cos_sin_t, true, RAW_KV_T, CACHE_T, KV_DTYPE>  \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \
@@ -191,7 +189,7 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
                           block_size,                                      \
                           kv_cache_quant_scale.const_data_ptr<float>());   \
                 } else {                                                   \
-                  aphrodite::concat_and_cache_mla_rope_fused_kernel<       \
+                  sonar::concat_and_cache_mla_rope_fused_kernel<           \
                       qk_t, cos_sin_t, false, RAW_KV_T, CACHE_T, KV_DTYPE> \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \
@@ -228,10 +226,10 @@ void concat_and_cache_mla_rope_fused(
         kv_cache,  // [num_blocks, block_size, (kv_lora_rank + rot_dim)]
     const std::string& kv_cache_dtype,
     torch::stable::Tensor& kv_cache_quant_scale) {
-  // NOTE(woosuk): In Aphrodite V1, query/key/position.size(0) can be different
-  // from slot_mapping.size(0) because of padding for CUDA graphs. In Aphrodite
+  // NOTE(woosuk): In Sonar V1, query/key/position.size(0) can be different
+  // from slot_mapping.size(0) because of padding for CUDA graphs. In Sonar
   // V0, key.size(0) is always equal to slot_mapping.size(0) because both
-  // include padding. In Aphrodite V1, however, key.size(0) can be larger than
+  // include padding. In Sonar V1, however, key.size(0) can be larger than
   // slot_mapping.size(0) since key includes padding for CUDA graphs,
   // while slot_mapping does not. In this case,
   // slot_mapping.size(0) represents the actual number of tokens

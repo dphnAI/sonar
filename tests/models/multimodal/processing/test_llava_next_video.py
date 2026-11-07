@@ -5,10 +5,10 @@ import math
 
 import pytest
 
-from aphrodite.model_executor.models.llava_next_video import (
+from sonar.model_executor.models.llava_next_video import (
     LlavaNextVideoForConditionalGeneration,
 )
-from aphrodite.model_executor.models.vision import get_vision_encoder_info
+from sonar.model_executor.models.vision import get_vision_encoder_info
 
 from ...utils import build_model_context
 

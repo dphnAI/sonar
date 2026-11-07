@@ -7,14 +7,14 @@ import torch
 import torch.nn as nn
 from torch.testing._internal.two_tensor import TwoTensor
 
-from aphrodite.config import ParallelConfig
-from aphrodite.model_executor import parameter
-from aphrodite.model_executor.model_loader.weight_checksum import (
+from sonar.config import ParallelConfig
+from sonar.model_executor import parameter
+from sonar.model_executor.model_loader.weight_checksum import (
     compute_tensor_digests,
     zero_weights,
 )
-from aphrodite.v1.worker import gpu_worker
-from aphrodite.v1.worker.gpu_worker import Worker
+from sonar.v1.worker import gpu_worker
+from sonar.v1.worker.gpu_worker import Worker
 
 pytestmark = pytest.mark.cpu_test
 

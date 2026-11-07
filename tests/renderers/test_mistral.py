@@ -10,15 +10,15 @@ from unittest.mock import Mock
 import pytest
 from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     JsonSchemaResponseFormat as OpenAIJsonSchemaResponseFormat,
 )
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     ResponseFormat as OpenAIResponseFormat,
 )
-from aphrodite.renderers import ChatParams
-from aphrodite.renderers.mistral import MistralRenderer, safe_apply_chat_template
-from aphrodite.tokenizers.mistral import MistralTokenizer
+from sonar.renderers import ChatParams
+from sonar.renderers.mistral import MistralRenderer, safe_apply_chat_template
+from sonar.tokenizers.mistral import MistralTokenizer
 
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.3"
 
@@ -53,7 +53,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -71,7 +71,7 @@ async def test_async_mistral_tokenizer_does_not_block_event_loop():
     mock_tokenizer = Mock(spec=MistralTokenizer)
     mock_tokenizer.apply_chat_template = mocked_apply_chat_template
     mock_renderer = MistralRenderer(
-        MockAphroditeConfig(mock_model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(mock_model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
 
@@ -127,14 +127,14 @@ def test_renderer_passes_response_format_to_tokenizer(
     mock_tokenizer = Mock(spec=MistralTokenizer)
     mock_tokenizer.apply_chat_template = Mock(return_value=[1])
     renderer = MistralRenderer(
-        MockAphroditeConfig(
+        MockSonarConfig(
             MockModelConfig(skip_tokenizer_init=True),
             parallel_config=MockParallelConfig(),
         ),
         tokenizer=mock_tokenizer,
     )
     monkeypatch.setattr(
-        "aphrodite.renderers.mistral.parse_chat_messages",
+        "sonar.renderers.mistral.parse_chat_messages",
         lambda *_args, **_kwargs: ([], None, None),
     )
 

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.tokenizers import TokenizerLike
+from sonar.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,
@@ -578,7 +578,7 @@ def test_adjust_request_disables_skip_special_tokens(
     ``skip_special_tokens=False`` so the engine does not strip the
     <|tool_call_start|>/<|tool_call_end|> sentinels before they reach the
     parser."""
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    from sonar.entrypoints.openai.chat_completion.protocol import (
         ChatCompletionRequest,
     )
 

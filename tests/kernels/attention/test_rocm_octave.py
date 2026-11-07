@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Octave HIP kernels against the PyTorch reference in
-aphrodite/v1/attention/ops/rocm_octave.py."""
+sonar/v1/attention/ops/rocm_octave.py."""
 
 import math
 
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.rocm_octave_attn import RocmOctaveAttentionBackend
-from aphrodite.v1.attention.ops import rocm_octave as sq
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.rocm_octave_attn import RocmOctaveAttentionBackend
+from sonar.v1.attention.ops import rocm_octave as sq
+from sonar.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
 from tests.v1.attention.utils import dense_kv_cache_views
 
 
 def _arch() -> str | None:
     if not current_platform.is_rocm():
         return None
-    from aphrodite.platforms.rocm import get_cdna_version, get_rdna_version
+    from sonar.platforms.rocm import get_cdna_version, get_rdna_version
 
     if get_rdna_version() == 3:
         return "rdna3"
@@ -293,7 +293,7 @@ def _prefill(cache, q, k, v, block_table, qsl, seq_lens, signs, fmt):
 
 @pytest.mark.parametrize("layout", RocmOctaveAttentionBackend.supported_kv_cache_layouts())
 def test_kernels_follow_declared_cache_layouts(layout):
-    """Store, decode and prefill on the cache view Aphrodite allocates for each
+    """Store, decode and prefill on the cache view Sonar allocates for each
     declared layout match a contiguous cache bit for bit. Two KV heads, so the
     head and token strides differ between layouts."""
     torch.manual_seed(4)

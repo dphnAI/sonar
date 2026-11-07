@@ -5,9 +5,9 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
-import aphrodite.utils.gpu_sync_debug as gsd
-from aphrodite.utils.gpu_sync_debug import with_gpu_sync_check
-from aphrodite.v1.spec_decode.vocab_mapping import VocabMapping, _detect_space_prefix
+import sonar.utils.gpu_sync_debug as gsd
+from sonar.utils.gpu_sync_debug import with_gpu_sync_check
+from sonar.v1.spec_decode.vocab_mapping import VocabMapping, _detect_space_prefix
 
 
 @pytest.mark.parametrize(

@@ -4,15 +4,15 @@
 import pytest
 from transformers import AutoModel
 
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
-from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
-from aphrodite.renderers.chat_utils import (
+from sonar.assets.base import SONAR_S3_BUCKET_URL
+from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageEmbedsParam,
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
 )
 
-from ....conftest import AphroditeRunner, HfRunner
+from ....conftest import HfRunner, SonarRunner
 
 MODELS = ["jinaai/jina-reranker-m0"]
 
@@ -28,8 +28,8 @@ CHECKPOINT_TO_HF_MAPPER = {
     r"^model\.(?!language_model\.|visual\.)": "model.language_model.",
 }
 
-HANDELSBLATT_IMAGE_URL = f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/jinavl-handelsblatt-preview.png"
-PAPER_IMAGE_URL = f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/jinavl-paper-11.png"
+HANDELSBLATT_IMAGE_URL = f"{SONAR_S3_BUCKET_URL}/multimodal_asset/jinavl-handelsblatt-preview.png"
+PAPER_IMAGE_URL = f"{SONAR_S3_BUCKET_URL}/multimodal_asset/jinavl-paper-11.png"
 
 # Shared long text for test data
 LONG_TEXT_DOC = """We present ReaderLM-v2, a compact 1.5 billion parameter language model designed for efficient
@@ -129,18 +129,18 @@ def create_score_multimodal_param(
     return [ScoreMultiModalParam(content=[content]) for content in formatted_content]
 
 
-def _run_aphrodite(
-    aphrodite_runner: type[AphroditeRunner],
+def _run_sonar(
+    sonar_runner: type[SonarRunner],
     model: str,
     dtype: str,
     query_strs: list[dict[str, str]],
     document_strs: list[dict[str, str]],
 ) -> list[float]:
-    """Run Aphrodite reranker and return scores."""
+    """Run Sonar reranker and return scores."""
     query = create_score_multimodal_param(query_strs)
     documents = create_score_multimodal_param(document_strs)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -148,8 +148,8 @@ def _run_aphrodite(
         max_model_len=2048,
         mm_processor_kwargs=MM_PROCESSOR_KWARGS,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as aphrodite_model:
-        outputs = aphrodite_model.llm.score(query, documents)
+    ) as sonar_model:
+        outputs = sonar_model.llm.score(query, documents)
 
     return [output.outputs.score for output in outputs]
 
@@ -203,29 +203,29 @@ def _run_hf(
 
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     model: str,
     dtype: str,
     query_strs: list[dict[str, str]],
     document_strs: list[dict[str, str]],
 ) -> None:
-    """Run comparison test between Aphrodite and HuggingFace implementations."""
-    # NOTE: take care of the order. run Aphrodite first, and then run HF.
-    # Aphrodite needs a fresh new process without cuda initialization.
+    """Run comparison test between Sonar and HuggingFace implementations."""
+    # NOTE: take care of the order. run Sonar first, and then run HF.
+    # Sonar needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
 
-    aphrodite_outputs = _run_aphrodite(aphrodite_runner, model, dtype, query_strs, document_strs)
+    sonar_outputs = _run_sonar(sonar_runner, model, dtype, query_strs, document_strs)
     hf_outputs = _run_hf(hf_runner, model, dtype, query_strs, document_strs)
 
     # Compare outputs
-    assert len(hf_outputs) == len(aphrodite_outputs), (
-        f"Output length mismatch: HF={len(hf_outputs)}, Aphrodite={len(aphrodite_outputs)}"
+    assert len(hf_outputs) == len(sonar_outputs), (
+        f"Output length mismatch: HF={len(hf_outputs)}, Sonar={len(sonar_outputs)}"
     )
 
-    for i, (hf_score, aphrodite_score) in enumerate(zip(hf_outputs, aphrodite_outputs)):
-        assert hf_score == pytest.approx(aphrodite_score, rel=0.02), (
-            f"Score mismatch at index {i}: HF={hf_score}, Aphrodite={aphrodite_score}"
+    for i, (hf_score, sonar_score) in enumerate(zip(hf_outputs, sonar_outputs)):
+        assert hf_score == pytest.approx(sonar_score, rel=0.02), (
+            f"Score mismatch at index {i}: HF={hf_score}, Sonar={sonar_score}"
         )
 
 
@@ -233,14 +233,14 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_model_text_image(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Visual Documents Reranking."""
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model,
         dtype,
         TEXT_IMAGE_TEST_DATA["query"],
@@ -252,14 +252,14 @@ def test_model_text_image(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_model_text_text(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Textual Documents Reranking."""
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model,
         dtype,
         TEXT_TEXT_TEST_DATA["query"],
@@ -271,14 +271,14 @@ def test_model_text_text(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_model_image_text(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Image Querying for Textual Documents."""
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model,
         dtype,
         IMAGE_TEXT_TEST_DATA["query"],
@@ -290,14 +290,14 @@ def test_model_image_text(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_model_image_image(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Image Querying for Image Documents."""
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model,
         dtype,
         IMAGE_IMAGE_TEST_DATA["query"],
@@ -309,14 +309,14 @@ def test_model_image_image(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_model_text_mixed_documents(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Text Query for Mixed Text and Image Documents."""
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         model,
         dtype,
         TEXT_MIXED_DOCS_TEST_DATA["query"],

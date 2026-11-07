@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import zmq
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.control.base import (
+from sonar.distributed.ec_transfer.ec_connector.cpu.control.base import (
     ControlConnection,
 )
 
@@ -67,11 +67,11 @@ def test_close_sets_alive_false():
 # ── ZmqClientConnection ───────────────────────────────────────────────────────
 
 
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq import (  # noqa: E402
+from sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq import (  # noqa: E402
     ZmqClientConnection,
     ZmqClientTransport,
 )
-from aphrodite.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr  # noqa: E402
+from sonar.distributed.ec_transfer.ec_connector.cpu.utils import PeerAddr  # noqa: E402
 
 
 def _conn(messages: list[list[bytes]], monitor=None) -> ZmqClientConnection:
@@ -155,15 +155,15 @@ def _make_transport() -> tuple[ZmqClientTransport, MagicMock]:
     ctx.socket.return_value = MagicMock()
     with (
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context",
             return_value=ctx,
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket",
             return_value=MagicMock(),
         ),
         patch(
-            "aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path",
+            "sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path",
             return_value="tcp://host:0",
         ),
     ):
@@ -179,9 +179,9 @@ def _inject_conn(transport: ZmqClientTransport, addr: PeerAddr) -> ZmqClientConn
     return conn
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
 def test_zmq_client_transport_connect_caches_connection(mock_ctx_cls, mock_path, mock_sock):
     mock_ctx_cls.return_value = MagicMock()
     mock_ctx_cls.return_value.socket.return_value = MagicMock()
@@ -191,9 +191,9 @@ def test_zmq_client_transport_connect_caches_connection(mock_ctx_cls, mock_path,
     assert transport.connect(addr) is transport.connect(addr)
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
 def test_zmq_client_transport_connect_creates_independent_conns_per_addr(mock_ctx_cls, mock_path, mock_sock):
     mock_ctx_cls.return_value = MagicMock()
     mock_ctx_cls.return_value.socket.return_value = MagicMock()
@@ -204,7 +204,7 @@ def test_zmq_client_transport_connect_creates_independent_conns_per_addr(mock_ct
     assert conn_a is not conn_b
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
 def test_zmq_client_transport_poll_dead_detects_disconnected_peer(mock_recv_mon):
     transport, _ = _make_transport()
     addr: PeerAddr = ("host", 1234)
@@ -217,7 +217,7 @@ def test_zmq_client_transport_poll_dead_detects_disconnected_peer(mock_recv_mon)
     assert not conn.alive
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
 def test_zmq_client_transport_poll_dead_skips_conn_without_monitor(mock_recv_mon):
     transport, _ = _make_transport()
     addr: PeerAddr = ("host", 9999)
@@ -230,7 +230,7 @@ def test_zmq_client_transport_poll_dead_skips_conn_without_monitor(mock_recv_mon
     mock_recv_mon.assert_not_called()
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.recv_monitor_message")
 def test_zmq_client_transport_poll_dead_ignores_non_disconnect_events(mock_recv_mon):
     transport, _ = _make_transport()
     addr: PeerAddr = ("host", 1234)
@@ -261,9 +261,9 @@ def test_zmq_client_transport_remove_returns_none_for_unknown_addr():
     assert transport.remove(("ghost", 0)) is None
 
 
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
-@patch("aphrodite.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_socket")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.make_zmq_path")
+@patch("sonar.distributed.ec_transfer.ec_connector.cpu.control.zmq.zmq.Context")
 def test_zmq_client_transport_close_closes_all_connections(mock_ctx_cls, mock_path, mock_sock):
     mock_ctx = MagicMock()
     mock_ctx_cls.return_value = mock_ctx

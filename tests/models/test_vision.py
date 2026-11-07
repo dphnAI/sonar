@@ -6,22 +6,22 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.distributed.parallel_state import (
+from sonar.distributed import get_tensor_model_parallel_world_size
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.model_executor.models.vision import (
+from sonar.model_executor.models.vision import (
     get_load_balance_assignment,
     resolve_visual_encoder_outputs,
     run_dp_sharded_mrope_vision_model,
     run_dp_sharded_vision_model,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
-from aphrodite.utils.torch_utils import set_random_seed
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
+from sonar.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_sonar_config, multi_gpu_test
 
 pytestmark = pytest.mark.cpu_test
 
@@ -109,7 +109,7 @@ def run_dp_sharded_vision_model_vs_direct(local_rank: int, world_size: int, batc
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create a test input tensor
@@ -290,7 +290,7 @@ def run_dp_sharded_mrope_vision_model_vs_direct(local_rank: int, world_size: int
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create test data
@@ -364,7 +364,7 @@ def run_dp_sharded_mrope_vision_model_empty_input_worker(local_rank: int, world_
     )
 
     init_distributed_environment()
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create empty inputs
@@ -409,7 +409,7 @@ def run_dp_sharded_mrope_vision_model_uneven_load_worker(local_rank: int, world_
     )
 
     init_distributed_environment()
-    with ensure_current_aphrodite_config():
+    with ensure_current_sonar_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create images with very different sizes

@@ -11,7 +11,7 @@ and passes with the guard.
 
 import pytest
 
-from aphrodite.v1.structured_output.backend_guidance import GuidanceGrammar
+from sonar.v1.structured_output.backend_guidance import GuidanceGrammar
 
 pytestmark = pytest.mark.skip_global_cleanup
 

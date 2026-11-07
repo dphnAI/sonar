@@ -14,46 +14,46 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fmt, fs};
 
-use aphrodite_chat::{
-    ChatBackend, ChatContent, ChatContentPart, ChatLlm, ChatMessage, ChatRenderer, ChatRequest,
-    ChatRequestProcessor, ChatTextBackend, DefaultChatOutputProcessor, DynChatOutputProcessor,
-    DynChatRenderer, NewChatOutputProcessorOptions, ParserSelection,
-};
-use aphrodite_engine_core_client::mock_engine::DEFAULT_MOCK_MAX_MODEL_LEN;
-use aphrodite_engine_core_client::mock_engine::default_ready_response;
-use aphrodite_engine_core_client::protocol::decode_value;
-use aphrodite_engine_core_client::protocol::dtype::TensorDtype;
-use aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
-use aphrodite_engine_core_client::protocol::logprobs::{
-    Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
-};
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
-use aphrodite_engine_core_client::protocol::multimodal::{MmField, MmKwargValue, MmModality};
-use aphrodite_engine_core_client::protocol::output::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, RequestError,
-    StopReason, UtilityCallOutput,
-};
-use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
-use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
-use aphrodite_engine_core_client::test_utils::{
-    IpcNamespace, spawn_mock_engine_task, spawn_mock_engine_task_with_ready,
-};
-use aphrodite_engine_core_client::{
-    ENGINE_CORE_DEAD_SENTINEL, EngineCoreClient, EngineCoreClientConfig, EngineId,
-};
-use aphrodite_llm::Llm;
-use aphrodite_metrics::METRICS;
-use aphrodite_text::tokenizer::DynTokenizer;
-use aphrodite_text::{Prompt, TextBackend, TextLlm, TextRequestProcessor};
-use aphrodite_tokenizer::Tokenizer as _;
-use aphrodite_tokenizer::test_utils::TestTokenizer;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use bytes::Bytes;
 use rmpv::Value;
 use serde_json::json;
 use serial_test::serial;
+use sonar_chat::{
+    ChatBackend, ChatContent, ChatContentPart, ChatLlm, ChatMessage, ChatRenderer, ChatRequest,
+    ChatRequestProcessor, ChatTextBackend, DefaultChatOutputProcessor, DynChatOutputProcessor,
+    DynChatRenderer, NewChatOutputProcessorOptions, ParserSelection,
+};
+use sonar_engine_core_client::mock_engine::DEFAULT_MOCK_MAX_MODEL_LEN;
+use sonar_engine_core_client::mock_engine::default_ready_response;
+use sonar_engine_core_client::protocol::decode_value;
+use sonar_engine_core_client::protocol::dtype::TensorDtype;
+use sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse;
+use sonar_engine_core_client::protocol::logprobs::{
+    Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
+};
+use sonar_engine_core_client::protocol::lora::LoraRequest;
+use sonar_engine_core_client::protocol::multimodal::{MmField, MmKwargValue, MmModality};
+use sonar_engine_core_client::protocol::output::{
+    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, RequestError,
+    StopReason, UtilityCallOutput,
+};
+use sonar_engine_core_client::protocol::request::EngineCoreRequest;
+use sonar_engine_core_client::protocol::stats::PrefillStats;
+use sonar_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
+use sonar_engine_core_client::test_utils::{
+    IpcNamespace, spawn_mock_engine_task, spawn_mock_engine_task_with_ready,
+};
+use sonar_engine_core_client::{
+    ENGINE_CORE_DEAD_SENTINEL, EngineCoreClient, EngineCoreClientConfig, EngineId,
+};
+use sonar_llm::Llm;
+use sonar_metrics::METRICS;
+use sonar_text::tokenizer::DynTokenizer;
+use sonar_text::{Prompt, TextBackend, TextLlm, TextRequestProcessor};
+use sonar_tokenizer::Tokenizer as _;
+use sonar_tokenizer::test_utils::TestTokenizer;
 use tower::{Service as _, ServiceExt as _};
 use zeromq::prelude::{SocketRecv, SocketSend};
 use zeromq::{DealerSocket, PushSocket, ZmqMessage};
@@ -450,7 +450,7 @@ async fn recv_engine_message(dealer: &mut DealerSocket) -> Vec<Bytes> {
 #[derive(Clone)]
 struct FakeChatBackend {
     model_id: String,
-    multimodal_model_info: Option<aphrodite_chat::multimodal::MultimodalModelInfo>,
+    multimodal_model_info: Option<sonar_chat::multimodal::MultimodalModelInfo>,
 }
 
 /// Synthetic BOS id used when `add_special_tokens` is true in tests.
@@ -486,7 +486,7 @@ impl FakeChatBackend {
     }
 
     fn with_multimodal_model_info(
-        multimodal_model_info: aphrodite_chat::multimodal::MultimodalModelInfo,
+        multimodal_model_info: sonar_chat::multimodal::MultimodalModelInfo,
     ) -> Self {
         Self {
             model_id: "test-model".to_string(),
@@ -518,7 +518,7 @@ impl ChatBackend for FakeChatBackend {
         Arc::new(self.clone())
     }
 
-    fn multimodal_model_info(&self) -> Option<&aphrodite_chat::multimodal::MultimodalModelInfo> {
+    fn multimodal_model_info(&self) -> Option<&sonar_chat::multimodal::MultimodalModelInfo> {
         self.multimodal_model_info.as_ref()
     }
 
@@ -526,7 +526,7 @@ impl ChatBackend for FakeChatBackend {
         &self,
         request: &mut ChatRequest,
         options: NewChatOutputProcessorOptions<'_>,
-    ) -> aphrodite_chat::Result<DynChatOutputProcessor> {
+    ) -> sonar_chat::Result<DynChatOutputProcessor> {
         Ok(Box::new(DefaultChatOutputProcessor::new(
             request,
             &self.model_id,
@@ -539,10 +539,7 @@ impl ChatBackend for FakeChatBackend {
 }
 
 impl ChatRenderer for FakeChatBackend {
-    fn render(
-        &self,
-        request: &ChatRequest,
-    ) -> aphrodite_chat::Result<aphrodite_chat::RenderedPrompt> {
+    fn render(&self, request: &ChatRequest) -> sonar_chat::Result<sonar_chat::RenderedPrompt> {
         let placeholder = self
             .multimodal_model_info
             .as_ref()
@@ -558,7 +555,7 @@ impl ChatRenderer for FakeChatBackend {
         if request.chat_options.add_generation_prompt() {
             prompt.push_str("assistant:");
         }
-        Ok(aphrodite_chat::RenderedPrompt {
+        Ok(sonar_chat::RenderedPrompt {
             prompt: Prompt::Text(prompt),
             media_order: None,
             effective_template_kwargs: request.chat_options.template_kwargs.clone(),
@@ -569,7 +566,7 @@ impl ChatRenderer for FakeChatBackend {
 fn render_fake_message_content(
     message: &ChatMessage,
     placeholder: &str,
-) -> aphrodite_chat::Result<String> {
+) -> sonar_chat::Result<String> {
     match message {
         ChatMessage::System { content }
         | ChatMessage::Developer { content, .. }
@@ -580,7 +577,7 @@ fn render_fake_message_content(
     }
 }
 
-fn render_fake_content(content: &ChatContent, placeholder: &str) -> aphrodite_chat::Result<String> {
+fn render_fake_content(content: &ChatContent, placeholder: &str) -> sonar_chat::Result<String> {
     Ok(match content {
         ChatContent::Text(text) => text.clone(),
         ChatContent::Parts(parts) => {
@@ -599,15 +596,15 @@ fn render_fake_content(content: &ChatContent, placeholder: &str) -> aphrodite_ch
     })
 }
 
-fn qwen_multimodal_model_info() -> aphrodite_chat::multimodal::MultimodalModelInfo {
+fn qwen_multimodal_model_info() -> sonar_chat::multimodal::MultimodalModelInfo {
     qwen_multimodal_model_info_with_limits(std::collections::HashMap::new())
 }
 
 fn qwen_multimodal_model_info_with_limits(
-    limit_mm_per_prompt: aphrodite_chat::multimodal::MmLimitPerPrompt,
-) -> aphrodite_chat::multimodal::MultimodalModelInfo {
+    limit_mm_per_prompt: sonar_chat::multimodal::MmLimitPerPrompt,
+) -> sonar_chat::multimodal::MultimodalModelInfo {
     let config_path = std::env::temp_dir().join(format!(
-        "aphrodite-server-qwen-config-{}.json",
+        "sonar-server-qwen-config-{}.json",
         uuid::Uuid::new_v4()
     ));
     fs::write(
@@ -615,10 +612,10 @@ fn qwen_multimodal_model_info_with_limits(
         r#"{"model_type":"qwen2_vl","image_token_id":151655}"#,
     )
     .expect("write qwen test config");
-    let info = aphrodite_chat::multimodal::MultimodalModelInfo::from_paths(
+    let info = sonar_chat::multimodal::MultimodalModelInfo::from_paths(
         "qwen2-vl-test".to_string(),
         Some("qwen2_vl".to_string()),
-        aphrodite_chat::multimodal::MultimodalConfigFiles {
+        sonar_chat::multimodal::MultimodalConfigFiles {
             config: Some(&config_path),
             ..Default::default()
         },
@@ -649,19 +646,19 @@ fn step5_vl_chat_tokenizer() -> TestTokenizer {
         .with_regular_token("<patch_newline>", STEP3_PATCH_NEWLINE_ID)
 }
 
-fn step5_vl_multimodal_model_info() -> aphrodite_chat::multimodal::MultimodalModelInfo {
+fn step5_vl_multimodal_model_info() -> sonar_chat::multimodal::MultimodalModelInfo {
     step5_vl_multimodal_model_info_with_limits(std::collections::HashMap::new())
 }
 
 fn step5_vl_multimodal_model_info_with_limits(
-    limit_mm_per_prompt: aphrodite_chat::multimodal::MmLimitPerPrompt,
-) -> aphrodite_chat::multimodal::MultimodalModelInfo {
+    limit_mm_per_prompt: sonar_chat::multimodal::MmLimitPerPrompt,
+) -> sonar_chat::multimodal::MultimodalModelInfo {
     let config_path = std::env::temp_dir().join(format!(
-        "aphrodite-server-step5-vl-config-{}.json",
+        "sonar-server-step5-vl-config-{}.json",
         uuid::Uuid::new_v4()
     ));
     let preprocessor_config_path = std::env::temp_dir().join(format!(
-        "aphrodite-server-step5-vl-preprocessor-config-{}.json",
+        "sonar-server-step5-vl-preprocessor-config-{}.json",
         uuid::Uuid::new_v4()
     ));
     fs::write(&config_path, r#"{"model_type":"step5_vl"}"#).expect("write step5_vl test config");
@@ -670,10 +667,10 @@ fn step5_vl_multimodal_model_info_with_limits(
         r#"{"image_size":728,"patch_size":504}"#,
     )
     .expect("write step5_vl test preprocessor config");
-    let info = aphrodite_chat::multimodal::MultimodalModelInfo::from_paths(
+    let info = sonar_chat::multimodal::MultimodalModelInfo::from_paths(
         "step5-vl-test".to_string(),
         Some("step5_vl".to_string()),
-        aphrodite_chat::multimodal::MultimodalConfigFiles {
+        sonar_chat::multimodal::MultimodalConfigFiles {
             config: Some(&config_path),
             preprocessor_config: Some(&preprocessor_config_path),
             ..Default::default()
@@ -869,7 +866,7 @@ async fn assert_route_not_supported(app: &axum::Router, method: &str, uri: &str,
         error["error"]["message"],
         format!(
             "{method} {route} is not supported by the Rust frontend yet. \
-             Set APHRODITE_USE_RUST_FRONTEND=0 to use the Python frontend."
+             Set SONAR_USE_RUST_FRONTEND=0 to use the Python frontend."
         ),
     );
 }
@@ -1040,7 +1037,7 @@ async fn tokenizer_info_route_follows_api_server_options() {
 /// response, returning the router and the engine task handle so the engine
 /// stays alive for the duration of the test.
 async fn test_dev_mode_app_with_ready(
-    ready_response: aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse,
+    ready_response: sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse,
 ) -> (axum::Router, MockEngineTask) {
     let ipc = IpcNamespace::new().expect("create ipc namespace");
     let handshake_address = ipc.handshake_endpoint();
@@ -1270,7 +1267,7 @@ fn add_lora_script(
 #[serial]
 async fn static_lora_module_loads_and_lists_with_parent() {
     // An absolute local path: the runtime endpoint would reject it without
-    // APHRODITE_RUNTIME_LORA_ALLOWED_PATH_PREFIXES, static config trusts it.
+    // SONAR_RUNTIME_LORA_ALLOWED_PATH_PREFIXES, static config trusts it.
     let mut ready = default_ready_response();
     ready.supports_lora = true;
     ready.max_loras = 4;
@@ -1825,7 +1822,7 @@ async fn render_glm_tools_for_none_follow_server_exclusion_setting() {
     .unwrap();
     fs::write(dir.path().join("tokenizer.json"), "{}").unwrap();
     let files =
-        aphrodite_text::backend::hf::ResolvedModelFiles::new(dir.path().to_str().unwrap(), None)
+        sonar_text::backend::hf::ResolvedModelFiles::new(dir.path().to_str().unwrap(), None)
             .await
             .unwrap();
     let mut tokenizer = TestTokenizer::new();
@@ -1839,11 +1836,11 @@ async fn render_glm_tools_for_none_follow_server_exclusion_setting() {
         tokenizer = tokenizer.with_regular_token(token, 256 + index as u32);
     }
     let backend = Arc::new(
-        aphrodite_chat::HfChatBackend::from_resolved_model_files(
+        sonar_chat::HfChatBackend::from_resolved_model_files(
             files,
             "glm-test".into(),
-            aphrodite_chat::LoadModelBackendsOptions {
-                renderer: aphrodite_chat::RendererSelection::Glm5Next,
+            sonar_chat::LoadModelBackendsOptions {
+                renderer: sonar_chat::RendererSelection::Glm5Next,
                 language_model_only: true,
                 ..Default::default()
             },
@@ -1901,7 +1898,7 @@ async fn render_chat_response_can_be_submitted_to_generate_unchanged() {
                         "messages": [{"role": "user", "content": "hello"}],
                         "max_completion_tokens": 8,
                         "bad_words": ["blocked"],
-                        "aphrodite_xargs": {"custom": 1},
+                        "sonar_xargs": {"custom": 1},
                         "kv_transfer_params": {"do_remote_decode": true},
                         "ec_transfer_params": {"do_remote_encode": true},
                         "chat_template_kwargs": {"enable_thinking": false},
@@ -1929,7 +1926,7 @@ async fn render_chat_response_can_be_submitted_to_generate_unchanged() {
     );
     // Transfer params move to the top level, like Python render.
     assert_eq!(
-        render_json["sampling_params"]["aphrodite_xargs"],
+        render_json["sampling_params"]["sonar_xargs"],
         json!({"custom": 1})
     );
     assert_eq!(
@@ -2050,7 +2047,7 @@ async fn list_models_base_card_includes_metadata() {
 
     let card = json["data"][0].as_object().expect("card object");
     assert_eq!(card["id"], "public-alias");
-    assert_eq!(card["owned_by"], "aphrodite-frontend-rs");
+    assert_eq!(card["owned_by"], "sonar-frontend-rs");
     assert_eq!(card["root"], "org/backend-model");
     assert!(card["max_model_len"].as_u64().expect("max_model_len") > 0);
     assert!(card["created"].as_i64().expect("created") > 0);
@@ -2596,7 +2593,7 @@ async fn cors_explicit_headers_union_safelisted_headers() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial]
-async fn version_returns_engine_aphrodite_version() {
+async fn version_returns_engine_sonar_version() {
     let mut app = test_app().await;
     let response = app
         .call(Request::builder().uri("/version").body(Body::empty()).expect("build request"))
@@ -2609,8 +2606,8 @@ async fn version_returns_engine_aphrodite_version() {
     assert_eq!(
         json,
         json!({
-            "version": "test-aphrodite-version",
-            "rust_frontend_version": aphrodite_build_info::VERSION,
+            "version": "test-sonar-version",
+            "rust_frontend_version": sonar_build_info::VERSION,
         })
     );
 }
@@ -2618,10 +2615,10 @@ async fn version_returns_engine_aphrodite_version() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial]
 async fn kv_event_sources_reports_each_ready_engine() {
-    let ready = aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse {
+    let ready = sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse {
         data_parallel_rank: 1,
         kv_events_config: Some(
-            aphrodite_engine_core_client::protocol::handshake::KvEventsConfig {
+            sonar_engine_core_client::protocol::handshake::KvEventsConfig {
                 enable_kv_cache_events: true,
                 publisher: "zmq".to_string(),
                 endpoint: "tcp://10.0.0.2:41233".to_string(),
@@ -3257,7 +3254,7 @@ async fn request_metrics_use_served_model_name_label() {
         metric_delta(
             &before,
             &after,
-            "aphrodite:request_success_total",
+            "sonar:request_success_total",
             Some("model_name=\"served-model-metrics\",engine=\"0\",finished_reason=\"stop\""),
         ),
         1.0
@@ -3624,7 +3621,7 @@ async fn openai_bad_words_reach_engine_core_as_token_ids() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial]
 async fn chat_structured_outputs_use_configured_backend() {
-    use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+    use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
 
     for backend in [
         StructuredOutputBackend::Xgrammar,
@@ -3889,8 +3886,8 @@ async fn non_stream_chat_rejects_when_image_count_exceeds_limit_mm_per_prompt() 
         default_stream_output_specs(),
         Arc::new(FakeChatBackend::with_multimodal_model_info(
             qwen_multimodal_model_info_with_limits(std::collections::HashMap::from([(
-                aphrodite_chat::multimodal::MmModality::Image,
-                aphrodite_chat::multimodal::MmLimitSpec::Count(1),
+                sonar_chat::multimodal::MmModality::Image,
+                sonar_chat::multimodal::MmLimitSpec::Count(1),
             )])),
         )),
     )
@@ -4247,8 +4244,8 @@ async fn non_stream_chat_step5_vl_rejects_when_image_limit_is_zero() {
         default_stream_output_specs(),
         Arc::new(FakeChatBackend::with_multimodal_model_info(
             step5_vl_multimodal_model_info_with_limits(std::collections::HashMap::from([(
-                aphrodite_chat::multimodal::MmModality::Image,
-                aphrodite_chat::multimodal::MmLimitSpec::Count(0),
+                sonar_chat::multimodal::MmModality::Image,
+                sonar_chat::multimodal::MmLimitSpec::Count(0),
             )])),
         )),
     )
@@ -4706,7 +4703,7 @@ async fn health_endpoint_returns_503_after_engine_core_dead_sentinel() {
     assert!(body.is_empty(), "expected empty body, got {:?}", body);
     assert!(matches!(
         state.chat.engine_core_client().health_error().as_deref(),
-        Some(aphrodite_engine_core_client::Error::EngineCoreDead)
+        Some(sonar_engine_core_client::Error::EngineCoreDead)
     ));
 
     engine_task.await.expect("mock engine task");
@@ -7941,7 +7938,7 @@ async fn sleep_route_uses_python_compatible_default_query_values() {
         metric_delta(
             &before,
             &after,
-            "aphrodite:sleep_mode_operation_duration_seconds_count",
+            "sonar:sleep_mode_operation_duration_seconds_count",
             Some("operation=\"sleep\""),
         ),
         1.0
@@ -7949,7 +7946,7 @@ async fn sleep_route_uses_python_compatible_default_query_values() {
     assert_eq!(
         metric_value(
             &after,
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             Some("operation=\"sleep\""),
         ),
         Some(0.0)
@@ -7997,8 +7994,8 @@ async fn sleep_route_rejects_invalid_query_before_engine_dispatch() {
         4.0
     );
     for metric in [
-        "aphrodite:sleep_mode_operation_duration_seconds_count",
-        "aphrodite:sleep_mode_operations_in_flight",
+        "sonar:sleep_mode_operation_duration_seconds_count",
+        "sonar:sleep_mode_operations_in_flight",
     ] {
         assert_eq!(
             metric_delta(&before, &after, metric, Some("operation=\"sleep\"")),
@@ -8113,7 +8110,7 @@ async fn release_kv_cache_memory_error_records_http_status_and_operation_duratio
         metric_delta(
             &before,
             &after,
-            "aphrodite:sleep_mode_operation_duration_seconds_count",
+            "sonar:sleep_mode_operation_duration_seconds_count",
             Some("operation=\"release_kv_cache_memory\""),
         ),
         1.0
@@ -8121,7 +8118,7 @@ async fn release_kv_cache_memory_error_records_http_status_and_operation_duratio
     assert_eq!(
         metric_value(
             &after,
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             Some("operation=\"release_kv_cache_memory\""),
         ),
         Some(0.0)
@@ -8167,7 +8164,7 @@ async fn cancelled_wake_operation_clears_in_flight_and_is_scraped() {
         metric_delta(
             &before,
             &active,
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             Some("operation=\"wake\""),
         ),
         1.0
@@ -8192,7 +8189,7 @@ async fn cancelled_wake_operation_clears_in_flight_and_is_scraped() {
     assert_eq!(
         metric_value(
             &after,
-            "aphrodite:sleep_mode_operations_in_flight",
+            "sonar:sleep_mode_operations_in_flight",
             Some("operation=\"wake\""),
         ),
         Some(0.0)
@@ -8201,7 +8198,7 @@ async fn cancelled_wake_operation_clears_in_flight_and_is_scraped() {
         metric_delta(
             &before,
             &after,
-            "aphrodite:sleep_mode_operation_duration_seconds_count",
+            "sonar:sleep_mode_operation_duration_seconds_count",
             Some("operation=\"wake\""),
         ),
         1.0
@@ -8789,7 +8786,7 @@ async fn weight_transfer_routes_support_the_http_training_lifecycle() {
             metric_delta(
                 &metrics_before,
                 &metrics_after,
-                "aphrodite:rl_weight_update_operation_duration_seconds_count",
+                "sonar:rl_weight_update_operation_duration_seconds_count",
                 Some(&format!("operation=\"{operation}\"")),
             ),
             count
@@ -8797,7 +8794,7 @@ async fn weight_transfer_routes_support_the_http_training_lifecycle() {
         assert_eq!(
             metric_value(
                 &metrics_after,
-                "aphrodite:rl_weight_update_operations_in_flight",
+                "sonar:rl_weight_update_operations_in_flight",
                 Some(&format!("operation=\"{operation}\"")),
             ),
             Some(0.0)
@@ -8866,7 +8863,7 @@ async fn weight_transfer_routes_reject_invalid_payloads_before_engine_calls() {
             metric_delta(
                 &metrics_before,
                 &metrics_after,
-                "aphrodite:rl_weight_update_operation_duration_seconds_count",
+                "sonar:rl_weight_update_operation_duration_seconds_count",
                 Some(&format!("operation=\"{operation}\"")),
             ),
             0.0
@@ -9508,7 +9505,7 @@ async fn tokenize_chat_with_tools_does_not_require_output_parser() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial]
 async fn tokenize_allows_prompts_at_or_above_max_model_len() {
-    let ready = aphrodite_engine_core_client::protocol::handshake::EngineCoreReadyResponse {
+    let ready = sonar_engine_core_client::protocol::handshake::EngineCoreReadyResponse {
         max_model_len: 4,
         ..default_ready_response()
     };
@@ -10225,7 +10222,7 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for AccessLogCapture {
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        if event.metadata().target() != "aphrodite_server::middleware::access_log" {
+        if event.metadata().target() != "sonar_server::middleware::access_log" {
             return;
         }
         let mut line = event.metadata().level().to_string();
@@ -10388,7 +10385,7 @@ where
     }
 
     fn on_event(&self, event: &tracing::Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
-        if event.metadata().target() != "aphrodite_server::routes::output_log" {
+        if event.metadata().target() != "sonar_server::routes::output_log" {
             return;
         }
         let mut line = event.metadata().level().to_string();

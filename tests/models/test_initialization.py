@@ -10,17 +10,17 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite import LLM
-from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
-from aphrodite.v1.core.kv_cache_planning import (
+from sonar import LLM
+from sonar.logger import init_logger
+from sonar.platforms import current_platform
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.v1.attention.backends.utils import resolve_kv_cache_layout
+from sonar.v1.core.kv_cache_planning import (
     get_global_kv_cache_groups,
     get_kv_cache_configs,
 )
-from aphrodite.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
-from aphrodite.v1.engine.core import EngineCore as V1EngineCore
+from sonar.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
+from sonar.v1.engine.core import EngineCore as V1EngineCore
 
 from ..utils import (
     create_new_process_for_each_test,
@@ -101,7 +101,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
     """The reason for using create_new_process_for_each_test is to avoid
     the WARNING:
         "We must use the 'spawn' multiprocessing start method. Overriding
-        APHRODITE_WORKER_MULTIPROC_METHOD to 'spawn'."
+        SONAR_WORKER_MULTIPROC_METHOD to 'spawn'."
     The spawn process causes the _initialize_kv_caches_v1 function below to
     become ineffective.
     """
@@ -110,7 +110,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
     model_info.check_transformers_version(
         on_fail="skip",
         check_max_version=False,
-        check_version_reason="aphrodite",
+        check_version_reason="sonar",
     )
 
     hf_overrides_fn = partial(
@@ -121,31 +121,29 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
     )
 
     # Avoid calling model.forward()
-    def _initialize_kv_caches_v1(self, aphrodite_config):
+    def _initialize_kv_caches_v1(self, sonar_config):
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
         layout = resolve_kv_cache_layout(
-            aphrodite_config,
+            sonar_config,
             self.model_executor.get_supported_kv_cache_layouts(),
             [spec for worker_specs in kv_cache_specs for spec in worker_specs.values()],
         )
-        global_kv_cache_groups = get_global_kv_cache_groups(aphrodite_config, kv_cache_specs)
-        aphrodite_config.adjust_dcp_kv_cache_interleave_size(global_kv_cache_groups)
-        self.model_executor.set_kv_cache_layout(
-            layout.name, aphrodite_config.parallel_config.cp_kv_cache_interleave_size
-        )
+        global_kv_cache_groups = get_global_kv_cache_groups(sonar_config, kv_cache_specs)
+        sonar_config.adjust_dcp_kv_cache_interleave_size(global_kv_cache_groups)
+        self.model_executor.set_kv_cache_layout(layout.name, sonar_config.parallel_config.cp_kv_cache_interleave_size)
         kv_cache_configs = get_kv_cache_configs(
-            aphrodite_config,
+            sonar_config,
             kv_cache_specs,
             [10 * GiB_bytes],
             global_kv_cache_groups,
         )
         scheduler_kv_cache_config = generate_scheduler_kv_cache_config(kv_cache_configs)
-        aphrodite_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
+        sonar_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
         kv_cache_groups = scheduler_kv_cache_config.kv_cache_groups
         if kv_cache_groups:
-            aphrodite_config.cache_config.block_size = min(g.kv_cache_spec.block_size for g in kv_cache_groups)
+            sonar_config.cache_config.block_size = min(g.kv_cache_spec.block_size for g in kv_cache_groups)
 
-        aphrodite_config.validate_block_size()
+        sonar_config.validate_block_size()
         return scheduler_kv_cache_config
 
     if model_arch == "MoonshotKimiaForCausalLM":
@@ -161,11 +159,11 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
 
     use_sm89_dsa = False
     if model_arch in ["DeepseekV32ForCausalLM", "GlmMoeDsaForCausalLM"]:
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         capability = current_platform.get_device_capability()
         if capability and capability.major < 9:
-            from aphrodite import _custom_ops as ops
+            from sonar import _custom_ops as ops
 
             if capability == (8, 9) and ops.supports_sm89_dsa():
                 # SM89_MLA_SPARSE only serves the fp8_ds_mla cache layout.
@@ -179,11 +177,11 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
                 )
 
     if model_arch == "Step5ForConditionalGeneration":
-        from aphrodite.platforms import current_platform
-        from aphrodite.platforms.interface import DeviceCapability
+        from sonar.platforms import current_platform
+        from sonar.platforms.interface import DeviceCapability
 
         if current_platform.is_rocm():
-            from aphrodite.platforms.rocm import on_mi3xx
+            from sonar.platforms.rocm import on_mi3xx
 
             if not on_mi3xx():
                 pytest.skip("Step5 on ROCm requires MI300 or MI350")
@@ -194,7 +192,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
             pytest.skip("Step5 DSA requires CUDA SM90 or SM103")
 
     if model_arch == "DeepseekV4ForConditionalGeneration":
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if not (current_platform.is_cuda() or current_platform.is_rocm()):
             pytest.skip("Deepseek V4 vision is only supported on CUDA and ROCm")
@@ -207,7 +205,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
             # The EngineCore subprocess re-imports the class and does not
             # inherit the KV-cache patch above, so it OOMs. Run in-process
             # so the patch applies.
-            m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+            m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
         # FIXME: A hack to bypass FA3 assertion because our CI's L4 GPU
         # has cc==8.9 which hasn't supported FA3 yet. Remove this hack when
@@ -217,7 +215,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
             {"backend": "TRITON_ATTN"} if model_arch in ("GptOssForCausalLM", "Step1ForCausalLM") else None
         )
         if model_arch == "WhisperForConditionalGeneration":
-            m.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+            m.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
         kwargs: dict[str, Any] = {}
         if not model_info.enable_prefix_caching:
@@ -248,7 +246,7 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
             # these tests seem to produce leftover memory
             gpu_memory_utilization=0.80,
             load_format="dummy",
-            model_impl="transformers" if model_arch in _TRANSFORMERS_BACKEND_MODELS else "aphrodite",
+            model_impl="transformers" if model_arch in _TRANSFORMERS_BACKEND_MODELS else "sonar",
             hf_overrides=hf_overrides_fn,
             max_num_seqs=model_info.max_num_seqs,
             attention_config=attention_config,
@@ -270,7 +268,7 @@ def test_can_initialize_large_subset(model_arch: str, monkeypatch: pytest.Monkey
     test.
     """
     if model_arch in ("HYV4ForCausalLM", "HYV4MTPModel"):
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         if current_platform.is_rocm():
             pytest.skip("HY V4 ROCm initialization requires #54405")

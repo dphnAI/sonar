@@ -3,7 +3,7 @@
 
 from types import SimpleNamespace
 
-from aphrodite.config.speculative import resolve_draft_kv_cache_dtype
+from sonar.config.speculative import resolve_draft_kv_cache_dtype
 
 
 def _spec_config(*, draft_uses_mla: bool, kv_cache_dtype: str | None = None):

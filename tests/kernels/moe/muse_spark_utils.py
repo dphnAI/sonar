@@ -7,16 +7,16 @@ from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     KernelConfig,
     ParallelConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.models.muse_spark.nvidia.muse_moe_runner import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.models.muse_spark.nvidia.muse_moe_runner import (
     MuseMoERunner,
     MusePostExpertFinalize,
     MuseSpark1xRouter,
@@ -51,11 +51,11 @@ def make_runner(
 ):
     """Build a MuseSpark runner, load ``ckpt`` and finalize its weights."""
     num_experts = expert_bias.numel()
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         parallel_config=ParallelConfig(),
         kernel_config=KernelConfig(moe_backend="auto"),
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         router = MuseSpark1xRouter(
             top_k=top_k,
             num_experts=num_experts,
@@ -92,17 +92,17 @@ def make_runner(
     assert experts.post_gemm2_hook is runner.post_expert_finalize
     assert isinstance(runner.post_expert_finalize, MusePostExpertFinalize)
     assert not runner.post_expert_finalize.pre_norm_all_reduce
-    return router, runner, aphrodite_config
+    return router, runner, sonar_config
 
 
-def run_moe(runner, aphrodite_config, x, logits):
-    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
+def run_moe(runner, sonar_config, x, logits):
+    with set_current_sonar_config(sonar_config), set_forward_context(None, sonar_config):
         return runner.forward(hidden_states=x, router_logits=logits)
 
 
-def assert_cudagraph_replays(runner, aphrodite_config, x, logits, next_x, next_logits):
+def assert_cudagraph_replays(runner, sonar_config, x, logits, next_x, next_logits):
     """A captured forward replayed on new inputs matches an eager forward."""
-    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
+    with set_current_sonar_config(sonar_config), set_forward_context(None, sonar_config):
         # FlashInfer autotuning must happen before capture.
         for _ in range(3):
             runner.forward(hidden_states=x, router_logits=logits)

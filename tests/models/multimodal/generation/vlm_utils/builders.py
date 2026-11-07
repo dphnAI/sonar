@@ -9,9 +9,9 @@ from typing import Any
 import numpy.typing as npt
 import torch
 
-from aphrodite.multimodal.audio import AudioResampler
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.video import (
+from sonar.multimodal.audio import AudioResampler
+from sonar.multimodal.image import rescale_image_size
+from sonar.multimodal.video import (
     rescale_video_size,
     resize_video,
     sample_frames_from_video,
@@ -210,8 +210,8 @@ def build_embedding_inputs_from_test_info(
     assert len(images) == len(model_prompts)
 
     inputs = build_single_image_inputs(images, model_prompts, size_wrapper)
-    aphrodite_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
-    return inputs, aphrodite_embeddings
+    sonar_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
+    return inputs, sonar_embeddings
 
 
 def build_video_inputs_from_test_info(

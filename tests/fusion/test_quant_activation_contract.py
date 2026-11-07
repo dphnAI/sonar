@@ -5,59 +5,59 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     _POSSIBLE_FP8_BLOCK_KERNELS,
     _POSSIBLE_FP8_KERNELS,
     _POSSIBLE_INT8_KERNELS,
     _POSSIBLE_MXFP8_KERNELS,
     _POSSIBLE_NVFP4_KERNELS,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
+from sonar.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutedslMxfp8LinearKernel,
     FlashInferCutlassMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
+from sonar.model_executor.kernels.linear.mxfp8.rocm_native import (
     RocmDotScaledMxfp8LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.base import (
+from sonar.model_executor.kernels.linear.nvfp4.base import (
     NvFp4LinearKernel,
     NvFp4LinearLayerConfig,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.flashinfer import (
+from sonar.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferCuteDslNvFp4LinearKernel,
     FlashInferCutlassNvFp4LinearKernel,
     FlashInferTrtllmNvFp4LinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.aiter import (
+from sonar.model_executor.kernels.linear.scaled_mm.aiter import (
     AiterHipbMMPerTokenFp8ScaledMMLinearKernel,
     AiterPerTokenFp8ScaledMMLinearKernel,
     AiterPreshuffledPerTokenFp8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
+from sonar.model_executor.kernels.linear.scaled_mm.cutlass import (
     CutlassFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.flashinfer import (
+from sonar.model_executor.kernels.linear.scaled_mm.flashinfer import (
     FlashInferFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.pytorch import (
+from sonar.model_executor.kernels.linear.scaled_mm.pytorch import (
     PerTensorTorchFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
+from sonar.model_executor.kernels.linear.scaled_mm.ScaledMMLinearKernel import (
     FP8ScaledMMLinearLayerConfig,
     Int8ScaledMMLinearKernel,
     Int8ScaledMMLinearLayerConfig,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     as_quantized_activation,
     expose_input_quant_key,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 # The only backends that consume a pre-quantized activation.
 SUPPORTING = {

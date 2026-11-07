@@ -4,9 +4,9 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.attention.ops.triton_decode_attention import decode_attention_fwd
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import cdiv
+from sonar.v1.attention.ops.triton_decode_attention import decode_attention_fwd
 
 pytestmark = pytest.mark.skip_global_cleanup
 

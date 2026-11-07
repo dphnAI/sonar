@@ -6,8 +6,8 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Duration;
 
-use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_metrics::METRICS;
+use sonar_engine_core_client::EngineCoreClient;
+use sonar_metrics::METRICS;
 use tracing::Span;
 
 mod error;
@@ -17,9 +17,6 @@ mod output;
 mod request;
 mod request_metrics;
 
-pub use aphrodite_engine_core_client::protocol::logprobs::{
-    Logprobs, PositionLogprobs, TokenLogprob,
-};
 pub use error::{Error, Result};
 pub use output::{
     CollectedGenerateOutput, FinishReason, GenerateOutput, GenerateOutputStream,
@@ -27,6 +24,7 @@ pub use output::{
 };
 pub use request::GenerateRequest;
 pub use request_metrics::{RequestTimestamps, current_unix_timestamp_secs};
+pub use sonar_engine_core_client::protocol::logprobs::{Logprobs, PositionLogprobs, TokenLogprob};
 
 use crate::inflight::InflightRequests;
 use crate::log_stats::StatsLogger;

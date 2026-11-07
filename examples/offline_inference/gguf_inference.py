@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from huggingface_hub import hf_hub_download
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 
 def run_gguf_inference(model_path):

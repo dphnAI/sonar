@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.outputs import (
+from sonar.outputs import (
     ClassificationRequestOutput,
     CompletionOutput,
     EmbeddingRequestOutput,
@@ -14,7 +14,7 @@ from aphrodite.outputs import (
     RequestOutput,
     ScoringRequestOutput,
 )
-from aphrodite.v1.metrics.stats import RequestSpecDecodeMetrics
+from sonar.v1.metrics.stats import RequestSpecDecodeMetrics
 
 pytestmark = pytest.mark.cpu_test
 

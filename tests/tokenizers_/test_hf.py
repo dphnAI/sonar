@@ -8,8 +8,8 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from transformers import AutoTokenizer, TokenizersBackend
 
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tokenizers.hf import (
+from sonar.tokenizers import TokenizerLike
+from sonar.tokenizers.hf import (
     CachedHfTokenizer,
     ThreadSafeHFTokenizerMixin,
     get_cached_tokenizer,

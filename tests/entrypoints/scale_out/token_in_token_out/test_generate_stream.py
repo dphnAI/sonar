@@ -8,40 +8,40 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.generate.base.protocol import StreamOptions
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_features import (
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.generate.base.protocol import StreamOptions
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.scale_out.token_in_token_out.mm_features import (
     placeholder_ranges_from_engine_input,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_serde import (
+from sonar.entrypoints.scale_out.token_in_token_out.mm_serde import (
     encode_mm_kwargs_item,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     GenerateTextResponse,
     GenerateTokensResponse,
     MultiModalFeatures,
     PlaceholderRangeInfo,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.exceptions import GenerationError
-from aphrodite.logprobs import Logprob
-from aphrodite.multimodal.inputs import (
+from sonar.entrypoints.scale_out.token_in_token_out.serving import ServingTokens
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.exceptions import GenerationError
+from sonar.logprobs import Logprob
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.outputs import CompletionOutput, RequestOutput, SamplingMask
-from aphrodite.renderers import renderer_from_config
-from aphrodite.renderers.online_derenderer import OnlineDerenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.stats import RequestSpecDecodeMetrics
+from sonar.outputs import CompletionOutput, RequestOutput, SamplingMask
+from sonar.renderers import renderer_from_config
+from sonar.renderers.online_derenderer import OnlineDerenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.stats import RequestSpecDecodeMetrics
 
 MODEL_NAME = "openai-community/gpt2"
 BASE_MODEL_PATHS = [
@@ -95,7 +95,7 @@ class MockSchedulerConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
     scheduler_config: MockSchedulerConfig = field(default_factory=MockSchedulerConfig)
@@ -103,7 +103,7 @@ class MockAphroditeConfig:
 
 def _build_renderer(model_config: MockModelConfig):
     return renderer_from_config(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
     )
 
 
@@ -178,7 +178,7 @@ def _mock_engine() -> MagicMock:
     engine = MagicMock(spec=AsyncLLM)
     engine.errored = False
     engine.model_config = MockModelConfig()
-    engine.aphrodite_config = MockAphroditeConfig(engine.model_config, parallel_config=MockParallelConfig())
+    engine.sonar_config = MockSonarConfig(engine.model_config, parallel_config=MockParallelConfig())
     engine.input_processor = MagicMock()
     engine.renderer = _build_renderer(engine.model_config)
     return engine

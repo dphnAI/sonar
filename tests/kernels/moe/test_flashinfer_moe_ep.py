@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """End-to-end tests for the FlashInfer MoE-EP adapter on real Blackwell GPUs.
 
-Each test spawns one process per GPU, bootstraps Aphrodite's expert-parallel
+Each test spawns one process per GPU, bootstraps Sonar's expert-parallel
 groups, builds a ``FlashInferMoeEp`` adapter from bf16 expert weights at the
 MoE geometry of a real model, warms it up and runs a forward whose inputs are
 chosen so that every quantization step in the megakernel is exact, for the
@@ -22,28 +22,28 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.config.kernel import FLASHINFER_MOE_EP_CUTEDSL, FLASHINFER_MOE_EP_DEEP_GEMM
-from aphrodite.distributed.parallel_state import ensure_model_parallel_initialized
-from aphrodite.model_executor.layers.fused_moe import flashinfer_moe_ep as fi_ep
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.config.kernel import FLASHINFER_MOE_EP_CUTEDSL, FLASHINFER_MOE_EP_DEEP_GEMM
+from sonar.distributed.parallel_state import ensure_model_parallel_initialized
+from sonar.model_executor.layers.fused_moe import flashinfer_moe_ep as fi_ep
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (
+from sonar.model_executor.layers.fused_moe.experts.flashinfer_moe_ep import (
     FlashInferMoeEpExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.flashinfer_moe_ep import (
+from sonar.model_executor.layers.fused_moe.flashinfer_moe_ep import (
     FlashInferMoeEp,
     FlashInferMoeEpWeights,
     apply_topk_in_fc1,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp4Static
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_deep_gemm
+from sonar.model_executor.layers.quantization.utils.quant_utils import kMxfp4Static
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_deep_gemm
 from tests.distributed.eplb_utils import distributed_run, set_env_vars_and_device
 
 
@@ -173,7 +173,7 @@ def _expected_output(geometry: Geometry, topk_ids: torch.Tensor, topk_weights: t
 
 
 def _moe_config(
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     geometry: Geometry,
     world_size: int,
     device: torch.device,
@@ -184,7 +184,7 @@ def _moe_config(
         pcp_size_=1,
         dp_size_=world_size,
         sp_size_=1,
-        aphrodite_parallel_config=aphrodite_config.parallel_config,
+        sonar_parallel_config=sonar_config.parallel_config,
     )
     return FusedMoEConfig(
         num_experts=geometry.num_experts,
@@ -233,16 +233,16 @@ def _check_expert_views_alias_kernel_memory(
 
 def _init_warmup_forward(env: dict[str, str], world_size: int, geometry: Geometry, backend: str) -> None:
     set_env_vars_and_device(env)
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.data_parallel_size = world_size
-    aphrodite_config.parallel_config.enable_expert_parallel = True
-    aphrodite_config.kernel_config.moe_backend = backend
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.data_parallel_size = world_size
+    sonar_config.parallel_config.enable_expert_parallel = True
+    sonar_config.kernel_config.moe_backend = backend
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=1, pipeline_model_parallel_size=1)
         rank = torch.distributed.get_rank()
         device = torch.device(f"cuda:{rank}")
-        moe = _moe_config(aphrodite_config, geometry, world_size, device, backend)
+        moe = _moe_config(sonar_config, geometry, world_size, device, backend)
         supported, reason = FlashInferMoeEpExperts.is_supported_config(
             FlashInferMoeEpExperts,
             moe,

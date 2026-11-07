@@ -10,18 +10,18 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.third_party.flash_linear_attention.ops import (
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.third_party.flash_linear_attention.ops import (
     fused_sigmoid_gating_delta_rule_update,
 )
-from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (
+from sonar.third_party.flash_linear_attention.ops.fused_gdn_decode_post_conv_mtp import (
     fused_gdn_decode_post_conv_mtp_triton,
 )
-from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_prefill_post_conv import (
+from sonar.third_party.flash_linear_attention.ops.fused_gdn_prefill_post_conv import (
     fused_post_conv_prep,
 )
-from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (
     rmsnorm_fn,
 )
 

@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.pooling.base.io_processor import PoolingIOProcessor
-from aphrodite.entrypoints.pooling.offline import PoolingOfflineMixin
-from aphrodite.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
-from aphrodite.entrypoints.pooling.typing import OfflineEncodeInputsContext
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers import TokenizeParams
+from sonar import PoolingParams
+from sonar.entrypoints.pooling.base.io_processor import PoolingIOProcessor
+from sonar.entrypoints.pooling.offline import PoolingOfflineMixin
+from sonar.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
+from sonar.entrypoints.pooling.typing import OfflineEncodeInputsContext
+from sonar.exceptions import SonarValidationError
+from sonar.renderers import TokenizeParams
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def processor() -> PoolingIOProcessor:
 
 
 def test_rejects_untrusted_request_chat_template(processor: PoolingIOProcessor):
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         processor._validate_chat_template("template", None, False)
 
     assert str(exc_info.value) == (
@@ -33,7 +33,7 @@ def test_rejects_untrusted_request_chat_template(processor: PoolingIOProcessor):
 
 
 def test_rejects_mismatched_pooling_params(processor: PoolingIOProcessor):
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         processor._params_to_seq([PoolingParams()], num_requests=2)
 
     assert str(exc_info.value) == ("The lengths of prompts (2) and params (1) must be the same.")
@@ -42,7 +42,7 @@ def test_rejects_mismatched_pooling_params(processor: PoolingIOProcessor):
 
 
 def test_rejects_mismatched_lora_requests(processor: PoolingIOProcessor):
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         processor._lora_request_to_seq([None], num_requests=2)
 
     assert str(exc_info.value) == ("The lengths of prompts (2) and lora_request (1) must be the same.")
@@ -62,7 +62,7 @@ def test_rejects_conflicting_pooling_task(processor: PoolingIOProcessor):
         pooling_params=PoolingParams(task="classify"),
     )
 
-    with pytest.raises(AphroditeValidationError) as exc_info:
+    with pytest.raises(SonarValidationError) as exc_info:
         processor.get_request_factory_offline(ctx)
 
     assert str(exc_info.value) == ("You cannot overwrite param.task='classify' with pooling_task='embed'!")
@@ -73,21 +73,21 @@ def test_rejects_conflicting_pooling_task(processor: PoolingIOProcessor):
 def test_qwen3_reranker_warns_without_chat_template(monkeypatch):
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
+    from sonar.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
 
-    monkeypatch.setattr("aphrodite.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
+    monkeypatch.setattr("sonar.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.interfaces.supports_score_template",
+        "sonar.model_executor.models.interfaces.supports_score_template",
         lambda *_: False,
     )
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
+        "sonar.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
         lambda *_: False,
     )
 
     mock_logger = MagicMock()
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.logger",
+        "sonar.entrypoints.pooling.scoring.io_processor.logger",
         mock_logger,
     )
 
@@ -99,7 +99,7 @@ def test_qwen3_reranker_warns_without_chat_template(monkeypatch):
     model_config.is_multimodal_model = False
     model_config.max_model_len = 8192
 
-    aphrodite_config = MagicMock(model_config=model_config)
+    sonar_config = MagicMock(model_config=model_config)
     tokenizer = MagicMock()
     tokenizer.pad_token_id = 0
     renderer = MagicMock()
@@ -107,7 +107,7 @@ def test_qwen3_reranker_warns_without_chat_template(monkeypatch):
     chat_template_config = MagicMock(chat_template=None)
 
     CrossEncoderIOProcessor(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )
@@ -121,21 +121,21 @@ def test_qwen3_reranker_warns_without_chat_template(monkeypatch):
 def test_qwen3_vl_reranker_warns_with_vl_template(monkeypatch):
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
+    from sonar.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
 
-    monkeypatch.setattr("aphrodite.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
+    monkeypatch.setattr("sonar.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.interfaces.supports_score_template",
+        "sonar.model_executor.models.interfaces.supports_score_template",
         lambda *_: False,
     )
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
+        "sonar.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
         lambda *_: False,
     )
 
     mock_logger = MagicMock()
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.logger",
+        "sonar.entrypoints.pooling.scoring.io_processor.logger",
         mock_logger,
     )
 
@@ -147,7 +147,7 @@ def test_qwen3_vl_reranker_warns_with_vl_template(monkeypatch):
     model_config.is_multimodal_model = True
     model_config.max_model_len = 8192
 
-    aphrodite_config = MagicMock(model_config=model_config)
+    sonar_config = MagicMock(model_config=model_config)
     tokenizer = MagicMock()
     tokenizer.pad_token_id = 0
     renderer = MagicMock()
@@ -155,7 +155,7 @@ def test_qwen3_vl_reranker_warns_with_vl_template(monkeypatch):
     chat_template_config = MagicMock(chat_template=None)
 
     CrossEncoderIOProcessor(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )
@@ -169,21 +169,21 @@ def test_qwen3_vl_reranker_warns_with_vl_template(monkeypatch):
 def test_qwen3_reranker_no_warning_when_template_provided(monkeypatch):
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
+    from sonar.entrypoints.pooling.scoring.io_processor import CrossEncoderIOProcessor
 
-    monkeypatch.setattr("aphrodite.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
+    monkeypatch.setattr("sonar.model_executor.model_loader.get_model_cls", lambda *_: MagicMock())
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.interfaces.supports_score_template",
+        "sonar.model_executor.models.interfaces.supports_score_template",
         lambda *_: False,
     )
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
+        "sonar.entrypoints.pooling.scoring.io_processor.is_mistral_tokenizer",
         lambda *_: False,
     )
 
     mock_logger = MagicMock()
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.scoring.io_processor.logger",
+        "sonar.entrypoints.pooling.scoring.io_processor.logger",
         mock_logger,
     )
 
@@ -195,7 +195,7 @@ def test_qwen3_reranker_no_warning_when_template_provided(monkeypatch):
     model_config.is_multimodal_model = False
     model_config.max_model_len = 8192
 
-    aphrodite_config = MagicMock(model_config=model_config)
+    sonar_config = MagicMock(model_config=model_config)
     tokenizer = MagicMock()
     tokenizer.pad_token_id = 0
     renderer = MagicMock()
@@ -203,7 +203,7 @@ def test_qwen3_reranker_no_warning_when_template_provided(monkeypatch):
     chat_template_config = MagicMock(chat_template="custom template")
 
     CrossEncoderIOProcessor(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )

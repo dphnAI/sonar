@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite import SamplingParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.kv_hints import KvHintAction, KvHintsEnvelope
-from aphrodite.v1.request import Request, RequestStatus
+from sonar import SamplingParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.kv_hints import KvHintAction, KvHintsEnvelope
+from sonar.v1.request import Request, RequestStatus
 
 
 def test_request_status_fmt_str():

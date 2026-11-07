@@ -32,7 +32,7 @@ from bench_dataset import (
 from bench_utils import TEXT_SEPARATOR, Color, logger
 from transformers import AutoTokenizer  # type: ignore
 
-from aphrodite.benchmarks.lib.utils import redact_sensitive_namespace
+from sonar.benchmarks.lib.utils import redact_sensitive_namespace
 
 NUM_TOKENS_FROM_DATASET = 0
 TERM_SIGNAL = None

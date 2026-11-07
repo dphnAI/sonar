@@ -5,11 +5,11 @@ import math
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
-from aphrodite.platforms import current_platform
-from aphrodite.v1.metrics.reader import Counter
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
+from sonar.config.compilation import CompilationMode, CUDAGraphMode
+from sonar.platforms import current_platform
+from sonar.v1.metrics.reader import Counter
 from tests.utils import multi_gpu_marks
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
@@ -44,20 +44,20 @@ def _small_hyv4_config(config):
 
 
 def _num_captured_graphs(_worker):
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
     return compilation_counter.num_cudagraph_captured
 
 
 def _piecewise_compile_state(worker):
-    from aphrodite.compilation.counter import compilation_counter
+    from sonar.compilation.counter import compilation_counter
 
     # `cudagraph_mode` is returned by name: the enum does not survive the
     # collective_rpc round trip, it arrives as its bare value.
     return (
         compilation_counter.num_models_seen,
         compilation_counter.num_cudagraph_captured,
-        worker.aphrodite_config.compilation_config.cudagraph_mode.name,
+        worker.sonar_config.compilation_config.cudagraph_mode.name,
     )
 
 
@@ -80,7 +80,7 @@ def _piecewise_compile_state(worker):
     ],
 )
 def test_hyv4_dummy_generation(
-    aphrodite_runner,
+    sonar_runner,
     enable_pickle,
     tp: int,
     enforce_eager: bool,
@@ -89,7 +89,7 @@ def test_hyv4_dummy_generation(
     kv_cache_dtype: str,
 ) -> None:
     """Exercise prefill, decode, and batch consistency with dummy HY weights."""
-    with aphrodite_runner(
+    with sonar_runner(
         "tencent/Hy4-preview",
         trust_remote_code=True,
         skip_tokenizer_init=True,
@@ -134,19 +134,19 @@ def test_hyv4_dummy_generation(
 
         if mtp:
             assert any(
-                isinstance(metric, Counter) and metric.name == "aphrodite:spec_decode_num_drafts" and metric.value > 0
+                isinstance(metric, Counter) and metric.name == "sonar:spec_decode_num_drafts" and metric.value > 0
                 for metric in model.llm.get_metrics()
             ), "MTP drafter did not run"
 
 
-def test_hyv4_backbone_reaches_the_compiler(aphrodite_runner, enable_pickle) -> None:
+def test_hyv4_backbone_reaches_the_compiler(sonar_runner, enable_pickle) -> None:
     """Guard against the backbone losing `@support_torch_compile`.
 
-    An undecorated backbone is not a hard failure: Aphrodite downgrades
+    An undecorated backbone is not a hard failure: Sonar downgrades
     `cudagraph_mode` to NONE and serves the whole model eager, which on TP8
     gfx942 cost ~4x decode latency.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         "tencent/Hy4-preview",
         trust_remote_code=True,
         skip_tokenizer_init=True,
@@ -162,7 +162,7 @@ def test_hyv4_backbone_reaches_the_compiler(aphrodite_runner, enable_pickle) -> 
         enforce_eager=False,
         seed=17,
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
             cudagraph_capture_sizes=[1, 2, 4],
         ),

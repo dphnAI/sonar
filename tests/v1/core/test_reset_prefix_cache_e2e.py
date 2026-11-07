@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite import EngineArgs, LLMEngine, SamplingParams
+from sonar import EngineArgs, LLMEngine, SamplingParams
 
 PROMPTS = [
     "A robot may not injure a human being ",
@@ -13,7 +13,7 @@ PROMPTS = [
 
 def test_reset_prefix_cache_e2e(monkeypatch):
     # "spawn" is required for test to be deterministic
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
     engine_args = EngineArgs(
         model="Qwen/Qwen3-0.6B",
         gpu_memory_utilization=0.2,

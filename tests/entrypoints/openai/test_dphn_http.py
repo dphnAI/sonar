@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock
 import pytest
 from starlette.datastructures import Headers
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponseStreamChoice,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.completion.protocol import CompletionResponseChoice
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.proof.http import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.completion.protocol import CompletionResponseChoice
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.proof.http import (
     DphnHTTPMiddleware,
     DphnNonceError,
     DphnProofContext,
@@ -73,9 +73,9 @@ def test_nonce_rejected(value):
 
 
 def test_nonce_is_per_request_and_mode_off_is_inert():
-    disabled = SimpleNamespace(aphrodite_config=SimpleNamespace(dphn_network_config=None))
+    disabled = SimpleNamespace(sonar_config=SimpleNamespace(dphn_network_config=None))
     assert get_proof_nonce(disabled, None) is None
-    enabled = SimpleNamespace(aphrodite_config=SimpleNamespace(dphn_network_config=object()))
+    enabled = SimpleNamespace(sonar_config=SimpleNamespace(dphn_network_config=object()))
     for nonce in ("first", "second", " punctuation !~ ", "a" * 1024):
         request = SimpleNamespace(headers=Headers({"X-DPHN-Proof-Nonce": nonce}))
         assert get_proof_nonce(enabled, request) == nonce
@@ -106,7 +106,7 @@ async def test_hidden_reasoning_rejected_before_generation_only_in_receipt_mode(
         serving,
         "engine_client",
         SimpleNamespace(
-            aphrodite_config=SimpleNamespace(dphn_network_config=object() if enabled else None),
+            sonar_config=SimpleNamespace(dphn_network_config=object() if enabled else None),
             generate=generate,
         ),
         raising=False,

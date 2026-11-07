@@ -5,12 +5,12 @@ import weakref
 import pytest
 import torch
 
-from aphrodite import LLM, PoolingParams, PoolingRequestOutput
-from aphrodite.config import PoolerConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.outputs import PoolingOutput
-from aphrodite.pooling_params import LateChunkingParams
-from aphrodite.tasks import PoolingTask
+from sonar import LLM, PoolingParams, PoolingRequestOutput
+from sonar.config import PoolerConfig
+from sonar.exceptions import SonarValidationError
+from sonar.outputs import PoolingOutput
+from sonar.pooling_params import LateChunkingParams
+from sonar.tasks import PoolingTask
 from tests.models.utils import check_embeddings_close
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
@@ -21,8 +21,8 @@ embedding_size = 384
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         pooler_config=PoolerConfig(task="token_embed"),
@@ -35,7 +35,7 @@ def llm(aphrodite_runner):
     ) as runner:
         assert embedding_size == runner.llm.model_config.embedding_size
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
@@ -60,7 +60,7 @@ def test_token_ids_prompts(llm: LLM, method: str):
 
 
 @pytest.mark.parametrize("task", ["embed", "classify", "token_classify", "plugin"])
-def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_aphrodite):
+def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_sonar):
     if task == "plugin":
         err_msg = "No IOProcessor plugin installed."
     elif task == "embed":
@@ -72,8 +72,8 @@ def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_aphrodite):
         llm.encode(prompt, pooling_task=task, use_tqdm=False)
 
 
-def test_bge_m3_late_chunking_keeps_special_tokens(aphrodite_runner):
-    with aphrodite_runner(
+def test_bge_m3_late_chunking_keeps_special_tokens(sonar_runner):
+    with sonar_runner(
         "BAAI/bge-m3",
         hf_overrides={"architectures": ["BgeM3EmbeddingModel"]},
         pooler_config=PoolerConfig(task="token_embed"),
@@ -117,9 +117,9 @@ def test_bge_m3_late_chunking_keeps_special_tokens(aphrodite_runner):
             torch.testing.assert_close(output.outputs.data, expected, atol=2e-5, rtol=2e-4)
 
 
-def test_nomic_late_chunking_without_special_tokens(aphrodite_runner):
+def test_nomic_late_chunking_without_special_tokens(sonar_runner):
     """Keep source ranges without special tokens and reject empty tokenization."""
-    with aphrodite_runner(
+    with sonar_runner(
         "nomic-ai/nomic-embed-text-v1",
         revision="720244025c1a7e15661a174c63cce63c8218e52b",
         trust_remote_code=True,
@@ -160,7 +160,7 @@ def test_nomic_late_chunking_without_special_tokens(aphrodite_runner):
             offsets = [(a, b) for a, b in encoded["offset_mapping"][start:end] if a < b]
             assert chunk.char_range == (offsets[0][0], offsets[-1][1])
         for rejected in ("long " * 256, "   "):
-            with pytest.raises(AphroditeValidationError):
+            with pytest.raises(SonarValidationError):
                 llm.encode(
                     rejected,
                     pooling_task="token_embed",
@@ -177,7 +177,7 @@ def test_late_chunking_rejects_oversized_chunk_size(llm: LLM):
     params = PoolingParams(late_chunking_params=chunk_params)
     # Exercise request validation after a mutable parameter has changed.
     chunk_params.chunk_size = 2**64
-    with pytest.raises(AphroditeValidationError, match="positive integer"):
+    with pytest.raises(SonarValidationError, match="positive integer"):
         llm.encode(prompt, pooling_task="token_embed", pooling_params=params, use_tqdm=False)
     assert not llm.llm_engine.has_unfinished_requests()
 
@@ -229,10 +229,10 @@ def test_e5_late_chunking_mixed_requests(llm: LLM, normalize: bool):
 
 
 @pytest.mark.parametrize("use_v2_runner", [False, True])
-def test_late_chunking_recomputes_cached_prefix_with_chunked_prefill(aphrodite_runner, monkeypatch, use_v2_runner):
+def test_late_chunking_recomputes_cached_prefix_with_chunked_prefill(sonar_runner, monkeypatch, use_v2_runner):
     # Dummy weights suffice for testing scheduling and reduction of the same states.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_v2_runner else "0")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_v2_runner else "0")
+    with sonar_runner(
         "openai-community/gpt2",
         runner="pooling",
         convert="embed",

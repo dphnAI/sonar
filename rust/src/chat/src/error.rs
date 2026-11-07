@@ -110,9 +110,9 @@ pub enum Error {
         error: BoxedError,
     },
     #[error(transparent)]
-    Text(#[from] aphrodite_text::Error),
+    Text(#[from] sonar_text::Error),
     #[error(transparent)]
-    Tokenizer(#[from] aphrodite_tokenizer::TokenizerError),
+    Tokenizer(#[from] sonar_tokenizer::TokenizerError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -9,13 +9,13 @@ import torch._dynamo
 import torch.fx as fx
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from aphrodite.compilation.backends import (
+from sonar.compilation.backends import (
     _decompose_size_nodes,
     _is_empty_allocation_node,
     split_graph,
 )
-from aphrodite.compilation.passes.fx_utils import find_op_nodes
-from aphrodite.platforms import current_platform
+from sonar.compilation.passes.fx_utils import find_op_nodes
+from sonar.platforms import current_platform
 
 # This import automatically registers `torch.ops.silly.attention`
 from . import silly_attention  # noqa: F401

@@ -4,7 +4,7 @@
 import prometheus_client
 import pytest
 
-from aphrodite.v1.metrics.reader import (
+from sonar.v1.metrics.reader import (
     Counter,
     Gauge,
     Histogram,
@@ -19,14 +19,14 @@ pytestmark = pytest.mark.cpu_test
 def test_registry(monkeypatch):
     # Use a custom registry for tests
     test_registry = prometheus_client.CollectorRegistry(auto_describe=True)
-    monkeypatch.setattr("aphrodite.v1.metrics.reader.REGISTRY", test_registry)
+    monkeypatch.setattr("sonar.v1.metrics.reader.REGISTRY", test_registry)
     return test_registry
 
 
 @pytest.mark.parametrize("num_engines", [1, 4])
 def test_gauge_metric(test_registry, num_engines):
     g = prometheus_client.Gauge(
-        "aphrodite:test_gauge",
+        "sonar:test_gauge",
         "Test gauge metric",
         labelnames=["model", "engine_index"],
         registry=test_registry,
@@ -39,7 +39,7 @@ def test_gauge_metric(test_registry, num_engines):
     engine_labels = [str(i) for i in range(num_engines)]
     for m in metrics:
         assert isinstance(m, Gauge)
-        assert m.name == "aphrodite:test_gauge"
+        assert m.name == "sonar:test_gauge"
         assert m.value == 98.5
         assert m.labels["model"] == "foo"
         assert m.labels["engine_index"] in engine_labels
@@ -49,7 +49,7 @@ def test_gauge_metric(test_registry, num_engines):
 @pytest.mark.parametrize("num_engines", [1, 4])
 def test_counter_metric(test_registry, num_engines):
     c = prometheus_client.Counter(
-        "aphrodite:test_counter",
+        "sonar:test_counter",
         "Test counter metric",
         labelnames=["model", "engine_index"],
         registry=test_registry,
@@ -62,7 +62,7 @@ def test_counter_metric(test_registry, num_engines):
     engine_labels = [str(i) for i in range(num_engines)]
     for m in metrics:
         assert isinstance(m, Counter)
-        assert m.name == "aphrodite:test_counter"
+        assert m.name == "sonar:test_counter"
         assert m.value == 19
         assert m.labels["model"] == "bar"
         assert m.labels["engine_index"] in engine_labels
@@ -72,7 +72,7 @@ def test_counter_metric(test_registry, num_engines):
 @pytest.mark.parametrize("num_engines", [1, 4])
 def test_histogram_metric(test_registry, num_engines):
     h = prometheus_client.Histogram(
-        "aphrodite:test_histogram",
+        "sonar:test_histogram",
         "Test histogram metric",
         labelnames=["model", "engine_index"],
         buckets=[10, 20, 30, 40, 50],
@@ -89,7 +89,7 @@ def test_histogram_metric(test_registry, num_engines):
     engine_labels = [str(i) for i in range(num_engines)]
     for m in metrics:
         assert isinstance(m, Histogram)
-        assert m.name == "aphrodite:test_histogram"
+        assert m.name == "sonar:test_histogram"
         assert m.count == 3
         assert m.sum == 70
         assert m.buckets["10.0"] == 1
@@ -105,7 +105,7 @@ def test_histogram_metric(test_registry, num_engines):
 @pytest.mark.parametrize("num_engines", [1, 4])
 def test_vector_metric(test_registry, num_engines):
     c = prometheus_client.Counter(
-        "aphrodite:spec_decode_num_accepted_tokens_per_pos",
+        "sonar:spec_decode_num_accepted_tokens_per_pos",
         "Vector-like counter metric",
         labelnames=["position", "model", "engine_index"],
         registry=test_registry,
@@ -120,7 +120,7 @@ def test_vector_metric(test_registry, num_engines):
     engine_labels = [str(i) for i in range(num_engines)]
     for m in metrics:
         assert isinstance(m, Vector)
-        assert m.name == "aphrodite:spec_decode_num_accepted_tokens_per_pos"
+        assert m.name == "sonar:spec_decode_num_accepted_tokens_per_pos"
         assert m.values == [10, 5, 1]
         assert m.labels["model"] == "llama"
         assert m.labels["engine_index"] in engine_labels

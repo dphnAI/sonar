@@ -27,7 +27,7 @@
 #   PREFILL_BLOCK_SIZE          default 128
 #   DECODE_BLOCK_SIZE           default 128
 #   CPU_BYTES                   default 209715200 (200 MB)
-#   APHRODITE_SERVE_EXTRA_ARGS       comma-separated extra args for aphrodite serve
+#   SONAR_SERVE_EXTRA_ARGS       comma-separated extra args for sonar serve
 #   --decoder-first             toggle decoder-first proxy mode
 #
 # Examples:
@@ -90,7 +90,7 @@ MAX_MODEL_LEN=${MAX_MODEL_LEN:-512}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
 CPU_BYTES=${CPU_BYTES:-209715200}
-APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
+SONAR_SERVE_EXTRA_ARGS=${SONAR_SERVE_EXTRA_ARGS:-}
 
 # Base ports — per-instance offsets layered on top.
 PREFILL_HTTP_BASE=8100
@@ -106,13 +106,13 @@ P2P_HOST=127.0.0.1
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../../.." && pwd -P)}"
 
-if [[ -z "${APHRODITE_BIN:-}" ]]; then
-    if [[ -x "${GIT_ROOT}/.venv/bin/aphrodite" ]]; then
-        APHRODITE_BIN="${GIT_ROOT}/.venv/bin/aphrodite"
-    elif [[ -x "/workspace/venv/bin/aphrodite" ]]; then
-        APHRODITE_BIN="/workspace/venv/bin/aphrodite"
+if [[ -z "${SONAR_BIN:-}" ]]; then
+    if [[ -x "${GIT_ROOT}/.venv/bin/sonar" ]]; then
+        SONAR_BIN="${GIT_ROOT}/.venv/bin/sonar"
+    elif [[ -x "/workspace/venv/bin/sonar" ]]; then
+        SONAR_BIN="/workspace/venv/bin/sonar"
     else
-        APHRODITE_BIN="$(command -v aphrodite)"
+        SONAR_BIN="$(command -v sonar)"
     fi
 fi
 if [[ -z "${PYTHON_BIN:-}" ]]; then
@@ -124,7 +124,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
         PYTHON_BIN="$(command -v python3 || command -v python)"
     fi
 fi
-echo "Using aphrodite: ${APHRODITE_BIN}"
+echo "Using sonar: ${SONAR_BIN}"
 echo "Using python: ${PYTHON_BIN}"
 
 SMI_BIN=$(command -v nvidia-smi || command -v rocm-smi || echo "")
@@ -145,7 +145,7 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running Sonar / proxy instances..."
-  pkill -f "aphrodite serve" || true
+  pkill -f "sonar serve" || true
   pkill -f "p2p_connector_proxy.py" || true
   sleep 2
 }
@@ -213,7 +213,7 @@ run_tests_for_model() {
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=${cuda_devs} \
     PYTHONHASHSEED=42 \
-    ${APHRODITE_BIN} serve ${model_name} \
+    ${SONAR_BIN} serve ${model_name} \
     --port ${http_port} \
     --enforce-eager \
     --block-size ${PREFILL_BLOCK_SIZE} \
@@ -222,8 +222,8 @@ run_tests_for_model() {
     --tensor-parallel-size ${PREFILLER_TP_SIZE} \
     --kv-transfer-config '${kv_cfg}'"
 
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done
@@ -253,7 +253,7 @@ run_tests_for_model() {
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=${cuda_devs} \
     PYTHONHASHSEED=42 \
-    ${APHRODITE_BIN} serve ${model_name} \
+    ${SONAR_BIN} serve ${model_name} \
     --port ${http_port} \
     --enforce-eager \
     --block-size ${DECODE_BLOCK_SIZE} \
@@ -269,8 +269,8 @@ run_tests_for_model() {
       --tensor-parallel-size 1 --enable-expert-parallel"
     fi
 
-    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
+    if [[ -n "$SONAR_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$SONAR_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done

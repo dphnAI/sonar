@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.minicpmv4_6 import _stack_vit_merger_qkv
-from aphrodite.model_executor.models.minicpmv4_7 import (
+from sonar.model_executor.models.minicpmv4_6 import _stack_vit_merger_qkv
+from sonar.model_executor.models.minicpmv4_7 import (
     MiniCPMV4_7MultiModalProcessor,
     _compute_canvas_single,
     build_image_bounds,
@@ -21,7 +21,7 @@ def test_canvas_mrope_sizes_survive_prefix_cache_stripping():
     keeps only CPU-side metadata. Canvas M-RoPE places slices from `tgt_sizes`,
     so 4.7 marks it `keep_on_cpu` while the shared 4.6 config stays as it was.
     """
-    from aphrodite.model_executor.models.minicpmv4_6 import _minicpmv4_6_field_config
+    from sonar.model_executor.models.minicpmv4_6 import _minicpmv4_6_field_config
 
     shared = _minicpmv4_6_field_config({})
     assert shared["tgt_sizes"].field.keep_on_cpu is False
@@ -45,11 +45,11 @@ def test_modality_mm_kwargs_resolution():
     routing itself is upstream's, tested here against the MiniCPM-V schema to
     pin the precedence rule (`scoped > flat`).
     """
-    from aphrodite.model_executor.models.minicpmv4_6 import (
+    from sonar.model_executor.models.minicpmv4_6 import (
         _flat_processor_kwargs,
         _scoped_mm_kwarg,
     )
-    from aphrodite.multimodal.processing.context import _resolve_mm_processor_kwargs
+    from sonar.multimodal.processing.context import _resolve_mm_processor_kwargs
 
     # What MiniCPMV4_6{Image,Video}ProcessorKwargs declare.
     processor_keys = {"downsample_mode", "max_slice_nums"}

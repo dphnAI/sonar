@@ -11,9 +11,9 @@ import pytest
 import pytest_asyncio
 from transformers import AutoTokenizer
 
-import aphrodite.envs as envs
-from aphrodite.config import ModelConfig
-from aphrodite.v1.engine.detokenizer import check_stop_strings
+import sonar.envs as envs
+from sonar.config import ModelConfig
+from sonar.v1.engine.detokenizer import check_stop_strings
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -136,7 +136,7 @@ async def test_generate_rejects_min_tokens_above_filled_max_tokens(client):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="sampling mask output is not supported by the Rust frontend",
 )
 @pytest.mark.parametrize(
@@ -213,7 +213,7 @@ async def test_generate_defaults_max_tokens_when_omitted(client):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="parallel sampling (n > 1) is not supported by the Rust frontend",
 )
 async def test_generate_returns_all_choices_when_n_greater_than_one(client):
@@ -470,7 +470,7 @@ async def test_stop_string_workflow(client, tokenizer, messages):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="--tokens-only is not supported by the Rust frontend",
 )
 @pytest.mark.parametrize("server", [["--tokens-only"]], indirect=True)
@@ -600,7 +600,7 @@ async def _render_then_generate(client, body) -> tuple[dict, list[int]]:
 # either reasoning field is dropped between render and generate.
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="the Rust frontend does not forward reasoning fields to the engine",
 )
 @pytest.mark.parametrize("server", [["--reasoning-parser", "deepseek_v3"]], indirect=True)
@@ -619,7 +619,7 @@ async def test_render_then_generate_forwards_reasoning_parser_kwargs(client, mes
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="the Rust frontend does not forward reasoning fields to the engine",
 )
 @pytest.mark.parametrize("server", [["--reasoning-parser", "deepseek_v3"]], indirect=True)
@@ -656,7 +656,7 @@ def _text_mode_payload(token_ids, **sampling_params) -> dict:
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="output_mode is not supported by the Rust frontend",
 )
 async def test_text_mode_matches_chat_completions(client, tokenizer, messages):
@@ -684,7 +684,7 @@ async def test_text_mode_matches_chat_completions(client, tokenizer, messages):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="output_mode is not supported by the Rust frontend",
 )
 async def test_text_mode_stream_matches_non_stream(client, tokenizer, messages):
@@ -709,7 +709,7 @@ async def test_text_mode_stream_matches_non_stream(client, tokenizer, messages):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="output_mode is not supported by the Rust frontend",
 )
 @pytest.mark.parametrize(
@@ -733,7 +733,7 @@ async def test_text_mode_invalid_requests_return_400(client, overrides, expected
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="output_mode is not supported by the Rust frontend",
 )
 async def test_derender_mode_without_parser_returns_text_message(client, tokenizer, messages):
@@ -753,7 +753,7 @@ async def test_derender_mode_without_parser_returns_text_message(client, tokeniz
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="output_mode is not supported by the Rust frontend",
 )
 @pytest.mark.parametrize(
@@ -808,7 +808,7 @@ async def test_derender_mode_with_parser_matches_chat_completions(client, messag
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="--tokens-only is not supported by the Rust frontend",
 )
 @pytest.mark.parametrize("server", [["--tokens-only"]], indirect=True)
@@ -827,7 +827,7 @@ async def test_text_mode_rejected_when_tokens_only(client):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="the Rust frontend does not serve /inference/v1/abort_requests",
 )
 @pytest.mark.parametrize("output_mode", ["tokens", "text"])
@@ -872,7 +872,7 @@ async def test_stream_delivers_abort_finish_chunk(client, tokenizer, messages, o
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="the Rust frontend does not serve /inference/v1/abort_requests",
 )
 async def test_abort_requests_is_served_without_tokens_only(client):

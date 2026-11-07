@@ -178,7 +178,7 @@ fn materialize_config(
     anyhow::ensure!(config.is_object(), "HF model config must be a JSON object");
     overrides.apply(&mut config);
     let file = tempfile::Builder::new()
-        .prefix("aphrodite-rs-hf-config-")
+        .prefix("sonar-rs-hf-config-")
         .suffix(".json")
         .tempfile()?;
     serde_json::to_writer(file.as_file(), &config)?;
@@ -503,7 +503,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use aphrodite_tokenizer::{TiktokenTokenizer, Tokenizer};
+    use sonar_tokenizer::{TiktokenTokenizer, Tokenizer};
     use tempfile::tempdir;
 
     use super::{ModelFileSources, ModelSource, ResolvedModelFiles, TokenizerSource};
@@ -740,7 +740,7 @@ mod tests {
 
     #[tokio::test]
     async fn offline_resolution_uses_hub_cache_and_reports_cache_misses() {
-        const CHILD: &str = "APHRODITE_TEST_HF_OFFLINE_CHILD";
+        const CHILD: &str = "SONAR_TEST_HF_OFFLINE_CHILD";
         if std::env::var_os(CHILD).is_some() {
             let files = ResolvedModelFiles::new("test/model", Some("release")).await.unwrap();
             let cache = PathBuf::from(std::env::var_os("HF_HUB_CACHE").unwrap());

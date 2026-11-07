@@ -15,10 +15,10 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite._aiter_ops import is_aiter_found
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.mla import rocm_aiter_mla
-from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
+from sonar._aiter_ops import is_aiter_found
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.mla import rocm_aiter_mla
+from sonar.v1.attention.backends.mla.rocm_aiter_mla import (
     AiterMLADecodeMetadata,
     AiterMLAHelper,
     AiterMLAImpl,
@@ -51,7 +51,7 @@ def _rocm_aiter_available() -> bool:
 def _on_gfx950() -> bool:
     if not (current_platform.is_rocm() and is_aiter_found()):
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -271,21 +271,21 @@ def test_divisor_gluon_selection_follows_arch():
 
 
 def test_asm_padding_env_default_is_auto(monkeypatch):
-    monkeypatch.delenv("APHRODITE_ROCM_AITER_MLA_ASM_PADDING", raising=False)
-    import aphrodite.envs as envs
+    monkeypatch.delenv("SONAR_ROCM_AITER_MLA_ASM_PADDING", raising=False)
+    import sonar.envs as envs
 
-    assert envs.APHRODITE_ROCM_AITER_MLA_ASM_PADDING == "auto"
+    assert envs.SONAR_ROCM_AITER_MLA_ASM_PADDING == "auto"
 
 
 def test_asm_padding_env_force_asm_disables_gluon(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ROCM_AITER_MLA_ASM_PADDING", "asm")
+    monkeypatch.setenv("SONAR_ROCM_AITER_MLA_ASM_PADDING", "asm")
     # Forcing the asm path: no small-head count uses Gluon on any arch.
     for num_heads in (1, 2, 4, 8, 12):
         assert not AiterMLAHelper.use_gluon_decode(num_heads, 1, "auto")
 
 
 def test_asm_padding_env_force_gluon_follows_arch(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ROCM_AITER_MLA_ASM_PADDING", "gluon")
+    monkeypatch.setenv("SONAR_ROCM_AITER_MLA_ASM_PADDING", "gluon")
     on_gfx950 = _on_gfx950()
     # Forcing Gluon: any 1..15 single-token decode uses it where a build exists
     # (gfx950), including non-divisor counts like 12; gfx942/non-ROCm still
@@ -295,7 +295,7 @@ def test_asm_padding_env_force_gluon_follows_arch(monkeypatch):
 
 
 def test_asm_padding_env_auto_matches_arch_gate(monkeypatch):
-    monkeypatch.setenv("APHRODITE_ROCM_AITER_MLA_ASM_PADDING", "auto")
+    monkeypatch.setenv("SONAR_ROCM_AITER_MLA_ASM_PADDING", "auto")
     on_gfx950 = _on_gfx950()
     # auto: divisor counts keep Gluon on gfx950, non-divisor counts take asm.
     assert AiterMLAHelper.use_gluon_decode(8, 1, "auto") is on_gfx950

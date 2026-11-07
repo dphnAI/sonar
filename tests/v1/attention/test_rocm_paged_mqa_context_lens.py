@@ -4,13 +4,13 @@
 import pytest
 import torch
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm() or not is_aiter_found_and_supported():
     pytest.skip("Requires ROCm with AITER.", allow_module_level=True)
 
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _per_sequence_context_lens
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import _per_sequence_context_lens
 
 
 def test_per_row_table_uses_last_column():

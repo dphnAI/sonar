@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.glm5next.common.kda import Glm5NextLinearAttention
-from aphrodite.models.glm5next.common.model import (
+from sonar.models.glm5next.common.kda import Glm5NextLinearAttention
+from sonar.models.glm5next.common.model import (
     Glm5NextForCausalLM,
     Glm5NextForConditionalGeneration,
 )
@@ -26,11 +26,11 @@ def test_kda_recurrent_state_dtype_follows_ssm_cache_dtype(ssm_dtype, expected):
         mamba_ssm_cache_dtype=ssm_dtype,
         use_kda_recoverssm=False,
     )
-    aphrodite_config = SimpleNamespace(model_config=model_config, cache_config=cache_config)
+    sonar_config = SimpleNamespace(model_config=model_config, cache_config=cache_config)
     want = (torch.bfloat16, expected)
 
-    assert Glm5NextForCausalLM.get_mamba_state_dtype_from_config(aphrodite_config) == want
-    assert Glm5NextForConditionalGeneration.get_mamba_state_dtype_from_config(aphrodite_config) == want
+    assert Glm5NextForCausalLM.get_mamba_state_dtype_from_config(sonar_config) == want
+    assert Glm5NextForConditionalGeneration.get_mamba_state_dtype_from_config(sonar_config) == want
     # The layer's own dtype must agree with the model-level one, since the
     # KV-cache spec and the kernels read them separately.
     layer = Glm5NextLinearAttention.__new__(Glm5NextLinearAttention)

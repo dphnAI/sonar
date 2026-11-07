@@ -7,7 +7,7 @@ Copied from https://github.com/turboderp/exllamav2
 
 #include "qdq_util.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq {
 // Permutation:
 //
@@ -79,6 +79,6 @@ __forceinline__ __device__ void dequant_4bit_8_gptq(const uint32_t q_0,
   }
 }
 }  // namespace gptq
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif

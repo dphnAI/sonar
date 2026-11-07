@@ -29,15 +29,15 @@ DOCKER_BUILDKIT=1 docker build . -f docker/Dockerfile --target build --tag alpin
     --build-arg nvcc_threads="$NVCC_THREADS"
 
 # Create a temporary container to extract the wheel
-docker run -d --name aphrodite-build-container alpindale/aphrodite-build tail -f /dev/null
+docker run -d --name sonar-build-container alpindale/aphrodite-build tail -f /dev/null
 # Create dist directory if it doesn't exist
 mkdir -p dist
 # Copy the wheel to the dist directory
-docker cp aphrodite-build-container:/workspace/dist .
-docker stop aphrodite-build-container && docker rm aphrodite-build-container
+docker cp sonar-build-container:/workspace/dist .
+docker stop sonar-build-container && docker rm sonar-build-container
 
 # Step 2: Build the final Docker image using the wheel
-DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile . --target aphrodite-openai --tag alpindale/aphrodite-openai \
+DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile . --target sonar-openai --tag alpindale/aphrodite-openai \
     --build-arg CUDA_VERSION="$CUDA_VERSION" \
     --build-arg PYTHON_VERSION="$PYTHON_VERSION" \
     --build-arg torch_cuda_arch_list="$TORCH_CUDA_ARCH_LIST" \

@@ -4,7 +4,7 @@ num_questions: 1319
 num_fewshot: 5
 startup_max_wait_seconds: 1200
 env:
-  APHRODITE_ROCM_USE_AITER: "1"
+  SONAR_ROCM_USE_AITER: "1"
 server_args: >-
   --enforce-eager
   --max-model-len 4096

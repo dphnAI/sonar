@@ -147,8 +147,8 @@ def fail(message: str, node: ast.stmt):
 
 def main():
     for filename in sys.argv[1:]:
-        # Only run for Python files in aphrodite/ or tests/
-        if not re.match(r"^(aphrodite|tests)/.*\.py$", filename):
+        # Only run for Python files in sonar/ or tests/
+        if not re.match(r"^(sonar|tests)/.*\.py$", filename):
             continue
         # Only run if the file contains @config
         with open(filename, encoding="utf-8") as f:

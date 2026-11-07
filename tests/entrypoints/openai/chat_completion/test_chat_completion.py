@@ -168,7 +168,7 @@ async def test_kv_transfer_prompt_token_ids_round_trip(client: openai.AsyncOpenA
     The decode request carries different messages, so a response whose
     prompt_token_ids match the forwarded ids proves the ids were used rather
     than the request's own messages. Generated text is not compared across
-    requests because Aphrodite greedy decoding is not bitwise-reproducible.
+    requests because Sonar greedy decoding is not bitwise-reproducible.
     """
     baseline = await client.chat.completions.create(
         model=MODEL_NAME,

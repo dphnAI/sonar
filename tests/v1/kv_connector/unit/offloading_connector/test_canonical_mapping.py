@@ -5,22 +5,22 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
+from sonar.distributed.kv_transfer.kv_connector.v1.offloading.canonical_mapping import (
     _layer_mapping,
     _opaque_fallback_mapping,
     _RankContext,
     _verify_tiling,
     derive_canonical_mappings,
 )
-from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheGroupSpec,
     KVCacheSpec,
     KVQuantMode,
     MLAAttentionSpec,
 )
-from aphrodite.v1.kv_offload.base import CanonicalPageMapping, CopyRun
+from sonar.v1.kv_offload.base import CanonicalPageMapping, CopyRun
 
 NUM_BLOCKS = 3
 
@@ -395,7 +395,7 @@ def test_opaque_fallback_places_page_whole():
 # ---------------------------------------------------------------------------
 
 
-def _aphrodite_config(tp=1, dcp=1, pcp=1, pp=1, interleave=1, total_kv_heads=2):
+def _sonar_config(tp=1, dcp=1, pcp=1, pp=1, interleave=1, total_kv_heads=2):
     config = MagicMock()
     config.parallel_config.tensor_parallel_size = tp
     config.parallel_config.decode_context_parallel_size = dcp
@@ -429,7 +429,7 @@ def test_derive_mixed_model_with_dcp():
         "attn": _split_nhd_cache(attn_spec),
         "quant": _split_nhd_cache(quant_spec),
     }
-    mappings = derive_canonical_mappings(_aphrodite_config(tp=4, dcp=2, total_kv_heads=2), kv_cache_config, kv_caches)
+    mappings = derive_canonical_mappings(_sonar_config(tp=4, dcp=2, total_kv_heads=2), kv_cache_config, kv_caches)
     assert set(mappings) == {"attn", "mla", "quant"}
     assert not mappings["attn"].parallelism_agnostic
     assert mappings["attn"].runs
@@ -442,4 +442,4 @@ def test_derive_refuses_foreign_worker_groups():
     attn_spec = _full_spec()
     kv_cache_config = _kv_cache_config([KVCacheGroupSpec(layer_names=["attn"], kv_cache_spec=attn_spec)])
     kv_caches = {"attn": _split_nhd_cache(attn_spec)}
-    assert derive_canonical_mappings(_aphrodite_config(tp=2, pp=2, total_kv_heads=4), kv_cache_config, kv_caches) == {}
+    assert derive_canonical_mappings(_sonar_config(tp=2, pp=2, total_kv_heads=4), kv_cache_config, kv_caches) == {}

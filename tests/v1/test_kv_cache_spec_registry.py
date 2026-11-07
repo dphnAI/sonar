@@ -7,12 +7,12 @@ from typing import Any
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
+    SonarConfig,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     ChunkedLocalAttentionManager,
     CrossAttentionManager,
     FullAttentionManager,
@@ -23,7 +23,7 @@ from aphrodite.v1.core.single_type_kv_cache_manager import (
     SlidingWindowManager,
     register_all_kvcache_specs,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     CrossAttentionSpec,
     FullAttentionSpec,
@@ -39,15 +39,15 @@ from aphrodite.v1.kv_cache_interface import (
     UniformTypeKVCacheSpecs,
     get_kv_cache_spec_kind,
 )
-from aphrodite.v1.kv_cache_spec_registry import (
+from sonar.v1.kv_cache_spec_registry import (
     _REGISTRY_KVCACHESPEC_LIST,
     KVCacheSpecRegistry,
     register_kv_cache_spec,
 )
 
 
-def make_aphrodite_config() -> AphroditeConfig:
-    return AphroditeConfig(
+def make_sonar_config() -> SonarConfig:
+    return SonarConfig(
         cache_config=CacheConfig(
             block_size=64,
             cache_dtype="bfloat16",
@@ -56,8 +56,8 @@ def make_aphrodite_config() -> AphroditeConfig:
     )
 
 
-aphrodite_config = make_aphrodite_config()
-register_all_kvcache_specs(aphrodite_config)
+sonar_config = make_sonar_config()
+register_all_kvcache_specs(sonar_config)
 
 
 @pytest.fixture(autouse=True)

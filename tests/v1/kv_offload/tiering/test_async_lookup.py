@@ -8,8 +8,8 @@ from collections.abc import Iterable
 
 import pytest
 
-from aphrodite.v1.kv_offload.base import OffloadKey, ReqContext, make_offload_key
-from aphrodite.v1.kv_offload.tiering.async_lookup import AsyncLookupManager, LookupPhase
+from sonar.v1.kv_offload.base import OffloadKey, ReqContext, make_offload_key
+from sonar.v1.kv_offload.tiering.async_lookup import AsyncLookupManager, LookupPhase
 
 
 def _key(i: int) -> OffloadKey:

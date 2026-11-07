@@ -14,18 +14,18 @@ from openai_harmony import (
 )
 from transformers import AutoTokenizer, GenerationConfig
 
-from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
-from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.config import SonarConfig, StructuredOutputsConfig
+from sonar.entrypoints.generate.base.protocol import FunctionCall
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.parser.harmony_utils import (
     get_encoding,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.parser.harmony import HarmonyParser
-from aphrodite.parser.parser_manager import ParserManager
-from aphrodite.sampling_params import StructuredOutputsParams
-from aphrodite.v1.structured_output.backend_types import StructuredOutputOptions
-from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.parser.harmony import HarmonyParser
+from sonar.parser.parser_manager import ParserManager
+from sonar.sampling_params import StructuredOutputsParams
+from sonar.v1.structured_output.backend_types import StructuredOutputOptions
+from sonar.v1.structured_output.backend_xgrammar import XgrammarBackend
 
 REASONING_MODEL_NAME = "openai/gpt-oss-20b"
 
@@ -45,9 +45,9 @@ def gpt_oss_stop_token_ids() -> set[int]:
 
 @pytest.fixture(scope="module")
 def xgrammar_backend(gpt_oss_tokenizer) -> XgrammarBackend:
-    aphrodite_config = AphroditeConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
+    sonar_config = SonarConfig(structured_outputs_config=StructuredOutputsConfig(backend="xgrammar"))
     return XgrammarBackend(
-        aphrodite_config,
+        sonar_config,
         tokenizer=gpt_oss_tokenizer,
         vocab_size=len(gpt_oss_tokenizer),
     )
@@ -667,7 +667,7 @@ class TestParseDelta:
             delta_token_ids=encode_output(
                 "<|channel|>analysis<|message|>Reasoning about query...<|end|>"
                 "<|start|>assistant to=functions.search<|channel|>commentary"
-                '<|constrain|>json<|message|>{"query": "aphrodite"}<|call|>'
+                '<|constrain|>json<|message|>{"query": "sonar"}<|call|>'
                 "<|start|>assistant<|channel|>final<|message|>Done"
             ),
             request=chat_request,
@@ -677,7 +677,7 @@ class TestParseDelta:
         assert delta is not None
         assert delta.reasoning == "Reasoning about query..."
         assert delta.content == "Done"
-        assert tool_call_entries(delta) == [(0, "search", '{"query": "aphrodite"}')]
+        assert tool_call_entries(delta) == [(0, "search", '{"query": "sonar"}')]
 
     def test_tool_index_across_calls(self, gpt_oss_tokenizer, chat_request):
         parser = HarmonyParser(gpt_oss_tokenizer)
@@ -854,7 +854,7 @@ class TestCountReasoningTokens:
         def fail():
             raise AssertionError("count_reasoning_tokens replayed the output")
 
-        monkeypatch.setattr("aphrodite.parser.harmony.get_streamable_parser_for_assistant", fail)
+        monkeypatch.setattr("sonar.parser.harmony.get_streamable_parser_for_assistant", fail)
         for end in range(3, len(token_ids)):
             harmony_parser.process_chunk(token_ids[end : end + 1])
             harmony_parser.count_reasoning_tokens(token_ids[: end + 1])

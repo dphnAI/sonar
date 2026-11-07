@@ -6,10 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TextPrompt
-from aphrodite.outputs import RequestOutput
-from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+from sonar import LLM, SamplingParams
+from sonar.inputs import TextPrompt
+from sonar.outputs import RequestOutput
+from sonar.renderers.chat_utils import ChatCompletionMessageParam
 
 
 def _make_mock_llm() -> LLM:
@@ -201,7 +201,7 @@ def test_preprocess_cmpl_applies_mm_processor_kwargs_to_renderer(
     llm.renderer = renderer
 
     monkeypatch.setattr(
-        "aphrodite.entrypoints.common.offline.parse_model_prompt",
+        "sonar.entrypoints.common.offline.parse_model_prompt",
         lambda _model_config, parsed_prompt: parsed_prompt,
     )
 
@@ -235,7 +235,7 @@ def test_preprocess_cmpl_keeps_prompt_mm_processor_kwargs_when_no_override(
     llm.renderer = renderer
 
     monkeypatch.setattr(
-        "aphrodite.entrypoints.common.offline.parse_model_prompt",
+        "sonar.entrypoints.common.offline.parse_model_prompt",
         lambda _model_config, parsed_prompt: parsed_prompt,
     )
 
@@ -335,16 +335,16 @@ def test_preprocess_chat_tokenization_kwargs_override_add_special_tokens() -> No
 
 @pytest.fixture(scope="module")
 def llava_llm():
-    from aphrodite.config import AphroditeConfig, ModelConfig
-    from aphrodite.renderers.hf import HfRenderer
-    from aphrodite.tokenizers import cached_tokenizer_from_config
+    from sonar.config import ModelConfig, SonarConfig
+    from sonar.renderers.hf import HfRenderer
+    from sonar.tokenizers import cached_tokenizer_from_config
 
     # A real multimodal model (Llama tokenizer, BOS=1) so that the real
     # processor default (`add_special_tokens=True`) is in play. Only
     # config/tokenizer/processor files are fetched, no weights.
     model_config = ModelConfig(model="llava-hf/llava-1.5-7b-hf", max_model_len=128)
     renderer = HfRenderer(
-        AphroditeConfig(model_config=model_config),
+        SonarConfig(model_config=model_config),
         cached_tokenizer_from_config(model_config),
     )
     assert renderer.default_chat_tok_params.add_special_tokens is True
@@ -387,7 +387,7 @@ class TestChatAddSpecialTokensDefault:
         assert prompt_token_ids.count(bos) == 1
 
     def test_chat_matches_online_chat_api(self, llava_llm):
-        from aphrodite.renderers.params import ChatParams, TokenizeParams
+        from sonar.renderers.params import ChatParams, TokenizeParams
 
         # `ChatCompletionRequest.add_special_tokens` defaults to `False`.
         online_tok_params = TokenizeParams(

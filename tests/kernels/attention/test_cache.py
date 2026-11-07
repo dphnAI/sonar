@@ -6,10 +6,10 @@ import random
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import scaled_dequantize
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import nvfp4_split_data_scale, set_random_seed
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import scaled_dequantize
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import nvfp4_split_data_scale, set_random_seed
 from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 
 pytestmark = pytest.mark.skip_global_cleanup
@@ -322,7 +322,7 @@ def test_reshape_and_cache_flash(
             v_scale,
         )
     elif implementation == "triton":
-        from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
+        from sonar.v1.attention.ops.triton_reshape_and_cache_flash import (
             triton_reshape_and_cache_flash,
         )
 
@@ -586,7 +586,7 @@ def test_reshape_and_cache_flash_asymmetric_head_sizes(
     key = torch.randn(num_tokens, num_heads, ASYM_HEAD_SIZE, dtype=torch.bfloat16, device=device)
     value = torch.randn(num_tokens, num_heads, ASYM_HEAD_SIZE_V, dtype=torch.bfloat16, device=device)
 
-    # K and V are views of one packed layer buffer, as in Aphrodite.
+    # K and V are views of one packed layer buffer, as in Sonar.
     content = ASYM_HEAD_SIZE + ASYM_HEAD_SIZE_V
     if kv_cache_layout == "unified":
         # [num_blocks, num_heads, block_size, content], split per side.

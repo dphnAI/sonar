@@ -14,7 +14,7 @@ render (GPU-less)                encode (EC producer)
                        /inference/v1/generate  (mm_metadata + ec_transfer_params)
 ```
 
-- The **render** server (`aphrodite launch render`) preprocesses the chat request
+- The **render** server (`sonar launch render`) preprocesses the chat request
   into token ids and multimodal features (`kwargs_data` + `mm_metadata`).
 - The **encode** instance (`ec_role: ec_producer`, encode-only) runs the
   vision encoder on `kwargs_data` and publishes embeddings through the
@@ -32,7 +32,7 @@ render (GPU-less)                encode (EC producer)
 bash tests/entrypoints/scale_out/ec_integration/run_scale_out_ec_e2e_test.sh
 ```
 
-The script first collects baseline outputs from a single `aphrodite serve`
+The script first collects baseline outputs from a single `sonar serve`
 instance, then runs the scale-out topology and compares the derendered
 outputs for exact equality. It also checks that metadata-only features are
 rejected when `ec_transfer_params` is missing.

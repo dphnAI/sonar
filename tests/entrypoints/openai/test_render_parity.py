@@ -24,15 +24,15 @@ from unittest.mock import MagicMock
 import pytest
 from openai.types.shared import Reasoning
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.inputs import tokens_input
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.renderers.params import ChatParams
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.serving import OpenAIServingResponses
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.exceptions import SonarValidationError
+from sonar.inputs import tokens_input
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.renderers.params import ChatParams
 
 _MODEL = "test-model"
 _USER = [{"role": "user", "content": "Hello"}]
@@ -242,7 +242,7 @@ def serving_responses(
     engine_client.model_config = model_config
     engine_client.renderer = online_renderer.renderer
     engine_client.input_processor = MagicMock()
-    engine_client.aphrodite_config = MagicMock()
+    engine_client.sonar_config = MagicMock()
 
     return OpenAIServingResponses(
         engine_client=engine_client,
@@ -433,7 +433,7 @@ class TestReasoningRenderParity:
             messages=_USER,
             reasoning_effort="none",
         )
-        with pytest.raises(AphroditeValidationError, match="Harmony does not support") as exc_info:
+        with pytest.raises(SonarValidationError, match="Harmony does not support") as exc_info:
             online_renderer._make_request_with_harmony(request)
         assert exc_info.value.parameter == "reasoning_effort"
 

@@ -4,10 +4,10 @@
 import pytest
 import torch.cuda
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.core import EngineCore
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.core import EngineCore
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 
@@ -38,7 +38,7 @@ def test_preprocess_error_handling(monkeypatch: pytest.MonkeyPatch):
 
     # Create a failing request by crafting a request with an invalid token
     # We need to use a direct approach since LLM.generate tokenizes for us
-    from aphrodite.inputs import TokensPrompt
+    from sonar.inputs import TokensPrompt
 
     # This should raise an exception due to the preprocessing failure
     # Special token id to trigger the failure

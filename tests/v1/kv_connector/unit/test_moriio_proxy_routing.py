@@ -50,7 +50,7 @@ def test_consecutive_requests_alternate_instances(route):
 
 @pytest.mark.skipif(sys.platform != "linux", reason="GIL probe uses libc.usleep")
 def test_discovery_heartbeat_progresses_while_worker_holds_gil():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import MoRIIOHeartbeat
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import MoRIIOHeartbeat
 
     payload = {
         "type": "P",
@@ -82,7 +82,7 @@ def test_discovery_heartbeat_progresses_while_worker_holds_gil():
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Checks child exit via procfs")
 def test_discovery_heartbeat_exits_when_worker_dies():
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio import moriio_heartbeat
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio import moriio_heartbeat
 
     owner_code = """
 import runpy
@@ -129,7 +129,7 @@ sys.stdin.read()
 
 
 def test_discovery_heartbeat_recovers_after_router_outage(capfd):
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import MoRIIOHeartbeat
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import MoRIIOHeartbeat
 
     payload = {"type": "P", "http_address": "127.0.0.1:8000"}
     with zmq.Context() as context:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for Aphrodite `aphrodite/v1/engine/processor.Processor._validate_model_input()`
+"""Tests for Sonar `sonar/v1/engine/processor.Processor._validate_model_input()`
 handling of maximum context length for decoder models.
 
 This test ensures:
@@ -12,8 +12,8 @@ This test ensures:
 
 import pytest
 
-from aphrodite.exceptions import AphroditeValidationError
-from tests.conftest import AphroditeRunner
+from sonar.exceptions import SonarValidationError
+from tests.conftest import SonarRunner
 from tests.utils import create_new_process_for_each_test
 
 
@@ -29,27 +29,27 @@ from tests.utils import create_new_process_for_each_test
 def test_decoder_max_context_length_validation(
     model: str,
     max_model_len: int,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     prompt_len: int,
     max_tokens: int,
 ) -> None:
-    """Check Aphrodite decoder model input validation for edge cases where
+    """Check Sonar decoder model input validation for edge cases where
     the prompt length is (almost) equal to the max model length."""
     prompt_ids = [[43] * prompt_len]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model,
         tokenizer_name=model,
         max_model_len=max_model_len,
         max_num_seqs=1,
         tensor_parallel_size=1,
-    ) as aphrodite_model:
+    ) as sonar_model:
         if prompt_len + max_tokens <= max_model_len:
             # Should succeed as constraints are met
-            aphrodite_model.generate_greedy(prompt_ids, max_tokens)
+            sonar_model.generate_greedy(prompt_ids, max_tokens)
         else:
             # Should raise the ValueError defined in
-            # aphrodite/v1/engine/processor.Processor_validate_model_input()
+            # sonar/v1/engine/processor.Processor_validate_model_input()
             expected_msg = (
                 f"The decoder prompt (length {prompt_len}) plus the number of "
                 f"requested output tokens (at least 1) is longer than "
@@ -58,7 +58,7 @@ def test_decoder_max_context_length_validation(
                 "text tokens (prompt + requested output tokens)."
             )
             with pytest.raises(ValueError) as excinfo:
-                aphrodite_model.generate_greedy(prompt_ids, max_tokens)
+                sonar_model.generate_greedy(prompt_ids, max_tokens)
             assert expected_msg in str(excinfo.value)
 
 
@@ -66,7 +66,7 @@ def test_decoder_max_context_length_validation(
 @pytest.mark.parametrize("model", ["JackFram/llama-160m"])
 def test_auto_fit_max_model_len_rejects_oversized_input(
     model: str,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
 ) -> None:
     """When max_model_len='auto' and KV cache memory is very limited,
     the engine auto-fits max_model_len to a small value. The frontend
@@ -81,7 +81,7 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
     # pool cannot serve any tokens at all.
     kv_cache_bytes = 2_000_000  # 2 MB = 3 blocks -> 2 usable
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name=model,
         max_model_len=-1,
         max_num_seqs=1,
@@ -89,8 +89,8 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
         block_size=16,
         kv_cache_memory_bytes=kv_cache_bytes,
         load_format="dummy",
-    ) as aphrodite_model:
-        auto_fitted_len = aphrodite_model.llm.llm_engine.aphrodite_config.model_config.max_model_len
+    ) as sonar_model:
+        auto_fitted_len = sonar_model.llm.llm_engine.sonar_config.model_config.max_model_len
         # Sanity check: auto-fit should have reduced it well below the
         # model's native context length.
         assert auto_fitted_len < 2048, (
@@ -99,5 +99,5 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
 
         # A prompt longer than the auto-fitted length must be rejected.
         oversized_prompt = [[43] * (auto_fitted_len + 10)]
-        with pytest.raises(AphroditeValidationError, match="Please reduce the length"):
-            aphrodite_model.generate_greedy(oversized_prompt, max_tokens=4)
+        with pytest.raises(SonarValidationError, match="Please reduce the length"):
+            sonar_model.generate_greedy(oversized_prompt, max_tokens=4)

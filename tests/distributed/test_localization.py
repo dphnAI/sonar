@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.distributed import localization
+from sonar.distributed import localization
 
 
 @pytest.fixture
@@ -65,8 +65,8 @@ def cuda_locality(monkeypatch):
     )
     # Model a torch/FlashInfer stack that provides the localized MoE APIs.
     monkeypatch.setattr(localization, "localized_moe_unsupported_reason", lambda: None)
-    monkeypatch.setattr(localization.envs, "APHRODITE_USE_LOCALITY_DOMAINS", True)
-    monkeypatch.setattr(localization.envs, "APHRODITE_MOE_LOCALIZE_BACKFILL", False)
+    monkeypatch.setattr(localization.envs, "SONAR_USE_LOCALITY_DOMAINS", True)
+    monkeypatch.setattr(localization.envs, "SONAR_MOE_LOCALIZE_BACKFILL", False)
     monkeypatch.setattr(localization, "_LOCALIZED_RESOURCES", {})
     return resource, green, state
 
@@ -93,7 +93,7 @@ def test_partition_counts_remainder_and_pool_device(cuda_locality):
 @pytest.mark.parametrize("failure", ["split", "counts"])
 def test_backfill_failure_retries_node_local_partitions(cuda_locality, monkeypatch, failure):
     resource, green, state = cuda_locality
-    monkeypatch.setattr(localization.envs, "APHRODITE_MOE_LOCALIZE_BACKFILL", True)
+    monkeypatch.setattr(localization.envs, "SONAR_MOE_LOCALIZE_BACKFILL", True)
     node_local = resource.split.return_value
     failed = RuntimeError("unsupported backfill") if failure == "split" else node_local
     resource.split.side_effect = [failed, node_local]
@@ -112,7 +112,7 @@ def test_backfill_failure_retries_node_local_partitions(cuda_locality, monkeypat
 @pytest.mark.parametrize("backfill", [False, True])
 def test_no_remainder_uses_full_device_aux_stream(cuda_locality, monkeypatch, backfill):
     resource, green, state = cuda_locality
-    monkeypatch.setattr(localization.envs, "APHRODITE_MOE_LOCALIZE_BACKFILL", backfill)
+    monkeypatch.setattr(localization.envs, "SONAR_MOE_LOCALIZE_BACKFILL", backfill)
     resource.split.return_value = (
         [SimpleNamespace(sm_count=70) for _ in range(2)],
         None,
@@ -149,10 +149,10 @@ def test_remainder_creation_failure_preserves_compute_domains(cuda_locality):
 @pytest.mark.parametrize("missing", ["torch", "flashinfer"])
 def test_unsupported_stack_disables_localization(monkeypatch, missing):
     """An old torch or FlashInfer disables localization before any partitioning."""
-    import aphrodite.utils.flashinfer as fi
+    import sonar.utils.flashinfer as fi
 
     cuda = localization.torch.cuda
-    monkeypatch.setattr(localization.envs, "APHRODITE_USE_LOCALITY_DOMAINS", True)
+    monkeypatch.setattr(localization.envs, "SONAR_USE_LOCALITY_DOMAINS", True)
     monkeypatch.setattr(localization, "_LOCALIZED_RESOURCES", {})
     # Provide the allocator/partition APIs so only the MoE-stack check can refuse.
     monkeypatch.setattr(cuda, "LocalizedAllocator", Mock(), raising=False)
@@ -182,7 +182,7 @@ def test_unsupported_stack_disables_localization(monkeypatch, missing):
 
 
 def test_supported_stack_reports_no_reason(monkeypatch):
-    import aphrodite.utils.flashinfer as fi
+    import sonar.utils.flashinfer as fi
 
     monkeypatch.setattr(
         localization.torch.cuda,

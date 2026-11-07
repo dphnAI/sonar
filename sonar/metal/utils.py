@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+"""Metal utility functions for Sonar Metal plugin."""
+
+import logging
+import os
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def get_model_download_path(model_repo_name: str) -> str:
+    """
+    Get the path to the model, downloading from ModelScope if configured, otherwise will pass the model_repo_name.
+
+    When SONAR_USE_MODELSCOPE=True, downloads the model from ModelScope (modelscope.cn)
+    instead of HuggingFace. Useful in regions where HuggingFace is slow or blocked.
+
+    Args:
+        model_repo_name: Model repo name from HuggingFace or ModelScope
+
+    Returns:
+        Local folder path (string) of repo snapshot
+
+    Example:
+
+    ```bash
+    SONAR_USE_MODELSCOPE=True SONAR_METAL_MODELSCOPE_CACHE=/path/to/cache sonar run Qwen/Qwen2.5-0.5B
+    ```
+    """
+    if Path(model_repo_name).exists():
+        return model_repo_name
+
+    if os.environ.get("SONAR_USE_MODELSCOPE", "False").lower() == "true":
+        try:
+            from modelscope.hub.snapshot_download import snapshot_download
+
+            import sonar.metal.envs as envs
+
+            model_cache_dir = envs.SONAR_METAL_MODELSCOPE_CACHE
+
+            logger.info("Downloading model %s from ModelScope...", model_repo_name)
+            model_path = snapshot_download(model_repo_name, cache_dir=model_cache_dir)
+            logger.info("Model downloaded to %s", model_path)
+            return str(model_path)
+        except ImportError:
+            logger.warning("modelscope not installed, falling back to default loader (HuggingFace)")
+        except Exception as e:
+            logger.warning("Failed to download from ModelScope: %s", e)
+
+    # Fallback: Let mlx_lm or mlx_vlm handle the download natively from HuggingFace
+    return model_repo_name
+
+
+def set_wired_limit() -> None:
+    """
+    Set Metal wired memory limit for optimal GPU performance.
+
+    Pins model weights in GPU-accessible memory to prevent memory paging
+    and GPU stalls during inference.
+
+    See: https://github.com/ml-explore/mlx-lm/pull/652
+    """
+    try:
+        import mlx.core as mx
+
+        device_info = mx.metal.device_info()
+        max_wired = int(device_info.get("max_recommended_working_set_size", 0))
+        if max_wired > 0:
+            if hasattr(mx, "set_wired_limit"):
+                mx.set_wired_limit(max_wired)
+                logger.info("Set Metal wired_limit to %.1f GB", max_wired / (1024**3))
+            elif hasattr(mx.metal, "set_wired_limit"):
+                mx.metal.set_wired_limit(max_wired)
+                logger.info("Set Metal wired_limit to %.1f GB", max_wired / (1024**3))
+            else:
+                logger.debug("No set_wired_limit API available, skipping")
+    except Exception as e:
+        logger.warning("Failed to set wired_limit: %s", e)

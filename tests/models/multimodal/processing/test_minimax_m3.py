@@ -11,7 +11,7 @@ against the sglang reference algorithm
 import pytest
 import torch
 
-from aphrodite.transformers_utils.processors.minimax_m3 import (
+from sonar.transformers_utils.processors.minimax_m3 import (
     MIN_SHORT_SIDE_PIXEL,
     MiniMaxM3VLImageProcessor,
     MiniMaxM3VLVideoProcessor,

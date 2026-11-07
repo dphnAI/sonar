@@ -22,7 +22,7 @@ import os
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 from tests.models.registry import HF_EXAMPLE_MODELS
 
 MODEL_NAME = "nvidia/audio-flamingo-3-hf"

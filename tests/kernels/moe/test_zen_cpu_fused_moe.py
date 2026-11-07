@@ -5,23 +5,23 @@
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.kernels.linear.zentorch_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.kernels.linear.zentorch_utils import (
     has_zentorch_op,
     is_zentorch_moe_config_supported,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
     biased_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
     CPUUnquantizedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from tests.kernels.moe.test_cpu_fused_moe import (
     UNALIGNED_INTERMEDIATE_DIM,
@@ -128,7 +128,7 @@ def test_zen_cpu_fused_moe_config_supported_unaligned_intermediate():
 @pytest.mark.parametrize("act", ZENTORCH_ACT)
 @pytest.mark.parametrize("use_bias", USE_BIAS)
 def test_zen_cpu_fused_moe_forward(
-    default_aphrodite_config,
+    default_sonar_config,
     act: MoEActivation,
     use_bias: bool,
 ):

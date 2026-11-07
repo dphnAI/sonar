@@ -6,7 +6,7 @@ import weakref
 import pytest
 import torch
 
-from aphrodite import LLM, PoolingParams
+from sonar import LLM, PoolingParams
 from tests.models.utils import softmax
 
 MODEL_NAME = "internlm/internlm2-1_8b-reward"
@@ -15,8 +15,8 @@ prompts = ["The chef prepared a delicious meal."]
 
 
 @pytest.fixture(scope="module")
-def llm(aphrodite_runner):
-    with aphrodite_runner(
+def llm(sonar_runner):
+    with sonar_runner(
         MODEL_NAME,
         max_model_len=None,
         max_num_batched_tokens=32768,
@@ -28,15 +28,15 @@ def llm(aphrodite_runner):
         enable_chunked_prefill=None,
     ) as runner:
         # pytest caches yielded fixtures until after teardown, so use a proxy to
-        # avoid retaining the LLM while AphroditeRunner.__exit__ releases ROCm memory.
+        # avoid retaining the LLM while SonarRunner.__exit__ releases ROCm memory.
         yield weakref.proxy(runner.llm)
 
 
 @pytest.mark.skip_global_cleanup
 def test_config(llm: LLM):
-    aphrodite_config = llm.llm_engine.aphrodite_config
-    assert aphrodite_config.cache_config.enable_prefix_caching
-    assert aphrodite_config.scheduler_config.enable_chunked_prefill
+    sonar_config = llm.llm_engine.sonar_config
+    assert sonar_config.cache_config.enable_prefix_caching
+    assert sonar_config.scheduler_config.enable_chunked_prefill
 
 
 def test_pooling_params(llm: LLM):

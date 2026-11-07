@@ -5,9 +5,9 @@
 import pytest
 import torch
 
-from aphrodite.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.models.kimi_k3.amd.mla import KimiK3MultiHeadLatentAttentionWrapper
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 compute_w_fold = KimiK3MultiHeadLatentAttentionWrapper._compute_w_fold
 split_fold_output = KimiK3MultiHeadLatentAttentionWrapper._split_fold_output
@@ -93,7 +93,7 @@ def test_root_model_builds_the_fold() -> None:
     builds each MLA wrapper's W_fold (else _fused_decode asserts at DCP1)."""
     from unittest.mock import MagicMock
 
-    from aphrodite.models.kimi_k3.amd.model import KimiK3ForConditionalGeneration
+    from sonar.models.kimi_k3.amd.model import KimiK3ForConditionalGeneration
 
     root = MagicMock()
     KimiK3ForConditionalGeneration.process_weights_after_loading(root)

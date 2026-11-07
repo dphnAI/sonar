@@ -15,7 +15,7 @@
 
 #include "persistent_topk.cuh"
 
-namespace aphrodite::sampled_topk {
+namespace sonar::sampled_topk {
 
 namespace hist4096 = topk_histogram_4096;
 
@@ -258,4 +258,4 @@ __global__ void __launch_bounds__(kThreads)
   }
 }
 
-}  // namespace aphrodite::sampled_topk
+}  // namespace sonar::sampled_topk

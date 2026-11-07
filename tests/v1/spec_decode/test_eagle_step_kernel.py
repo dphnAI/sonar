@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.spec_decode.utils import (
+from sonar.platforms import current_platform
+from sonar.v1.spec_decode.utils import (
     PADDING_SLOT_ID,
     eagle_step_update_slot_mapping_and_metadata,
 )

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for the batched-weight RMS norm kernel (aphrodite._custom_ops.rms_norm).
+"""Tests for the batched-weight RMS norm kernel (sonar._custom_ops.rms_norm).
 
 ``rms_norm`` can use the outermost input batch index to select the corresponding
 weight row. The result must match that of looping ``rms_norm`` over that dimension.
@@ -9,9 +9,9 @@ weight row. The result must match that of looping ``rms_norm`` over that dimensi
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cuda_alike(),

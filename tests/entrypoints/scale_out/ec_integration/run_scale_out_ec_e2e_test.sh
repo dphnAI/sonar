@@ -7,9 +7,9 @@
 # Tests the disaggregated multimodal flow over the scale-out endpoints,
 # following the bash-script style of tests/v1/kv_connector/nixl_integration:
 #
-#   1. Baseline: a single Aphrodite instance serving /v1/chat/completions
+#   1. Baseline: a single Sonar instance serving /v1/chat/completions
 #   2. Scale-out:
-#        render   (GPU-less, `aphrodite launch render`)
+#        render   (GPU-less, `sonar launch render`)
 #        encode   (EC producer, encode-only)
 #        prefill  (EC consumer)
 #
@@ -57,7 +57,7 @@ PYTHON="${PYTHON:-python3}"
 
 # Output files and logs
 LOG_PATH="${LOG_PATH:-/tmp}"
-BASELINE_FILE="${BASELINE_FILE:-/tmp/aphrodite_scale_out_ec_baseline.txt}"
+BASELINE_FILE="${BASELINE_FILE:-/tmp/sonar_scale_out_ec_baseline.txt}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-600}"
 BASELINE_LOG="${LOG_PATH}/scale_out_ec_baseline.log"
 RENDER_LOG="${LOG_PATH}/scale_out_ec_render.log"
@@ -110,12 +110,12 @@ dump_scale_out_logs() {
 }
 
 cleanup_instances() {
-    echo "Cleaning up any running Aphrodite instances..."
-    pkill -TERM -f "aphrodite serve" || true
-    pkill -TERM -f "aphrodite launch render" || true
+    echo "Cleaning up any running Sonar instances..."
+    pkill -TERM -f "sonar serve" || true
+    pkill -TERM -f "sonar launch render" || true
     sleep 3
-    pkill -9 -f "aphrodite serve" || true
-    pkill -9 -f "aphrodite launch render" || true
+    pkill -9 -f "sonar serve" || true
+    pkill -9 -f "sonar launch render" || true
     sleep 2
 }
 
@@ -129,7 +129,7 @@ run_baseline() {
     rm -rf "$EC_SHARED_STORAGE_PATH"
 
     echo "Starting baseline instance on GPU $GPU_SINGLE, port $BASELINE_PORT"
-    env CUDA_VISIBLE_DEVICES="$GPU_SINGLE" aphrodite serve "$MODEL" \
+    env CUDA_VISIBLE_DEVICES="$GPU_SINGLE" sonar serve "$MODEL" \
         --port "$BASELINE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
         --enforce-eager \
@@ -173,7 +173,7 @@ run_scale_out_ec() {
 
     # GPU-less render/derender server
     echo "Starting render server on port $RENDER_PORT"
-    aphrodite launch render "$MODEL" \
+    sonar launch render "$MODEL" \
         --port "$RENDER_PORT" \
         > "$RENDER_LOG" 2>&1 &
     PIDS+=("$!")
@@ -182,7 +182,7 @@ run_scale_out_ec() {
     # publishes embeddings through the ECExampleConnector shared storage.
     echo "Starting encode instance on GPU $GPU_E, port $ENCODE_PORT"
     env CUDA_VISIBLE_DEVICES="$GPU_E" \
-        aphrodite serve "$MODEL" \
+        sonar serve "$MODEL" \
         --enable-scale-out \
         --port "$ENCODE_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \
@@ -206,7 +206,7 @@ run_scale_out_ec() {
     # encode instance published.
     echo "Starting prefill instance on GPU $GPU_PD, port $PREFILL_PORT"
     env CUDA_VISIBLE_DEVICES="$GPU_PD" \
-        aphrodite serve "$MODEL" \
+        sonar serve "$MODEL" \
         --enable-scale-out \
         --port "$PREFILL_PORT" \
         --max-model-len "$MAX_MODEL_LEN" \

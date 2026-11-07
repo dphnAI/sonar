@@ -17,19 +17,19 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.metrics.stats import PrefixCacheStats
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
+from sonar.config import SonarConfig
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.metrics.stats import PrefixCacheStats
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import RequestStatus
 
 from .utils import create_requests, create_scheduler, mock_kv
 
 pytestmark = pytest.mark.cpu_test
 
 # Allow overriding the model with a local path for offline environments.
-MODEL = os.environ.get("APHRODITE_TEST_DEFER_FREE_MODEL", "facebook/opt-125m")
+MODEL = os.environ.get("SONAR_TEST_DEFER_FREE_MODEL", "facebook/opt-125m")
 STOP_TOKEN_ID = 42
 NUM_PROMPT_TOKENS = 33  # 3 blocks with block_size=16
 
@@ -108,7 +108,7 @@ def test_gate_enabled_for_async_consumer():
     # CPU, where this test runs, and PP can't be built without GPUs, so force
     # max_concurrent_batches to exercise the enabled path on any platform.
     with patch.object(
-        AphroditeConfig,
+        SonarConfig,
         "max_concurrent_batches",
         new_callable=PropertyMock,
         return_value=2,

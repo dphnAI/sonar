@@ -1,10 +1,10 @@
-## Contributing Guidelines for Aphrodite Engine
+## Contributing Guidelines for Sonar Engine
 
-Aphrodite Engine welcomes any and all contributors to submit fixes, features, issues - no matter the scope.
+Sonar Engine welcomes any and all contributors to submit fixes, features, issues - no matter the scope.
 
 ### Code of Ethics
 
-If you wish, you can read the [Aphrodite Engine Code of Conduct](./CODE_OF_CONDUCT.md). You don't need to follow it! :)
+If you wish, you can read the [Sonar Engine Code of Conduct](./CODE_OF_CONDUCT.md). You don't need to follow it! :)
 
 ### Setup
 
@@ -31,4 +31,4 @@ To run them by hand on every file:
 pre-commit run --all-files
 ```
 
-Thank you for your interest in Aphrodite Engine!
+Thank you for your interest in Sonar Engine!

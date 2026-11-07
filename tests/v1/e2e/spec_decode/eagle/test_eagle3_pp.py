@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed import cleanup_dist_env_and_memory
+from sonar import LLM, SamplingParams
+from sonar.distributed import cleanup_dist_env_and_memory
 from tests.utils import multi_gpu_test
 from tests.v1.e2e.spec_decode.utils import compute_acceptance_len
 

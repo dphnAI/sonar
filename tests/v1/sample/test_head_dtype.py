@@ -11,9 +11,9 @@ import math
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar import LLM, SamplingParams
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     UnquantizedEmbeddingMethod,
     VocabParallelEmbedding,
@@ -47,7 +47,7 @@ def _build_processor(vocab_size: int) -> LogitsProcessor:
     return lp
 
 
-def test_fp32_head_runs_projection_in_fp32(default_aphrodite_config):
+def test_fp32_head_runs_projection_in_fp32(default_sonar_config):
     vocab_size, hidden_size, num_tokens = 64, 16, 4
     lp = _build_processor(vocab_size)
     lp.head_dtype = torch.float32
@@ -64,7 +64,7 @@ def test_fp32_head_runs_projection_in_fp32(default_aphrodite_config):
     torch.testing.assert_close(logits, expected)
 
 
-def test_non_fp32_head_dtype_uses_cast_path(default_aphrodite_config):
+def test_non_fp32_head_dtype_uses_cast_path(default_sonar_config):
     # head_dtype != fp32 must not hit the CUDA out_dtype-mm fast path
     # (torch.mm only supports fp32 out for fp16/bf16 inputs); the cast path
     # handles any dtype.
@@ -83,7 +83,7 @@ def test_non_fp32_head_dtype_uses_cast_path(default_aphrodite_config):
     torch.testing.assert_close(logits, expected)
 
 
-def test_head_dtype_equal_to_model_dtype_uses_quant_method(default_aphrodite_config):
+def test_head_dtype_equal_to_model_dtype_uses_quant_method(default_sonar_config):
     from unittest import mock
 
     vocab_size, hidden_size = 64, 16
@@ -110,7 +110,7 @@ def test_head_dtype_equal_to_model_dtype_uses_quant_method(default_aphrodite_con
     not torch.cuda.is_available(),
     reason="Exercises the torch.mm(out_dtype=...) device fast path, available on CUDA and ROCm.",
 )
-def test_fp32_head_uses_mm_fast_path_on_device(default_aphrodite_config):
+def test_fp32_head_uses_mm_fast_path_on_device(default_sonar_config):
     # On ROCm, current_platform.is_cuda() is False, so this previously fell
     # through to the cast path (F.linear) instead of torch.mm(out_dtype=...),
     # even though ROCm supports the out_dtype mm via its non-Lt GEMM path.
@@ -123,7 +123,7 @@ def test_fp32_head_uses_mm_fast_path_on_device(default_aphrodite_config):
     hidden_states = torch.randn(num_tokens, hidden_size, dtype=torch.bfloat16, device="cuda")
     weight = torch.randn(vocab_size, hidden_size, dtype=torch.bfloat16, device="cuda")
 
-    with mock.patch("aphrodite.model_executor.layers.logits_processor.F.linear") as linear_mock:
+    with mock.patch("sonar.model_executor.layers.logits_processor.F.linear") as linear_mock:
         logits = lp._get_logits(hidden_states, _fake_lm_head(weight), None)
 
     linear_mock.assert_not_called()
@@ -133,7 +133,7 @@ def test_fp32_head_uses_mm_fast_path_on_device(default_aphrodite_config):
     torch.testing.assert_close(logits, expected)
 
 
-def test_fp32_head_rejects_quantized_lm_head(default_aphrodite_config):
+def test_fp32_head_rejects_quantized_lm_head(default_sonar_config):
     lp = _build_processor(64)
     lp.head_dtype = torch.float32
     lm_head = _fake_lm_head(torch.randn(64, 16, dtype=torch.bfloat16), quantized=True)
@@ -143,7 +143,7 @@ def test_fp32_head_rejects_quantized_lm_head(default_aphrodite_config):
 
 
 def test_replicated_lm_head_skips_tp_communication_and_preserves_processing(
-    default_aphrodite_config,
+    default_sonar_config,
 ):
     from unittest import mock
 
@@ -158,7 +158,7 @@ def test_replicated_lm_head_skips_tp_communication_and_preserves_processing(
 
     hidden_states = torch.randn(4, hidden_size, dtype=torch.bfloat16)
     weight = torch.randn(vocab_size, hidden_size, dtype=torch.bfloat16)
-    world_size_getter = "aphrodite.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_world_size"
+    world_size_getter = "sonar.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_world_size"
     with mock.patch(world_size_getter, return_value=2):
         lm_head = ParallelLMHead(
             vocab_size,
@@ -178,7 +178,7 @@ def test_replicated_lm_head_skips_tp_communication_and_preserves_processing(
     expected = torch.tanh(expected / soft_cap) * soft_cap * scale
     torch.testing.assert_close(logits, expected)
 
-    all_gather_path = "aphrodite.model_executor.layers.logits_processor.tensor_model_parallel_all_gather"
+    all_gather_path = "sonar.model_executor.layers.logits_processor.tensor_model_parallel_all_gather"
     with mock.patch(all_gather_path) as all_gather:
         top = lp.get_top_tokens(lm_head, hidden_states)
 
@@ -186,7 +186,7 @@ def test_replicated_lm_head_skips_tp_communication_and_preserves_processing(
     assert torch.equal(top, expected.argmax(dim=-1))
 
 
-def test_get_top_tokens_honors_head_dtype(default_aphrodite_config):
+def test_get_top_tokens_honors_head_dtype(default_sonar_config):
     # The spec-decode local-argmax path (get_top_tokens) must run the lm_head
     # in head_dtype too, not just _get_logits.
     import types

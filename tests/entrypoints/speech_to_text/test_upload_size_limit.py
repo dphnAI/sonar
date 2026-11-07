@@ -4,16 +4,16 @@
 
 These tests verify that over-limit audio uploads are rejected *before*
 the full file is materialized into memory, closing the vulnerability
-where Aphrodite would allocate memory proportional to an oversized upload
-before enforcing the APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB limit.
+where Sonar would allocate memory proportional to an oversized upload
+before enforcing the SONAR_MAX_AUDIO_CLIP_FILESIZE_MB limit.
 """
 
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from aphrodite.entrypoints.speech_to_text.base.utils import read_upload_with_limit
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.entrypoints.speech_to_text.base.utils import read_upload_with_limit
+from sonar.exceptions import SonarValidationError
 
 
 def _make_upload_file(data: bytes, *, size: int | None = None) -> AsyncMock:
@@ -45,7 +45,7 @@ async def test_rejects_oversized_upload_via_content_length():
 
     upload = _make_upload_file(b"", size=oversized_bytes)
 
-    with pytest.raises(AphroditeValidationError, match="Maximum file size exceeded"):
+    with pytest.raises(SonarValidationError, match="Maximum file size exceeded"):
         await read_upload_with_limit(upload, max_size_mb=max_mb)
 
     upload.read.assert_not_called()
@@ -60,7 +60,7 @@ async def test_rejects_oversized_upload_via_chunked_read():
 
     upload = _make_upload_file(oversized_data, size=None)
 
-    with pytest.raises(AphroditeValidationError, match="Maximum file size exceeded"):
+    with pytest.raises(SonarValidationError, match="Maximum file size exceeded"):
         await read_upload_with_limit(upload, max_size_mb=max_mb)
 
 
@@ -98,21 +98,21 @@ async def test_rejects_at_one_byte_over_limit():
 
     upload = _make_upload_file(data, size=None)
 
-    with pytest.raises(AphroditeValidationError, match="Maximum file size exceeded"):
+    with pytest.raises(SonarValidationError, match="Maximum file size exceeded"):
         await read_upload_with_limit(upload, max_size_mb=max_mb)
 
 
 @pytest.mark.asyncio
 async def test_uses_env_default_when_no_limit_specified():
-    """Uses APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB when max_size_mb is not given."""
-    with patch("aphrodite.entrypoints.speech_to_text.base.utils.envs") as mock_envs:
-        mock_envs.APHRODITE_MAX_AUDIO_CLIP_FILESIZE_MB = 2
+    """Uses SONAR_MAX_AUDIO_CLIP_FILESIZE_MB when max_size_mb is not given."""
+    with patch("sonar.entrypoints.speech_to_text.base.utils.envs") as mock_envs:
+        mock_envs.SONAR_MAX_AUDIO_CLIP_FILESIZE_MB = 2
         max_bytes = 2 * 1024 * 1024
         oversized_data = b"\x00" * (max_bytes + 1)
 
         upload = _make_upload_file(oversized_data, size=None)
 
-        with pytest.raises(AphroditeValidationError, match="Maximum file size exceeded"):
+        with pytest.raises(SonarValidationError, match="Maximum file size exceeded"):
             await read_upload_with_limit(upload)
 
 
@@ -131,7 +131,7 @@ async def test_chunked_read_does_not_fully_materialize():
 
     upload = _make_upload_file(data, size=None)
 
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         await read_upload_with_limit(upload, max_size_mb=max_mb)
 
     chunk_size = 64 * 1024

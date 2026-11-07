@@ -28,16 +28,16 @@ fp32-state + bf16-activation production config.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import selective_state_update
-from aphrodite.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
+from sonar.model_executor.layers.mamba.ops.mamba_ssm import selective_state_update
+from sonar.model_executor.layers.mamba.ops.selective_state_update_replayssm_output_only import (  # noqa: E501
     selective_state_update_replayssm_output_only,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssd_combined import (
+from sonar.model_executor.layers.mamba.ops.ssd_combined import (
     mamba_chunk_scan_combined_varlen,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.backends.mamba2_attn import compute_varlen_chunk_metadata
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.backends.mamba2_attn import compute_varlen_chunk_metadata
 from tests.kernels.mamba.utils import selective_state_update_ref
 
 

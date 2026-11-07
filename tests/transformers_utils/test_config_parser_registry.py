@@ -7,12 +7,12 @@ import pytest
 import transformers.configuration_utils as hf_configuration_utils
 from transformers import PreTrainedConfig
 
-import aphrodite.transformers_utils.config as config_module
-from aphrodite.transformers_utils.config import (
+import sonar.transformers_utils.config as config_module
+from sonar.transformers_utils.config import (
     get_config_parser,
     register_config_parser,
 )
-from aphrodite.transformers_utils.config_parser_base import ConfigParserBase
+from sonar.transformers_utils.config_parser_base import ConfigParserBase
 
 
 @register_config_parser("custom_config_parser")
@@ -45,11 +45,11 @@ def test_patch_hf_transformers_allowed_layer_types(monkeypatch):
     hf_layer_types = tuple(
         layer_type for layer_type in hf_configuration_utils.ALLOWED_LAYER_TYPES if layer_type != extra_layer_type
     )
-    aphrodite_layer_types = tuple(
+    sonar_layer_types = tuple(
         layer_type for layer_type in config_module.ALLOWED_LAYER_TYPES if layer_type != extra_layer_type
     )
     monkeypatch.setattr(hf_configuration_utils, "ALLOWED_LAYER_TYPES", hf_layer_types)
-    monkeypatch.setattr(config_module, "ALLOWED_LAYER_TYPES", aphrodite_layer_types)
+    monkeypatch.setattr(config_module, "ALLOWED_LAYER_TYPES", sonar_layer_types)
 
     config_module._patch_hf_transformers_allowed_layer_types((extra_layer_type,))
 

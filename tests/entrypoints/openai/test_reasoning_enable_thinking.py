@@ -11,10 +11,10 @@ is injected automatically.
 import pytest
 from openai.types.shared import Reasoning
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
 
 def _build_chat_request(**kwargs) -> ChatCompletionRequest:

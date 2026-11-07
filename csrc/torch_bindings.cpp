@@ -8,7 +8,7 @@
 // Note: We register under namespace "_C" so ops are accessible as
 // torch.ops._C.<op_name> for compatibility with existing code.
 STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
-#ifdef APHRODITE_ENABLE_FUSED_MQA_TOPK
+#ifdef SONAR_ENABLE_FUSED_MQA_TOPK
   // Single-launch fused FP8 MQA-logits + top-k (512/1024/2048) prefill
   // selection (SM100 family). Workspace tensors are caller-owned; counter must
   // be zero.
@@ -219,7 +219,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "                        Tensor!? sorted_expert_ids=None) -> ()");
 
   // compute per-expert problem sizes from expert_first_token_offset
-  // produced by Aphrodite's moe_permute kernel
+  // produced by Sonar's moe_permute kernel
   ops.def(
       "get_cutlass_moe_mm_problem_sizes_from_expert_offsets("
       "    Tensor expert_first_token_offset, "
@@ -614,7 +614,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor cache_offsets, Tensor k_scale, Tensor scale_offsets, "
       "int rotary_dim, float eps, str kv_cache_dtype) -> ()");
 
-#ifdef APHRODITE_ENABLE_FUSED_KDA_DECODE
+#ifdef SONAR_ENABLE_FUSED_KDA_DECODE
   ops.def(
       "fused_kda_decode("
       "Tensor x, Tensor weight, Tensor? bias, Tensor! conv_state, "
@@ -624,7 +624,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor? norm_weight=None, float norm_eps=1e-5) -> ()");
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_GDN_DECODE
+#ifdef SONAR_ENABLE_FUSED_GDN_DECODE
   ops.def(
       "fused_gdn_decode_post_conv_mtp("
       "Tensor mixed_qkv, Tensor a, Tensor b, Tensor A_log, Tensor dt_bias, "
@@ -634,7 +634,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "str output_gate_activation='silu') -> ()");
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_KDA_CHUNK
+#ifdef SONAR_ENABLE_FUSED_KDA_CHUNK
   ops.def(
       "fused_kda_prologue("
       "Tensor q, Tensor k, Tensor v, Tensor raw_g, Tensor raw_beta, "
@@ -654,7 +654,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor? state_indices=None, Tensor? has_initial_state=None) -> ()");
 #endif
 
-#ifdef APHRODITE_ENABLE_BEAM_KERNELS
+#ifdef SONAR_ENABLE_BEAM_KERNELS
   // Beam's MNNVL all-reduce fused with its norm-residual-norm boundary.
   ops.def(
       "beam_allreduce_norm(Tensor input, Tensor residual, "
@@ -670,7 +670,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor! flags, int multicast_ptr, int world, int rank) -> ()");
 #endif
 
-#ifdef APHRODITE_ENABLE_KIMI_K3_ATTN_RES
+#ifdef SONAR_ENABLE_KIMI_K3_ATTN_RES
   ops.def(
       "kimi_k3_attn_res("
       "Tensor! prefix, Tensor? delta, Tensor! blocks, Tensor norm_weight, "
@@ -700,13 +700,13 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "persistent_topk(Tensor logits, Tensor lengths, Tensor! output, "
       "Tensor workspace, int k, int max_seq_len) -> ()");
 
-#ifdef APHRODITE_ENABLE_COOPERATIVE_TOPK
+#ifdef SONAR_ENABLE_COOPERATIVE_TOPK
   ops.def(
       "cooperative_topk(Tensor logits, Tensor lengths, Tensor! output, "
       "Tensor workspace, int k, int max_seq_len) -> ()");
 #endif
 
-#ifdef APHRODITE_ENABLE_SM89_DSA
+#ifdef SONAR_ENABLE_SM89_DSA
   // sm89 DeepSeek sparse attention; impls are registered in the kernel sources
   ops.def(
       "sm89_fp8_paged_mqa_logits(Tensor q, Tensor pool, Tensor weights, "
@@ -878,7 +878,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
 }
 
 STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
-#ifdef APHRODITE_ENABLE_FUSED_MQA_TOPK
+#ifdef SONAR_ENABLE_FUSED_MQA_TOPK
   ops.impl("fused_mqa_topk_prefill", TORCH_BOX(&fused_mqa_topk_prefill));
 #endif
 
@@ -973,7 +973,7 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
 #ifndef USE_ROCM
   ops.impl("minimax_allreduce_rms_qk", TORCH_BOX(&minimax_allreduce_rms_qk));
   ops.impl("fused_qknorm_rope_cache",
-           TORCH_BOX(&aphrodite::fused_qknorm_rope_cache));
+           TORCH_BOX(&sonar::fused_qknorm_rope_cache));
 #endif
   ops.impl("fused_muse_spark_qknorm_rope_kv_insert",
            TORCH_BOX(&fused_muse_spark_qknorm_rope_kv_insert));
@@ -981,26 +981,26 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
            TORCH_BOX(&fused_minimax_m3_qknorm_rope_kv_insert));
   ops.impl("fused_minimax_m3_dspark_context_kv",
            TORCH_BOX(&fused_minimax_m3_dspark_context_kv));
-#ifdef APHRODITE_ENABLE_FUSED_KDA_DECODE
+#ifdef SONAR_ENABLE_FUSED_KDA_DECODE
   ops.impl("fused_kda_decode", TORCH_BOX(&fused_kda_decode));
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_GDN_DECODE
+#ifdef SONAR_ENABLE_FUSED_GDN_DECODE
   ops.impl("fused_gdn_decode_post_conv_mtp",
            TORCH_BOX(&fused_gdn_decode_post_conv_mtp));
 #endif
 
-#ifdef APHRODITE_ENABLE_FUSED_KDA_CHUNK
+#ifdef SONAR_ENABLE_FUSED_KDA_CHUNK
   ops.impl("fused_kda_prologue", TORCH_BOX(&fused_kda_prologue));
   ops.impl("fused_kda_chunk", TORCH_BOX(&fused_kda_chunk));
 #endif
 
-#ifdef APHRODITE_ENABLE_BEAM_KERNELS
+#ifdef SONAR_ENABLE_BEAM_KERNELS
   ops.impl("beam_allreduce_norm", TORCH_BOX(&beam_allreduce_norm));
   ops.impl("beam_allreduce", TORCH_BOX(&beam_allreduce));
 #endif
 
-#ifdef APHRODITE_ENABLE_KIMI_K3_ATTN_RES
+#ifdef SONAR_ENABLE_KIMI_K3_ATTN_RES
   ops.impl("kimi_k3_attn_res", TORCH_BOX(&kimi_k3_attn_res));
 #endif
 
@@ -1010,7 +1010,7 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
   ops.impl("top_k_per_row_prefill", TORCH_BOX(&top_k_per_row_prefill));
   ops.impl("top_k_per_row_decode", TORCH_BOX(&top_k_per_row_decode));
   ops.impl("persistent_topk", TORCH_BOX(&persistent_topk));
-#ifdef APHRODITE_ENABLE_COOPERATIVE_TOPK
+#ifdef SONAR_ENABLE_COOPERATIVE_TOPK
   ops.impl("cooperative_topk", TORCH_BOX(&cooperative_topk));
 #endif
 

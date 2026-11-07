@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""The MiniMax-M3.1 DSpark draft attention under Aphrodite's torch.compile.
+"""The MiniMax-M3.1 DSpark draft attention under Sonar's torch.compile.
 
-Aphrodite traces the draft model once, in the memory-profiling run, whose forward
+Sonar traces the draft model once, in the memory-profiling run, whose forward
 context has no slot mapping, and reuses that graph afterwards. The draft
 tokens' k/v insert must still happen on the later calls.
 """
@@ -11,7 +11,7 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.utils.torch_utils import set_default_torch_dtype
+from sonar.utils.torch_utils import set_default_torch_dtype
 
 HEAD_DIM = 128
 BLOCK_SIZE = 16
@@ -36,19 +36,19 @@ class _QueryAttention(nn.Module):
     [("auto", False), ("fp8", False), ("fp8", True)],
 )
 def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cache_dtype, query_pre_quantized):
-    from aphrodite.compilation.decorators import support_torch_compile
-    from aphrodite.config import (
-        AphroditeConfig,
+    from sonar.compilation.decorators import support_torch_compile
+    from sonar.config import (
         CompilationConfig,
         CompilationMode,
         CUDAGraphMode,
-        set_current_aphrodite_config,
+        SonarConfig,
+        set_current_sonar_config,
     )
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
-    from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
+    from sonar.forward_context import set_forward_context
+    from sonar.models.minimax_m3.common.dspark import MiniMaxM3DSparkAttention
+    from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3TextConfig
 
-    monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
+    monkeypatch.setenv("SONAR_DISABLE_COMPILE_CACHE", "1")
     config = MiniMaxM3TextConfig(
         hidden_size=512,
         num_attention_heads=8,
@@ -59,7 +59,7 @@ def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cach
 
     @support_torch_compile
     class DraftAttention(nn.Module):
-        def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs):
+        def __init__(self, *, sonar_config: SonarConfig, prefix: str = "", **kwargs):
             super().__init__()
             self.self_attn = MiniMaxM3DSparkAttention(
                 config,
@@ -74,16 +74,16 @@ def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cach
         def forward(self, positions: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
             return self.self_attn(positions, hidden_states)
 
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, cudagraph_mode=CUDAGraphMode.NONE)
+    sonar_config = SonarConfig(
+        compilation_config=CompilationConfig(mode=CompilationMode.SONAR_COMPILE, cudagraph_mode=CUDAGraphMode.NONE)
     )
     torch.manual_seed(0)
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         torch.device("cuda"),
         set_default_torch_dtype(torch.bfloat16),
     ):
-        model = DraftAttention(aphrodite_config=aphrodite_config, prefix="model.layers.0")
+        model = DraftAttention(sonar_config=sonar_config, prefix="model.layers.0")
     attn = model.self_attn
     for param in (
         attn.qkv_proj.weight,
@@ -102,18 +102,18 @@ def test_draft_attention_stores_kv_after_compile(dist_init, monkeypatch, kv_cach
     slots = {layer.layer_name: torch.tensor([5, -1, 17, 18, 40, 63, 0], device="cuda")}
 
     with torch.inference_mode():
-        with set_forward_context(None, aphrodite_config, slot_mapping=slots):
+        with set_forward_context(None, sonar_config, slot_mapping=slots):
             expected_out = attn(positions, hidden)
         expected_cache = layer.kv_cache.clone()
         assert expected_cache.any()
         layer.kv_cache.zero_()
 
         # The memory-profiling run: no slot mapping, nothing is stored.
-        with set_forward_context(None, aphrodite_config):
+        with set_forward_context(None, sonar_config):
             model(positions, hidden)
         assert not layer.kv_cache.any()
 
-        with set_forward_context(None, aphrodite_config, slot_mapping=slots):
+        with set_forward_context(None, sonar_config, slot_mapping=slots):
             out = model(positions, hidden)
     assert layer.kv_cache.any(), "the compiled draft attention stored no k/v"
     got, expected, rtol = layer.kv_cache, expected_cache, 2e-2

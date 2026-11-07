@@ -9,17 +9,17 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from aphrodite import PoolingParams
-from aphrodite.entrypoints.pooling import factories
-from aphrodite.entrypoints.pooling.factories import init_pooling_io_processors
-from aphrodite.entrypoints.pooling.pooling.io_processor import (
+from sonar import PoolingParams
+from sonar.entrypoints.pooling import factories
+from sonar.entrypoints.pooling.factories import init_pooling_io_processors
+from sonar.entrypoints.pooling.pooling.io_processor import (
     PluginWithIOProcessorPlugins,
     UnsupportedCombinedTaskIOProcessor,
 )
-from aphrodite.entrypoints.pooling.token_embed.serving import ServingTokenEmbedding
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.pooling_params import LateChunkingParams
+from sonar.entrypoints.pooling.token_embed.serving import ServingTokenEmbedding
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.exceptions import SonarValidationError
+from sonar.pooling_params import LateChunkingParams
 
 
 def _bge_m3_config(io_processor_plugin=None):
@@ -29,7 +29,7 @@ def _bge_m3_config(io_processor_plugin=None):
     model_config.hf_config.to_dict.return_value = {}
     model_config.architecture = "BgeM3EmbeddingModel"
 
-    aphrodite_config = MagicMock(model_config=model_config)
+    sonar_config = MagicMock(model_config=model_config)
     renderer = MagicMock()
     renderer._executor = MagicMock()
     chat_template_config = MagicMock(
@@ -37,15 +37,15 @@ def _bge_m3_config(io_processor_plugin=None):
         chat_template_content_format="auto",
         trust_request_chat_template=False,
     )
-    return aphrodite_config, renderer, chat_template_config
+    return sonar_config, renderer, chat_template_config
 
 
 def test_combined_task_without_plugin_uses_rejection_processor():
-    aphrodite_config, renderer, chat_template_config = _bge_m3_config()
+    sonar_config, renderer, chat_template_config = _bge_m3_config()
 
     processors = init_pooling_io_processors(
         supported_tasks=("embed", "embed&token_classify"),
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )
@@ -55,16 +55,16 @@ def test_combined_task_without_plugin_uses_rejection_processor():
 
 
 def test_combined_task_with_plugin_uses_plugin_processor(monkeypatch):
-    aphrodite_config, renderer, chat_template_config = _bge_m3_config("bge_m3_sparse_plugin")
+    sonar_config, renderer, chat_template_config = _bge_m3_config("bge_m3_sparse_plugin")
     monkeypatch.setattr(factories, "has_io_processor", lambda *_: True)
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.pooling.io_processor.get_io_processor",
+        "sonar.entrypoints.pooling.pooling.io_processor.get_io_processor",
         lambda *_: MagicMock(),
     )
 
     processors = init_pooling_io_processors(
         supported_tasks=("embed", "embed&token_classify"),
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )
@@ -74,18 +74,18 @@ def test_combined_task_with_plugin_uses_plugin_processor(monkeypatch):
 
 
 def test_combined_task_plain_pooling_request_has_actionable_error(monkeypatch):
-    from aphrodite.entrypoints.pooling.pooling.protocol import PoolingCompletionRequest
-    from aphrodite.entrypoints.pooling.pooling.serving import ServingPooling
+    from sonar.entrypoints.pooling.pooling.protocol import PoolingCompletionRequest
+    from sonar.entrypoints.pooling.pooling.serving import ServingPooling
 
-    aphrodite_config, renderer, chat_template_config = _bge_m3_config("bge_m3_sparse_plugin")
+    sonar_config, renderer, chat_template_config = _bge_m3_config("bge_m3_sparse_plugin")
     monkeypatch.setattr(factories, "has_io_processor", lambda *_: True)
     monkeypatch.setattr(
-        "aphrodite.entrypoints.pooling.pooling.io_processor.get_io_processor",
+        "sonar.entrypoints.pooling.pooling.io_processor.get_io_processor",
         lambda *_: MagicMock(),
     )
 
-    engine_client = MagicMock(renderer=renderer, aphrodite_config=aphrodite_config)
-    models = MagicMock(model_config=aphrodite_config.model_config)
+    engine_client = MagicMock(renderer=renderer, sonar_config=sonar_config)
+    models = MagicMock(model_config=sonar_config.model_config)
     serving = ServingPooling(
         engine_client,
         models,
@@ -172,15 +172,15 @@ def test_embedding_route_validates_the_configured_task(task):
 
 
 def test_token_embedding_keeps_model_specific_chunking_rejection():
-    aphrodite_config, renderer, chat_template_config = _bge_m3_config()
-    aphrodite_config.model_config.get_pooling_task.return_value = "token_embed"
-    aphrodite_config.model_config.architecture = "JinaForRanking"
+    sonar_config, renderer, chat_template_config = _bge_m3_config()
+    sonar_config.model_config.get_pooling_task.return_value = "token_embed"
+    sonar_config.model_config.architecture = "JinaForRanking"
     serving = object.__new__(ServingTokenEmbedding)
     processor = serving.init_io_processor(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         renderer=renderer,
         chat_template_config=chat_template_config,
     )
-    with pytest.raises(AphroditeValidationError, match="JinaForRanking.*late chunking"):
+    with pytest.raises(SonarValidationError, match="JinaForRanking.*late chunking"):
         processor.render({"params": PoolingParams(late_chunking_params=LateChunkingParams(2))})
     renderer.render_cmpl.assert_not_called()

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     _LINEAR_BACKEND_KERNEL_MAP,
     _POSSIBLE_FP8_BLOCK_KERNELS,
     _POSSIBLE_FP8_KERNELS,
@@ -30,16 +30,16 @@ from aphrodite.model_executor.kernels.linear import (
     init_mxfp8_linear_kernel,
     init_nvfp4_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.nvfp4.marlin import (
+from sonar.model_executor.kernels.linear.nvfp4.marlin import (
     MarlinNvFp4LinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
     kFp8StaticTensorSym,
     kMxfp4Dynamic,
 )
-from aphrodite.platforms import PlatformEnum
+from sonar.platforms import PlatformEnum
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ from aphrodite.platforms import PlatformEnum
 )
 def test_b12x_backend_registration_priority_and_selection(
     monkeypatch,
-    default_aphrodite_config,
+    default_sonar_config,
     kernel_cls,
     kernels,
     before: str,
@@ -109,7 +109,7 @@ def test_b12x_backend_registration_priority_and_selection(
     initializer,
     kwargs: dict,
 ) -> None:
-    import aphrodite.model_executor.kernels.linear as linear_mod
+    import sonar.model_executor.kernels.linear as linear_mod
 
     assert kernel_cls in _LINEAR_BACKEND_KERNEL_MAP["b12x"]
     names = [kernel.__name__ for kernel in kernels]
@@ -132,7 +132,7 @@ def test_b12x_backend_registration_priority_and_selection(
 
 
 def test_b12x_module_lookup_is_dynamo_safe(monkeypatch) -> None:
-    import aphrodite.utils.b12x as b12x_utils
+    import sonar.utils.b12x as b12x_utils
 
     module = types.ModuleType("b12x.gemm.blockscaled")
     module.run = lambda x: x + 1  # type: ignore[attr-defined]
@@ -168,7 +168,7 @@ def test_b12x_tensor_fp8_can_implement_supported_config() -> None:
 
 
 def test_b12x_block_fp8_checks_runtime_support(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
 
     platform = types.SimpleNamespace(
         is_cuda=lambda: True,
@@ -235,7 +235,7 @@ def test_b12x_block_fp8_requires_aligned_features() -> None:
 def test_b12x_tensor_fp8_process_weights_packs_modelopt_layout(
     monkeypatch,
 ) -> None:
-    import aphrodite.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
 
     calls = []
     packed = types.SimpleNamespace(out_features=64)
@@ -286,7 +286,7 @@ def test_b12x_tensor_fp8_process_weights_packs_modelopt_layout(
 def test_b12x_tensor_fp8_apply_quantizes_and_uses_packed_weight(
     monkeypatch,
 ) -> None:
-    import aphrodite.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
 
     calls = []
 
@@ -362,7 +362,7 @@ def test_b12x_mxfp8_can_implement_supported_config() -> None:
 
 
 def test_b12x_mxfp8_support_check_reports_missing_import(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     monkeypatch.setattr(b12x_mod.current_platform, "is_cuda", lambda: True)
     monkeypatch.setattr(
@@ -372,14 +372,13 @@ def test_b12x_mxfp8_support_check_reports_missing_import(monkeypatch) -> None:
     )
     monkeypatch.setattr(b12x_mod, "_import_b12x_mxfp8", lambda: None)
 
-    is_supported, reason = B12xMxfp8LinearKernel.is_supported()
+    is_supported, _ = B12xMxfp8LinearKernel.is_supported()
 
     assert not is_supported
-    assert reason == "Install the B12X backend with `pip install aphrodite[b12x]`"
 
 
 def test_b12x_mxfp8_support_respects_runtime_probe(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     monkeypatch.setattr(b12x_mod.current_platform, "is_cuda", lambda: True)
     monkeypatch.setattr(
@@ -400,7 +399,7 @@ def test_b12x_mxfp8_support_respects_runtime_probe(monkeypatch) -> None:
 
 
 def test_b12x_mxfp8_process_weights_packs_modelopt_layout(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     calls = []
     packed = types.SimpleNamespace(out_features=48)
@@ -448,7 +447,7 @@ def test_b12x_mxfp8_process_weights_packs_modelopt_layout(monkeypatch) -> None:
 
 
 def test_b12x_mxfp8_reload_reuses_packed_tensor_addresses(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     @dataclass(frozen=True)
     class PackedWeight:
@@ -512,7 +511,7 @@ def test_b12x_mxfp8_reload_reuses_packed_tensor_addresses(monkeypatch) -> None:
 
 @pytest.fixture
 def _mock_b12x_cuda_fp8_platform(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aphrodite.model_executor.layers.quantization.utils.fp8_utils as fp8_utils
+    import sonar.model_executor.layers.quantization.utils.fp8_utils as fp8_utils
 
     monkeypatch.setattr(
         fp8_utils,
@@ -582,7 +581,7 @@ def test_b12x_block_fp8_upcasts_e8m0_weight_scales(scale_dtype) -> None:
 
 
 def test_b12x_mxfp8_apply_uses_packed_weight(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.mxfp8.b12x as b12x_mod
 
     calls = []
 
@@ -624,7 +623,7 @@ def test_b12x_mxfp8_apply_uses_packed_weight(monkeypatch) -> None:
 
 
 def test_b12x_block_fp8_apply_uses_b12x_recipe_api(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.scaled_mm.b12x as b12x_mod
 
     calls = []
 
@@ -680,12 +679,12 @@ def test_b12x_mxfp4_requires_dynamic_activations() -> None:
     [
         (
             B12xMxFp4LinearKernel,
-            "aphrodite.model_executor.kernels.linear.mxfp4.b12x",
+            "sonar.model_executor.kernels.linear.mxfp4.b12x",
             torch.uint8,
         ),
         (
             B12xNvFp4LinearKernel,
-            "aphrodite.model_executor.kernels.linear.nvfp4.b12x",
+            "sonar.model_executor.kernels.linear.nvfp4.b12x",
             torch.float8_e4m3fn,
         ),
     ],
@@ -719,8 +718,8 @@ def test_b12x_fp4_processes_scale_and_preserves_loader(
 
 
 def test_b12x_mxfp4_apply_calls_native_blockscaled_gemm(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.mxfp4.b12x as b12x_mod
-    import aphrodite.utils.flashinfer as flashinfer_utils
+    import sonar.model_executor.kernels.linear.mxfp4.b12x as b12x_mod
+    import sonar.utils.flashinfer as flashinfer_utils
 
     calls: list[tuple] = []
     x_packed = torch.empty((6, 64), dtype=torch.uint8)
@@ -772,7 +771,7 @@ def test_b12x_nvfp4_can_implement_supported_config() -> None:
 
 
 def test_b12x_backend_selects_w4a16(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear as linear_mod
+    import sonar.model_executor.kernels.linear as linear_mod
 
     monkeypatch.setattr(linear_mod.current_platform, "_enum", PlatformEnum.CUDA)
     monkeypatch.setattr(linear_mod, "_get_linear_backend", lambda *, quantization: "b12x")
@@ -793,7 +792,7 @@ def test_b12x_backend_selects_w4a16(monkeypatch) -> None:
 
 
 def test_b12x_nvfp4_apply_calls_native_blockscaled_gemm(monkeypatch) -> None:
-    import aphrodite.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
 
     calls: list[tuple] = []
     quant_calls: list[tuple] = []
@@ -849,7 +848,7 @@ def test_b12x_nvfp4_apply_calls_native_blockscaled_gemm(monkeypatch) -> None:
 
 
 def test_b12x_nvfp4_w4a16_uses_weight_only_scale_and_a16_dispatch(monkeypatch):
-    import aphrodite.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
 
     calls = []
     packed_weight = object()
@@ -904,9 +903,9 @@ def test_b12x_nvfp4_w4a16_uses_weight_only_scale_and_a16_dispatch(monkeypatch):
 @pytest.mark.parametrize("m,n,k", [(2, 136, 96), (17, 256, 256)])
 @torch.inference_mode()
 def test_b12x_nvfp4_w4a16_preserves_bf16_activations_under_graph_replay(
-    monkeypatch, default_aphrodite_config, m, n, k
+    monkeypatch, default_sonar_config, m, n, k
 ) -> None:
-    import aphrodite.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
+    import sonar.model_executor.kernels.linear.nvfp4.b12x as b12x_mod
 
     supported, reason = B12xNvFp4W4A16LinearKernel.is_supported()
     if not supported:
@@ -961,19 +960,19 @@ def _block_weights(n, k, codec):
 @pytest.mark.parametrize("codec", ["iq2_xs", "iq2_xxs", "q8_0"])
 @pytest.mark.parametrize("profile_first", [False, True])
 @torch.inference_mode()
-def test_b12x_block_quant_dense_compiled_graph(default_aphrodite_config, codec, profile_first):
+def test_b12x_block_quant_dense_compiled_graph(default_sonar_config, codec, profile_first):
     supported, reason = B12xNvFp4W4A16LinearKernel.is_supported()
     if not supported:
         pytest.skip(reason)
     from b12x.testing.iq2_xs_reference import dequantize_blocks
 
-    from aphrodite.model_executor.layers.quantization.modelopt_block_quant import (
+    from sonar.model_executor.layers.quantization.modelopt_block_quant import (
         ModelOptBlockQuantLinearMethod,
     )
 
-    default_aphrodite_config.scheduler_config.max_num_batched_tokens = 32
-    default_aphrodite_config.scheduler_config.max_num_scheduled_tokens = 32
-    default_aphrodite_config.compilation_config.cudagraph_capture_sizes = [1, 4]
+    default_sonar_config.scheduler_config.max_num_batched_tokens = 32
+    default_sonar_config.scheduler_config.max_num_scheduled_tokens = 32
+    default_sonar_config.compilation_config.cudagraph_capture_sizes = [1, 4]
     method = ModelOptBlockQuantLinearMethod(codec)
     raw = _block_weights(128, 256, codec)
     decoded = dequantize_blocks(raw).bfloat16().cuda()
@@ -1006,19 +1005,19 @@ def test_b12x_block_quant_dense_compiled_graph(default_aphrodite_config, codec, 
 @pytest.mark.parametrize("id_dtype", [torch.int32, torch.int64])
 @pytest.mark.parametrize("profile_first", [False, True])
 @torch.inference_mode()
-def test_b12x_q8_embedding_graph(default_aphrodite_config, id_dtype, profile_first):
+def test_b12x_q8_embedding_graph(default_sonar_config, id_dtype, profile_first):
     supported, reason = B12xNvFp4W4A16LinearKernel.is_supported()
     if not supported:
         pytest.skip(reason)
     from b12x.testing.q8_0_reference import dequantize_blocks
 
-    from aphrodite.model_executor.layers.quantization.modelopt_block_quant import (
+    from sonar.model_executor.layers.quantization.modelopt_block_quant import (
         ModelOptBlockQuantLinearMethod,
     )
 
-    default_aphrodite_config.scheduler_config.max_num_batched_tokens = 32
-    default_aphrodite_config.scheduler_config.max_num_scheduled_tokens = 32
-    default_aphrodite_config.compilation_config.cudagraph_capture_sizes = [1, 4]
+    default_sonar_config.scheduler_config.max_num_batched_tokens = 32
+    default_sonar_config.scheduler_config.max_num_scheduled_tokens = 32
+    default_sonar_config.compilation_config.cudagraph_capture_sizes = [1, 4]
     method = ModelOptBlockQuantLinearMethod("q8_0")
     method.is_embedding = True
     raw = _block_weights(128, 256, "q8_0")

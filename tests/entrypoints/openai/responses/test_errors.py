@@ -6,10 +6,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import aphrodite.envs as envs
-from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-from aphrodite.envs import disable_envs_cache
-from aphrodite.exceptions import GenerationError
+import sonar.envs as envs
+from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+from sonar.envs import disable_envs_cache
+from sonar.exceptions import GenerationError
 
 
 @pytest.mark.asyncio
@@ -68,9 +68,9 @@ async def test_convert_generation_error_to_streaming_response():
 def test_is_model_supported_skip_name_validation_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When APHRODITE_SKIP_MODEL_NAME_VALIDATION is set, accept any model id."""
+    """When SONAR_SKIP_MODEL_NAME_VALIDATION is set, accept any model id."""
     disable_envs_cache()
-    monkeypatch.delenv("APHRODITE_SKIP_MODEL_NAME_VALIDATION", raising=False)
+    monkeypatch.delenv("SONAR_SKIP_MODEL_NAME_VALIDATION", raising=False)
 
     mock_engine = MagicMock()
     mock_engine.model_config = MagicMock()
@@ -86,12 +86,12 @@ def test_is_model_supported_skip_name_validation_env(
 
     assert serving._is_model_supported("not-a-registered-model") is False
 
-    monkeypatch.setenv("APHRODITE_SKIP_MODEL_NAME_VALIDATION", "1")
+    monkeypatch.setenv("SONAR_SKIP_MODEL_NAME_VALIDATION", "1")
     disable_envs_cache()
-    assert envs.APHRODITE_SKIP_MODEL_NAME_VALIDATION is True
+    assert envs.SONAR_SKIP_MODEL_NAME_VALIDATION is True
     assert serving._is_model_supported("not-a-registered-model") is True
 
-    monkeypatch.setenv("APHRODITE_SKIP_MODEL_NAME_VALIDATION", "true")
+    monkeypatch.setenv("SONAR_SKIP_MODEL_NAME_VALIDATION", "true")
     disable_envs_cache()
-    assert envs.APHRODITE_SKIP_MODEL_NAME_VALIDATION is True
+    assert envs.SONAR_SKIP_MODEL_NAME_VALIDATION is True
     assert serving._is_model_supported("another-alias") is True

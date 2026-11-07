@@ -22,7 +22,7 @@ model:
 
 dependencies:
   - note: "Audio extras — required for ASR input pre-processing (librosa, soundfile)"
-    command: 'uv pip install -U "aphrodite-engine[audio]"'
+    command: 'uv pip install -U "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
 
 features: {}
 
@@ -46,7 +46,7 @@ hardware_overrides:
   amd:
     extra_args: []
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       SAFETENSORS_FAST_GPU: "1"
 
 strategy_overrides: {}
@@ -54,25 +54,25 @@ strategy_overrides: {}
 guide: |
   ## Overview
 
-  Qwen3-ASR is a speech-to-text model that achieves accurate and robust recognition across 11 languages and multiple accents. It supports prompting the model with text context in any format to produce customized ASR results and performs well on singing-voice recognition. This guide demonstrates how to deploy Qwen3-ASR efficiently with Aphrodite.
+  Qwen3-ASR is a speech-to-text model that achieves accurate and robust recognition across 11 languages and multiple accents. It supports prompting the model with text context in any format to produce customized ASR results and performs well on singing-voice recognition. This guide demonstrates how to deploy Qwen3-ASR efficiently with Sonar.
 
   ## Prerequisites
 
-  Install Aphrodite with audio dependencies:
+  Install Sonar with audio dependencies:
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --pre \
-      --extra-index-url https://wheels.vllm.ai/nightly/cu129 \
+  uv pip install -U sonar --torch-backend cu130 --pre \
+      --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
       --extra-index-url https://download.pytorch.org/whl/cu129 \
-      --index-strategy unsafe-best-match
-  uv pip install "aphrodite-engine[audio]"
+      --index-strategy first-index
+  uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ## Launching with Aphrodite
+  ## Launching with Sonar
 
   ```bash
-  aphrodite serve Qwen/Qwen3-ASR-1.7B
+  sonar serve Qwen/Qwen3-ASR-1.7B
   ```
 
   ## Client Usage
@@ -127,8 +127,8 @@ guide: |
 
   ### Offline Inference
   ```python
-  from aphrodite import LLM, SamplingParams
-  from aphrodite.assets.audio import AudioAsset
+  from sonar import LLM, SamplingParams
+  from sonar.assets.audio import AudioAsset
 
   llm = LLM(model="Qwen/Qwen3-ASR-1.7B")
   audio_asset = AudioAsset("winning_call")
@@ -145,10 +145,10 @@ guide: |
 
   ## Troubleshooting
 
-  - Make sure `aphrodite[audio]` extras are installed or audio requests will fail.
+  - Make sure `sonar[audio]` extras are installed or audio requests will fail.
   - Use the nightly wheel until Qwen3-ASR support lands in the stable release.
 
   ## References
 
   - [Model card](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)
-  - [Aphrodite audio support](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar audio support](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

@@ -3,12 +3,12 @@
 
 """Tests for DPSupervisor: unit tests and lifecycle integration tests.
 
-Lifecycle integration tests replace child Aphrodite servers with lightweight
+Lifecycle integration tests replace child Sonar servers with lightweight
 aiohttp "fake" servers controlled by the test, so the suite runs without GPUs.
 _start_children is monkeypatched to install FakeProcess objects (with
 controllable liveness/timing) alongside those fake HTTP servers.
 
-Port allocation (kept far from default Aphrodite ports to avoid conflicts):
+Port allocation (kept far from default Sonar ports to avoid conflicts):
   Supervisor : 19256
   Children   : 18000, 18001
 """
@@ -31,15 +31,15 @@ import pytest
 import uvicorn
 from fastapi import FastAPI, Response
 
-import aphrodite.entrypoints.launchers.dp_supervisor as dp_sup
-from aphrodite.entrypoints.launchers.dp_supervisor import (
+import sonar.entrypoints.launchers.dp_supervisor as dp_sup
+from sonar.entrypoints.launchers.dp_supervisor import (
     CHILD_EXIT_GRACE_S,
     DPSupervisor,
-    _build_aphrodite_dp_server_args,
+    _build_sonar_dp_server_args,
     infer_multi_port_external_lb_start_rank,
     validate_multi_port_external_lb_args,
 )
-from aphrodite.logger import init_logger
+from sonar.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -169,7 +169,7 @@ def test_infer_multi_port_external_lb_start_rank_uses_node_rank():
 
 def test_build_multi_port_external_lb_child_args_sets_external_rank_server():
     args = _make_unit_args(data_parallel_start_rank=8, api_server_count=None)
-    child_args = _build_aphrodite_dp_server_args(args, local_rank=2)
+    child_args = _build_sonar_dp_server_args(args, local_rank=2)
 
     assert child_args.port == 8002
     assert child_args.data_parallel_rank == 10
@@ -180,38 +180,38 @@ def test_build_multi_port_external_lb_child_args_sets_external_rank_server():
     assert child_args.api_server_count == 1
 
 
-def test_run_aphrodite_dp_server_uses_python_server_by_default(monkeypatch):
+def test_run_sonar_dp_server_uses_python_server_by_default(monkeypatch):
     calls: list[str] = []
 
     monkeypatch.setattr(dp_sup.os, "setpgrp", lambda: None)
     monkeypatch.setattr(dp_sup, "set_process_title", lambda *_args: None)
     monkeypatch.setattr(dp_sup, "decorate_logs", lambda *_args: None)
-    monkeypatch.setattr(dp_sup.envs, "APHRODITE_RUST_FRONTEND_PATH", None, raising=False)
-    monkeypatch.setattr(dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python"))
-    monkeypatch.setattr(dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust"))
+    monkeypatch.setattr(dp_sup.envs, "SONAR_RUST_FRONTEND_PATH", None, raising=False)
+    monkeypatch.setattr(dp_sup, "_run_python_sonar_dp_server", lambda _args: calls.append("python"))
+    monkeypatch.setattr(dp_sup, "_run_rust_sonar_dp_server", lambda _args: calls.append("rust"))
 
-    dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
+    dp_sup._run_sonar_dp_server(_make_unit_args(data_parallel_rank=4))
 
     assert calls == ["python"]
 
 
-def test_run_aphrodite_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
+def test_run_sonar_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
     calls: list[str] = []
 
     monkeypatch.setattr(dp_sup.os, "setpgrp", lambda: None)
     monkeypatch.setattr(dp_sup, "set_process_title", lambda *_args: None)
     monkeypatch.setattr(dp_sup, "decorate_logs", lambda *_args: None)
-    monkeypatch.setattr(dp_sup.envs, "APHRODITE_USE_RUST_FRONTEND", True, raising=False)
+    monkeypatch.setattr(dp_sup.envs, "SONAR_USE_RUST_FRONTEND", True, raising=False)
     monkeypatch.setattr(
         dp_sup.envs,
-        "APHRODITE_RUST_FRONTEND_PATH",
-        "/tmp/aphrodite-rs",
+        "SONAR_RUST_FRONTEND_PATH",
+        "/tmp/sonar-rs",
         raising=False,
     )
-    monkeypatch.setattr(dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python"))
-    monkeypatch.setattr(dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust"))
+    monkeypatch.setattr(dp_sup, "_run_python_sonar_dp_server", lambda _args: calls.append("python"))
+    monkeypatch.setattr(dp_sup, "_run_rust_sonar_dp_server", lambda _args: calls.append("rust"))
 
-    dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
+    dp_sup._run_sonar_dp_server(_make_unit_args(data_parallel_rank=4))
 
     assert calls == ["rust"]
 
@@ -444,12 +444,12 @@ async def test_start_server_no_log_config_when_no_filter(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle integration tests – MockAPHRODITEServer
+# Lifecycle integration tests – MockSONARServer
 # ---------------------------------------------------------------------------
 
 
-class MockAPHRODITEServer:
-    """Minimal FastAPI server that mimics one Aphrodite replica.
+class MockSONARServer:
+    """Minimal FastAPI server that mimics one Sonar replica.
     GET /health returns 200 when healthy, 503 otherwise.
     Health state is toggled by the test via set_healthy().
     """
@@ -538,27 +538,27 @@ class MockAPHRODITEServer:
         await self._serve_task
 
 
-def launch_mock_aphrodite(child_args: argparse.Namespace):
-    logger.info("Launching mock Aphrodite on port %s", child_args.port)
-    mock_aphrodite = MockAPHRODITEServer(
+def launch_mock_sonar(child_args: argparse.Namespace):
+    logger.info("Launching mock Sonar on port %s", child_args.port)
+    mock_sonar = MockSONARServer(
         port=child_args.port,
         ssl_keyfile=child_args.ssl_keyfile,
         ssl_certfile=child_args.ssl_certfile,
     )
-    asyncio.run(mock_aphrodite.start())
+    asyncio.run(mock_sonar.start())
 
 
-def launch_mock_aphrodite_with_drain(
+def launch_mock_sonar_with_drain(
     child_args: argparse.Namespace,
 ):
-    logger.info("Launching mock Aphrodite with 15s drain on port %s", child_args.port)
-    mock_aphrodite = MockAPHRODITEServer(
+    logger.info("Launching mock Sonar with 15s drain on port %s", child_args.port)
+    mock_sonar = MockSONARServer(
         port=child_args.port,
         drain_seconds=10.0,
         ssl_keyfile=child_args.ssl_keyfile,
         ssl_certfile=child_args.ssl_certfile,
     )
-    asyncio.run(mock_aphrodite.start())
+    asyncio.run(mock_sonar.start())
 
 
 # ---------------------------------------------------------------------------
@@ -663,8 +663,8 @@ async def _run_supervisor(
     launch_fn=None,
 ):
     if launch_fn is None:
-        launch_fn = launch_mock_aphrodite
-    monkeypatch.setattr(dp_sup, "_run_aphrodite_dp_server", launch_fn)
+        launch_fn = launch_mock_sonar
+    monkeypatch.setattr(dp_sup, "_run_sonar_dp_server", launch_fn)
     supervisor = DPSupervisor(args)
     task = asyncio.create_task(supervisor.run())
     await asyncio.sleep(1.0)
@@ -689,24 +689,24 @@ async def test_basic_lifecycle(monkeypatch):
     """
     args = _make_args()
 
-    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             assert await _poll_supervisor_health(-1)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(aphrodite_server_ports[0])
+        await _set_healthy(sonar_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
         print("supervisor not listening --- expected!")
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             await _set_healthy(port)
         assert await _await_supervisor_health(200)
         assert supervisor.is_ready
@@ -734,18 +734,18 @@ async def test_basic_lifecycle_with_ssl(monkeypatch):
             ssl_certfile=str(cert_file),
         )
 
-        aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+        sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
         async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
             assert await _poll_supervisor_health(-1, use_ssl=True)
             assert not supervisor.is_ready
 
-            for port in aphrodite_server_ports:
+            for port in sonar_server_ports:
                 assert await _poll_supervisor_health(-1, use_ssl=True)
                 assert not supervisor.is_ready
                 await _poll_until_api_server_running(port, use_ssl=True)
 
-            for port in aphrodite_server_ports:
+            for port in sonar_server_ports:
                 await _set_healthy(port, use_ssl=True)
 
             assert await _await_supervisor_health(200, use_ssl=True)
@@ -754,18 +754,18 @@ async def test_basic_lifecycle_with_ssl(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_startup(monkeypatch):
-    """A) One of the Aphrodite servers crashes during startup.
+    """A) One of the Sonar servers crashes during startup.
     B) DPSupervisor detects this, and cleans up resources.
     """
     args = _make_args()
 
-    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             await _poll_until_api_server_running(port)
 
         await _kill_server(port)
@@ -784,24 +784,24 @@ async def test_becomes_unhealthy(monkeypatch):
     """
     args = _make_args()
 
-    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             assert await _poll_supervisor_health(-1)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(aphrodite_server_ports[0])
+        await _set_healthy(sonar_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
         print("supervisor not listening --- expected!")
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             await _set_healthy(port)
         assert await _await_supervisor_health(200)
         assert supervisor.is_ready
@@ -824,24 +824,24 @@ async def test_dp_server_fails(monkeypatch):
     """
     args = _make_args()
 
-    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             assert await _poll_supervisor_health(-1)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(aphrodite_server_ports[0])
+        await _set_healthy(sonar_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(-1)
         assert not supervisor.is_ready
         print("supervisor not listening --- expected!")
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             await _set_healthy(port)
         assert await _await_supervisor_health(200)
         assert supervisor.is_ready
@@ -870,13 +870,13 @@ async def test_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
     _SHUTDOWN_TIMEOUT = 10.0
 
     args = _make_args(shutdown_timeout=_SHUTDOWN_TIMEOUT)
-    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    sonar_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
-    async with _run_supervisor(args, monkeypatch, launch_fn=launch_mock_aphrodite_with_drain) as (supervisor, _task):
-        for port in aphrodite_server_ports:
+    async with _run_supervisor(args, monkeypatch, launch_fn=launch_mock_sonar_with_drain) as (supervisor, _task):
+        for port in sonar_server_ports:
             await _poll_until_api_server_running(port)
 
-        for port in aphrodite_server_ports:
+        for port in sonar_server_ports:
             await _set_healthy(port)
         assert await _await_supervisor_health(200)
         assert supervisor.is_ready

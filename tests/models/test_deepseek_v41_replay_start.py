@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import CUDAGraphMode
-from aphrodite.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
-from aphrodite.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadataBuilder
-from aphrodite.v1.attention.backends.utils import PAD_SLOT_ID
-from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
-from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
+from sonar.config import CUDAGraphMode
+from sonar.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
+from sonar.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadataBuilder
+from sonar.v1.attention.backends.utils import PAD_SLOT_ID
+from sonar.v1.worker.gpu.input_batch import InputBatch, InputBuffers
+from sonar.v1.worker.gpu.model_states.default import DefaultModelState
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 

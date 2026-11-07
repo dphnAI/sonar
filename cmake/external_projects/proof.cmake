@@ -15,7 +15,7 @@ FetchContent_MakeAvailable(dphn_blake3 dphn_monocypher)
 # Host ATen operations support CPU, CUDA/ROCm and MPS tensors without GPU kernels.
 define_extension_target(
   _proof_C
-  DESTINATION aphrodite
+  DESTINATION sonar
   LANGUAGE CXX
   SOURCES
     csrc/proof/proof.cpp

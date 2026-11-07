@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite.config import ModelConfig
-from aphrodite.inputs import MultiModalDataDict
-from aphrodite.renderers.chat_utils import (
+from sonar.config import ModelConfig
+from sonar.inputs import MultiModalDataDict
+from sonar.renderers.chat_utils import (
     ChatCompletionMessageParam,
     parse_chat_messages,
     parse_chat_messages_async,

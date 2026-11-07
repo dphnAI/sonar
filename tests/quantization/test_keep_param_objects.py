@@ -7,29 +7,29 @@ from collections.abc import Callable
 import pytest
 import torch
 
-from aphrodite.config.model import ModelConfig
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
-from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.config.model import ModelConfig
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.linear import ReplicatedLinear
+from sonar.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
+from sonar.model_executor.layers.quantization.base_config import QuantizationConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
 )
-from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.model_executor.layers.quantization.fp8 import Fp8Config
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptFp8Config,
     ModelOptMxFp8Config,
     ModelOptNvFp4Config,
 )
-from aphrodite.model_executor.layers.quantization.mxfp4 import Mxfp4Config
-from aphrodite.model_executor.layers.quantization.online.mxfp4 import (
+from sonar.model_executor.layers.quantization.mxfp4 import Mxfp4Config
+from sonar.model_executor.layers.quantization.online.mxfp4 import (
     Mxfp4OnlineLinearMethod,
     Mxfp4OnlineMoEMethod,
 )
-from aphrodite.model_executor.model_loader.reload.meta import materialize_meta_tensor
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_humming
+from sonar.model_executor.model_loader.reload.meta import materialize_meta_tensor
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_humming
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_device_capability_family(100),
@@ -178,8 +178,8 @@ IDS = [
 ]
 
 
-def _check_keeps_param_objects(build: Callable, aphrodite_config) -> None:
-    aphrodite_config.model_config = ModelConfig()
+def _check_keeps_param_objects(build: Callable, sonar_config) -> None:
+    sonar_config.model_config = ModelConfig()
     with torch.device("cuda"):
         layer, method = build()
         _load(layer)
@@ -208,10 +208,8 @@ def _check_keeps_param_objects(build: Callable, aphrodite_config) -> None:
 
 
 @pytest.mark.parametrize("build", CASES, ids=IDS)
-def test_process_weights_after_loading_keeps_param_objects(
-    build: Callable, default_aphrodite_config, dist_init
-) -> None:
-    _check_keeps_param_objects(build, default_aphrodite_config)
+def test_process_weights_after_loading_keeps_param_objects(build: Callable, default_sonar_config, dist_init) -> None:
+    _check_keeps_param_objects(build, default_sonar_config)
 
 
 FORCED_CASES: list[Callable] = [
@@ -230,20 +228,20 @@ FORCED_IDS = [
 
 @pytest.mark.parametrize("backend", ["marlin", "humming"])
 @pytest.mark.parametrize("build", FORCED_CASES, ids=FORCED_IDS)
-def test_forced_backend_keeps_param_objects(build: Callable, backend: str, default_aphrodite_config, dist_init) -> None:
+def test_forced_backend_keeps_param_objects(build: Callable, backend: str, default_sonar_config, dist_init) -> None:
     """Weight-only backends leave the input scales unused but registered."""
     if backend == "humming" and not has_humming():
         pytest.skip("humming is not installed")
-    default_aphrodite_config.kernel_config.linear_backend = backend
-    default_aphrodite_config.kernel_config.moe_backend = backend
-    _check_keeps_param_objects(build, default_aphrodite_config)
+    default_sonar_config.kernel_config.linear_backend = backend
+    default_sonar_config.kernel_config.moe_backend = backend
+    _check_keeps_param_objects(build, default_sonar_config)
 
 
-def test_marlin_bias_keeps_its_address(default_aphrodite_config, dist_init) -> None:
+def test_marlin_bias_keeps_its_address(default_sonar_config, dist_init) -> None:
     """Captured CUDA graphs read the bias at its startup address (direct reload
     writes the checkpoint bias there before rerunning post-load processing)."""
-    default_aphrodite_config.model_config = ModelConfig()
-    default_aphrodite_config.kernel_config.linear_backend = "marlin"
+    default_sonar_config.model_config = ModelConfig()
+    default_sonar_config.kernel_config.linear_backend = "marlin"
     gptq = AutoGPTQConfig.from_config(dict(bits=4, group_size=128, desc_act=False, sym=True))
     with torch.device("cuda"):
         layer = ReplicatedLinear(SIZE, SIZE, bias=True, quant_config=gptq)

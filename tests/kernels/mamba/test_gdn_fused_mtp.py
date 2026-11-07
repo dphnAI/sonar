@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not (current_platform.is_rocm() or (current_platform.is_cuda() and current_platform.has_device_capability(80))):
     pytest.skip(
@@ -19,28 +19,28 @@ if not (current_platform.is_rocm() or (current_platform.is_cuda() and current_pl
         allow_module_level=True,
     )
 
-from aphrodite.config import SpeculativeConfig, set_current_aphrodite_config  # noqa: E402
-from aphrodite.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn  # noqa: E402
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # noqa: E402
+from sonar.config import SpeculativeConfig, set_current_sonar_config  # noqa: E402
+from sonar.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn  # noqa: E402
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # noqa: E402
     ChunkGatedDeltaRule,
     QwenGatedDeltaNetAttention,
 )
-from aphrodite.model_executor.layers.mamba.mamba_utils import (  # noqa: E402
+from sonar.model_executor.layers.mamba.mamba_utils import (  # noqa: E402
     MambaStateShapeCalculator,
 )
-from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (  # noqa: E402
+from sonar.third_party.flash_linear_attention.ops.layernorm_guard import (  # noqa: E402
     rmsnorm_fn,
 )
-from aphrodite.utils.torch_utils import _encode_layer_name  # noqa: E402
-from aphrodite.v1.attention.backends.gdn_attn import (  # noqa: E402
+from sonar.utils.torch_utils import _encode_layer_name  # noqa: E402
+from sonar.v1.attention.backends.gdn_attn import (  # noqa: E402
     GDNAttentionMetadata,
     GDNAttentionMetadataBuilder,
 )
-from aphrodite.v1.kv_cache_interface import MambaSpec  # noqa: E402
+from sonar.v1.kv_cache_interface import MambaSpec  # noqa: E402
 from tests.v1.attention.utils import (  # noqa: E402
     BatchSpec,
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
 )
 
 NUM_SPEC = 3
@@ -77,8 +77,8 @@ class _TestGatedNorm:
         )
 
 
-def _make_aphrodite_config():
-    config = create_aphrodite_config(
+def _make_sonar_config():
+    config = create_sonar_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
         hf_config_override={"linear_key_head_dim": K},
@@ -90,7 +90,7 @@ def _make_aphrodite_config():
 
 
 def _build_layer(
-    aphrodite_config,
+    sonar_config,
     conv_state: torch.Tensor,
     ssm_state: torch.Tensor,
     a_log: torch.Tensor,
@@ -119,7 +119,7 @@ def _build_layer(
         layer_norm_epsilon=EPS,
         gdn_decode_kernel="cuda",
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer.chunk_gated_delta_rule = ChunkGatedDeltaRule()
     layer.gdn_prefill_backend = layer.chunk_gated_delta_rule.gdn_prefill_backend
     for name in (
@@ -215,11 +215,11 @@ def test_fused_forward_uses_packed_entrypoint() -> None:
 
     with (
         patch.object(
-            torch.ops.aphrodite,
+            torch.ops.sonar,
             "qwen_gdn_attention_core_fused_norm_packed",
             side_effect=packed_op,
         ) as packed_mock,
-        patch.object(torch.ops.aphrodite, "qwen_gdn_attention_core") as triton_mock,
+        patch.object(torch.ops.sonar, "qwen_gdn_attention_core") as triton_mock,
     ):
         output = layer.forward_cuda(hidden_states)
 
@@ -273,7 +273,7 @@ def test_fused_model_path_matches_reference(
     """Fused MTP and its mixed/prefill/decode fallbacks match the reference."""
     torch.manual_seed(1)
     device = torch.device("cuda")
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     builder = GDNAttentionMetadataBuilder(
         kv_cache_spec=MambaSpec(
             block_size=BLOCK_SIZE,
@@ -282,7 +282,7 @@ def test_fused_model_path_matches_reference(
             num_speculative_blocks=NUM_SPEC,
         ),
         layer_names=[PREFIX],
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         device=device,
     )
     batch = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
@@ -298,7 +298,7 @@ def test_fused_model_path_matches_reference(
         )
         common = common.replace(query_start_loc=device_query_start_loc)
     common.block_table_tensor.add_(1)
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         metadata = builder.build(
             common_prefix_len=0,
             common_attn_metadata=common,
@@ -334,7 +334,7 @@ def test_fused_model_path_matches_reference(
     context = types.SimpleNamespace(attn_metadata={PREFIX: metadata})
 
     reference_layer = _build_layer(
-        aphrodite_config,
+        sonar_config,
         conv_state_seed.clone(),
         ssm_state_seed.clone(),
         a_log,
@@ -354,7 +354,7 @@ def test_fused_model_path_matches_reference(
     reference_out = reference_layer.norm(reference_out, output_gate)
 
     fused_layer = _build_layer(
-        aphrodite_config,
+        sonar_config,
         conv_state_seed.clone(),
         ssm_state_seed.clone(),
         a_log,
@@ -370,7 +370,7 @@ def test_fused_model_path_matches_reference(
         patch.object(qwen_gdn_linear_attn, "get_forward_context", return_value=context),
         patch.object(qwen_gdn_linear_attn, "fused_mtp_decode_impl", return_value=fused_mock),
     ):
-        torch.ops.aphrodite.qwen_gdn_attention_core_fused_norm_packed(
+        torch.ops.sonar.qwen_gdn_attention_core_fused_norm_packed(
             mixed_qkvz.clone(),
             ba,
             fused_out,

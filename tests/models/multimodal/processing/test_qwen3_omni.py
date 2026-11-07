@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ...utils import build_model_context
 
@@ -25,7 +25,7 @@ def test_processor_with_audio_sample_rate(
     audio_sample_rate: int,
     audio_duration_sec: float,
 ) -> None:
-    """Test that Aphrodite's processor generates expected outputs with audio_sample_rate.
+    """Test that Sonar's processor generates expected outputs with audio_sample_rate.
 
     This validates that the processor correctly handles audio_sample_rate
     passed via hf_processor_mm_kwargs and generates audio tokens.

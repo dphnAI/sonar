@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use winnow::error::ErrMode;
 
 use super::{
@@ -119,8 +119,8 @@ impl ReasoningParser for MiniMaxM3ReasoningParser {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::Tokenizer as _;
-    use aphrodite_tokenizer::test_utils::decode_ids;
+    use sonar_tokenizer::Tokenizer as _;
+    use sonar_tokenizer::test_utils::decode_ids;
 
     use super::MiniMaxM3ReasoningParser;
     use crate::reasoning::ReasoningParser;

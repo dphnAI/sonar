@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.lora.utils import get_supported_lora_modules
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
-from aphrodite.models.inkling.nvidia import moe
-from aphrodite.models.inkling.nvidia.model import _TmlForCausalLMBase
-from aphrodite.platforms import current_platform
+from sonar.lora.utils import get_supported_lora_modules
+from sonar.model_executor.layers.quantization.modelopt import ModelOptNvFp4Config
+from sonar.models.inkling.nvidia import moe
+from sonar.models.inkling.nvidia.model import _TmlForCausalLMBase
+from sonar.platforms import current_platform
 
 
 def test_gate_loads_directly_into_padded_runtime_weight() -> None:
@@ -99,7 +99,7 @@ def test_inkling_mapper_maps_modelopt_exclusions() -> None:
         }
     )
 
-    quant_config.apply_aphrodite_mapper(_TmlForCausalLMBase.hf_to_aphrodite_mapper.get_rename_mapper())
+    quant_config.apply_sonar_mapper(_TmlForCausalLMBase.hf_to_sonar_mapper.get_rename_mapper())
 
     assert quant_config.is_layer_excluded("model.layers.2.mlp.experts")
     assert quant_config.is_layer_excluded("model.layers.2.mlp.shared_experts")
@@ -121,7 +121,7 @@ def test_inkling_mapper_maps_compressed_tensors_expert_params(projection: str, s
     projection_param = f"{projection}_weight.{suffix}" if nested else f"{projection}_{suffix}"
     source = f"model.llm.layers.2.mlp.experts.{projection_param}"
 
-    mapped = _TmlForCausalLMBase.hf_to_aphrodite_mapper.apply_list([source])
+    mapped = _TmlForCausalLMBase.hf_to_sonar_mapper.apply_list([source])
 
     assert mapped == [f"model.layers.2.mlp.experts.{projection}_{suffix}"]
 

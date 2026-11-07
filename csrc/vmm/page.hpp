@@ -7,7 +7,7 @@
 
 #include "constants.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 class Page {
@@ -42,4 +42,4 @@ class CPUPage : public Page {
 };
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

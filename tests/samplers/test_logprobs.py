@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.logprobs import FlatLogprobs
+from sonar import SamplingParams
+from sonar.logprobs import FlatLogprobs
 
 MODELS = ["distilbert/distilgpt2"]
 MAX_TOKENS = 5
@@ -18,15 +18,15 @@ MAX_LOGPROBS = max(NUM_TOP_LOGPROBS, NUM_PROMPT_LOGPROBS)
 @pytest.mark.parametrize("greedy", [True, False])
 @pytest.mark.parametrize("flat_logprobs", [True, False])
 def test_ranks(
-    aphrodite_runner,
+    sonar_runner,
     model,
     dtype,
     greedy,
     flat_logprobs,
     example_prompts,
 ):
-    with aphrodite_runner(model, dtype=dtype, max_logprobs=MAX_LOGPROBS) as aphrodite_model:
-        tokenizer = aphrodite_model.llm.get_tokenizer()
+    with sonar_runner(model, dtype=dtype, max_logprobs=MAX_LOGPROBS) as sonar_model:
+        tokenizer = sonar_model.llm.get_tokenizer()
         example_prompt_tokens = [tokenizer.encode(prompt) for prompt in example_prompts]
         sampling_params = SamplingParams(
             temperature=0.0 if greedy else 1.0,
@@ -36,7 +36,7 @@ def test_ranks(
             prompt_logprobs=NUM_PROMPT_LOGPROBS,
             flat_logprobs=flat_logprobs,
         )
-        results = aphrodite_model.generate_w_logprobs(example_prompts, sampling_params)
+        results = sonar_model.generate_w_logprobs(example_prompts, sampling_params)
 
     assert len(results) == len(example_prompt_tokens)
     for i, (result, prompt_tokens) in enumerate(zip(results, example_prompt_tokens)):

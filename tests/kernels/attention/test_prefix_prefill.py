@@ -11,12 +11,12 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
-from aphrodite.v1.attention.ops.chunked_prefill_paged_decode import (
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE, set_random_seed
+from sonar.v1.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode,
 )
-from aphrodite.v1.attention.ops.prefix_prefill import context_attention_fwd
+from sonar.v1.attention.ops.prefix_prefill import context_attention_fwd
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -309,8 +309,8 @@ def test_contexted_kv_attention(
 @torch.inference_mode()
 def test_rocm_backend_sliding_window_includes_boundary_token(sliding_window: int | None, query_len: int) -> None:
     """A window of W must include the current token and W - 1 preceding tokens."""
-    from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionImpl
-    from aphrodite.v1.attention.ops.paged_attn import PagedAttention
+    from sonar.v1.attention.backends.rocm_attn import RocmAttentionImpl
+    from sonar.v1.attention.ops.paged_attn import PagedAttention
 
     device, dtype = "cuda:0", torch.float16
     num_heads, head_size, seq_len = 4, 128, 8
@@ -667,7 +667,7 @@ def test_contexted_kv_attention_alibi(
     torch.accelerator.set_device_index(device)
 
     def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
-        # Fork from: aphrodite/aphrodite/model_executor/models/bloom.py#L44
+        # Fork from: sonar/sonar/model_executor/models/bloom.py#L44
         closest_power_of_2 = 2 ** math.floor(math.log2(total_num_heads))
         base = torch.tensor(
             2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))),

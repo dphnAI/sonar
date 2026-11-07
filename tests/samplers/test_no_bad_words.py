@@ -8,12 +8,12 @@ Run `pytest tests/samplers/test_no_bad_words.py`.
 
 from transformers import AutoTokenizer
 
-from aphrodite import SamplingParams
-from tests.conftest import AphroditeRunner
+from sonar import SamplingParams
+from tests.conftest import SonarRunner
 
 
 def _generate(
-    llm: AphroditeRunner,
+    llm: SonarRunner,
     prompt: str,
     num_prompt_tokens: int,
     temperature: float = 0,
@@ -47,15 +47,15 @@ class TestOneTokenBadWord:
         self.num_prompt_tokens = len(self._encode(self.PROMPT))
         self.target_token_id = self._encode(self.TARGET_TOKEN, add_special_tokens=False)[0]
 
-    def test_one_token_bad_word(self, aphrodite_runner):
-        with aphrodite_runner(self.MODEL) as llm:
+    def test_one_token_bad_word(self, sonar_runner):
+        with sonar_runner(self.MODEL) as llm:
             output_token_ids = self._generate(llm)
             assert output_token_ids[0] == self.target_token_id
 
             output_token_ids = self._generate(llm, bad_words=[self.TARGET_TOKEN])
             assert self.target_token_id not in output_token_ids
 
-    def _generate(self, llm: AphroditeRunner, bad_words: list[str] | None = None) -> list[int]:
+    def _generate(self, llm: SonarRunner, bad_words: list[str] | None = None) -> list[int]:
         return _generate(
             llm=llm,
             prompt=self.PROMPT,
@@ -84,8 +84,8 @@ class TestTwoTokenBadWord:
         self.target_token_id2 = self._encode(self.TARGET_TOKEN2, add_special_tokens=False)[0]
         self.neighbour_token_id2 = self._encode(self.NEIGHBOUR_TOKEN2, add_special_tokens=False)[0]
 
-    def test_two_token_bad_word(self, aphrodite_runner):
-        with aphrodite_runner(self.MODEL, dtype="half") as llm:
+    def test_two_token_bad_word(self, sonar_runner):
+        with sonar_runner(self.MODEL, dtype="half") as llm:
             output_token_ids = self._generate(llm)
             assert output_token_ids[:2] == [
                 self.target_token_id1,
@@ -132,7 +132,7 @@ class TestTwoTokenBadWord:
             assert not self._contains(output_token_ids, [self.target_token_id1, self.neighbour_token_id2])
             assert (self.target_token_id2 in output_token_ids) or (self.neighbour_token_id2 in output_token_ids)
 
-    def _generate(self, llm: AphroditeRunner, bad_words: list[str] | None = None) -> list[int]:
+    def _generate(self, llm: SonarRunner, bad_words: list[str] | None = None) -> list[int]:
         return _generate(
             llm=llm,
             prompt=self.PROMPT,

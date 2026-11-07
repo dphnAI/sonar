@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.models.deepseek_v41.sm120.sampling import (
+from sonar.models.deepseek_v41.sm120.sampling import (
     combine_rounded_sum_partials,
     markov_shard_partial,
     sample_rounded_sum,
 )
-from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from sonar.v1.worker.gpu.sample.vocab_parallel import VocabShard
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
@@ -157,7 +157,7 @@ def _config(*, batch_sharded=False, watermark=None, return_sampling_mask=False):
 
 
 def _speculator(**overrides):
-    from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
+    from sonar.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     spec = DSparkSpeculator.__new__(DSparkSpeculator)
     spec.use_draft_logits = True
@@ -171,7 +171,7 @@ def _speculator(**overrides):
     spec.max_num_reqs = 2
     spec.num_speculative_steps = STEPS
     spec.device = torch.device("cpu")
-    spec.aphrodite_config = _config()
+    spec.sonar_config = _config()
     spec.draft_logits_spec = lambda config: (torch.float32, float("-inf"))
     for name, value in overrides.items():
         setattr(spec, name, value)
@@ -201,9 +201,9 @@ def test_speculator_enables_vocab_parallel_draft():
         {"draft_watermarker": object()},
         {"use_acceptance_estimator": True},
         {"_draft_topk": 8},
-        {"aphrodite_config": _config(batch_sharded=True)},
-        {"aphrodite_config": _config(watermark=object())},
-        {"aphrodite_config": _config(return_sampling_mask=True)},
+        {"sonar_config": _config(batch_sharded=True)},
+        {"sonar_config": _config(watermark=object())},
+        {"sonar_config": _config(return_sampling_mask=True)},
         {"enable_adaptive_verification": True},
         {"speculative_config": SimpleNamespace(rejection_sample_method="synthetic")},
     ],

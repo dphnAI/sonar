@@ -22,24 +22,24 @@ import pytest
 import ray
 import torch
 
-from aphrodite import LLM
-from aphrodite.config import KVTransferConfig, set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.utils import (
+from sonar import LLM
+from sonar.config import KVTransferConfig, set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.utils import (
     EngineTransferInfo,
     KVOutputAggregator,
     TransferTopology,
     get_current_attn_backend,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import nixl
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1 import nixl
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorRole,
     KVConnectorTransferResults,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiKVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl import (
     NixlAgentMetadata,
     NixlConnector,
     NixlConnectorMetadata,
@@ -48,24 +48,24 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
     NixlHandshakePayload,
     NixlKVConnectorStats,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
+from sonar.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     HeartbeatInfo,
     RemoteMeta,
     ReqMeta,
     compute_nixl_compatibility_hash,
 )
-from aphrodite.distributed.kv_transfer.kv_transfer_state import (
+from sonar.distributed.kv_transfer.kv_transfer_state import (
     ensure_kv_transfer_shutdown,
     has_kv_transfer_group,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import Platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.output_processor import OutputProcessor
-from aphrodite.v1.kv_cache_interface import (
+from sonar.forward_context import ForwardContext
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
+from sonar.platforms.interface import Platform
+from sonar.sampling_params import SamplingParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.output_processor import OutputProcessor
+from sonar.v1.kv_cache_interface import (
     AttentionSpec,
     CircularBufferSpec,
     FullAttentionSpec,
@@ -76,16 +76,16 @@ from aphrodite.v1.kv_cache_interface import (
     MLAAttentionSpec,
     compute_layer_kv_cache_shape_bytes,
 )
-from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+from sonar.v1.request import RequestStatus
 from tests.v1.attention.utils import dense_kv_cache_views
 from tests.v1.spec_decode.utils import fake_speculative_config
 
 from .utils import (
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
     expand_strided_descs,
     make_kv_cache_config,
     maybe_update_block_size,
@@ -94,7 +94,7 @@ from .utils import (
 
 @pytest.fixture(scope="module", autouse=True)
 def clear_kv_transfer():
-    """The test cases in this file use `APHRODITE_ENABLE_V1_MULTIPROCESSING=0`,
+    """The test cases in this file use `SONAR_ENABLE_V1_MULTIPROCESSING=0`,
     causing the global variable `_KV_CONNECTOR_AGENT`
     to be assigned but never deleted.
 
@@ -259,11 +259,11 @@ nixl_agent = FakeNixlWrapper
 
 def test_basic_interface():
     """Unit test for basic NixlConnector interface functionality."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -301,11 +301,11 @@ def test_prompt_less_than_block_size():
     partial block. The D worker should schedule an async read
     in this case.
     """
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # Half of a block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_TOKENS = int(BLOCK_SIZE * 0.5)
 
     # Request will have 1 partial remote block.
@@ -332,9 +332,9 @@ def test_abort_immediately_remote_prefill_enqueues_empty_recv():
     be added to the scheduler's waiting queue then immediately aborted, so the
     NIXL connector's request_finished hook enqueues an empty recv to notify
     the prefill instance to free its blocks."""
-    from aphrodite.v1.request import RequestStatus
+    from sonar.v1.request import RequestStatus
 
-    scheduler = create_scheduler(create_aphrodite_config())
+    scheduler = create_scheduler(create_sonar_config())
 
     request = create_request(request_id=42, num_tokens=10, do_remote_prefill=True)
     assert request.kv_transfer_params is not None
@@ -365,10 +365,10 @@ def test_prefill_exports_cached_tokens_in_kv_transfer_params():
     prompt_tokens_details instead of the ~100% local hit it measures
     when pulling the KVs from the remote.
     """
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_TOKENS = BLOCK_SIZE * 3
 
     # Warm the prefix cache with a request sharing the full prompt.
@@ -408,7 +408,7 @@ def test_prefill_exports_cached_tokens_in_kv_transfer_params():
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_kv_transfer_handshake(dist_init):
@@ -417,13 +417,13 @@ def test_kv_transfer_handshake(dist_init):
     # of role SCHEDULER, and expect it to be serving NixlAgentMetadata from
     # all workers of the instance.
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
-    aphrodite_config.cache_config.kv_cache_layout = "BLHNC"
+    sonar_config = create_sonar_config(block_size=block_size)
+    sonar_config.cache_config.kv_cache_layout = "BLHNC"
     # in case the test runs on non-GPU machine
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cpu"
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config.kv_transfer_config.kv_buffer_device = "cpu"
+    scheduler = create_scheduler(sonar_config)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         # Create two NixlConnector of role WORKER, one is the worker of
         # the scheduler (prefill), the other is a worker of decode instance.
 
@@ -441,7 +441,7 @@ def test_kv_transfer_handshake(dist_init):
             )
         ]
         kv_cache_config = KVCacheConfig(num_blocks=2, kv_cache_tensors=[], kv_cache_groups=kv_cache_groups)
-        prefill_connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        prefill_connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         kv_cache_spec = cast(AttentionSpec, kv_cache_config.kv_cache_groups[0].kv_cache_spec)
         raw = torch.zeros(
             kv_cache_spec.page_size_bytes * kv_cache_config.num_blocks * 3,
@@ -471,7 +471,7 @@ def test_kv_transfer_handshake(dist_init):
 
         # Simulate a request that finishes prefill, which returns
         # corresponding NixlConnectorMetadata for decode instance.
-        BLOCK_SIZE = aphrodite_config.cache_config.block_size
+        BLOCK_SIZE = sonar_config.cache_config.block_size
         NUM_EXTERNAL_FULL_BLOCKS = 2
         NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -489,7 +489,7 @@ def test_kv_transfer_handshake(dist_init):
         assert kv_connector_metadata["transfer_mode"] == "pull"
 
         # Decode connector will be able to create handshake with the prefill connector.
-        decode_connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        decode_connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         decode_connector.register_kv_caches(kv_caches)
 
         # Here we are testing the retrieval of NIXLAgentMetadata.
@@ -547,7 +547,7 @@ class FakeNixlConnectorWorker(NixlConnectorWorker):
             tensor_shape=test_shape,
         )
 
-        self.compat_hash = compute_nixl_compatibility_hash(self.aphrodite_config, self.backend_name)
+        self.compat_hash = compute_nixl_compatibility_hash(self.sonar_config, self.backend_name)
 
     def _nixl_handshake(
         self,
@@ -650,12 +650,12 @@ class TestNixlHandshake:
         ],
     )
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     def test_pcp_producer_exposes_dcp_shards_or_canonical_replica(
         self,
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         pcp_rank,
         pcp_size,
@@ -663,24 +663,22 @@ class TestNixlHandshake:
         expected_tracked,
     ):
         """Replicated PCP is canonicalized; PCP-DCP publishes every shard."""
-        from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+        from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(kv_role="kv_producer", block_size=block_size)
-        aphrodite_config.parallel_config.prefill_context_parallel_size = pcp_size
-        aphrodite_config.parallel_config.decode_context_parallel_size = dcp_size
+        sonar_config = create_sonar_config(kv_role="kv_producer", block_size=block_size)
+        sonar_config.parallel_config.prefill_context_parallel_size = pcp_size
+        sonar_config.parallel_config.decode_context_parallel_size = dcp_size
         with (
             patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_current_attn_backends",
+                "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_current_attn_backends",
                 return_value=[FlashAttentionBackend],
             ),
-            patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_pcp_group"
-            ) as mock_get_pcp_group,
+            patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_pcp_group") as mock_get_pcp_group,
         ):
             mock_get_pcp_group.return_value.rank_in_group = pcp_rank
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
@@ -718,12 +716,12 @@ class TestNixlHandshake:
         assert results.finished_sending == ({"sent"} if expected_tracked else set())
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     def test_multi_xfer_one_engine(
         self,
-        default_aphrodite_config,
+        default_sonar_config,
         # dist_init is a fixture that initializes the distributed environment.
         dist_init,
     ):
@@ -733,15 +731,15 @@ class TestNixlHandshake:
         `request_id`.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
 
         request_id = "req_id"
 
         # Test worker role in decode server.
         kv_cache_config = make_kv_cache_config(block_size=block_size, num_blocks=10)
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            aphrodite_config,
+            sonar_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_config=kv_cache_config,
@@ -798,7 +796,7 @@ class TestNixlHandshake:
             connector.clear_connector_metadata()
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     @pytest.mark.parametrize(
@@ -812,7 +810,7 @@ class TestNixlHandshake:
     )
     def test_async_load_kv(
         self,
-        default_aphrodite_config,
+        default_sonar_config,
         # Fixture that initializes the distributed environment.
         dist_init,
         # Simulate consumer-producer TP sizes.
@@ -821,16 +819,16 @@ class TestNixlHandshake:
     ):
         """Test that NixlConnector's start_load_kv should be non-blocking."""
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
-        aphrodite_config.parallel_config.tensor_parallel_size = decode_tp_size
+        sonar_config = create_sonar_config(block_size=block_size)
+        sonar_config.parallel_config.tensor_parallel_size = decode_tp_size
 
         # Test worker role in decode server.
         connector = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
-        connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id)
+        connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id)
         metadata = NixlConnectorMetadata()
         metadata.add_new_req_to_recv(
             request_id="id",
@@ -866,31 +864,31 @@ class TestNixlHandshake:
         raise TimeoutError("Took too long to complete async handshake.")
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     @pytest.mark.parametrize("local_tp_size", [1, 2])
     def test_prefill_tp_size_greater_than_decode_tp_size(
-        self, local_tp_size: int, default_aphrodite_config, dist_init, monkeypatch
+        self, local_tp_size: int, default_sonar_config, dist_init, monkeypatch
     ):
         """Verify remote TP > local TP handshake succeeds with different
         remote configurations.
         """
         monkeypatch.setattr(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",
             lambda: local_tp_size,
         )
 
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
 
         # num_blocks=1 keeps the fake handshake's region_num_blocks consistent
         # with the minimal single-block registration below (num_descs == 1);
         # _fa_desc_replicated cross-checks the two.
         kv_cache_config = make_kv_cache_config(block_size=block_size, num_blocks=1)
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            aphrodite_config,
+            sonar_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_config=kv_cache_config,
@@ -945,31 +943,31 @@ class TestNixlHandshake:
         check_handshake(6)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_prefill_tp_size_greater_than_decode_tp_size_mla(self, default_aphrodite_config, dist_init):
+    def test_prefill_tp_size_greater_than_decode_tp_size_mla(self, default_sonar_config, dist_init):
         """Verify remote TP > local TP handshake succeeds with different
         remote configurations for an MLA model.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
         d_tp_size = 1
         p_tp_size = 2
 
         # Build two separate connectors/workers to emulate P TP=2 ranks.
         conn_p0 = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
         conn_p1 = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
-        conn_p0.connector_worker = FakeNixlConnectorWorker(aphrodite_config, conn_p0.engine_id, hand_shake_latency=0)
-        conn_p1.connector_worker = FakeNixlConnectorWorker(aphrodite_config, conn_p1.engine_id, hand_shake_latency=0)
+        conn_p0.connector_worker = FakeNixlConnectorWorker(sonar_config, conn_p0.engine_id, hand_shake_latency=0)
+        conn_p1.connector_worker = FakeNixlConnectorWorker(sonar_config, conn_p1.engine_id, hand_shake_latency=0)
 
         # Force P world size to 2 for both workers and emulate distinct tp_ranks.
         # Also enable MLA path so that expected_finished_count is updated.
@@ -1001,7 +999,7 @@ class TestNixlHandshake:
 
         # E2E aggregation: ensure the aggregated output marks the request
         # as finished using the connector's expected_finished_count.
-        from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
+        from sonar.v1.outputs import KVConnectorOutput, ModelRunnerOutput
 
         aggregator = KVOutputAggregator.from_connector(conn_p0, world_size=2)
 
@@ -1040,26 +1038,26 @@ class TestNixlHandshake:
         assert req_id not in conn_p1.connector_worker._reqs_to_process
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     def test_concurrent_load_kv(
         self,
-        default_aphrodite_config,
+        default_sonar_config,
         # dist_init is a fixture that initializes the distributed environment.
         dist_init,
     ):
         """Test that multiple start_load_kv calls should occur concurrently."""
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
 
         # Test worker role in decode server.
         connector = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
-        connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id)
+        connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id)
         # Register (mocked) local xfer handler
         # worker = connector.connector_worker
         # worker.src_xfer_handles_by_block_size = {worker.block_size: 1}
@@ -1108,17 +1106,17 @@ class TestNixlHandshake:
         [("LBHNC", False), ("BLHNC", True)],
     )
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     def test_handshake_fails_on_kv_cache_layout_mismatch(
-        self, default_aphrodite_config, dist_init, kv_cache_layout, enable_permute_local_kv
+        self, default_sonar_config, dist_init, kv_cache_layout, enable_permute_local_kv
     ):
         """Verify that adding a remote agent fails if kv_cache_layout differs.
         This test is only relevant for heterogeneous TP.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(
+        sonar_config = create_sonar_config(
             enable_permute_local_kv=enable_permute_local_kv,
             block_size=block_size,
         )
@@ -1126,17 +1124,17 @@ class TestNixlHandshake:
         # Mock TP world size to 2 to force heterogeneous TP when
         # remote_tp_size=1
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=2,
         ):
             # Initialize connector and worker (with fake NIXL wrapper)
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                aphrodite_config,
+                sonar_config,
                 connector.engine_id,
                 hand_shake_latency=0,
                 kv_cache_layout=kv_cache_layout,
@@ -1173,30 +1171,30 @@ class TestNixlHandshake:
                 worker.add_remote_agent(meta, remote_tp_size=1)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_succeed_on_kv_cache_layout_mismatch_with_experimental(self, default_aphrodite_config, dist_init):
+    def test_handshake_succeed_on_kv_cache_layout_mismatch_with_experimental(self, default_sonar_config, dist_init):
         """Verify that adding a remote agent fails if kv_cache_layout differs.
         This test is only relevant for heterogeneous TP.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(enable_permute_local_kv=True, block_size=block_size)
+        sonar_config = create_sonar_config(enable_permute_local_kv=True, block_size=block_size)
 
         # Mock TP world size to 2 to force heterogeneous TP when
         # remote_tp_size=1
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=2,
         ):
             # Initialize connector and worker (with fake NIXL wrapper)
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                aphrodite_config,
+                sonar_config,
                 connector.engine_id,
                 hand_shake_latency=0,
                 kv_cache_layout="LBNHC",
@@ -1233,12 +1231,12 @@ class TestNixlHandshake:
             worker.add_remote_agent(meta, remote_tp_size=1)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_hybrid_mamba_attention_remote_descs_use_packed_head_slices(self, default_aphrodite_config, dist_init):
+    def test_hybrid_mamba_attention_remote_descs_use_packed_head_slices(self, default_sonar_config, dist_init):
         worker = FakeNixlConnectorWorker(
-            create_aphrodite_config(block_size=maybe_update_block_size(16)),
+            create_sonar_config(block_size=maybe_update_block_size(16)),
             "engine",
             hand_shake_latency=0,
         )
@@ -1287,27 +1285,27 @@ class TestNixlHandshake:
         ]
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_mixed_fa_mla_hetero_tp(self, default_aphrodite_config, dist_init):
+    def test_handshake_mixed_fa_mla_hetero_tp(self, default_sonar_config, dist_init):
         """Mixed full-attn (SPLIT) + MLA (REPLICATE) single KV group under
         heterogeneous TP must NOT raise (previously a NotImplementedError),
         and the per-region gate must still reject a wrong block_len.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=2,
         ):
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                aphrodite_config, connector.engine_id, hand_shake_latency=0
+                sonar_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1349,7 +1347,7 @@ class TestNixlHandshake:
             worker.add_remote_agent(meta, remote_tp_size=1)
             assert FakeNixlConnectorWorker.REMOTE_ENGINE_ID in worker.dst_xfer_side_handles
             # Gate rejects an MLA region wrongly scaled by tp_ratio.
-            worker2 = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+            worker2 = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
             worker2.block_len_per_layer = [fa_len, idx_len]
             worker2._region_is_mla = [False, True]
             worker2.num_blocks = 1
@@ -1388,7 +1386,7 @@ class TestNixlHandshake:
             use_mla=target_mla,
             _has_mamba=False,
             _is_csa_linear=False,
-            aphrodite_config=SimpleNamespace(
+            sonar_config=SimpleNamespace(
                 speculative_config=(SimpleNamespace(draft_model_config=draft) if has_draft else None)
             ),
         )
@@ -1399,7 +1397,7 @@ class TestNixlHandshake:
     def _mla_target_with_gqa_draft(tp_size: int, tp_rank: int, remote_tp_size: int):
         """Worker for an MLA target (REPLICATE region) plus a GQA draft with
         8 KV heads (SPLIT region), and the prefill metadata it pairs with."""
-        base_worker = "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
+        base_worker = "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
         with (
             patch(
                 f"{base_worker}.get_tensor_model_parallel_world_size",
@@ -1408,7 +1406,7 @@ class TestNixlHandshake:
             patch(f"{base_worker}.get_tensor_model_parallel_rank", return_value=tp_rank),
         ):
             worker = FakeNixlConnectorWorker(
-                create_aphrodite_config(block_size=maybe_update_block_size(16)),
+                create_sonar_config(block_size=maybe_update_block_size(16)),
                 "engine",
                 hand_shake_latency=0,
             )
@@ -1463,13 +1461,13 @@ class TestNixlHandshake:
         return worker, meta, mla_len, draft_len
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_head_sharded_draft_regions_check_layer_identity(self, default_aphrodite_config, dist_init):
+    def test_head_sharded_draft_regions_check_layer_identity(self, default_sonar_config, dist_init):
         worker, _, _, _ = self._mla_target_with_gqa_draft(4, 0, 1)
         worker.model_config = SimpleNamespace(get_total_num_hidden_layers=lambda: 78)
-        worker.aphrodite_config = SimpleNamespace(
+        worker.sonar_config = SimpleNamespace(
             speculative_config=SimpleNamespace(
                 draft_model_config=SimpleNamespace(get_total_num_hidden_layers=lambda: 6)
             ),
@@ -1500,12 +1498,12 @@ class TestNixlHandshake:
             worker._get_head_sharded_draft_regions()
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     @pytest.mark.parametrize("tp_rank,remote_tp_size,draft_slice", [(3, 1, 3), (5, 2, 1)])
     def test_handshake_mla_target_reads_draft_head_slice(
-        self, default_aphrodite_config, dist_init, tp_rank, remote_tp_size, draft_slice
+        self, default_sonar_config, dist_init, tp_rank, remote_tp_size, draft_slice
     ):
         """A GQA draft under an MLA target is head-sharded even though the
         target is replicated: at D_TP=8 each rank owns one draft head, so the
@@ -1525,10 +1523,10 @@ class TestNixlHandshake:
         ]
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_mla_target_reads_draft_head_slice_block_outermost(self, default_aphrodite_config, dist_init):
+    def test_handshake_mla_target_reads_draft_head_slice_block_outermost(self, default_sonar_config, dist_init):
         """With a block-outermost layout (BLHNC) one page holds every layer of a
         block, so the region stride is the page, not the region's block_len. The
         draft head slice must still land inside the draft layer of each page."""
@@ -1559,10 +1557,10 @@ class TestNixlHandshake:
         ]
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_mla_target_rejects_unsharded_draft_block(self, default_aphrodite_config, dist_init):
+    def test_handshake_mla_target_rejects_unsharded_draft_block(self, default_sonar_config, dist_init):
         """The draft region is validated against its own head ratio, so a
         prefill draft block that was not scaled by it is still rejected."""
         worker, meta, mla_len, draft_len = self._mla_target_with_gqa_draft(tp_size=8, tp_rank=3, remote_tp_size=1)
@@ -1572,10 +1570,10 @@ class TestNixlHandshake:
             worker.add_remote_agent(meta, remote_tp_size=1)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_mla_target_rejects_draft_with_prefill_tp_above_decode(self, default_aphrodite_config, dist_init):
+    def test_handshake_mla_target_rejects_draft_with_prefill_tp_above_decode(self, default_sonar_config, dist_init):
         """With P_TP > D_TP the draft needs several prefill ranks while the
         MLA mapping reads one, so the pairing is rejected rather than reading
         a fraction of the draft heads."""
@@ -1584,10 +1582,10 @@ class TestNixlHandshake:
             worker.add_remote_agent(meta, remote_tp_size=8)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_validates_gqa_replicated_block_len(self, default_aphrodite_config, dist_init):
+    def test_handshake_validates_gqa_replicated_block_len(self, default_sonar_config, dist_init):
         """Regression test for #45330.
 
         When tp_size > total_num_kv_heads, GQA replication caps per-rank
@@ -1598,19 +1596,19 @@ class TestNixlHandshake:
         handshake.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
 
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=16,
         ):
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                aphrodite_config, connector.engine_id, hand_shake_latency=0
+                sonar_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1645,28 +1643,28 @@ class TestNixlHandshake:
             worker.add_remote_agent(meta, remote_tp_size=8)
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_rejects_wrong_block_len_without_gqa_replication(self, default_aphrodite_config, dist_init):
+    def test_handshake_rejects_wrong_block_len_without_gqa_replication(self, default_sonar_config, dist_init):
         """Ensure the head-ratio validation still rejects genuinely wrong
         block_lens when GQA replication is NOT in effect (32 KV heads,
         D_TP=4, P_TP=2: head_ratio=4, both sides have >1 head/rank).
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
 
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=4,
         ):
             connector = NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                aphrodite_config, connector.engine_id, hand_shake_latency=0
+                sonar_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1714,12 +1712,12 @@ class TestNixlHandshake:
         ],
     )
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
     def test_handshake_rejects_nvfp4_kv_head_split(
         self,
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         kv_quant_mode,
         local_tp,
@@ -1731,7 +1729,7 @@ class TestNixlHandshake:
         heterogeneous-TP head splitting would silently corrupt the KV.
         """
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
+        sonar_config = create_sonar_config(block_size=block_size)
         kv_cache_config = KVCacheConfig(
             num_blocks=1,
             kv_cache_tensors=[],
@@ -1749,11 +1747,11 @@ class TestNixlHandshake:
             ],
         )
         with patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=local_tp,
         ):
             worker = FakeNixlConnectorWorker(
-                aphrodite_config,
+                sonar_config,
                 "engine",
                 hand_shake_latency=0,
                 kv_cache_config=kv_cache_config,
@@ -1793,21 +1791,21 @@ class TestNixlHandshake:
 # we put here is important. First run ray, it will clean up the resources, then
 # the rest of the tests.
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_kv_connector_stats(default_aphrodite_config, dist_init):
+def test_kv_connector_stats(default_sonar_config, dist_init):
     """Test that KV transfer stats are properly recorded and retrieved."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
     # Test worker role in decode server.
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
 
     # Verify that xfer_stats starts empty
     initial_stats = connector.get_kv_connector_stats()
@@ -1866,10 +1864,10 @@ def test_kv_connector_stats(default_aphrodite_config, dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_reqs_to_send_deadline_rebased_to_worker_clock(default_aphrodite_config, dist_init):
+def test_reqs_to_send_deadline_rebased_to_worker_clock(default_sonar_config, dist_init):
     """reqs_to_send deadlines are stamped with the scheduler process's
     perf_counter, whose epoch differs across processes and (by boot-time
     deltas) across nodes. Without rebasing, a P worker on a node whose
@@ -1880,13 +1878,13 @@ def test_reqs_to_send_deadline_rebased_to_worker_clock(default_aphrodite_config,
     The worker must anchor the remaining TTL to its own clock.
     """
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
     worker = connector.connector_worker
 
     req_id = "req-lease-clock"
@@ -2004,12 +2002,12 @@ def test_kv_connector_stats_failure_grouping():
 
 
 def test_nixl_prom_metrics_group_handshake_with_transfer_failures():
-    """aphrodite:nixl_num_failed_transfers counts handshake and notification
-    failures too, while aphrodite:nixl_num_kv_expired_reqs stays a separate
+    """sonar:nixl_num_failed_transfers counts handshake and notification
+    failures too, while sonar:nixl_num_kv_expired_reqs stays a separate
     counter."""
     from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
         NixlPromMetrics,
     )
 
@@ -2027,14 +2025,14 @@ def test_nixl_prom_metrics_group_handshake_with_transfer_failures():
         def __init__(self, *args, **kwargs):
             super().__init__(*args, registry=registry, **kwargs)
 
-    aphrodite_config = create_aphrodite_config()
+    sonar_config = create_sonar_config()
     metric_types = {
         Gauge: RegistryGauge,
         Counter: RegistryCounter,
         Histogram: RegistryHistogram,
     }
     prom = NixlPromMetrics(
-        aphrodite_config,
+        sonar_config,
         metric_types,
         labelnames=["engine"],
         per_engine_labelvalues={0: ["engine-0"]},
@@ -2055,24 +2053,24 @@ def test_nixl_prom_metrics_group_handshake_with_transfer_failures():
                     return sample.value
         raise AssertionError(f"metric {name} not found in registry")
 
-    assert counter_value("aphrodite:nixl_num_failed_transfers_total") == 3.0
-    assert counter_value("aphrodite:nixl_num_kv_expired_reqs_total") == 1.0
-    assert counter_value("aphrodite:nixl_num_notifications_after_expiry_total") == 1.0
+    assert counter_value("sonar:nixl_num_failed_transfers_total") == 3.0
+    assert counter_value("sonar:nixl_num_kv_expired_reqs_total") == 1.0
+    assert counter_value("sonar:nixl_num_notifications_after_expiry_total") == 1.0
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_notification_after_expiry_is_counted(default_aphrodite_config, dist_init):
+def test_notification_after_expiry_is_counted(default_sonar_config, dist_init):
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
     worker = connector.connector_worker
     worker._reqs_to_process.add("known")
     worker._reqs_to_send["known"] = time.perf_counter() + 10
@@ -2159,14 +2157,14 @@ def test_multi_kv_connector_stats_aggregation():
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_scheduler_kv_connector_stats_aggregation():
     """Test scheduler and worker KV connector stats aggregation."""
-    from aphrodite.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.core.sched.output import SchedulerOutput
 
-    scheduler = create_scheduler(create_aphrodite_config())
+    scheduler = create_scheduler(create_sonar_config())
 
     # Worker stats with transfer metrics
     worker_stats = NixlKVConnectorStats()
@@ -2218,7 +2216,7 @@ def test_scheduler_kv_connector_stats_aggregation():
 
 @pytest.mark.parametrize("distributed_executor_backend", ["ray", None])
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_abort_timeout_on_prefiller(monkeypatch, distributed_executor_backend):
@@ -2245,7 +2243,7 @@ def test_abort_timeout_on_prefiller(monkeypatch, distributed_executor_backend):
         "distributed_executor_backend": distributed_executor_backend,
     }
 
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
 
     def run_test_and_cleanup():
         llm = LLM(**llm_kwargs)
@@ -2263,7 +2261,7 @@ def test_abort_timeout_on_prefiller(monkeypatch, distributed_executor_backend):
                     "NIXL_TELEMETRY_ENABLE": "1",
                 },
             }
-            # On XPU/ROCm, Aphrodite expects Ray's device key to be "GPU".
+            # On XPU/ROCm, Sonar expects Ray's device key to be "GPU".
             # Explicitly reserving GPU resources here prevents false negatives
             # when Ray cannot auto-detect accelerator resources in test envs.
             ray_init_kwargs: dict[str, Any] = {"runtime_env": runtime_env}
@@ -2557,7 +2555,7 @@ def element_byte_addrs(view: torch.Tensor) -> list[int]:
 @pytest.mark.parametrize("layout", [layout.name for layout in KVCacheLayout])
 @pytest.mark.parametrize("separate_kv_head_groups", [False, True])
 def test_register_kv_caches(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     attn_backend,
     layout,
@@ -2573,24 +2571,24 @@ def test_register_kv_caches(
        expansion covers exactly the registered blocks
     """
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(attention_backend=attn_backend, block_size=block_size)
-    aphrodite_config.cache_config.kv_cache_layout = layout
+    sonar_config = create_sonar_config(attention_backend=attn_backend, block_size=block_size)
+    sonar_config.cache_config.kv_cache_layout = layout
 
     # Import the appropriate backend based on the parameter
     if attn_backend == "FLASH_ATTN":
-        from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+        from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
         backend_cls = FlashAttentionBackend
     elif attn_backend == "ROCM_ATTN":
-        from aphrodite.v1.attention.backends.rocm_attn import RocmAttentionBackend
+        from sonar.v1.attention.backends.rocm_attn import RocmAttentionBackend
 
         backend_cls = RocmAttentionBackend
     else:  # TRITON_ATTN
-        from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+        from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
         backend_cls = TritonAttentionBackend
 
-    nixl_worker = "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
+    nixl_worker = "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
     with (
         patch(f"{nixl_worker}.NixlWrapper") as mock_nixl_wrapper,
         patch(f"{nixl_worker}.threading.Event"),
@@ -2616,9 +2614,9 @@ def test_register_kv_caches(
             kv_cache_groups=[KVCacheGroupSpec(["layer0", "layer1", "layer2", "layer3"], kv_cache_spec)],
         )
         # Create connector
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            aphrodite_config,
+            sonar_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_config=kv_cache_config,
@@ -2756,10 +2754,10 @@ def _dsv4_mla_spec(record_bytes: int, alignment: int, tokens_per_state: int):
     ],
     ids=["v4-padded-pages", "v41-aliased-groups"],
 )
-def test_register_packed_dsv4_mla_cache_as_single_region(default_aphrodite_config, dist_init, groups):
-    from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
+def test_register_packed_dsv4_mla_cache_as_single_region(default_sonar_config, dist_init, groups):
+    from sonar.v1.attention.backends.triton_attn import TritonAttentionBackend
 
-    nixl_worker = "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
+    nixl_worker = "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker"
     with (
         patch(f"{nixl_worker}.NixlWrapper") as mock_nixl_wrapper,
         patch(f"{nixl_worker}.threading.Event"),
@@ -2778,12 +2776,12 @@ def test_register_packed_dsv4_mla_cache_as_single_region(default_aphrodite_confi
             kv_cache_tensors=[],
             kv_cache_groups=[KVCacheGroupSpec(layer_names, spec) for layer_names, spec in zip(group_layers, specs)],
         )
-        aphrodite_config = create_aphrodite_config(attention_backend="TRITON_ATTN")
-        aphrodite_config.cache_config.block_size = 256
-        aphrodite_config.cache_config.kv_cache_layout = "BLHNC"
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        sonar_config = create_sonar_config(attention_backend="TRITON_ATTN")
+        sonar_config.cache_config.block_size = 256
+        sonar_config.cache_config.kv_cache_layout = "BLHNC"
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            aphrodite_config,
+            sonar_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_layout="BLHNC",
@@ -2850,36 +2848,36 @@ class FakePlatform(Platform):
         ("oot", "VRAM"),
     ],
 )
-def test_kv_buffer_to_nixl_memory_types(default_aphrodite_config, dist_init, kv_buffer_device, nixl_memory_type):
+def test_kv_buffer_to_nixl_memory_types(default_sonar_config, dist_init, kv_buffer_device, nixl_memory_type):
     """Test that register_kv_caches() passes the correct memory types from the
     config to the nixl_wrapper.
     """
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     # Override the default memory types in the config
-    aphrodite_config.kv_transfer_config.kv_buffer_device = kv_buffer_device
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
+    sonar_config.kv_transfer_config.kv_buffer_device = kv_buffer_device
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
         _NIXL_SUPPORTED_DEVICE,
     )
 
     _NIXL_SUPPORTED_DEVICE.update(FakePlatform.get_nixl_supported_devices())
 
     with (
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.threading.Event"),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.threading.Thread"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.threading.Event"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.threading.Thread"),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.current_platform",
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.current_platform",
             FakePlatform,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils._NIXL_SUPPORTED_DEVICE",
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.utils._NIXL_SUPPORTED_DEVICE",
             _NIXL_SUPPORTED_DEVICE,
         ),
     ):  # noqa: E501
         # Create connector and replace its worker with a fake one for isolation
         connector = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
@@ -2890,22 +2888,22 @@ def test_kv_buffer_to_nixl_memory_types(default_aphrodite_config, dist_init, kv_
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_shutdown_cleans_up_resources(default_aphrodite_config, dist_init):
+def test_shutdown_cleans_up_resources(default_sonar_config, dist_init):
     """Test that shutdown() properly cleans up all resources."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
     scheduler = NixlConnectorScheduler(
-        aphrodite_config,
-        aphrodite_config.kv_transfer_config.engine_id,
+        sonar_config,
+        sonar_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=block_size),
     )
     worker = NixlConnectorWorker(
-        aphrodite_config,
-        aphrodite_config.kv_transfer_config.engine_id,
+        sonar_config,
+        sonar_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=block_size),
     )
     nixl_wrapper = worker.nixl_wrapper
@@ -2961,16 +2959,16 @@ def test_shutdown_cleans_up_resources(default_aphrodite_config, dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_sleep_unregisters_and_restores_kv_caches(dist_init):
     """Sleep drops everything built on the KV cache registration; wake-up
     registers the same memory again and publishes the new agent metadata."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
-    aphrodite_config.cache_config.kv_cache_layout = "BLHNC"
-    aphrodite_config.kv_transfer_config.kv_buffer_device = "cpu"
+    sonar_config = create_sonar_config(block_size=block_size)
+    sonar_config.cache_config.kv_cache_layout = "BLHNC"
+    sonar_config.kv_transfer_config.kv_buffer_device = "cpu"
     spec = FullAttentionSpec(block_size=block_size, num_kv_heads=4, head_size=16, dtype=torch.float16)
     kv_cache_config = KVCacheConfig(
         num_blocks=2,
@@ -2979,8 +2977,8 @@ def test_sleep_unregisters_and_restores_kv_caches(dist_init):
     )
     raw = torch.zeros(spec.page_size_bytes * 2, dtype=torch.int8)
     (cache,) = dense_kv_cache_views(raw, spec, 2, num_layers=1, layout=KVCacheLayout.BLHNC)
-    with set_current_aphrodite_config(aphrodite_config):
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    with set_current_sonar_config(sonar_config):
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.register_kv_caches({"layer0": cache})
     worker = connector.connector_worker
     nixl = worker.nixl_wrapper = MagicMock(wraps=worker.nixl_wrapper)
@@ -3002,12 +3000,12 @@ def test_sleep_unregisters_and_restores_kv_caches(dist_init):
     connector.shutdown()
 
 
-def test_registration_generation_bumps_on_changed_payload(default_aphrodite_config, dist_init):
+def test_registration_generation_bumps_on_changed_payload(default_sonar_config, dist_init):
     """Requests tell decoders to handshake again only when the published
     registration changed."""
-    aphrodite_config = create_aphrodite_config()
+    sonar_config = create_sonar_config()
     scheduler = NixlConnectorScheduler(
-        aphrodite_config, aphrodite_config.kv_transfer_config.engine_id, make_kv_cache_config(16)
+        sonar_config, sonar_config.kv_transfer_config.engine_id, make_kv_cache_config(16)
     )
     scheduler._nixl_handshake_listener_t = MagicMock()  # already serving
     generations: list[int] = []
@@ -3030,13 +3028,13 @@ def _setup_worker_with_remote_engine(
 ) -> tuple[Any, str]:
     """Create a worker with one remote engine registered."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         kv_connector_extra_config={"engine_ttl": engine_ttl},
     )
     worker = NixlConnectorWorker(
-        aphrodite_config,
-        aphrodite_config.kv_transfer_config.engine_id,
+        sonar_config,
+        sonar_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=block_size),
     )
 
@@ -3054,10 +3052,10 @@ def _setup_worker_with_remote_engine(
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_engine_ttl_eviction(default_aphrodite_config, dist_init):
+def test_engine_ttl_eviction(default_sonar_config, dist_init):
     """Stale engines are evicted when TTL expires."""
     worker, engine_id = _setup_worker_with_remote_engine(engine_ttl=10.0)
     nixl_wrapper = worker.nixl_wrapper
@@ -3089,10 +3087,10 @@ def test_engine_ttl_eviction(default_aphrodite_config, dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_engine_with_inflight_transfer_is_not_evicted(default_aphrodite_config, dist_init):
+def test_engine_with_inflight_transfer_is_not_evicted(default_sonar_config, dist_init):
     """A transfer that outlives the TTL must keep its engine registered.
 
     _engine_last_active is stamped when a read is issued and not refreshed
@@ -3129,10 +3127,10 @@ def test_engine_with_inflight_transfer_is_not_evicted(default_aphrodite_config, 
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_heartbeated_engine_is_not_evicted(default_aphrodite_config, dist_init, monkeypatch):
+def test_heartbeated_engine_is_not_evicted(default_sonar_config, dist_init, monkeypatch):
     """Heartbeats keep a remote engine's NIXL state alive.
 
     Requests waiting in the D scheduler issue no reads, but their engine is
@@ -3140,7 +3138,7 @@ def test_heartbeated_engine_is_not_evicted(default_aphrodite_config, dist_init, 
     next heartbeat evicts the engine and starts a new handshake, which loads
     every remote agent again.
     """
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker
 
     worker, engine_id = _setup_worker_with_remote_engine(engine_ttl=10.0)
     nixl_wrapper = worker.nixl_wrapper
@@ -3172,10 +3170,10 @@ def test_heartbeated_engine_is_not_evicted(default_aphrodite_config, dist_init, 
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_engine_ttl_disabled(default_aphrodite_config, dist_init):
+def test_engine_ttl_disabled(default_sonar_config, dist_init):
     """Eviction is disabled when engine_ttl <= 0."""
     worker, engine_id = _setup_worker_with_remote_engine(engine_ttl=0.0)
 
@@ -3193,12 +3191,12 @@ def test_engine_ttl_disabled(default_aphrodite_config, dist_init):
 class TestPeerReplacement:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch):
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
-        from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+        from sonar.distributed.kv_transfer.kv_connector.v1.nixl import base_worker as bw
+        from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
         block_size = maybe_update_block_size(16)
 
-        config = create_aphrodite_config(kv_connector_extra_config={"engine_ttl": 0}, block_size=block_size)
+        config = create_sonar_config(kv_connector_extra_config={"engine_ttl": 0}, block_size=block_size)
         config.kv_transfer_config.kv_buffer_device = "cpu"
         platform = SimpleNamespace(
             device_type="cpu",
@@ -3534,7 +3532,7 @@ class TestPeerReplacement:
 
 def test_transfer_topology_unregister():
     """TransferTopology.unregister_remote_engine removes the engine."""
-    from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
+    from sonar.v1.attention.backends.flash_attn import FlashAttentionBackend
 
     topo = TransferTopology(
         tp_rank=0,
@@ -3565,25 +3563,25 @@ def test_transfer_topology_unregister():
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_aborted_request_removed_from_worker_in_batch(default_aphrodite_config, dist_init):
+def test_aborted_request_removed_from_worker_in_batch(default_sonar_config, dist_init):
     """Create and schedule a request so that P adds it to in-batch tracking via
     the real scheduler, then simulate an abort (request not in next scheduler
     iteration) and verify the worker no longer tracks it as in-batch.
     """
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
-    scheduler = create_scheduler(aphrodite_config)
+    scheduler = create_scheduler(sonar_config)
     # KVConnector Worker in P
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
 
     # Create a request that triggers do_remote_decode so that
     # the scheduler adds it to reqs_in_batch
@@ -3685,14 +3683,12 @@ class FailingNixlWrapper(FakeNixlWrapper):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
 @pytest.mark.parametrize("awaiting_kvs", [True, False])
 @pytest.mark.parametrize("notification_fails", [False, True])
-def test_empty_recv_is_reported_only_when_awaited(
-    default_aphrodite_config, dist_init, awaiting_kvs, notification_fails
-):
+def test_empty_recv_is_reported_only_when_awaited(default_sonar_config, dist_init, awaiting_kvs, notification_fails):
     """An empty recv is reported iff the scheduler parked the request on it.
 
     _read_blocks returns early when the local block list is empty -- D already
@@ -3715,14 +3711,14 @@ def test_empty_recv_is_reported_only_when_awaited(
     producer frees its own blocks on a timeout.
     """
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        aphrodite_config,
+        sonar_config,
         connector.engine_id,
         hand_shake_latency=0.0,
         kv_cache_config=connector._kv_cache_config,
@@ -3800,7 +3796,7 @@ def test_handshake_failure_reports_only_awaited_recvs(recv_worker, is_hma, local
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
 @pytest.mark.parametrize(
@@ -3815,7 +3811,7 @@ def test_handshake_failure_reports_only_awaited_recvs(recv_worker, is_hma, local
 )
 @pytest.mark.parametrize("enable_hma", [False, True])
 def test_transfer_failure_logging(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     failure_type,
     wrapper_config,
@@ -3836,15 +3832,15 @@ def test_transfer_failure_logging(
     import logging
 
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size, swa_enabled=enable_hma),
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        aphrodite_config,
+        sonar_config,
         connector.engine_id,
         hand_shake_latency=0.0,
         kv_cache_config=connector._kv_cache_config,
@@ -3890,9 +3886,9 @@ def test_transfer_failure_logging(
     )
 
     # Capture logs from the nixl connector loggers
-    # Aphrodite loggers have propagate=False, so we need to capture directly
-    nixl_logger = logging.getLogger("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker")
-    pull_logger = logging.getLogger("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker")
+    # Sonar loggers have propagate=False, so we need to capture directly
+    nixl_logger = logging.getLogger("sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker")
+    pull_logger = logging.getLogger("sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker")
     captured_logs: list[logging.LogRecord] = []
 
     class LogCapture(logging.Handler):
@@ -3950,20 +3946,20 @@ def test_transfer_failure_logging(
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
-def test_handshake_failure_returns_finished(default_aphrodite_config, dist_init):
+def test_handshake_failure_returns_finished(default_sonar_config, dist_init):
     """Test that handshake failures mark blocks invalid and return via get_finished."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0.1)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0.1)
     connector.connector_worker.nixl_wrapper.fail_handshake = True
 
     request_id = "test_handshake_fail"
@@ -4004,21 +4000,21 @@ def test_handshake_failure_returns_finished(default_aphrodite_config, dist_init)
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
 @pytest.mark.parametrize("is_hma", [False, True])
-def test_transfer_setup_failure_returns_finished(default_aphrodite_config, dist_init, is_hma):
+def test_transfer_setup_failure_returns_finished(default_sonar_config, dist_init, is_hma):
     """Setup failures report the request; only non-HMA reports block IDs."""
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(block_size=block_size)
+    sonar_config = create_sonar_config(block_size=block_size)
 
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
     connector.connector_worker.nixl_wrapper.fail_transfer_setup = True
     connector.connector_worker._is_hma_required = is_hma
 
@@ -4078,14 +4074,14 @@ class _ScriptedXferWrapper(FakeNixlWrapper):
         self.released.append(handle)
 
 
-def _make_split_read_connector(aphrodite_config, request_id, states):
+def _make_split_read_connector(sonar_config, request_id, states):
     """Seed a request with scripted in-flight xfer handles + recv metadata."""
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
-        make_kv_cache_config(block_size=aphrodite_config.cache_config.block_size),
+        make_kv_cache_config(block_size=sonar_config.cache_config.block_size),
     )
-    connector.connector_worker = FakeNixlConnectorWorker(aphrodite_config, connector.engine_id, hand_shake_latency=0)
+    connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
     worker = connector.connector_worker
     wrapper = _ScriptedXferWrapper("agent")
     worker.nixl_wrapper = wrapper
@@ -4109,10 +4105,10 @@ def _make_split_read_connector(aphrodite_config, request_id, states):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_split_read_failure_defers_report_until_last_handle(default_aphrodite_config, dist_init):
+def test_split_read_failure_defers_report_until_last_handle(default_sonar_config, dist_init):
     """One half of a split (mixed DRAM/VRAM) read failing must not report the
     request — nor invalidate its blocks — while the sibling xfer is still in
     flight: a posted READ cannot be aborted and would DMA into blocks the
@@ -4121,7 +4117,7 @@ def test_split_read_failure_defers_report_until_last_handle(default_aphrodite_co
     request_id = "split_read_partial_failure"
     err_handle, live_handle = 11, 22
     connector, worker, wrapper = _make_split_read_connector(
-        create_aphrodite_config(block_size=maybe_update_block_size(16)),
+        create_sonar_config(block_size=maybe_update_block_size(16)),
         request_id,
         {err_handle: ["ERR"], live_handle: ["PROC", "PROC", "DONE"]},
     )
@@ -4150,7 +4146,7 @@ def test_split_read_failure_defers_report_until_last_handle(default_aphrodite_co
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
 @pytest.mark.parametrize(
@@ -4162,7 +4158,7 @@ def test_split_read_failure_defers_report_until_last_handle(default_aphrodite_co
         "transfer_exception",
     ],
 )
-def test_failed_request_skips_kv_postprocessing(default_aphrodite_config, dist_init, failure_mode):
+def test_failed_request_skips_kv_postprocessing(default_sonar_config, dist_init, failure_mode):
     """Test that failed requests skip KV sync and post-processing in
     get_transfer_results().
 
@@ -4196,15 +4192,15 @@ def test_failed_request_skips_kv_postprocessing(default_aphrodite_config, dist_i
     # post_process_device_kv_on_receive would be called on the success path,
     # making the assertion meaningful (not trivially true).
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(enable_permute_local_kv=True, block_size=block_size)
+    sonar_config = create_sonar_config(enable_permute_local_kv=True, block_size=block_size)
 
     connector = NixlConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        aphrodite_config,
+        sonar_config,
         connector.engine_id,
         hand_shake_latency=0.1 if failure_mode == "handshake" else 0,
     )
@@ -4316,7 +4312,7 @@ def test_recv_failure_waits_for_unpollable_handle_to_be_released(recv_worker):
 
 
 def _set_test_speculative_config(
-    aphrodite_config,
+    sonar_config,
     *,
     method: str = "eagle3",
     model: str = "test/eagle3-drafter",
@@ -4334,7 +4330,7 @@ def _set_test_speculative_config(
         code_revision=code_revision,
         hf_config=SimpleNamespace(eagle_aux_hidden_state_layer_ids=auxiliary_layer_ids),
     )
-    aphrodite_config.speculative_config = fake_speculative_config(
+    sonar_config.speculative_config = fake_speculative_config(
         method=method,
         draft_model_config=draft_model_config,
         num_speculative_tokens=num_speculative_tokens,
@@ -4363,8 +4359,8 @@ def _set_test_speculative_config(
 )
 @pytest.mark.skip_global_cleanup
 def test_speculative_config_compatibility_hash(remote_overrides: dict[str, Any], should_match: bool):
-    local_config = create_aphrodite_config()
-    remote_config = create_aphrodite_config()
+    local_config = create_sonar_config()
+    remote_config = create_sonar_config()
     _set_test_speculative_config(local_config)
     _set_test_speculative_config(remote_config, **remote_overrides)
 
@@ -4376,8 +4372,8 @@ def test_speculative_config_compatibility_hash(remote_overrides: dict[str, Any],
 
 @pytest.mark.skip_global_cleanup
 def test_missing_speculative_config_changes_compatibility_hash():
-    regular_config = create_aphrodite_config()
-    speculative_config = create_aphrodite_config()
+    regular_config = create_sonar_config()
+    speculative_config = create_sonar_config()
     _set_test_speculative_config(speculative_config)
 
     regular_hash = compute_nixl_compatibility_hash(regular_config, "FLASH_ATTN")
@@ -4391,8 +4387,8 @@ def test_speculative_kv_cache_dtype_resolves_to_target():
     # The draft kv_cache_dtype override defaults to None ("inherit the target's
     # --kv-cache-dtype"). An explicit setting on one side that matches the
     # other side's inherited (resolved) dtype must not spuriously mismatch.
-    local_config = create_aphrodite_config(cache_dtype="fp8")
-    remote_config = create_aphrodite_config(cache_dtype="fp8")
+    local_config = create_sonar_config(cache_dtype="fp8")
+    remote_config = create_sonar_config(cache_dtype="fp8")
     _set_test_speculative_config(local_config, kv_cache_dtype="fp8")  # explicit
     _set_test_speculative_config(remote_config, kv_cache_dtype=None)  # inherits
 
@@ -4408,8 +4404,8 @@ def test_speculative_attention_backend_not_in_compatibility_hash():
     # connector only has the raw override (auto-select), and its transfer-
     # relevant effect is validated per region at runtime. Differing overrides
     # must not change the hash.
-    local_config = create_aphrodite_config()
-    remote_config = create_aphrodite_config()
+    local_config = create_sonar_config()
+    remote_config = create_sonar_config()
     _set_test_speculative_config(local_config, attention_backend=None)
     _set_test_speculative_config(remote_config, attention_backend="FLASHINFER")
 
@@ -4424,7 +4420,7 @@ def test_transfer_mode_changes_compatibility_hash():
     # push (WRITE) and pull (READ) connectors use incompatible transfer
     # protocols, so their compatibility hashes must differ; identical modes
     # must match. The default mode is pull.
-    config = create_aphrodite_config()
+    config = create_sonar_config()
 
     pull_hash = compute_nixl_compatibility_hash(config, "FLASH_ATTN", transfer_mode="pull")
     push_hash = compute_nixl_compatibility_hash(config, "FLASH_ATTN", transfer_mode="push")
@@ -4442,14 +4438,14 @@ def test_transfer_mode_changes_compatibility_hash():
 )
 def test_scheduler_advertises_transfer_topology(mode, tp_size, pcp_size, dcp_size, transfer_tp_size):
     """The consumer must address every distinct producer KV shard."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
         NixlPullConnectorScheduler,
     )
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
         NixlPushConnectorScheduler,
     )
 
-    config = create_aphrodite_config(kv_role="kv_producer")
+    config = create_sonar_config(kv_role="kv_producer")
     config.parallel_config.tensor_parallel_size = tp_size
     config.parallel_config.prefill_context_parallel_size = pcp_size
     config.parallel_config.decode_context_parallel_size = dcp_size
@@ -4470,7 +4466,7 @@ def test_scheduler_advertises_transfer_topology(mode, tp_size, pcp_size, dcp_siz
 @pytest.mark.parametrize(
     "mismatch_type,config_overrides,version_override,should_fail,enforce_handshake_compat",
     [
-        ("aphrodite_version", {}, {"aphrodite_version": "0.6.1"}, True, True),
+        ("sonar_version", {}, {"sonar_version": "0.6.1"}, True, True),
         ("nixl_connector_version", {}, {"connector_version": 37}, True, True),
         ("model_name", {"model": "facebook/opt-350m"}, {}, True, True),
         ("dtype", {"dtype": "bfloat16"}, {}, True, True),
@@ -4490,11 +4486,11 @@ def test_scheduler_advertises_transfer_topology(mode, tp_size, pcp_size, dcp_siz
     ],
 )
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
 def test_compatibility_hash_validation(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     mismatch_type,
     config_overrides,
@@ -4508,19 +4504,19 @@ def test_compatibility_hash_validation(
     ----------
         mismatch_type: description of what is being tested
         config_overrides: dict of config to override for the remote instance
-        version_override: version dict e.g. {"aphrodite_version": "0.6.1"}
+        version_override: version dict e.g. {"sonar_version": "0.6.1"}
         should_fail: whether the handshake should fail
         enforce_handshake_compat: whether to enforce compatibility checking
 
     """
     block_size = maybe_update_block_size(16)
-    local_aphrodite_config = create_aphrodite_config(
+    local_sonar_config = create_sonar_config(
         model="facebook/opt-125m",
         block_size=block_size,
         kv_connector_extra_config={"enforce_handshake_compat": enforce_handshake_compat},
     )
     kv_cache_config = make_kv_cache_config(block_size=block_size, num_blocks=2)
-    decode_connector = NixlConnector(local_aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    decode_connector = NixlConnector(local_sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     decode_worker = decode_connector.connector_worker
     kv_cache_spec = cast(AttentionSpec, kv_cache_config.kv_cache_groups[0].kv_cache_spec)
     shape = compute_layer_kv_cache_shape_bytes(kv_cache_spec, kv_cache_config.num_blocks)
@@ -4537,11 +4533,11 @@ def test_compatibility_hash_validation(
         "block_size": block_size,
         **config_overrides,
     }
-    remote_aphrodite_config = create_aphrodite_config(**remote_config_params)
+    remote_sonar_config = create_sonar_config(**remote_config_params)
 
     with contextlib.ExitStack() as stack:
-        if "aphrodite_version" in version_override:
-            stack.enter_context(patch("aphrodite.__version__", version_override["aphrodite_version"]))
+        if "sonar_version" in version_override:
+            stack.enter_context(patch("sonar.__version__", version_override["sonar_version"]))
         elif "connector_version" in version_override:
             stack.enter_context(
                 patch.object(
@@ -4551,11 +4547,11 @@ def test_compatibility_hash_validation(
                 )
             )
         remote_hash = compute_nixl_compatibility_hash(
-            remote_aphrodite_config,
+            remote_sonar_config,
             decode_worker.backend_name,
         )
 
-    prefill_block_size = remote_aphrodite_config.cache_config.block_size
+    prefill_block_size = remote_sonar_config.cache_config.block_size
     prefill_block_lens = [4096 * prefill_block_size]
     prefill_metadata = NixlAgentMetadata(
         engine_id=FakeNixlConnectorWorker.REMOTE_ENGINE_ID,
@@ -4621,10 +4617,10 @@ def test_compatibility_hash_validation(
     ],
 )
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scenario):
+def test_handshake_decode_errors(default_sonar_config, dist_init, error_scenario):
     """Test that msgspec decode errors are properly handled during handshake.
 
     Tests both DecodeError and ValidationError for both decoders:
@@ -4632,18 +4628,18 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
     - NixlAgentMetadata decoder
     """
     block_size = maybe_update_block_size(16)
-    local_aphrodite_config = create_aphrodite_config(
+    local_sonar_config = create_sonar_config(
         model="facebook/opt-125m",
         block_size=block_size,
     )
     decode_connector = NixlConnector(
-        local_aphrodite_config,
+        local_sonar_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=block_size),
     )
     decode_worker = decode_connector.connector_worker
 
-    backend = get_current_attn_backend(local_aphrodite_config)
+    backend = get_current_attn_backend(local_sonar_config)
     probe_spec = decode_worker.kv_cache_config.kv_cache_groups[0].kv_cache_spec
     test_shape = compute_layer_kv_cache_shape_bytes(probe_spec, 1)
     decode_worker.transfer_topo = TransferTopology(
@@ -4659,7 +4655,7 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
     )
 
     decode_worker.compat_hash = compute_nixl_compatibility_hash(
-        decode_worker.aphrodite_config,
+        decode_worker.sonar_config,
         decode_worker.backend_name,
     )
 
@@ -4703,10 +4699,10 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
             )
 
     @patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+        "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_mla_broadcast_notif_uses_remote_request_id(self, default_aphrodite_config, dist_init):
+    def test_mla_broadcast_notif_uses_remote_request_id(self, default_sonar_config, dist_init):
         """MLA + remote TP > local TP: the broadcast notification sent to
         non-read prefill ranks must be keyed by the prefill-side request
         id (``meta.remote.request_id``), not the local decode request id.
@@ -4716,23 +4712,21 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
         ``_get_new_notifs`` with "Potentially invalid KV blocks for
         unrecognized request" and the blocks only release via the abort
         timeout. See ``_read_blocks_for_req`` in
-        ``aphrodite/distributed/kv_transfer/kv_connector/v1/nixl/worker.py``.
+        ``sonar/distributed/kv_transfer/kv_connector/v1/nixl/worker.py``.
         """
         decode_tp_size = 1
         prefill_tp_size = 4
 
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(block_size=block_size)
-        aphrodite_config.parallel_config.tensor_parallel_size = decode_tp_size
+        sonar_config = create_sonar_config(block_size=block_size)
+        sonar_config.parallel_config.tensor_parallel_size = decode_tp_size
 
         connector = NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
-        connector.connector_worker = FakeNixlConnectorWorker(
-            aphrodite_config, connector.engine_id, hand_shake_latency=0
-        )
+        connector.connector_worker = FakeNixlConnectorWorker(sonar_config, connector.engine_id, hand_shake_latency=0)
         worker = connector.connector_worker
 
         # Force the MLA path; only `self.use_mla` gates the branches we
@@ -4813,22 +4807,22 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_kv_both_deprecation_warning(default_aphrodite_config, dist_init):
+def test_kv_both_deprecation_warning(default_sonar_config, dist_init):
     """kv_role='kv_both' should emit a deprecation log warning."""
-    from aphrodite.logger import _print_warning_once
+    from sonar.logger import _print_warning_once
 
     _print_warning_once.cache_clear()
 
     block_size = maybe_update_block_size(16)
-    aphrodite_config = create_aphrodite_config(kv_role="kv_both", block_size=block_size)
+    sonar_config = create_sonar_config(kv_role="kv_both", block_size=block_size)
 
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger") as mock_logger:
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger") as mock_logger:
         mock_logger.warning_once = mock_logger.warning_once
         NixlConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
@@ -4840,17 +4834,17 @@ def test_kv_both_deprecation_warning(default_aphrodite_config, dist_init):
 
 
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+    "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_explicit_kv_role_no_deprecation_warning(default_aphrodite_config, dist_init):
+def test_explicit_kv_role_no_deprecation_warning(default_sonar_config, dist_init):
     """kv_role='kv_consumer' or 'kv_producer' should NOT emit a warning."""
     for role in ("kv_consumer", "kv_producer"):
         block_size = maybe_update_block_size(16)
-        aphrodite_config = create_aphrodite_config(kv_role=role, block_size=block_size)
-        with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger") as mock_logger:
+        sonar_config = create_sonar_config(kv_role=role, block_size=block_size)
+        with patch("sonar.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger") as mock_logger:
             NixlConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=block_size),
             )
@@ -4909,19 +4903,19 @@ def test_ucx_backend_params(dist_init, extra_config, agent_backends, created_bac
             num_threads=num_threads,
         )
 
-    aphrodite_config = create_aphrodite_config(kv_connector_extra_config=extra_config)
+    sonar_config = create_sonar_config(kv_connector_extra_config=extra_config)
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
             _BackendRecordingNixlWrapper,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.nixl_agent_config",
+            "sonar.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.nixl_agent_config",
             agent_config,
         ),
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
     ):
-        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16))
+        connector = NixlConnector(sonar_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16))
     wrapper = connector.connector_worker.nixl_wrapper
     assert wrapper.config.backends == agent_backends
     assert wrapper.created_backends == created_backends

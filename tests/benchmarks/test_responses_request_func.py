@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for the ``openai-responses`` backend of ``aphrodite bench serve``.
+"""Tests for the ``openai-responses`` backend of ``sonar bench serve``.
 
 The Responses stream differs from Chat Completions in ways the benchmark client
 has to get right: every SSE message is labelled with an ``event:`` line,
@@ -19,7 +19,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from aphrodite.benchmarks.lib.endpoint_request_func import (
+from sonar.benchmarks.lib.endpoint_request_func import (
     ASYNC_REQUEST_FUNCS,
     OPENAI_COMPATIBLE_BACKENDS,
     RequestFuncInput,
@@ -177,7 +177,7 @@ def test_request_payload_is_accepted_by_the_server_schema():
     the flags that membership enables have to reach the model, and the server
     drops unknown fields without complaining.
     """
-    from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
+    from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
 
     sampling = {
         "temperature": 0.7,
@@ -357,7 +357,7 @@ def test_text_then_tool_call_times_both():
 def test_incomplete_response_is_a_successful_request(event_type: str):
     """Hitting max_output_tokens is the Responses form of finish_reason=length.
 
-    Aphrodite reports it as `response.completed` carrying `status: "incomplete"`.
+    Sonar reports it as `response.completed` carrying `status: "incomplete"`.
     The spec's dedicated `response.incomplete` event is accepted as well.
     """
     output = run(
@@ -437,7 +437,7 @@ def test_multi_line_data_payload_is_joined_with_newlines():
 
 
 def test_done_sentinel_is_skipped():
-    """Other Responses servers send `[DONE]`, but Aphrodite does not."""
+    """Other Responses servers send `[DONE]`, but Sonar does not."""
     output = run([PREAMBLE, text_delta("ok"), usage_event(5, 1), b"data: [DONE]\n\n"])
 
     assert output.success, output.error
@@ -478,7 +478,7 @@ def test_truncated_stream_is_not_reported_as_success():
 def test_mid_stream_error_is_not_reported_as_success():
     """An error payload mid-stream must not be counted as a success.
 
-    Aphrodite cannot emit this today: its streaming error path fails to validate
+    Sonar cannot emit this today: its streaming error path fails to validate
     against the event union, so a generation failure truncates the stream
     instead. Proxies and other Responses servers do send it.
     """

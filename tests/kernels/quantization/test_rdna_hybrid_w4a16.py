@@ -12,19 +12,19 @@ import importlib
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm only", allow_module_level=True)
 
 pytest.importorskip("triton")
 
-from aphrodite.platforms.rocm import on_gfx1x, on_gfx115x  # noqa: E402
+from sonar.platforms.rocm import on_gfx1x, on_gfx115x  # noqa: E402
 
 device = "cuda"
 
-hybrid_module = importlib.import_module("aphrodite.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16")
+hybrid_module = importlib.import_module("sonar.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16")
 RDNAHybridW4A16LinearKernel = hybrid_module.RDNAHybridW4A16LinearKernel
 pack_int4_exllama_shuffle = hybrid_module.pack_int4_exllama_shuffle
 dequantize_w4a16 = hybrid_module.dequantize_w4a16
@@ -143,9 +143,9 @@ def test_rdna_hybrid_w4a16_apply_matches_reference(dtype, group_size, has_zp, M,
         dequantize_w4a16(w_int4_nk, scales_nkg, zp_nkg, group_size, 0 if has_zp else 8, dtype) if use_dequant else None
     )
 
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
-    out = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(
+    out = torch.ops.sonar.rdna_hybrid_w4a16_apply(
         x_mk,
         w_q,
         scales_nkg,
@@ -179,9 +179,9 @@ def test_rdna_hybrid_w4a16_apply_with_bias(dtype, M):
     scales_nkg = (0.05 * torch.rand((N, K // G), device=device, dtype=torch.float32)).to(dtype)
     bias = torch.randn(N, device=device, dtype=dtype) * 0.1
 
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
-    out = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(
+    out = torch.ops.sonar.rdna_hybrid_w4a16_apply(
         x_mk,
         w_q,
         scales_nkg,
@@ -210,7 +210,7 @@ def test_rdna_hybrid_w4a16_dense_dispatch(M, has_dense, expected_path, monkeypat
     """Memory-bound batches must stay on int4, including decode batches that
     miss the skinny path on the LDS limit (e.g. spec-decode verify).
     """
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     N, K, G = 16, 16384, 128
     assert M > MAX_SKINNY_BATCH_SIZE or K * M > MEDIUM_SKINNY_LIMIT_ELEMENTS
@@ -347,10 +347,10 @@ def _build_dummy_layer(
     scales_ckpt_nkg: torch.Tensor,
     zeros_ckpt: torch.Tensor | None,
 ):
-    from aphrodite.model_executor.parameter import (
+    from sonar.model_executor.parameter import (
         GroupQuantScaleParameter,
-        PackedAphroditeParameter,
         PackedColumnParameter,
+        PackedSonarParameter,
     )
 
     weight_loader = lambda *args, **kwargs: None
@@ -361,7 +361,7 @@ def _build_dummy_layer(
     layer = DummyLayer()
     layer.register_parameter(
         "weight_packed",
-        PackedAphroditeParameter(
+        PackedSonarParameter(
             data=w_ckpt_nk8,
             weight_loader=weight_loader,
             input_dim=1,
@@ -399,10 +399,10 @@ def test_rdna_hybrid_w4a16_process_weights_symmetric_repack(group_size, dist_ini
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     set_random_seed(0)
 
@@ -454,10 +454,10 @@ def test_rdna_hybrid_w4a16_process_weights_asymmetric_repack(group_size, dist_in
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     set_random_seed(0)
 
@@ -515,10 +515,10 @@ _W_DEQUANT_ATTR = RDNAHybridW4A16LinearKernel.DEQUANT_WEIGHT_NAME
 
 def _build_prefill_dequant_case(K: int, N: int, G: int, has_zp: bool):
     """Return (layer, kernel, w_int4_nk, scales_nkg, zp_nkg) for a CT layer."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     w_int4_kn = torch.randint(0, 16, (K, N), device=device, dtype=torch.int32)
     scales_nkg = 0.05 * torch.rand((N, K // G), device=device, dtype=torch.float16)
@@ -547,10 +547,10 @@ def _build_prefill_dequant_case(K: int, N: int, G: int, has_zp: bool):
     return layer, kernel, w_int4_kn.t().contiguous(), scales_nkg, zp_nkg
 
 
-def _prefill_dequant_aphrodite_config(mode: str, gpu_memory_utilization: float):
-    from aphrodite.config import AphroditeConfig, CacheConfig, KernelConfig
+def _prefill_dequant_sonar_config(mode: str, gpu_memory_utilization: float):
+    from sonar.config import CacheConfig, KernelConfig, SonarConfig
 
-    return AphroditeConfig(
+    return SonarConfig(
         kernel_config=KernelConfig(rdna_hybrid_w4a16_prefill_dequant=mode),
         cache_config=CacheConfig(gpu_memory_utilization=gpu_memory_utilization),
     )
@@ -564,7 +564,7 @@ def test_rdna_hybrid_w4a16_prefill_dequant_mode_normalized(value, expected):
     """Mode strings are case-insensitive; booleans are not modes."""
     from pydantic import ValidationError
 
-    from aphrodite.config import KernelConfig
+    from sonar.config import KernelConfig
 
     if expected is None:
         with pytest.raises(ValidationError):
@@ -581,14 +581,14 @@ def test_rdna_hybrid_w4a16_prefill_dequant_cached(mode, has_zp, dist_init):
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
     set_random_seed(0)
     K, N, G = 256, 128, 128
     layer, kernel, w_int4_nk, scales_nkg, zp_nkg = _build_prefill_dequant_case(K, N, G, has_zp)
 
     # Utilization 1.0 leaves all free memory in budget, so the tiny layer fits.
-    with set_current_aphrodite_config(_prefill_dequant_aphrodite_config(mode, 1.0)):
+    with set_current_sonar_config(_prefill_dequant_sonar_config(mode, 1.0)):
         kernel.process_weights_after_loading(layer)
 
     if mode == "disable":
@@ -607,7 +607,7 @@ def test_rdna_hybrid_w4a16_prefill_dequant_budget_exhausted(dist_init, monkeypat
 
     from types import SimpleNamespace
 
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
     # The real free memory is machine dependent; 40 GiB free with 50 GiB
     # outside a 0.5 budget leaves nothing to spend.
@@ -620,7 +620,7 @@ def test_rdna_hybrid_w4a16_prefill_dequant_budget_exhausted(dist_init, monkeypat
     layer, kernel, *_ = _build_prefill_dequant_case(256, 128, 128, has_zp=False)
 
     with (
-        set_current_aphrodite_config(_prefill_dequant_aphrodite_config("enable", 0.5)),
+        set_current_sonar_config(_prefill_dequant_sonar_config("enable", 0.5)),
         pytest.raises(ValueError, match="gpu_memory_utilization"),
     ):
         kernel.process_weights_after_loading(layer)
@@ -634,7 +634,7 @@ def test_rdna_hybrid_w4a16_prefill_dequant_reserves_min_kv(min_kv_gib, fits, dis
 
     from types import SimpleNamespace
 
-    from aphrodite.config import set_current_aphrodite_config
+    from sonar.config import set_current_sonar_config
 
     # 60 GiB free with 50 GiB outside a 0.5 budget leaves 10 GiB, 6 GiB after
     # the activation headroom: enough for the layer unless KV claims 8 GiB.
@@ -644,13 +644,13 @@ def test_rdna_hybrid_w4a16_prefill_dequant_reserves_min_kv(min_kv_gib, fits, dis
         lambda device: SimpleNamespace(free_memory=60 * 2**30, total_memory=100 * 2**30),
     )
     monkeypatch.setattr(
-        "aphrodite.v1.core.kv_cache_planning.max_memory_usage_bytes",
-        lambda aphrodite_config, specs: min_kv_gib * 2**30,
+        "sonar.v1.core.kv_cache_planning.max_memory_usage_bytes",
+        lambda sonar_config, specs: min_kv_gib * 2**30,
     )
     set_random_seed(0)
     layer, kernel, *_ = _build_prefill_dequant_case(256, 128, 128, has_zp=False)
 
-    with set_current_aphrodite_config(_prefill_dequant_aphrodite_config("enable", 0.5)):
+    with set_current_sonar_config(_prefill_dequant_sonar_config("enable", 0.5)):
         if fits:
             kernel.process_weights_after_loading(layer)
             assert hasattr(layer, _W_DEQUANT_ATTR)
@@ -667,10 +667,10 @@ def test_rdna_hybrid_w4a16_prefill_dequant_reserves_min_kv(min_kv_gib, fits, dis
 @pytest.mark.skipif(not on_gfx1x(), reason="Hybrid path is gfx11/gfx12 only")
 @pytest.mark.parametrize("group_size,expected_ok", [(32, True), (64, True), (128, True), (256, False)])
 def test_hybrid_can_implement_group_size(group_size, expected_ok):
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     K, N = 1024, 256
     config = MPLinearLayerConfig(
@@ -764,8 +764,8 @@ def _hip_skinny_reference(
 )
 def test_hip_skinny_wvSplitK_int4_g(dtype, M, K, N, G, has_zp):
     """Test HIP wvSplitK_int4_g kernel directly via _custom_ops."""
-    import aphrodite._custom_ops as ops
-    from aphrodite.utils.platform_utils import num_compute_units
+    import sonar._custom_ops as ops
+    from sonar.utils.platform_utils import num_compute_units
 
     if K * M > LDS_CAPACITY_ELEMENTS and not on_gfx115x():
         pytest.skip("deep-K HIP path is gfx115x only")
@@ -806,7 +806,7 @@ def test_hip_skinny_padded_group_stride(dtype, G, has_zp, M):
     correctly rather than bleeding into the next row. M picks the path: the
     HIP skinny kernel at 2, the Triton prefill kernel at 64.
     """
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
     set_random_seed(0)
     K, N = 2048, 256
@@ -832,7 +832,7 @@ def test_hip_skinny_padded_group_stride(dtype, G, has_zp, M):
         zp_view = zp_padded[:, :num_groups]
 
     cu_count = num_compute_units()
-    out = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(a, b_packed_i8, scales_view, zp_view, None, cu_count, G)
+    out = torch.ops.sonar.rdna_hybrid_w4a16_apply(a, b_packed_i8, scales_view, zp_view, None, cu_count, G)
     ref = _hip_skinny_reference(a, w_int4_nk, scales, group_size=G, zp_nkg=zp_nkg)
 
     torch.testing.assert_close(out, ref, rtol=1e-2, atol=5e-2)
@@ -859,7 +859,7 @@ def test_hip_skinny_padded_group_stride(dtype, G, has_zp, M):
 )
 def test_rdna_hybrid_w4a16_dispatch(dtype, M, K, N, G):
     """Test the full hybrid dispatch via the custom op."""
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
     set_random_seed(0)
 
@@ -872,7 +872,7 @@ def test_rdna_hybrid_w4a16_dispatch(dtype, M, K, N, G):
     scales = (0.05 * torch.rand((N, K // G), device=device, dtype=torch.float32)).to(dtype)
 
     cu_count = num_compute_units()
-    out = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(a, b_packed_i8, scales, None, None, cu_count, G)
+    out = torch.ops.sonar.rdna_hybrid_w4a16_apply(a, b_packed_i8, scales, None, None, cu_count, G)
 
     ref = _hip_skinny_reference(a, w_int4_nk, scales, group_size=G, zp_nkg=None)
 
@@ -890,8 +890,8 @@ def test_wvsplitk_int4_g_rejects_unpacked_zero_points():
     Both layouts are 2D with compatible extents, so only the dtype separates
     them; misreading one as the other returns wrong numbers silently.
     """
-    import aphrodite._custom_ops as ops
-    from aphrodite.utils.platform_utils import num_compute_units
+    import sonar._custom_ops as ops
+    from sonar.utils.platform_utils import num_compute_units
 
     K, N, G, M = 256, 64, 128, 1
     a = torch.randn((M, K), device=device, dtype=torch.float16)
@@ -915,8 +915,8 @@ def test_wvsplitk_int4_g_rejects_undersized_weight_view():
     has to be checked: this view has a valid stride and half the required
     bytes, and without the size check the kernel reads past it.
     """
-    import aphrodite._custom_ops as ops
-    from aphrodite.utils.platform_utils import num_compute_units
+    import sonar._custom_ops as ops
+    from sonar.utils.platform_utils import num_compute_units
 
     K, N, G, M = 512, 256, 128, 1
     a = torch.randn((M, K), device=device, dtype=torch.float16)
@@ -996,7 +996,7 @@ def test_weight_row_padding_does_not_change_results(dtype, has_zp, M):
     weight row stride from the tensor, so a padded layout must produce exactly
     the same numbers as the dense one.
     """
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
     set_random_seed(0)
     K, N, G = 512, 256, 128
@@ -1016,8 +1016,8 @@ def test_weight_row_padding_does_not_change_results(dtype, has_zp, M):
     assert w_q_pad.stride(0) == w_q.stride(0) + _STRIDE_PAD_BYTES
 
     cu_count = num_compute_units()
-    dense = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(a, w_q, scales, zp, None, cu_count, G)
-    padded = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(a, w_q_pad, scales, zp, None, cu_count, G)
+    dense = torch.ops.sonar.rdna_hybrid_w4a16_apply(a, w_q, scales, zp, None, cu_count, G)
+    padded = torch.ops.sonar.rdna_hybrid_w4a16_apply(a, w_q_pad, scales, zp, None, cu_count, G)
     torch.testing.assert_close(padded, dense, rtol=0, atol=0)
 
 
@@ -1034,10 +1034,10 @@ def test_weight_row_padding_does_not_change_results(dtype, has_zp, M):
 )
 def test_process_weights_pads_cliff_rows(K, expected_weight_stride, dist_init):
     """The stored weight row stride follows the padding rule."""
-    from aphrodite.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
+    from sonar.model_executor.kernels.linear.mixed_precision.MPLinearKernel import (
         MPLinearLayerConfig,
     )
-    from aphrodite.scalar_type import scalar_types
+    from sonar.scalar_type import scalar_types
 
     set_random_seed(0)
     N, G = 128, 128
@@ -1095,7 +1095,7 @@ def test_rdna_hybrid_w4a16_dispatch_boundaries(M, K, gfx115x, expected_path, mon
     gfx115x drops the K*M bound, so a shape past the medium limit still goes to
     HIP there; the batch bound holds on every target.
     """
-    import aphrodite._custom_ops as ops
+    import sonar._custom_ops as ops
 
     N, G = 16, 128
     x_mk = torch.empty((M, K), dtype=torch.float16)
@@ -1129,7 +1129,7 @@ def test_rdna_hybrid_w4a16_medium_skinny_matches_reference(dtype, has_zp):
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.utils.platform_utils import num_compute_units
+    from sonar.utils.platform_utils import num_compute_units
 
     set_random_seed(0)
     M, K, N, G = 4, 9728, 256, 128
@@ -1142,7 +1142,7 @@ def test_rdna_hybrid_w4a16_medium_skinny_matches_reference(dtype, has_zp):
     zp = torch.randint(0, 16, (N, K // G), device=device, dtype=torch.int32) if has_zp else None
     w_zp = _pack_zp_rows_for_kernel(zp) if zp is not None else None
 
-    output = torch.ops.aphrodite.rdna_hybrid_w4a16_apply(x_mk, w_q, scales, w_zp, None, num_compute_units(), G)
+    output = torch.ops.sonar.rdna_hybrid_w4a16_apply(x_mk, w_q, scales, w_zp, None, num_compute_units(), G)
     reference = _rdna_hybrid_w4a16_reference(x_mk, w_int4_nk, scales, zp, G, bias=None)
 
     torch.testing.assert_close(output, reference, rtol=2e-2, atol=2e-2)

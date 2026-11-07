@@ -9,8 +9,8 @@ import pytest
 from xgrammar import Grammar
 from xgrammar.testing import _is_grammar_accept_string
 
-from aphrodite.parser.chat_parsing.response_templates import load_response_template
-from aphrodite.parser.response_template_grammar import (
+from sonar.parser.chat_parsing.response_templates import load_response_template
+from sonar.parser.response_template_grammar import (
     answer_rest_structural_tag,
     tool_call_structural_tag,
 )

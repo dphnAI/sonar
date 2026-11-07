@@ -9,13 +9,13 @@ kernel:
       index key into the index cache by its own slot mapping.
 
 Reference: PyTorch Gemma RMSNorm with the same dtype materialization boundary
-as the unfused path, followed by Aphrodite CUDA rotary_embedding-style NeoX RoPE.
+as the unfused path, followed by Sonar CUDA rotary_embedding-style NeoX RoPE.
 """
 
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
+import sonar._custom_ops as ops
 
 HEAD_DIM = 128
 ROTARY_DIM = 64

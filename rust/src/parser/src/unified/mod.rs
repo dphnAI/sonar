@@ -12,7 +12,6 @@ mod inkling;
 mod kimi_k3;
 mod muse;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 pub use beam::BeamUnifiedParser;
 pub use combined::CombinedParser;
 pub use gemma4::Gemma4UnifiedParser;
@@ -21,6 +20,7 @@ pub use hy::{HyV3UnifiedParser, HyV4UnifiedParser};
 pub use inkling::InklingUnifiedParser;
 pub use kimi_k3::KimiK3UnifiedParser;
 pub use muse::MuseUnifiedParser;
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use thiserror::Error;
 use thiserror_ext::Macro;
 
@@ -111,7 +111,7 @@ impl UnifiedParserOutput {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
+    use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
 
     use super::{UnifiedParserEvent, UnifiedParserOutput};
     use crate::tool::ToolCallDelta;
@@ -301,17 +301,14 @@ pub enum UnifiedParserError {
 }
 
 /// Returns the ID for the given token, or an error if it's not found.
-fn token_id(tokenizer: &dyn aphrodite_tokenizer::Tokenizer, token: &str) -> Result<u32> {
+fn token_id(tokenizer: &dyn sonar_tokenizer::Tokenizer, token: &str) -> Result<u32> {
     tokenizer.token_to_id(token).ok_or_else(|| UnifiedParserError::MissingToken {
         token: token.to_string(),
     })
 }
 
 /// Resolves `token` to a [`SpecialToken`], or an error if it's not found.
-fn special_token(
-    tokenizer: &dyn aphrodite_tokenizer::Tokenizer,
-    token: &str,
-) -> Result<SpecialToken> {
+fn special_token(tokenizer: &dyn sonar_tokenizer::Tokenizer, token: &str) -> Result<SpecialToken> {
     Ok(SpecialToken {
         id: token_id(tokenizer, token)?,
         text: token.to_string(),

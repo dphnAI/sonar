@@ -13,7 +13,7 @@
  * Structured after `applyMLARopeAndAssignQKVKernelGeneration` in
  * TensorRT-LLM's mlaKernels.cu: one kernel, one grid, with head-slot
  * dispatch choosing Q vs KV work per warp.  The per-warp RMSNorm/RoPE
- * skeleton is adapted from aphrodite-deepseek_v4's existing
+ * skeleton is adapted from sonar-deepseek_v4's existing
  * `fusedQKNormRopeKernel` (csrc/fused_qknorm_rope_kernel.cu).
  *
  * Assumptions (hard-coded for DeepseekV4 attention):
@@ -81,7 +81,7 @@ __device__ __forceinline__ uint8_t rocm_cvt_float_to_fp8_e4m3(float val) {
 }
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace deepseek_v4_fused_ops {
 
 namespace {
@@ -108,7 +108,7 @@ constexpr int kMxfp8TokenDataBytes = kHeadDim;                     // 512
 constexpr int kMxfp8BytesPerToken =
     kMxfp8TokenDataBytes + kMxfp8NumQuantBlocks;  // 528
 // FNUZ on gfx942 / OCP elsewhere. FNUZ uses 224.0 (not the dtype's raw
-// 240.0) to match the rest of Aphrodite's FNUZ pipeline.
+// 240.0) to match the rest of Sonar's FNUZ pipeline.
 #if defined(USE_ROCM) && defined(__gfx942__)
 constexpr float kFp8Max = 224.0f;
 #else
@@ -240,7 +240,7 @@ __device__ __forceinline__ void processDeepseekV4Slot(
     int64_t const* __restrict__ position_ids,
     float const* __restrict__ cos_sin_cache, int const cache_block_size,
     int const kv_block_stride, bool const kv_mxfp8, bool const apply_q_rope) {
-  using Converter = aphrodite::_typeConvert<scalar_t_in>;
+  using Converter = sonar::_typeConvert<scalar_t_in>;
   bool const isKV = (slotIdx == kNumHeadsQPadded);
   bool const isPadQ = !isKV && (slotIdx >= num_heads_q);
 
@@ -826,7 +826,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
     return;
   } else {
 #endif
-    using Converter = aphrodite::_typeConvert<scalar_t_in>;
+    using Converter = sonar::_typeConvert<scalar_t_in>;
     int const warpsPerBlock = blockDim.x / 32;
     int const warpId = threadIdx.x / 32;
     int const laneId = threadIdx.x % 32;
@@ -923,7 +923,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
     // ── Store ─────────────────────────────────────────────────────────────
     if (!isKV) {
       if constexpr (STORE_Q_FP8) {
-        float const scale_inv = APHRODITE_LDG(q_fp8_scale_inv);
+        float const scale_inv = SONAR_LDG(q_fp8_scale_inv);
         uint4 const out = packFp8E4M3x16(elements, scale_inv);
         uint8_t* dst = q_fp8_out +
                        static_cast<int64_t>(tokenIdx) * q_fp8_stride0 +
@@ -958,7 +958,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
         uint8_t* cache_row =
             k_cache + block_idx * kv_block_stride + pos_in_block * kv_token_stride;
         if constexpr (STORE_KV_FP8) {
-          float const inv_scale = 1.0f / APHRODITE_LDG(fp8_scale_ptr);
+          float const inv_scale = 1.0f / SONAR_LDG(fp8_scale_ptr);
           uint4 const out = packFp8E4M3x16(elements, inv_scale);
           *reinterpret_cast<uint4*>(cache_row + dim_base) = out;
         } else {
@@ -1044,7 +1044,7 @@ static void launchFullCacheKernel(
 }
 
 }  // namespace deepseek_v4_fused_ops
-}  // namespace aphrodite
+}  // namespace sonar
 
 // ────────────────────────────────────────────────────────────────────────────
 // Torch op wrapper
@@ -1113,20 +1113,20 @@ void fused_deepseek_v4_kv_rope_insert(
     // With zero query heads no Q slot is scheduled, so neither Q knob is
     // reachable: Q_INTERLEAVED picks addressing nothing uses, and apply_q_rope
     // gates a branch only a Q slot takes (KV is rotated unconditionally).
-    aphrodite::deepseek_v4_fused_ops::launchFusedDeepseekV4Templated<scalar_t, 0,
+    sonar::deepseek_v4_fused_ops::launchFusedDeepseekV4Templated<scalar_t, 0,
                                                                 false, false>(
         nullptr, nullptr, input, cache, slots, positions, cos_sin, 0.0f,
         num_tokens, num_tokens, 0, static_cast<int>(cache_block_size),
         static_cast<int>(k_cache.stride(0)), kv_mxfp8, /*apply_q_rope=*/true,
         stream);
   } else if (fp8) {
-    aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false, true>(
+    sonar::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false, true>(
         nullptr, nullptr, 0, 0, input, cache, slots, positions, cos_sin,
         fp8_scale->const_data_ptr<float>(), nullptr, 0.0f, num_tokens, num_tokens,
         0, static_cast<int>(cache_block_size), k_cache.stride(0),
         k_cache.stride(1), false, "fused_deepseek_v4_kv_rope_insert", stream);
   } else {
-    aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false, false>(
+    sonar::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false, false>(
         nullptr, nullptr, 0, 0, input, cache, slots, positions, cos_sin, nullptr,
         nullptr, 0.0f, num_tokens, num_tokens, 0, static_cast<int>(cache_block_size),
         k_cache.stride(0) * 2, k_cache.stride(1) * 2, false,
@@ -1209,10 +1209,10 @@ torch::stable::Tensor fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert(
   // Reuse the caller's output during graph capture/replay; the kernel writes
   // every live and padding element without allocating a new tensor.
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       q_in.scalar_type(), "fused_deepseek_v4_qnorm_rope_kv_insert", [&] {
         using qkv_scalar_t = scalar_t;
-        aphrodite::deepseek_v4_fused_ops::
+        sonar::deepseek_v4_fused_ops::
             launchFusedDeepseekV4QNormRopeKVRopeQuantInsert<qkv_scalar_t>(
                 reinterpret_cast<qkv_scalar_t const*>(q_in.const_data_ptr()),
                 reinterpret_cast<qkv_scalar_t*>(q_out.mutable_data_ptr()),
@@ -1284,10 +1284,10 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert(
   int64_t const kv_block_stride = k_cache.stride(0) * 2;
   int64_t const kv_token_stride = k_cache.stride(1) * 2;
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert", [&] {
-        aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false,
+        sonar::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false,
                                                            false>(
             reinterpret_cast<scalar_t*>(q.mutable_data_ptr()), nullptr, 0, 0,
             reinterpret_cast<scalar_t const*>(kv.const_data_ptr()),
@@ -1366,10 +1366,10 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert(
       q.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(q.get_device_index());
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+  SONAR_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert", [&] {
-        aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, true,
+        sonar::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, true,
                                                            true>(
             // q is read-only in the fp8 path (the kernel writes q_fp8); the
             // launcher signature is non-const, so cast away const on the ptr.

@@ -3,11 +3,11 @@
 
 from copy import copy
 
-from aphrodite import SamplingParams
-from aphrodite.outputs import CompletionOutput
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.parallel_sampling import ParentRequest
+from sonar import SamplingParams
+from sonar.outputs import CompletionOutput
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.parallel_sampling import ParentRequest
 
 
 def test_parent_request_to_output_stream() -> None:

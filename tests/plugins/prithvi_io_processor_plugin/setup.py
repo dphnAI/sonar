@@ -8,7 +8,7 @@ setup(
     version="0.1",
     packages=["prithvi_io_processor"],
     entry_points={
-        "aphrodite.io_processor_plugins": [
+        "sonar.io_processor_plugins": [
             "prithvi_to_tiff = prithvi_io_processor:register_prithvi",  # noqa: E501
         ]
     },

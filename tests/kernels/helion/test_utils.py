@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.kernels.helion.utils import canonicalize_gpu_name
+from sonar.kernels.helion.utils import canonicalize_gpu_name
 
 
 @pytest.mark.parametrize(

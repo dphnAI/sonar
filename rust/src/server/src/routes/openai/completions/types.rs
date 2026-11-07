@@ -5,14 +5,14 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::sampling::{
-    AphroditeSamplingParams, RepetitionDetectionParams,
-};
-use aphrodite_llm::WeightVersionSpan;
-use aphrodite_text::{Prompt, TruncationSide};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use serde_with::DefaultOnNull;
+use sonar_engine_core_client::protocol::sampling::{
+    RepetitionDetectionParams, SonarSamplingParams,
+};
+use sonar_llm::WeightVersionSpan;
+use sonar_text::{Prompt, TruncationSide};
 use validator::Validate;
 
 use crate::routes::openai::utils::metrics::{PerRequestMetrics, StreamPerRequestMetrics};
@@ -21,17 +21,17 @@ use crate::routes::openai::utils::types::{
     Usage, default_true, deserialize_request_top_k, validate_stop,
 };
 
-/// Serde default for `CompletionRequest::max_tokens`, matching the Python Aphrodite
+/// Serde default for `CompletionRequest::max_tokens`, matching the Python Sonar
 /// / OpenAI default.
 fn default_completion_max_tokens() -> Option<u32> {
     Some(16)
 }
 
-/// Aphrodite-compatible request type for the Completions API.
+/// Sonar-compatible request type for the Completions API.
 ///
-/// Mirrors the Python Aphrodite `CompletionRequest` class. The local copy keeps the
+/// Mirrors the Python Sonar `CompletionRequest` class. The local copy keeps the
 /// request type route-owned so we can accept token-id prompts via
-/// [`aphrodite_text::Prompt`] and add Aphrodite-only fields directly instead of layering
+/// [`sonar_text::Prompt`] and add Sonar-only fields directly instead of layering
 /// wrapper deserializers on top.
 #[serde_with::skip_serializing_none]
 #[serde_with::serde_as]
@@ -43,7 +43,7 @@ pub struct CompletionRequest {
 
     /// The prompt(s) to generate completions for.
     ///
-    /// We use [`aphrodite_text::Prompt`] here to support token-id input.
+    /// We use [`sonar_text::Prompt`] here to support token-id input.
     pub prompt: Prompt,
 
     /// Echo back the prompt in addition to the completion
@@ -62,7 +62,7 @@ pub struct CompletionRequest {
     pub logprobs: Option<i32>,
 
     /// The maximum number of tokens to generate (defaults to 16 when absent,
-    /// matching the Python Aphrodite / OpenAI API convention)
+    /// matching the Python Sonar / OpenAI API convention)
     #[serde(default = "default_completion_max_tokens")]
     pub max_tokens: Option<u32>,
 
@@ -101,10 +101,10 @@ pub struct CompletionRequest {
     /// A unique identifier representing your end-user
     pub user: Option<String>,
 
-    // -------- Aphrodite Sampling Parameters --------
+    // -------- Sonar Sampling Parameters --------
     /// Sonar's extended sampler settings, with the Python API defaults.
     #[serde(default, flatten)]
-    pub aphrodite_sampling: AphroditeSamplingParams,
+    pub sonar_sampling: SonarSamplingParams,
 
     /// Whether to apply the engine's configured watermark to this request.
     /// `None` requests it like `true`.
@@ -181,7 +181,7 @@ pub struct CompletionRequest {
     /// the top-k selected by `logprobs`. Requires `logprobs` to be set.
     pub logprob_token_ids: Option<Vec<u32>>,
 
-    // -------- Extra Aphrodite Parameters --------
+    // -------- Extra Sonar Parameters --------
     /// Whether to add special tokens (e.g. BOS) to the prompt
     #[serde(default = "default_true")]
     pub add_special_tokens: bool,
@@ -230,7 +230,7 @@ pub struct CompletionRequest {
 
     /// Additional request parameters with string or numeric values for custom
     /// extensions
-    pub aphrodite_xargs: Option<HashMap<String, Value>>,
+    pub sonar_xargs: Option<HashMap<String, Value>>,
 
     /// Additional fields
     #[serde(flatten)]
@@ -242,14 +242,14 @@ impl Normalizable for CompletionRequest {
     fn normalize(&mut self) {
         // An explicit `"max_tokens": null` deserializes to `None`, bypassing the
         // serde field default. Coerce it back to the default so it behaves like
-        // an absent field, matching Python Aphrodite's `normalize_null_max_tokens`.
+        // an absent field, matching Python Sonar's `normalize_null_max_tokens`.
         if self.max_tokens.is_none() {
             self.max_tokens = default_completion_max_tokens();
         }
     }
 }
 
-/// Mirrors the Python Aphrodite `CompletionResponse` class.
+/// Mirrors the Python Sonar `CompletionResponse` class.
 ///
 /// Do not skip serializing `None` fields here: non-streaming response types
 /// should serialize `None` as explicit `null`.
@@ -269,7 +269,7 @@ pub(crate) struct CompletionResponse {
     pub ec_transfer_params: Option<Value>,
 }
 
-/// Mirrors the Python Aphrodite `CompletionResponseChoice` class.
+/// Mirrors the Python Sonar `CompletionResponseChoice` class.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CompletionChoice {
     pub index: u32,
@@ -287,7 +287,7 @@ pub(crate) struct CompletionChoice {
     pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
-/// Mirrors the Python Aphrodite `CompletionStreamResponse` class.
+/// Mirrors the Python Sonar `CompletionStreamResponse` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CompletionStreamResponse {
@@ -313,7 +313,7 @@ impl CompletionStreamResponse {
     }
 }
 
-/// Mirrors the Python Aphrodite `CompletionResponseStreamChoice` class.
+/// Mirrors the Python Sonar `CompletionResponseStreamChoice` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Default, Serialize)]
 pub(crate) struct CompletionStreamChoice {

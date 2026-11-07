@@ -10,14 +10,14 @@ from typing import Annotated, Literal
 import pytest
 from pydantic import Field
 
-from aphrodite.config import (
+from sonar.config import (
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
     ModelConfig,
     config,
 )
-from aphrodite.engine.arg_utils import (
+from sonar.engine.arg_utils import (
     EngineArgs,
     _expand_json_human_readable_numbers,
     contains_type,
@@ -30,7 +30,7 @@ from aphrodite.engine.arg_utils import (
     optional_type,
     parse_type,
 )
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 
 @pytest.mark.parametrize(
@@ -491,7 +491,7 @@ def test_compilation_config():
 
 
 def test_trust_request_mm_kwargs_cli():
-    from aphrodite.entrypoints.common.cli_args import FrontendArgs
+    from sonar.entrypoints.common.cli_args import FrontendArgs
 
     parser = FrontendArgs.add_cli_args(FlexibleArgumentParser())
 
@@ -503,7 +503,7 @@ def test_trust_request_mm_kwargs_cli():
 
 
 def test_attention_config():
-    from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+    from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
     parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
 
@@ -574,7 +574,7 @@ def test_attention_config():
     assert engine_args.attention_config.use_trtllm_attention is False
     assert engine_args.attention_config.disable_flashinfer_q_quantization is False
 
-    # test --attention-backend flows into AphroditeConfig.attention_config
+    # test --attention-backend flows into SonarConfig.attention_config
     args = parser.parse_args(
         [
             "--model",
@@ -585,10 +585,10 @@ def test_attention_config():
     )
     assert args is not None
     engine_args = EngineArgs.from_cli_args(args)
-    aphrodite_config = engine_args.create_engine_config()
-    assert aphrodite_config.attention_config.backend == AttentionBackendEnum.FLASH_ATTN
+    sonar_config = engine_args.create_engine_config()
+    assert sonar_config.attention_config.backend == AttentionBackendEnum.FLASH_ATTN
 
-    # test --attention-config.backend flows into AphroditeConfig.attention_config
+    # test --attention-config.backend flows into SonarConfig.attention_config
     args = parser.parse_args(
         [
             "--model",
@@ -599,8 +599,8 @@ def test_attention_config():
     )
     assert args is not None
     engine_args = EngineArgs.from_cli_args(args)
-    aphrodite_config = engine_args.create_engine_config()
-    assert aphrodite_config.attention_config.backend == AttentionBackendEnum.FLASHINFER
+    sonar_config = engine_args.create_engine_config()
+    assert sonar_config.attention_config.backend == AttentionBackendEnum.FLASHINFER
 
     # test --attention-backend and --attention-config.backend are mutually exclusive
     args = parser.parse_args(
@@ -623,10 +623,10 @@ def test_multi_node_world_size_includes_pcp(monkeypatch):
     """PCP expands the process world size, so the --nnodes divisibility check
     must include it. Without this, TP=1/PCP=2 over 2 nodes computes a world
     size of 1 and the launch is rejected before the engine starts."""
-    import aphrodite.config.aphrodite
+    import sonar.config.sonar
 
     # PCP requires the V2 model runner, which is gated on Triton.
-    monkeypatch.setattr(aphrodite.config.aphrodite, "HAS_TRITON", True)
+    monkeypatch.setattr(sonar.config.sonar, "HAS_TRITON", True)
 
     engine_args = EngineArgs(
         model="facebook/opt-125m",
@@ -634,8 +634,8 @@ def test_multi_node_world_size_includes_pcp(monkeypatch):
         prefill_context_parallel_size=2,
         nnodes=2,
     )
-    aphrodite_config = engine_args.create_engine_config()
-    assert aphrodite_config.parallel_config.world_size == 2
+    sonar_config = engine_args.create_engine_config()
+    assert sonar_config.parallel_config.world_size == 2
 
 
 def test_prefix_cache_default():
@@ -797,9 +797,9 @@ def test_numa_bind_args():
 
 
 def test_ir_op_priority():
-    from aphrodite.config.kernel import IrOpPriorityConfig, KernelConfig
+    from sonar.config.kernel import IrOpPriorityConfig, KernelConfig
 
-    ir_op_priority = IrOpPriorityConfig(rms_norm=["aphrodite_c"])
+    ir_op_priority = IrOpPriorityConfig(rms_norm=["sonar_c"])
     cfg1 = EngineArgs(ir_op_priority=ir_op_priority).create_engine_config()
     cfg2 = EngineArgs(kernel_config=KernelConfig(ir_op_priority=ir_op_priority)).create_engine_config()
     assert cfg1.kernel_config.ir_op_priority == cfg2.kernel_config.ir_op_priority
@@ -811,25 +811,25 @@ def test_ir_op_priority():
         ).create_engine_config()
 
 
-def test_ir_op_priority_deprecation_warning(caplog_aphrodite, disable_log_dedup):
-    """Setting ir_op_priority warns users because Aphrodite IR is being removed."""
-    from aphrodite.config.kernel import IrOpPriorityConfig, KernelConfig
+def test_ir_op_priority_deprecation_warning(caplog_sonar, disable_log_dedup):
+    """Setting ir_op_priority warns users because Sonar IR is being removed."""
+    from sonar.config.kernel import IrOpPriorityConfig, KernelConfig
 
     msg = "ir_op_priority (--ir-op-priority) is deprecated"
 
     # Platform defaults fill ir_op_priority; copying the config must not warn.
     cfg = EngineArgs().create_engine_config()
     replace(cfg.kernel_config, moe_backend="triton")
-    assert msg not in caplog_aphrodite.text
+    assert msg not in caplog_sonar.text
 
-    ir_op_priority = IrOpPriorityConfig(rms_norm=["aphrodite_c"])
+    ir_op_priority = IrOpPriorityConfig(rms_norm=["sonar_c"])
     EngineArgs(ir_op_priority=ir_op_priority).create_engine_config()
-    assert msg in caplog_aphrodite.text
+    assert msg in caplog_sonar.text
 
-    caplog_aphrodite.clear()
+    caplog_sonar.clear()
     kernel_config = KernelConfig(ir_op_priority=ir_op_priority)
     EngineArgs(kernel_config=kernel_config).create_engine_config()
-    assert msg in caplog_aphrodite.text
+    assert msg in caplog_sonar.text
 
 
 @pytest.mark.parametrize(
@@ -893,7 +893,7 @@ class TestDeviceIds:
     @pytest.mark.parametrize("device_ids", [[0, 2], [-1]])
     def test_device_ids_with_cvd_out_of_range(self, monkeypatch, device_ids):
         """--device-ids index beyond the CVD set raises ValueError."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         key = current_platform.device_control_env_var
         monkeypatch.setenv(key, "4,5")
@@ -903,7 +903,7 @@ class TestDeviceIds:
 
     def test_device_ids_with_cvd_resolve_to_physical_ids(self, monkeypatch):
         """--device-ids are CVD-local indices resolved to physical ids."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         key = current_platform.device_control_env_var
         monkeypatch.setenv(key, "4,5")
@@ -912,7 +912,7 @@ class TestDeviceIds:
 
     def test_device_ids_with_uuid_cvd_resolve_to_physical_ids(self, monkeypatch):
         """--device-ids support UUID CVD values resolved by the platform."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         key = current_platform.device_control_env_var
         monkeypatch.setenv(key, "GPU-abcd1234,GPU-ef567890")
@@ -927,7 +927,7 @@ class TestDeviceIds:
 
     def test_device_ids_with_uuid_args_resolve_to_physical_ids(self, monkeypatch):
         """UUID --device-ids are resolved to physical IDs immediately."""
-        from aphrodite.platforms import current_platform
+        from sonar.platforms import current_platform
 
         monkeypatch.setattr(
             type(current_platform),
@@ -965,8 +965,8 @@ class TestDeviceIds:
 
     def test_assigned_physical_gpu_ids_are_physical_with_cvd(self, monkeypatch):
         """assigned_physical_gpu_ids are already physical and not composed with CVD."""
-        import aphrodite.platforms.interface as platform_interface
-        from aphrodite.platforms import current_platform
+        import sonar.platforms.interface as platform_interface
+        from sonar.platforms import current_platform
 
         monkeypatch.setattr(platform_interface, "_assigned_physical_gpu_ids", [4, 5])
         monkeypatch.setenv(current_platform.device_control_env_var, "4,5")
@@ -978,8 +978,8 @@ class TestDeviceIds:
 
     def test_assigned_physical_gpu_ids_map_to_visible_uuid_cvd(self, monkeypatch):
         """Physical IDs map back to visible ordinals when CVD uses UUIDs."""
-        import aphrodite.platforms.interface as platform_interface
-        from aphrodite.platforms import current_platform
+        import sonar.platforms.interface as platform_interface
+        from sonar.platforms import current_platform
 
         monkeypatch.setattr(platform_interface, "_assigned_physical_gpu_ids", [5])
         monkeypatch.setenv(
@@ -1015,8 +1015,8 @@ class TestDeviceIds:
         ordinal) and must not index into assigned_physical_gpu_ids, which
         raised IndexError for non-identity --device-ids like [2, 3].
         """
-        import aphrodite.platforms.interface as platform_interface
-        from aphrodite.platforms import current_platform
+        import sonar.platforms.interface as platform_interface
+        from sonar.platforms import current_platform
 
         monkeypatch.setattr(platform_interface, "_assigned_physical_gpu_ids", [2, 3])
         monkeypatch.delenv(current_platform.device_control_env_var, raising=False)
@@ -1039,7 +1039,7 @@ class TestDpDeviceIdSharding:
         against its inherited device-control env var."""
         import argparse
 
-        from aphrodite.entrypoints.launchers.dp_supervisor import _build_device_ids
+        from sonar.entrypoints.launchers.dp_supervisor import _build_device_ids
 
         args = argparse.Namespace(tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=None)
         assert _build_device_ids(args, local_rank=0) == [0, 1]
@@ -1049,7 +1049,7 @@ class TestDpDeviceIdSharding:
         """User-provided --device-ids are sharded across DP children."""
         import argparse
 
-        from aphrodite.entrypoints.launchers.dp_supervisor import _build_device_ids
+        from sonar.entrypoints.launchers.dp_supervisor import _build_device_ids
 
         args = argparse.Namespace(tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=[4, 5, 6, 7])
         assert _build_device_ids(args, local_rank=0) == [4, 5]
@@ -1060,8 +1060,8 @@ class TestDpDeviceIdSharding:
     def test_dp_rank_shards_user_assigned_gpu_ids(self):
         """get_physical_gpu_ids_for_local_dp_rank slices the user-provided
         --device-ids list instead of recomputing from the env var."""
-        from aphrodite.platforms import current_platform
-        from aphrodite.v1.engine.utils import get_physical_gpu_ids_for_local_dp_rank
+        from sonar.platforms import current_platform
+        from sonar.v1.engine.utils import get_physical_gpu_ids_for_local_dp_rank
 
         evar = current_platform.device_control_env_var
         assert get_physical_gpu_ids_for_local_dp_rank(
@@ -1088,8 +1088,8 @@ def test_get_batch_defaults_gb10_stays_on_small_tier(
     large discrete GPU, so it keeps the small-tier defaults."""
     from types import SimpleNamespace
 
-    from aphrodite.usage.usage_lib import UsageContext
-    from aphrodite.utils.mem_constants import GiB_bytes
+    from sonar.usage.usage_lib import UsageContext
+    from sonar.utils.mem_constants import GiB_bytes
 
     stub = SimpleNamespace(
         get_device_total_memory=lambda: mem_gib * GiB_bytes,
@@ -1098,7 +1098,7 @@ def test_get_batch_defaults_gb10_stays_on_small_tier(
         is_tpu=lambda: False,
         is_cpu=lambda: False,
     )
-    monkeypatch.setattr("aphrodite.engine.arg_utils.current_platform", stub)
+    monkeypatch.setattr("sonar.engine.arg_utils.current_platform", stub)
     tokens, seqs = EngineArgs.get_batch_defaults(1)
     assert tokens[UsageContext.OPENAI_API_SERVER] == expected_api_tokens
     assert seqs[UsageContext.OPENAI_API_SERVER] == expected_api_seqs

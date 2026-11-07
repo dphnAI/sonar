@@ -19,7 +19,7 @@ def server():
     args = ["--reasoning-parser", "qwen3", "--max_model_len", "5000"]
     env_dict = {
         **BASE_TEST_ENV,
-        "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
+        "SONAR_ENABLE_RESPONSES_API_STORE": "1",
         # uncomment for tool calling
         # PYTHON_EXECUTION_BACKEND: "dangerously_use_uv",
     }

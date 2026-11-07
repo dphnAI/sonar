@@ -8,4 +8,4 @@ server_args: >-
   --moe-backend humming
   --linear-backend humming
 env:
-  APHRODITE_HUMMING_MOE_GEMM_TYPE: "grouped_contiguous"
+  SONAR_HUMMING_MOE_GEMM_TYPE: "grouped_contiguous"

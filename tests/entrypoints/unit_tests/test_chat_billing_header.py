@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.renderers.chat_utils import parse_chat_message_content
+from sonar.renderers.chat_utils import parse_chat_message_content
 
 HEADER = "x-anthropic-billing-header: cc_version=2.1.220.300; cc_entrypoint=claude-desktop; cch=7adab;"
 

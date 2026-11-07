@@ -91,7 +91,7 @@ hardware_overrides:
       - "--limit-mm-per-prompt"
       - '{"image":2,"video":0}'
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides: {}
 
@@ -106,15 +106,15 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### AMD ROCm (MI300X, MI325X, MI355X)
-  > Note: The Aphrodite wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. Use the Docker flow if your environment is incompatible.
+  > Note: The Sonar wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. Use the Docker flow if your environment is incompatible.
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ### TPU Deployment
@@ -125,7 +125,7 @@ guide: |
   ### 4xA100 (BF16, TP=4)
   ```bash
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  aphrodite serve Qwen/Qwen2.5-VL-72B-Instruct  \
+  sonar serve Qwen/Qwen2.5-VL-72B-Instruct  \
     --host 0.0.0.0 \
     --port 8000 \
     --tensor-parallel-size 4 \
@@ -136,8 +136,8 @@ guide: |
   ### 4xMI300X/MI325X/MI355X (BF16, TP=4)
   ```bash
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve Qwen/Qwen2.5-VL-72B-Instruct  \
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve Qwen/Qwen2.5-VL-72B-Instruct  \
     --host 0.0.0.0 \
     --port 8000 \
     --tensor-parallel-size 4 \
@@ -150,7 +150,7 @@ guide: |
 
   ```bash
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  aphrodite serve Qwen/Qwen2.5-VL-7B-Instruct  \
+  sonar serve Qwen/Qwen2.5-VL-7B-Instruct  \
     --host 0.0.0.0 \
     --port 8000 \
     --data-parallel-size 4 \
@@ -163,7 +163,7 @@ guide: |
   - For A100-80GB devices, TP must be >= 2 to avoid OOM.
   - `--limit-mm-per-prompt` caps incoming multimodal requests.
   - `--mm-encoder-tp-mode data` deploys the small ViT encoder in DP fashion (ViT ≈ 675M vs 72B LM).
-  - Aphrodite uses 90% of GPU memory by default; set `--gpu-memory-utilization=0.95` to maximize KV cache.
+  - Sonar uses 90% of GPU memory by default; set `--gpu-memory-utilization=0.95` to maximize KV cache.
 
   ## Benchmarking
 
@@ -171,7 +171,7 @@ guide: |
 
   ### VisionArena-Chat
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --backend openai-chat \
@@ -184,7 +184,7 @@ guide: |
 
   ### Random Synthetic
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --host 0.0.0.0 \
     --port 8000 \
     --model Qwen/Qwen2.5-VL-72B-Instruct \
@@ -202,4 +202,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct)
-  - [Aphrodite multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)
+  - [Sonar multimodal inputs guide](https://docs.vllm.ai/en/latest/features/multimodal_inputs.html)

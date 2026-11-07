@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.utils.network_utils import get_file_store_init_method
-from aphrodite.v1.executor import UniProcExecutor
-from aphrodite.v1.worker.worker_base import WorkerWrapperBase
+from sonar.utils.network_utils import get_file_store_init_method
+from sonar.v1.executor import UniProcExecutor
+from sonar.v1.worker.worker_base import WorkerWrapperBase
 
 
 # This is a dummy executor for patching in test_runai_model_streamer_s3.py.
-# We cannot use aphrodite_runner fixture here, because it spawns worker process.
+# We cannot use sonar_runner fixture here, because it spawns worker process.
 # The worker process reimports the patched entities, and the patch is not applied.
 class RunaiDummyExecutor(UniProcExecutor):
     def _init_executor(self) -> None:
@@ -17,12 +17,12 @@ class RunaiDummyExecutor(UniProcExecutor):
         rank = 0
         is_driver_worker = True
 
-        device_info = self.aphrodite_config.device_config.device.__str__().split(":")
+        device_info = self.sonar_config.device_config.device.__str__().split(":")
         if len(device_info) > 1:
             local_rank = int(device_info[1])
 
         worker_rpc_kwargs = dict(
-            aphrodite_config=self.aphrodite_config,
+            sonar_config=self.sonar_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,

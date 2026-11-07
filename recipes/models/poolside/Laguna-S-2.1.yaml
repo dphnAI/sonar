@@ -57,23 +57,23 @@ variants:
     hardware_overrides:
       mi325x:
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
   fp8:
     model_id: "poolside/Laguna-S-2.1-FP8"
     precision: fp8
     vram_minimum_gb: 145
     description: "Block-FP8 weights + FP8 KV cache (~121GB) — a hair over one 141GB H200, so TP2 (or a single 268GB B300)"
     extra_env:
-      APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
+      SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
     hardware_overrides:
       mi325x:
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "0"
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "0"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
   nvfp4:
     model_id: "poolside/Laguna-S-2.1-NVFP4"
     precision: nvfp4
@@ -118,14 +118,14 @@ guide: |
   - **Tool calling**: Poolside's XML-style tool-call protocol, parsed via
     `poolside_v1`.
 
-  Same architecture as XS-2.1, so Aphrodite needs no S-specific code — support
+  Same architecture as XS-2.1, so Sonar needs no S-specific code — support
   lands with the shared `laguna` implementation.
 
   ## Prerequisites
 
   ### pip
   ```bash
-  uv pip install -U 'aphrodite-engine>=0.25.0'
+  uv pip install -U 'sonar>=0.25.0' --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker
@@ -142,7 +142,7 @@ guide: |
   | Variant | Checkpoint | Weights | ~Size | Fits on |
   |---------|-----------|---------|-------|---------|
   | BF16 | [Laguna-S-2.1](https://huggingface.co/poolside/Laguna-S-2.1) | BF16 | 235 GB | ≥2× H200/B200, or a full HGX node |
-  | FP8 | [Laguna-S-2.1-FP8](https://huggingface.co/poolside/Laguna-S-2.1-FP8) | Block-FP8 | 121 GB | TP2 on H200, or one B300; set `APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
+  | FP8 | [Laguna-S-2.1-FP8](https://huggingface.co/poolside/Laguna-S-2.1-FP8) | Block-FP8 | 121 GB | TP2 on H200, or one B300; set `SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
   | NVFP4 | [Laguna-S-2.1-NVFP4](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4) | NVFP4 | 72 GB | single B200/B300 (Blackwell only) |
   | INT4 | [Laguna-S-2.1-INT4](https://huggingface.co/poolside/Laguna-S-2.1-INT4) | INT4 (W4A16) | 72 GB | single H200/B200 |
 
@@ -164,7 +164,7 @@ guide: |
 
   ### Multi-GPU node (H200/B200, BF16)
   ```bash
-  aphrodite serve poolside/Laguna-S-2.1 \
+  sonar serve poolside/Laguna-S-2.1 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --max-model-len 262144 \
@@ -176,12 +176,12 @@ guide: |
   ### AMD ROCm — 8× MI325X
 
   For FP8, the MI325X override disables AITER MoE because its blockscale kernel
-  currently corrupts logits; other AITER operators remain enabled, while Aphrodite
+  currently corrupts logits; other AITER operators remain enabled, while Sonar
   uses Triton MoE.
 
   ### Single GPU (INT4 on H200, or NVFP4 on B200)
   ```bash
-  aphrodite serve poolside/Laguna-S-2.1-INT4 \
+  sonar serve poolside/Laguna-S-2.1-INT4 \
     --trust-remote-code \
     --max-model-len 262144 \
     --enable-auto-tool-choice \
@@ -213,7 +213,7 @@ guide: |
 
   The model's `generation_config.json` sets `top_k 20` (eval-certified
   truncation) so clients that send no sampling params still get sane output.
-  Do **not** add `min_p` when speculative decoding is on — Aphrodite rejects
+  Do **not** add `min_p` when speculative decoding is on — Sonar rejects
   `min_p`/`logit_bias` with speculation; use `top_k`/`top_p`.
 
   ## Speculative decoding (DFlash)
@@ -227,12 +227,12 @@ guide: |
   Requires:
   - DFlash drafter support for Laguna, merged in
     [PR #46853](https://github.com/vllm-project/vllm/pull/46853) (2026-07-03) —
-    use a Aphrodite build that includes it (validated on 0.25.1).
+    use a Sonar build that includes it (validated on 0.25.1).
   - `--moe-backend triton` — the default DeepGEMM MoE backend is incompatible
     with the DFlash draft path. Enabling the toggle adds this flag.
 
   ```bash
-  aphrodite serve poolside/Laguna-S-2.1 \
+  sonar serve poolside/Laguna-S-2.1 \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --max-model-len 16384 \
@@ -246,7 +246,7 @@ guide: |
   ### DGX Spark (GB10)
 
   The NVFP4 checkpoint is validated on a single DGX Spark (GB10, `sm_121a`) with
-  Aphrodite 0.25.1 + a FlashInfer nightly and DFlash — see the
+  Sonar 0.25.1 + a FlashInfer nightly and DFlash — see the
   [Laguna-S-2.1-NVFP4 model card](https://huggingface.co/poolside/Laguna-S-2.1-NVFP4)
   for the full one-box recipe.
 
@@ -254,5 +254,5 @@ guide: |
 
   - [Model card](https://huggingface.co/poolside/Laguna-S-2.1)
   - [DFlash draft model](https://huggingface.co/poolside/Laguna-S-2.1-DFlash)
-  - [Aphrodite DFlash spec-decoding PR #46853](https://github.com/vllm-project/vllm/pull/46853)
+  - [Sonar DFlash spec-decoding PR #46853](https://github.com/vllm-project/vllm/pull/46853)
   - [Laguna XS-2.1 recipe](https://huggingface.co/poolside/Laguna-XS-2.1)

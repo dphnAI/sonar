@@ -9,7 +9,7 @@ has to be detected from the per-layer algorithms.
 
 import pytest
 
-from aphrodite.config.model import _modelopt_mixed_has_nvfp4
+from sonar.config.model import _modelopt_mixed_has_nvfp4
 
 
 def _quantized_layers(*algos: str) -> dict:

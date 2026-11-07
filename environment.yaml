@@ -1,4 +1,4 @@
-name: aphrodite
+name: sonar
 channels:
   - nvidia
   - nvidia/label/cuda-12.8.1

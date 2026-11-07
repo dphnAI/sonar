@@ -7,23 +7,23 @@ against the single-head scorer, bit for bit, on one GPU."""
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm (gfx950) FlyDSL kernels", allow_module_level=True)
 
-from aphrodite.platforms.rocm import on_gfx950  # noqa: E402
+from sonar.platforms.rocm import on_gfx950  # noqa: E402
 
 if not on_gfx950():
     pytest.skip("gfx950 instructions", allow_module_level=True)
 
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_decode import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_decode import (  # noqa: E402
     host as decode_host,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_decode import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_decode import (  # noqa: E402
     kernel_cp_push as cp,
 )
-from aphrodite.models.minimax_m3.amd.ops.nvfp4_index_prefill import (  # noqa: E402
+from sonar.models.minimax_m3.amd.ops.nvfp4_index_prefill import (  # noqa: E402
     host as prefill_host,
 )
 from tests.kernels.attention.minimax_m3_nvfp4_ref import dequant  # noqa: E402

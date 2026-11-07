@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 
 use super::qwen_coder::{Qwen3CoderToolParser, QwenCoderConfig};
 use crate::tool::{Result, Tool, ToolParser, ToolParserOutput};
@@ -32,7 +32,7 @@ const SEED_OSS_CONFIG: QwenCoderConfig = QwenCoderConfig {
 /// `<function=...>` / `<parameter=...>` grammar and schema-driven argument
 /// conversion are byte-identical, so this delegates to a
 /// [`Qwen3CoderToolParser`] configured with the Seed-OSS markers. This mirrors
-/// Python `SeedOssParser(Qwen3Parser)` in `aphrodite/parser/seed_oss.py`.
+/// Python `SeedOssParser(Qwen3Parser)` in `sonar/parser/seed_oss.py`.
 ///
 /// Structured-output tags are intentionally unsupported: the trait default
 /// `structural_tag_builder() -> None` matches Python `SeedOssEngineToolParser`,

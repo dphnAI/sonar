@@ -11,24 +11,24 @@ import torch
 from tokenizers import Tokenizer, models, pre_tokenizers, processors
 from transformers import TokenizersBackend
 
-from aphrodite import PoolingParams, TokensPrompt
-from aphrodite.entrypoints.pooling.scoring.io_processor import (
+from sonar import PoolingParams, TokensPrompt
+from sonar.entrypoints.pooling.scoring.io_processor import (
     BiEncoderIOProcessor,
     CrossEncoderIOProcessor,
     JinaRankingIOProcessor,
     LateInteractionIOProcessor,
     _apply_post_tokenization_to_token_type_ids,
 )
-from aphrodite.entrypoints.pooling.scoring.typing import ScoringData
-from aphrodite.entrypoints.pooling.scoring.utils import compress_token_type_ids
-from aphrodite.entrypoints.pooling.typing import (
+from sonar.entrypoints.pooling.scoring.typing import ScoringData
+from sonar.entrypoints.pooling.scoring.utils import compress_token_type_ids
+from sonar.entrypoints.pooling.typing import (
     OfflineScoringInputsContext,
     ScoringRenderParams,
 )
-from aphrodite.model_executor.models.jina_vl import JinaVLForSequenceClassification
-from aphrodite.outputs import PoolingOutput, PoolingRequestOutput, RequestError
-from aphrodite.renderers import TokenizeParams
-from aphrodite.tokenizers import TokenizerLike
+from sonar.model_executor.models.jina_vl import JinaVLForSequenceClassification
+from sonar.outputs import PoolingOutput, PoolingRequestOutput, RequestError
+from sonar.renderers import TokenizeParams
+from sonar.tokenizers import TokenizerLike
 
 pytestmark = pytest.mark.skip_global_cleanup
 

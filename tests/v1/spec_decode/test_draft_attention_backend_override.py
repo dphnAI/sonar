@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.config import CacheConfig, LoadConfig, SpeculativeConfig
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
+from sonar.config import CacheConfig, LoadConfig, SpeculativeConfig
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import DFlashSpeculator
+from sonar.v1.worker.gpu.spec_decode.eagle.utils import load_eagle_model
 
 
 @dataclass
@@ -45,7 +45,7 @@ class _SpeculativeConfig:
 
 
 @dataclass
-class _AphroditeConfig:
+class _SonarConfig:
     attention_config: _AttentionConfig
     kernel_config: _KernelConfig
     cache_config: _CacheConfig
@@ -53,8 +53,8 @@ class _AphroditeConfig:
     load_config: LoadConfig = field(default_factory=LoadConfig)
 
 
-def _config(target_backend: str, draft_backend: str | None) -> _AphroditeConfig:
-    return _AphroditeConfig(
+def _config(target_backend: str, draft_backend: str | None) -> _SonarConfig:
+    return _SonarConfig(
         attention_config=_AttentionConfig(backend=target_backend),
         kernel_config=_KernelConfig(),
         cache_config=_CacheConfig(),
@@ -63,24 +63,24 @@ def _config(target_backend: str, draft_backend: str | None) -> _AphroditeConfig:
 
 
 class _Captured(Exception):
-    def __init__(self, aphrodite_config):
-        self.aphrodite_config = aphrodite_config
+    def __init__(self, sonar_config):
+        self.sonar_config = sonar_config
 
 
 def _capture_draft_config(cfg):
-    def _fake_get_model(*, aphrodite_config, model_config):
-        raise _Captured(aphrodite_config)
+    def _fake_get_model(*, sonar_config, model_config):
+        raise _Captured(sonar_config)
 
     with (
-        patch("aphrodite.v1.worker.gpu.spec_decode.eagle.utils.get_model", _fake_get_model),
+        patch("sonar.v1.worker.gpu.spec_decode.eagle.utils.get_model", _fake_get_model),
         patch(
-            "aphrodite.v1.worker.gpu.spec_decode.utils.get_pp_group",
+            "sonar.v1.worker.gpu.spec_decode.utils.get_pp_group",
             return_value=SimpleNamespace(world_size=1),
         ),
         pytest.raises(_Captured) as exc,
     ):
         load_eagle_model(object(), cfg)
-    return exc.value.aphrodite_config
+    return exc.value.sonar_config
 
 
 def test_draft_attention_backend_overrides_the_target():
@@ -108,18 +108,18 @@ def test_draft_attn_builders_get_overrides_and_keep_resolved_cache_state():
     an fp8 draft next to an NVFP4 target with a resolved KV cache layout."""
     cache_config = CacheConfig(cache_dtype="nvfp4")
     cache_config.kv_cache_layout = "HND"
-    cfg = _AphroditeConfig(
+    cfg = _SonarConfig(
         attention_config=_AttentionConfig(backend="FLASHINFER"),
         kernel_config=_KernelConfig(),
         cache_config=cache_config,
         speculative_config=_SpeculativeConfig(attention_backend="TRITON_ATTN", kv_cache_dtype="fp8"),
     )
     speculator = object.__new__(DFlashSpeculator)
-    speculator.aphrodite_config = cfg
+    speculator.sonar_config = cfg
     speculator.speculative_config = cfg.speculative_config
     speculator.requires_non_causal = True
 
-    used = speculator.attn_aphrodite_config
+    used = speculator.attn_sonar_config
 
     assert used.attention_config.backend == "TRITON_ATTN"
     assert used.attention_config.use_non_causal

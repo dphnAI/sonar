@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the Cohere v2 -> OpenAI request / response conversion
-implemented in ``aphrodite/entrypoints/cohere/serving.py``.
+implemented in ``sonar/entrypoints/cohere/serving.py``.
 
 These cover the pure-Python classmethods so we don't need an engine.
 For the instance methods that read ``self._is_reasoning_model`` we
@@ -16,33 +16,33 @@ from typing import Any
 
 import pytest
 
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
-    Citation as APHRODITECitation,
+from sonar.entrypoints.cohere.cohere_chat_message import (
+    Citation as SONARCitation,
 )
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.entrypoints.cohere.cohere_chat_message import (
     CitationSource,
 )
-from aphrodite.entrypoints.cohere.protocol import (
+from sonar.entrypoints.cohere.protocol import (
     CohereChatV2Request,
     CohereChatV2Response,
     CohereLogprobItem,
 )
-from aphrodite.entrypoints.cohere.serving import (
+from sonar.entrypoints.cohere.serving import (
     _FINISH_REASON_MAP,
     CohereServingChatV2,
     _map_finish_reason,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.renderers.cohere import (
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.renderers.cohere import (
     MESSAGES_CITATIONS_KEY,
     POSITION_TO_SOURCE_KEY,
     TOOL_MESSAGE_V2_CONTENT_KEY,
 )
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -502,11 +502,11 @@ class TestConvertToolMessage:
     def test_text_only_list_preserves_per_block_text_parts(self):
         # A list of text blocks maps 1-to-1 onto ``text`` content
         # parts, mirroring the shape ``_convert_user_message`` emits
-        # for multi-part user content. Aphrodite's
+        # for multi-part user content. Sonar's
         # ``parse_chat_message_content`` will collapse this back to
         # ``"\n".join(...)`` for the ``ConversationMessage`` handed to
         # renderers (see the tool-role branch in
-        # ``aphrodite/entrypoints/chat_utils.py``), so downstream chat
+        # ``sonar/entrypoints/chat_utils.py``), so downstream chat
         # templates that expect string tool content still work.
         req = self._request_with_tool_message(
             [
@@ -525,7 +525,7 @@ class TestConvertToolMessage:
         """Document blocks must not survive on the OpenAI-shaped tool
         message.
 
-        Aphrodite's shared ``parse_chat_message_content_parts`` runs a
+        Sonar's shared ``parse_chat_message_content_parts`` runs a
         Pydantic ``ValidatorIterator`` over the OpenAI content-part
         union, which only knows ``text`` / ``image_url`` / etc. and
         rejects ``{"type": "document", ...}`` blocks outright. We
@@ -580,7 +580,7 @@ class TestConvertToolMessage:
     def test_converted_tool_message_content_survives_openai_validation(self):
         """Regression for the reported crash.
 
-        ``aphrodite/renders/chat_message_content.py:parse_chat_message_content_parts``
+        ``sonar/renders/chat_message_content.py:parse_chat_message_content_parts``
         runs a Pydantic ``ValidatorIterator`` over
         ``list[ChatCompletionContentPartParam]``, which is a
         discriminated union that only accepts ``text`` / ``image_url``
@@ -2055,8 +2055,8 @@ class TestExtractCitations:
     """Test the parser-output -> wire-shape citation coercion.
 
     Sources are already fully resolved by the reasoning parser (see
-    ``_melody_sources_to_aphrodite`` in
-    ``aphrodite/reasoning/cohere_command_reasoning_parser.py``, which
+    ``_melody_sources_to_sonar`` in
+    ``sonar/reasoning/cohere_command_reasoning_parser.py``, which
     consumes the position map forwarded via ``chat_template_kwargs``).
     The serving layer's remaining responsibilities on the outbound
     path are: coerce to :class:`cohere.types.Citation`, apply the
@@ -2067,7 +2067,7 @@ class TestExtractCitations:
     """
 
     @staticmethod
-    def _make_citation(**overrides: Any) -> APHRODITECitation:
+    def _make_citation(**overrides: Any) -> SONARCitation:
         base = dict(
             start=0,
             end=11,
@@ -2082,7 +2082,7 @@ class TestExtractCitations:
             type="TEXT_CONTENT",
         )
         base.update(overrides)
-        return APHRODITECitation(**base)
+        return SONARCitation(**base)
 
     def test_none_or_empty_returns_none(self):
         serving = _serving()

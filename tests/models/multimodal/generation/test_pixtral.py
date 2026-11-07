@@ -7,18 +7,18 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.logprobs import Logprob, SampleLogprobs
-from aphrodite.model_executor.models.pixtral import (
+from sonar import SamplingParams
+from sonar.logprobs import Logprob, SampleLogprobs
+from sonar.model_executor.models.pixtral import (
     _apply_rotary_emb_vit_complex,
     _apply_rotary_emb_vit_real,
     _make_packed_sequence_metadata,
     precompute_freqs_cis_2d,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
-from ....utils import APHRODITE_PATH, large_gpu_test
+from ....utils import SONAR_PATH, large_gpu_test
 from ...utils import check_logprobs_close
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ LIMIT_MM_PER_PROMPT = dict(image=4)
 
 MAX_MODEL_LEN = [8192, 65536]
 
-FIXTURES_PATH = APHRODITE_PATH / "tests/models/fixtures"
+FIXTURES_PATH = SONAR_PATH / "tests/models/fixtures"
 assert FIXTURES_PATH.exists()
 
 FIXTURE_LOGPROBS_CHAT = {
@@ -151,12 +151,12 @@ def load_outputs_w_logprobs(filename: "StrPath") -> OutputsLogprobs:
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("max_model_len", MAX_MODEL_LEN)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_chat(aphrodite_runner, max_model_len: int, model: str, dtype: str, local_asset_server) -> None:
+def test_chat(sonar_runner, max_model_len: int, model: str, dtype: str, local_asset_server) -> None:
     if model == MISTRAL_SMALL_3_1_ID and max_model_len == 65536 and current_platform.is_rocm():
         pytest.skip("OOM on ROCm: 24B model with 65536 context length exceeds GPU memory")
 
     EXPECTED_CHAT_LOGPROBS = load_outputs_w_logprobs(FIXTURE_LOGPROBS_CHAT[model])
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -164,7 +164,7 @@ def test_chat(aphrodite_runner, max_model_len: int, model: str, dtype: str, loca
         config_format="mistral",
         max_model_len=max_model_len,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as aphrodite_model:
+    ) as sonar_model:
         outputs = []
 
         urls_all = [local_asset_server.url_for(u) for u in IMG_URLS]
@@ -174,11 +174,11 @@ def test_chat(aphrodite_runner, max_model_len: int, model: str, dtype: str, loca
             _create_msg_format(urls_all),
         ]
         for msg in msgs:
-            output = aphrodite_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
+            output = sonar_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
 
             outputs.extend(output)
 
-    logprobs = aphrodite_runner._final_steps_generate_w_logprobs(outputs)
+    logprobs = sonar_runner._final_steps_generate_w_logprobs(outputs)
     # Remove last `None` prompt_logprobs to compare with fixture
     for i in range(len(logprobs)):
         assert logprobs[i][-1] is None
@@ -193,9 +193,9 @@ def test_chat(aphrodite_runner, max_model_len: int, model: str, dtype: str, loca
 
 @large_gpu_test(min_gb=16)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_chat_consolidated(aphrodite_runner, dtype: str, local_asset_server) -> None:
+def test_chat_consolidated(sonar_runner, dtype: str, local_asset_server) -> None:
     EXPECTED_CHAT_LOGPROBS = load_outputs_w_logprobs(FIXTURE_LOGPROBS_CHAT[MINISTRAL_3B_ID])
-    with aphrodite_runner(
+    with sonar_runner(
         MINISTRAL_3B_ID,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -203,7 +203,7 @@ def test_chat_consolidated(aphrodite_runner, dtype: str, local_asset_server) -> 
         config_format="mistral",
         max_model_len=8192,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as aphrodite_model:
+    ) as sonar_model:
         outputs = []
         urls_all = [local_asset_server.url_for(u) for u in IMG_URLS]
         msgs = [
@@ -212,10 +212,10 @@ def test_chat_consolidated(aphrodite_runner, dtype: str, local_asset_server) -> 
             _create_msg_format(urls_all),
         ]
         for msg in msgs:
-            output = aphrodite_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
+            output = sonar_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
             outputs.extend(output)
 
-    logprobs = aphrodite_runner._final_steps_generate_w_logprobs(outputs)
+    logprobs = sonar_runner._final_steps_generate_w_logprobs(outputs)
     for i in range(len(logprobs)):
         assert logprobs[i][-1] is None
         logprobs[i] = logprobs[i][:-1]

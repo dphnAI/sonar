@@ -11,32 +11,32 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.distributed.aux_output_connector import store as store_module
-from aphrodite.distributed.aux_output_connector.connector import (
+from sonar.distributed.aux_output_connector import store as store_module
+from sonar.distributed.aux_output_connector.connector import (
     AuxOutputConnectorMetadata,
     AuxOutputSchedulerConnector,
     AuxRequestOutput,
     PackedBlockHashes,
 )
-from aphrodite.distributed.aux_output_connector.routed_experts import (
+from sonar.distributed.aux_output_connector.routed_experts import (
     RoutedExpertsBuffer,
     materialize_routed_experts,
     publish_routed_experts,
     routed_experts_keys,
 )
-from aphrodite.distributed.aux_output_connector.store import (
+from sonar.distributed.aux_output_connector.store import (
     BackgroundBlockObjectStore,
     BlockObject,
     BlockObjectStore,
     BlockObjectStoreError,
 )
-from aphrodite.distributed.aux_output_connector.worker import (
+from sonar.distributed.aux_output_connector.worker import (
     AuxOutputWorkerConnector,
 )
-from aphrodite.v1.core.sched.output import CachedRequestData, SchedulerOutput
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.worker.gpu import async_utils
-from aphrodite.v1.worker.gpu.sample.output import SamplerOutput
+from sonar.v1.core.sched.output import CachedRequestData, SchedulerOutput
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.worker.gpu import async_utils
+from sonar.v1.worker.gpu.sample.output import SamplerOutput
 
 pytestmark = pytest.mark.cpu_test
 
@@ -310,7 +310,7 @@ def test_tp_failure_does_not_release_tokens_or_aux_output(monkeypatch):
     [(False, None), (False, "target"), (True, None), (True, "target"), (True, "draft")],
 )
 def test_tp_output_gate_observes_draft_fault(monkeypatch, speculative, fault_phase):
-    from aphrodite.v1.worker.gpu import model_runner
+    from sonar.v1.worker.gpu import model_runner
 
     monkeypatch.setattr(torch.cuda, "Event", lambda **kwargs: Mock())
     monkeypatch.setattr(async_utils, "stream", lambda *args: nullcontext())
@@ -1292,9 +1292,9 @@ def test_worker_merges_block_hash_deltas():
     )
 
     assert worker._requests["request"].aux_output_keys == [
-        "aphrodite-artifact/0/" + (b"a" * 32).hex(),
-        "aphrodite-artifact/0/" + (b"b" * 32).hex(),
-        "aphrodite-artifact/0/" + (b"c" * 32).hex(),
+        "sonar-artifact/0/" + (b"a" * 32).hex(),
+        "sonar-artifact/0/" + (b"b" * 32).hex(),
+        "sonar-artifact/0/" + (b"c" * 32).hex(),
     ]
     worker.close()
 

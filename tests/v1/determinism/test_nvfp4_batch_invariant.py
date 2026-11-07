@@ -12,8 +12,8 @@ from utils import (
     skip_if_not_cuda_alike,
 )
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
 
 # FLASH_ATTN is CUDA-only.
 E2E_BACKENDS = ["TRITON_ATTN"] if current_platform.is_rocm() else ["FLASH_ATTN"]
@@ -23,17 +23,17 @@ pytestmark = pytest.mark.skipif(
     reason="NVFP4 tests require torch.float8_e4m3fn support.",
 )
 
-NVFP4_TEST_MODEL = os.getenv("APHRODITE_TEST_NVFP4_MODEL", "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4")
+NVFP4_TEST_MODEL = os.getenv("SONAR_TEST_NVFP4_MODEL", "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4")
 
 
 def _make_llm(max_num_seqs: int, backend: str) -> LLM:
     return LLM(
         model=NVFP4_TEST_MODEL,
         max_num_seqs=max_num_seqs,
-        gpu_memory_utilization=float(os.getenv("APHRODITE_NVFP4_TEST_GPU_MEMORY_UTILIZATION", "0.05")),
-        max_model_len=int(os.getenv("APHRODITE_NVFP4_TEST_MAX_MODEL_LEN", "2048")),
+        gpu_memory_utilization=float(os.getenv("SONAR_NVFP4_TEST_GPU_MEMORY_UTILIZATION", "0.05")),
+        max_model_len=int(os.getenv("SONAR_NVFP4_TEST_MAX_MODEL_LEN", "2048")),
         dtype="auto",
-        tensor_parallel_size=int(os.getenv("APHRODITE_NVFP4_TEST_TP_SIZE", "1")),
+        tensor_parallel_size=int(os.getenv("SONAR_NVFP4_TEST_TP_SIZE", "1")),
         enable_prefix_caching=False,
         enforce_eager=True,
         attention_config={"backend": backend},
@@ -43,19 +43,19 @@ def _make_llm(max_num_seqs: int, backend: str) -> LLM:
 @skip_if_not_cuda_alike
 @pytest.mark.parametrize("backend", E2E_BACKENDS)
 def test_dense_nvfp4_generation_is_deterministic_across_batch_sizes_e2e(backend):
-    seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
+    seed = int(os.getenv("SONAR_TEST_SEED", "12345"))
     random.seed(seed)
 
-    num_trials = int(os.getenv("APHRODITE_NVFP4_NEEDLE_TRIALS", "2"))
-    max_batch_size = int(os.getenv("APHRODITE_NVFP4_NEEDLE_BATCH_SIZE", "8"))
-    min_random_prompt = int(os.getenv("APHRODITE_NVFP4_MIN_PROMPT", "32"))
-    max_random_prompt = int(os.getenv("APHRODITE_NVFP4_MAX_PROMPT", "96"))
+    num_trials = int(os.getenv("SONAR_NVFP4_NEEDLE_TRIALS", "2"))
+    max_batch_size = int(os.getenv("SONAR_NVFP4_NEEDLE_BATCH_SIZE", "8"))
+    min_random_prompt = int(os.getenv("SONAR_NVFP4_MIN_PROMPT", "32"))
+    max_random_prompt = int(os.getenv("SONAR_NVFP4_MAX_PROMPT", "96"))
     assert max_batch_size >= 2, "Batch size should be >= 2 to test invariance."
 
     sampling = SamplingParams(
-        temperature=float(os.getenv("APHRODITE_NVFP4_NEEDLE_TEMPERATURE", "0.6")),
-        top_p=float(os.getenv("APHRODITE_NVFP4_NEEDLE_TOP_P", "0.95")),
-        max_tokens=int(os.getenv("APHRODITE_NVFP4_NEEDLE_MAX_TOKENS", "16")),
+        temperature=float(os.getenv("SONAR_NVFP4_NEEDLE_TEMPERATURE", "0.6")),
+        top_p=float(os.getenv("SONAR_NVFP4_NEEDLE_TOP_P", "0.95")),
+        max_tokens=int(os.getenv("SONAR_NVFP4_NEEDLE_MAX_TOKENS", "16")),
         seed=20240919,
         logprobs=5,
     )

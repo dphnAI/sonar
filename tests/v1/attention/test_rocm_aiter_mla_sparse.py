@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm() or not is_aiter_found_and_supported():
     pytest.skip(
@@ -15,8 +15,8 @@ if not current_platform.is_rocm() or not is_aiter_found_and_supported():
         allow_module_level=True,
     )
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as sparse_mod
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.v1.attention.ops import rocm_aiter_mla_sparse as sparse_mod
 
 
 def test_rocm_fp8_mqa_logits_disables_clean_logits(monkeypatch):

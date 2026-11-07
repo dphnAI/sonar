@@ -14,8 +14,8 @@ at M=4/5, M=9/10, M=12/13, odd/even, M=15/16) are exercised on Blackwell, and th
 import pytest
 import torch
 
-from aphrodite._custom_ops import fp32_router_gemm
-from aphrodite.platforms import current_platform
+from sonar._custom_ops import fp32_router_gemm
+from sonar.platforms import current_platform
 
 # (hidden_size, num_experts)
 SHAPES = [(3072, 256), (6144, 128), (5120, 256), (4096, 352), (8192, 256)]
@@ -172,10 +172,10 @@ def test_rejects_invalid_inputs(hidden_dim, num_experts):
 @pytest.mark.parametrize("tokens", [*range(1, 17), 17, 24, 32, 33, 40, 48, 56, 64, 65, 128])
 @pytest.mark.parametrize("hidden_dim,num_experts", [(5120, 256), (4096, 352), (8192, 256)])
 @torch.inference_mode()
-def test_router_retains_fp32_weights_and_logits(default_aphrodite_config, dist_init, tokens, hidden_dim, num_experts):
+def test_router_retains_fp32_weights_and_logits(default_sonar_config, dist_init, tokens, hidden_dim, num_experts):
     """Low-latency routing must retain FP32 weight precision and logits."""
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
-    from aphrodite.platforms import current_platform
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("SM100 required")

@@ -15,12 +15,12 @@ from openai import BadRequestError
 from PIL import Image
 from transformers import AutoConfig
 
-from aphrodite.multimodal.utils import encode_image_url
-from aphrodite.platforms import current_platform
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
+from sonar.multimodal.utils import encode_image_url
+from sonar.platforms import current_platform
+from tests.utils import SONAR_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "facebook/opt-125m"
-CHAT_TEMPLATE = APHRODITE_PATH / "examples/template_chatml.jinja"
+CHAT_TEMPLATE = SONAR_PATH / "examples/template_chatml.jinja"
 REASONING_CHAT_TEMPLATE = (
     "{% for m in messages %}{{ '<|im_start|>' + m['role'] + '\\n' }}"
     "{% if m.get('reasoning') %}"

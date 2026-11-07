@@ -23,7 +23,7 @@ Output (gzipped JSON):
 
     {
       "version": 1,
-      "commit": "...",              # from --commit or the environment
+      "commit": "...",              # from --commit or SONAR_BUILD_COMMIT
       "cuda": "13.0",               # nvcc release when found
       "generated_at": "2026-09-19T...",
       "build_dirs": ["build/temp.linux-x86_64-cpython-312"],
@@ -246,7 +246,7 @@ def main() -> int:
             a.build_root,
             a.source_root,
             tools,
-            commit=a.commit or os.environ.get("BUILDKITE_COMMIT", ""),
+            commit=a.commit or os.environ.get("SONAR_BUILD_COMMIT", ""),
             hipify_map=a.hipify_map,
         )
         a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -264,7 +264,7 @@ def main() -> int:
 
     result: dict = {
         "version": 1,
-        "commit": a.commit or os.environ.get("BUILDKITE_COMMIT") or os.environ.get("APHRODITE_BUILD_COMMIT") or "",
+        "commit": a.commit or os.environ.get("SONAR_BUILD_COMMIT") or "",
         "cuda": cuda_release(nvcc),
         "generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "build_dirs": [],

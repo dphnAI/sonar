@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Description: Test the lazy import module
-# The utility function cannot be placed in `aphrodite.utils`
+# The utility function cannot be placed in `sonar.utils`
 # this needs to be a standalone script
 import sys
 from unittest.mock import patch
@@ -15,7 +15,7 @@ from unittest.mock import patch
 module_names = ["torch._inductor.async_compile", "cv2"]
 
 # set all modules in `module_names` to be None.
-# if we import any modules during `import aphrodite`, there would be a
+# if we import any modules during `import sonar`, there would be a
 # hard error and nice stacktrace on the first import.
 with patch.dict(sys.modules, dict.fromkeys(module_names)):
-    import aphrodite  # noqa: F401
+    import sonar  # noqa: F401

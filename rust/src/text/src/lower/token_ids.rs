@@ -3,14 +3,14 @@
 
 use std::result::Result;
 
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use thiserror::Error;
 
 use crate::SamplingLimits;
 
-const MAX_NUM_BAD_WORDS_ENV: &str = "APHRODITE_MAX_NUM_BAD_WORDS";
+const MAX_NUM_BAD_WORDS_ENV: &str = "SONAR_MAX_NUM_BAD_WORDS";
 const DEFAULT_MAX_NUM_BAD_WORDS: usize = 128;
-const MAX_BAD_WORDS_TOTAL_TOKENS_ENV: &str = "APHRODITE_MAX_BAD_WORDS_TOTAL_TOKENS";
+const MAX_BAD_WORDS_TOTAL_TOKENS_ENV: &str = "SONAR_MAX_BAD_WORDS_TOTAL_TOKENS";
 const DEFAULT_MAX_BAD_WORDS_TOTAL_TOKENS: usize = 1024;
 
 #[derive(Debug, Error)]

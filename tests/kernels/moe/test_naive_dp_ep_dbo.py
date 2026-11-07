@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize import naive_dp_ep
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep import (
+from sonar.model_executor.layers.fused_moe.prepare_finalize import naive_dp_ep
+from sonar.model_executor.layers.fused_moe.prepare_finalize.naive_dp_ep import (
     MoEPrepareAndFinalizeNaiveDPEPModular,
     make_moe_prepare_and_finalize_naive_dp_ep,
 )

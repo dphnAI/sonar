@@ -3,7 +3,7 @@
 import gc
 import time
 
-from aphrodite import LLM, SamplingParams
+from sonar import LLM, SamplingParams
 
 
 def time_generation(llm: LLM, prompts: list[str], sampling_params: SamplingParams):

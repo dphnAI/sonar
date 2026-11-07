@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.model_executor.offloader.prefetch import _get_next_prefetch_index
+from sonar.model_executor.offloader.prefetch import _get_next_prefetch_index
 
 pytestmark = pytest.mark.skip_global_cleanup
 

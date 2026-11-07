@@ -3,10 +3,10 @@
 
 import pytest
 
-import aphrodite
-import aphrodite.config
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+import sonar.config
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test, multi_gpu_test
 
@@ -21,7 +21,7 @@ EXPECTED_LORA_OUTPUT = [
 ]
 
 
-def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
+def do_sample(llm: sonar.LLM, lora_path: str, lora_id: int) -> list[str]:
     prompts = [
         PROMPT_TEMPLATE.format(query="How many singers do we have?"),
         PROMPT_TEMPLATE.format(query=("What is the average, minimum, and maximum age of all singers from France?")),
@@ -29,7 +29,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
             query=("Show name, country, age for all singers ordered by age from the oldest to the youngest.")
         ),
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=32)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=32)
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -48,7 +48,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_chatglm3_lora(chatglm3_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=512,
         enable_lora=True,
@@ -69,7 +69,7 @@ def test_chatglm3_lora(chatglm3_lora_files):
 @pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_chatglm3_lora_tp4(chatglm3_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=512,
         enable_lora=True,
@@ -79,7 +79,7 @@ def test_chatglm3_lora_tp4(chatglm3_lora_files):
         tensor_parallel_size=4,
         trust_remote_code=True,
         fully_sharded_loras=False,
-        compilation_config=aphrodite.config.CompilationConfig(  # Avoid OOM
+        compilation_config=sonar.config.CompilationConfig(  # Avoid OOM
             cudagraph_specialize_lora=False,
         ),
     )
@@ -96,8 +96,8 @@ def test_chatglm3_lora_tp4(chatglm3_lora_files):
 def test_chatglm3_lora_tp4_fully_sharded_loras(chatglm3_lora_files):
     # https://github.com/NVIDIA/nccl/issues/1790, set a lower value for
     # gpu_memory_utilization here because NCCL >= 2.26.3 seems to use
-    # more GPU memory causing Aphrodite to OOM
-    llm = aphrodite.LLM(
+    # more GPU memory causing Sonar to OOM
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=512,
         enable_lora=True,
@@ -107,7 +107,7 @@ def test_chatglm3_lora_tp4_fully_sharded_loras(chatglm3_lora_files):
         trust_remote_code=True,
         fully_sharded_loras=True,
         gpu_memory_utilization=0.8,
-        compilation_config=aphrodite.config.CompilationConfig(  # Avoid OOM
+        compilation_config=sonar.config.CompilationConfig(  # Avoid OOM
             cudagraph_specialize_lora=False,
         ),
     )

@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use aphrodite_text::output::{
-    DecodedLogprobs, DecodedPositionLogprobs, DecodedText, DecodedTextEvent, Finished, SampledDelta,
-};
 use futures::executor::block_on;
 use futures::{TryStreamExt as _, stream};
 use openai_harmony::chat::{Message, Role};
+use sonar_text::output::{
+    DecodedLogprobs, DecodedPositionLogprobs, DecodedText, DecodedTextEvent, Finished, SampledDelta,
+};
 
 use super::*;
 use crate::event::AssistantBlockKind;
@@ -51,7 +51,7 @@ fn decoded_start() -> DecodedTextEvent {
 
 fn finished() -> Finished {
     Finished {
-        usage: aphrodite_llm::TokenUsage {
+        usage: sonar_llm::TokenUsage {
             prompt_token_count: 0,
             output_token_count: 0,
             prompt_cache_usage: Default::default(),
@@ -131,7 +131,7 @@ fn interrupted_final_message_is_preserved() {
                     text: "hello".to_string(),
                 }],
             },
-            usage: ChatTokenUsage::from(aphrodite_llm::TokenUsage {
+            usage: ChatTokenUsage::from(sonar_llm::TokenUsage {
                 prompt_token_count: 0,
                 output_token_count: 0,
                 prompt_cache_usage: Default::default(),
@@ -186,7 +186,7 @@ fn interrupted_analysis_message_is_preserved() {
                 }],
             },
             usage: ChatTokenUsage {
-                engine: aphrodite_llm::TokenUsage {
+                engine: sonar_llm::TokenUsage {
                     prompt_token_count: 0,
                     output_token_count: 0,
                     prompt_cache_usage: Default::default(),

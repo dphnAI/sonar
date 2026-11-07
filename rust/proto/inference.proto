@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 syntax = "proto3";
-package aphrodite;
+package sonar;
 
 import "google/protobuf/struct.proto";
 
@@ -66,7 +66,7 @@ message GenerateRequest {
   EngineReasoningGate engine_reasoning_gate = 18;
 
   // Sonar sampler extensions. Omitted fields use the Python sampling defaults.
-  AphroditeSamplingParams aphrodite_sampling = 19;
+  SonarSamplingParams sonar_sampling = 19;
 }
 
 // Inputs to the engine's reasoning gate, which keeps a structured-output
@@ -105,7 +105,7 @@ message RandomSampling {
 
 // Sonar-specific samplers, shared with the OpenAI API's top-level extensions.
 // Presence is required for scalar fields whose default is nonzero.
-message AphroditeSamplingParams {
+message SonarSamplingParams {
   optional uint32 no_repeat_ngram_size = 1;
   optional float dynatemp_min = 2;
   optional float dynatemp_max = 3;

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for aphrodite.model_executor.layers.pooler.activations."""
+"""Unit tests for sonar.model_executor.layers.pooler.activations."""
 
 from types import SimpleNamespace
 
@@ -8,7 +8,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.model_executor.layers.pooler.activations import (
+from sonar.model_executor.layers.pooler.activations import (
     LambdaPoolerActivation,
     PoolerClassify,
     PoolerIdentity,

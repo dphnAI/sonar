@@ -9,8 +9,8 @@ import pytest
 import torch
 from safetensors.torch import load_file, save_file
 
-import aphrodite
-from aphrodite.lora.request import LoRARequest
+import sonar
+from sonar.lora.request import LoRARequest
 
 from ..utils import multi_gpu_test
 
@@ -55,7 +55,7 @@ def _output_matches(generated: str, accepted: str | Sequence[str]) -> bool:
 
 
 def generate_and_test(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str,
     lora_id: list[int | None] | int | None,
 ) -> None:
@@ -74,7 +74,7 @@ def generate_and_test(
     elif isinstance(lora_id, list):
         lora_request = [LoRARequest(str(i), i, lora_path) if i is not None else None for i in lora_id]
 
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(prompts, sampling_params, lora_request=lora_request)
     # Print the outputs.
     generated_texts: list[str] = []
@@ -94,7 +94,7 @@ def generate_and_test(
 
 
 def test_olmoe_lora_mixed(olmoe_lora_files):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -118,7 +118,7 @@ def test_olmoe_lora_mixed_random(olmoe_lora_files, tmp_path, maybe_enable_lora_d
     random_weights = {k: torch.randn_like(v) for k, v in weights.items()}
     save_file(random_weights, str(weights_path))
 
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -138,7 +138,7 @@ def test_olmoe_lora_mixed_random(olmoe_lora_files, tmp_path, maybe_enable_lora_d
         LoRARequest("random", 2, str(random_lora_path)),
     ]
 
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(prompts, sampling_params, lora_request=lora_requests)
     assert outputs[0].outputs[0].text.strip().startswith(EXPECTED_LORA_OUTPUT[0])
 
@@ -146,7 +146,7 @@ def test_olmoe_lora_mixed_random(olmoe_lora_files, tmp_path, maybe_enable_lora_d
 @pytest.mark.parametrize("fully_sharded_loras", [False, True])
 @multi_gpu_test(num_gpus=2)
 def test_olmoe_lora_tp2(olmoe_lora_files, fully_sharded_loras):
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,

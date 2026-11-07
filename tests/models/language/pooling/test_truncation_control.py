@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L12-v2"
 max_model_len = 128
@@ -23,46 +23,46 @@ field."""
 
 
 @pytest.fixture(scope="module")
-def aphrodite_model(aphrodite_runner):
-    with aphrodite_runner(MODEL_NAME, runner="pooling", max_model_len=max_model_len) as model:
+def sonar_model(sonar_runner):
+    with sonar_runner(MODEL_NAME, runner="pooling", max_model_len=max_model_len) as model:
         yield model
 
 
 def test_smaller_truncation_size(
-    aphrodite_model,
+    sonar_model,
 ):
     truncate_prompt_tokens = 10
 
-    aphrodite_output = aphrodite_model.llm.embed(
+    sonar_output = sonar_model.llm.embed(
         input_str,
         tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
     )
 
-    prompt_tokens = aphrodite_output[0].prompt_token_ids
+    prompt_tokens = sonar_output[0].prompt_token_ids
 
     assert len(prompt_tokens) == truncate_prompt_tokens
 
 
-def test_max_truncation_size(aphrodite_model):
+def test_max_truncation_size(sonar_model):
     truncate_prompt_tokens = -1
 
-    aphrodite_output = aphrodite_model.llm.embed(
+    sonar_output = sonar_model.llm.embed(
         input_str,
         tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
     )
 
-    prompt_tokens = aphrodite_output[0].prompt_token_ids
+    prompt_tokens = sonar_output[0].prompt_token_ids
 
     # Pooling requests emit an embedding rather than generated tokens, so -1
     # truncates to the full context length.
     assert len(prompt_tokens) == max_model_len
 
 
-def test_bigger_truncation_size(aphrodite_model):
+def test_bigger_truncation_size(sonar_model):
     truncate_prompt_tokens = max_model_len + 1
 
-    with pytest.raises(AphroditeValidationError):
-        aphrodite_model.llm.embed(
+    with pytest.raises(SonarValidationError):
+        sonar_model.llm.embed(
             input_str,
             tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
         )

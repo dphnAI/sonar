@@ -13,10 +13,10 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.config import LoadConfig
-from aphrodite.model_executor.model_loader import ShardedStateLoader
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar import LLM, SamplingParams
+from sonar.config import LoadConfig
+from sonar.model_executor.model_loader import ShardedStateLoader
+from sonar.transformers_utils.repo_utils import hf_api
 
 prompts = [
     "Hello, my name is",
@@ -63,19 +63,19 @@ def _mock_pp_group(
 ) -> None:
     """Stub the parallel-state accessors used by the sharded state loader."""
     monkeypatch.setattr(
-        "aphrodite.distributed.get_pp_group",
+        "sonar.distributed.get_pp_group",
         lambda: SimpleNamespace(world_size=world_size, rank_in_group=pp_rank),
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.get_tp_group",
+        "sonar.distributed.get_tp_group",
         lambda: SimpleNamespace(world_size=tp_world_size, rank_in_group=tp_rank),
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.get_tensor_model_parallel_rank",
+        "sonar.distributed.get_tensor_model_parallel_rank",
         lambda: tp_rank,
     )
     monkeypatch.setattr(
-        "aphrodite.distributed.get_pipeline_model_parallel_rank",
+        "sonar.distributed.get_pipeline_model_parallel_rank",
         lambda: pp_rank,
     )
 
@@ -91,7 +91,7 @@ def test_load_weights_resolves_hf_repo_id(monkeypatch, tmp_path, model, model_we
     save_file({"weight": weights}, tmp_path / "model-rank-0-part-0.safetensors")
     download = Mock(return_value=str(tmp_path))
     monkeypatch.setattr(
-        "aphrodite.model_executor.model_loader.sharded_state_loader.download_weights_from_hf",
+        "sonar.model_executor.model_loader.sharded_state_loader.download_weights_from_hf",
         download,
     )
     load_config = LoadConfig(

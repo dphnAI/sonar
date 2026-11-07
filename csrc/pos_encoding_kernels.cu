@@ -3,7 +3,7 @@
 #include "core/cuda_compat.h"
 #include "dispatch_utils.h"
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename scalar_t, typename cache_t, bool IS_NEOX>
 inline __device__ void apply_token_rotary_embedding(
@@ -15,13 +15,13 @@ inline __device__ void apply_token_rotary_embedding(
   if (IS_NEOX) {
     x_index = rot_offset;
     y_index = embed_dim + rot_offset;
-    cos_f = static_cast<float>(APHRODITE_LDG(cos_ptr + x_index));
-    sin_f = static_cast<float>(APHRODITE_LDG(sin_ptr + x_index));
+    cos_f = static_cast<float>(SONAR_LDG(cos_ptr + x_index));
+    sin_f = static_cast<float>(SONAR_LDG(sin_ptr + x_index));
   } else {
     x_index = 2 * rot_offset;
     y_index = 2 * rot_offset + 1;
-    cos_f = static_cast<float>(APHRODITE_LDG(cos_ptr + x_index / 2));
-    sin_f = static_cast<float>(APHRODITE_LDG(sin_ptr + x_index / 2));
+    cos_f = static_cast<float>(SONAR_LDG(cos_ptr + x_index / 2));
+    sin_f = static_cast<float>(SONAR_LDG(sin_ptr + x_index / 2));
   }
   if (inverse) {
     sin_f = -sin_f;
@@ -98,7 +98,7 @@ __global__ void rotary_embedding_kernel(
       inverse);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void rotary_embedding(
     torch::stable::Tensor& positions,  // [batch_size, seq_len] or [num_tokens]
@@ -169,14 +169,14 @@ void rotary_embedding(
   const torch::stable::accelerator::DeviceGuard device_guard(
       query.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "rotary_embedding", [&] {
         using query_t = scalar_t;
-        APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+        SONAR_STABLE_DISPATCH_FLOATING_TYPES(
             cos_sin_cache.scalar_type(), "rotary_embedding_cache", [&] {
               using cache_t = scalar_t;
               if (is_neox) {
-                aphrodite::rotary_embedding_kernel<query_t, cache_t, true>
+                sonar::rotary_embedding_kernel<query_t, cache_t, true>
                     <<<grid, block, 0, stream>>>(
                         positions.const_data_ptr<int64_t>(),
                         query.mutable_data_ptr<query_t>(),
@@ -186,7 +186,7 @@ void rotary_embedding(
                         query_stride, key_stride, head_stride, num_heads,
                         num_kv_heads, head_size, rope_dim_offset, inverse);
               } else {
-                aphrodite::rotary_embedding_kernel<query_t, cache_t, false>
+                sonar::rotary_embedding_kernel<query_t, cache_t, false>
                     <<<grid, block, 0, stream>>>(
                         positions.const_data_ptr<int64_t>(),
                         query.mutable_data_ptr<query_t>(),

@@ -6,10 +6,10 @@ import logging
 import pytest
 import regex as re
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.config import CompilationMode
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.config import CompilationMode
+from sonar.platforms import current_platform
+from sonar.transformers_utils.repo_utils import hf_api
 from tests.utils import compare_two_settings
 
 
@@ -49,7 +49,7 @@ def test_rocm_aiter_static_attention_output_correctness(caplog_mp_spawn):
             "--compilation-config",
             json.dumps(
                 {
-                    "mode": CompilationMode.APHRODITE_COMPILE,
+                    "mode": CompilationMode.SONAR_COMPILE,
                     "cudagraph_mode": "NONE",
                     "splitting_ops": [],
                     "inductor_compile_config": {"force_disable_caches": True},
@@ -65,9 +65,9 @@ def test_rocm_aiter_static_attention_output_correctness(caplog_mp_spawn):
         ]
 
     env = {
-        "APHRODITE_ROCM_USE_AITER": "1",
-        "APHRODITE_ROCM_USE_AITER_LINEAR": "1",
-        "APHRODITE_DISABLE_COMPILE_CACHE": "1",
+        "SONAR_ROCM_USE_AITER": "1",
+        "SONAR_ROCM_USE_AITER_LINEAR": "1",
+        "SONAR_DISABLE_COMPILE_CACHE": "1",
     }
     with caplog_mp_spawn(logging.DEBUG) as logs:
         compare_two_settings(

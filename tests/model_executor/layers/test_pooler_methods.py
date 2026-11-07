@@ -11,28 +11,28 @@ import pytest
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config import PoolerConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.pooler import PoolingParamsUpdate
-from aphrodite.model_executor.layers.pooler.activations import PoolerNormalize
-from aphrodite.model_executor.layers.pooler.seqwise.heads import EmbeddingPoolerHead
-from aphrodite.model_executor.layers.pooler.seqwise.methods import (
+from sonar.config import PoolerConfig, set_current_sonar_config
+from sonar.model_executor.layers.pooler import PoolingParamsUpdate
+from sonar.model_executor.layers.pooler.activations import PoolerNormalize
+from sonar.model_executor.layers.pooler.seqwise.heads import EmbeddingPoolerHead
+from sonar.model_executor.layers.pooler.seqwise.methods import (
     CLSPool,
     LastPool,
     MeanPool,
     get_seq_pooling_method,
 )
-from aphrodite.model_executor.layers.pooler.seqwise.poolers import SequencePooler
-from aphrodite.model_executor.layers.pooler.special import BOSEOSFilter, DispatchPooler
-from aphrodite.model_executor.layers.pooler.tokwise.heads import TokenEmbeddingPoolerHead
-from aphrodite.model_executor.layers.pooler.tokwise.methods import (
+from sonar.model_executor.layers.pooler.seqwise.poolers import SequencePooler
+from sonar.model_executor.layers.pooler.special import BOSEOSFilter, DispatchPooler
+from sonar.model_executor.layers.pooler.tokwise.heads import TokenEmbeddingPoolerHead
+from sonar.model_executor.layers.pooler.tokwise.methods import (
     AllPool,
     StepPool,
     get_tok_pooling_method,
 )
-from aphrodite.model_executor.layers.pooler.tokwise.poolers import TokenPooler
-from aphrodite.pooling_params import LateChunkingParams, PoolingParams
-from aphrodite.tasks import PoolingTask
-from aphrodite.v1.pool.metadata import PoolingCursor, PoolingMetadata, PoolingStates
+from sonar.model_executor.layers.pooler.tokwise.poolers import TokenPooler
+from sonar.pooling_params import LateChunkingParams, PoolingParams
+from sonar.tasks import PoolingTask
+from sonar.v1.pool.metadata import PoolingCursor, PoolingMetadata, PoolingStates
 
 _CPU = torch.device("cpu")
 
@@ -250,7 +250,7 @@ class TestMeanPool:
         metadata = _make_metadata([3, 2])
         pooler = MeanPool()
         with patch(
-            "aphrodite.model_executor.layers.pooler.seqwise.methods._MEAN_POOL_ACCUMULATION_CHUNK_BYTES",
+            "sonar.model_executor.layers.pooler.seqwise.methods._MEAN_POOL_ACCUMULATION_CHUNK_BYTES",
             16,
         ):
             out = pooler(hidden, metadata)
@@ -299,7 +299,7 @@ class _FakeSchedulerConfig:
 
 
 @dataclass
-class _FakeAphroditeConfig:
+class _FakeSonarConfig:
     scheduler_config: _FakeSchedulerConfig
 
 
@@ -316,7 +316,7 @@ def test_dispatch_seq_cls_honors_token_pooling_type(tok_pooling_type):
         ),
     )
     classifier = torch.nn.Linear(4, 3)
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         pooler = DispatchPooler.for_seq_cls(pooler_config, classifier=classifier)
 
     token_ids = [[2, 99, 3, 99], [4, 99], [5, 6]]
@@ -394,14 +394,14 @@ def test_dispatch_mixed_tasks_preserves_token_offsets():
 class TestAllPool:
     @staticmethod
     def _make_all_pool(*, chunked: bool = False, async_scheduling: bool = False) -> AllPool:
-        fake_config = _FakeAphroditeConfig(
+        fake_config = _FakeSonarConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=chunked,
                 async_scheduling=async_scheduling,
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
+            "sonar.model_executor.layers.pooler.tokwise.methods.get_current_sonar_config",
             return_value=fake_config,
         ):
             return AllPool()
@@ -506,13 +506,13 @@ class TestAllPool:
 class TestStepPool:
     @staticmethod
     def _make_step_pool(*, chunked: bool = False) -> StepPool:
-        fake_config = _FakeAphroditeConfig(
+        fake_config = _FakeSonarConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=chunked,
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
+            "sonar.model_executor.layers.pooler.tokwise.methods.get_current_sonar_config",
             return_value=fake_config,
         ):
             return StepPool()
@@ -614,25 +614,25 @@ class TestStepPool:
 # ---------------------------------------------------------------------------
 class TestGetTokPoolingMethod:
     def test_all(self):
-        fake_config = _FakeAphroditeConfig(
+        fake_config = _FakeSonarConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=False,
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
+            "sonar.model_executor.layers.pooler.tokwise.methods.get_current_sonar_config",
             return_value=fake_config,
         ):
             assert isinstance(get_tok_pooling_method("ALL"), AllPool)
 
     def test_step(self):
-        fake_config = _FakeAphroditeConfig(
+        fake_config = _FakeSonarConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=False,
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
+            "sonar.model_executor.layers.pooler.tokwise.methods.get_current_sonar_config",
             return_value=fake_config,
         ):
             assert isinstance(get_tok_pooling_method("STEP"), StepPool)
@@ -651,7 +651,7 @@ class TestGetTokPoolingMethod:
     ],
 )
 def test_token_pooler_batches_projection_with_mixed_params(overrides, expected_calls, monkeypatch):
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "0")
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "0")
     torch.manual_seed(0)
     lengths = [3, 4, 2]
     hidden = torch.randn(sum(lengths), 4, dtype=torch.bfloat16)

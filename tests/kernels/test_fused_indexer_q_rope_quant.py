@@ -20,20 +20,20 @@ from unittest import mock
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
-from aphrodite.models.deepseek_v4.common.ops import fused_indexer_q_rope_quant
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import mqa_logits_use_mx_scales
-from aphrodite.utils.import_utils import has_cutedsl
+from sonar.models.deepseek_v4.common.ops import fused_indexer_q_rope_quant
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import mqa_logits_use_mx_scales
+from sonar.utils.import_utils import has_cutedsl
 
 HEAD_DIM = 128
 ROPE_DIM = 64
 MAX_POS = 4096
 
-CUTEDSL_MODULE = "aphrodite.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl"
+CUTEDSL_MODULE = "sonar.models.deepseek_v4.nvidia.ops.fused_indexer_q_cutedsl"
 
 
 def quantize_to_mxfp4(
@@ -196,7 +196,7 @@ def test_fused_indexer_q_rope_quant_matches_unfused(num_tokens, cache_dtype, use
     # by patching the dispatcher's has_cutedsl() binding to return False.
     cutedsl_patch = (
         mock.patch(
-            "aphrodite.models.deepseek_v4.common.ops.fused_indexer_q.has_cutedsl",
+            "sonar.models.deepseek_v4.common.ops.fused_indexer_q.has_cutedsl",
             return_value=False,
         )
         if not use_cutedsl
@@ -367,7 +367,7 @@ def _indexer_k_reference(k_pre, positions, cos_sin_cache, rms_norm_weight, compr
 @torch.inference_mode()
 def test_indexer_k_inserts_only_valid_groups_into_padded_pages(num_tokens, compress_ratio, use_fp4, cache_dtype):
     """Insert group ends and preserve skipped slots, graph rows, and page padding."""
-    from aphrodite.models.deepseek_v41.common.ops.indexer_k_store import (
+    from sonar.models.deepseek_v41.common.ops.indexer_k_store import (
         indexer_k_norm_rope_store,
     )
 
@@ -446,7 +446,7 @@ def test_indexer_k_inserts_only_valid_groups_into_padded_pages(num_tokens, compr
 @torch.inference_mode()
 def test_indexer_k_cuda_graph_replay_reads_current_projection(use_fp4):
     """Replay must consume updated keys and slot mapping through the captured API."""
-    from aphrodite.models.deepseek_v41.common.ops.indexer_k_store import (
+    from sonar.models.deepseek_v41.common.ops.indexer_k_store import (
         indexer_k_norm_rope_store,
     )
 
@@ -505,10 +505,10 @@ def test_indexer_k_store_roundtrips_through_rocm_gather(block_size, compress_rat
     ``block_size > 1``, so a row-major store would feed the indexer permuted
     key bytes and randomize its top-k. Assert the write/read pair is exact.
     """
-    from aphrodite.models.deepseek_v41.common.ops.indexer_k_store import (
+    from sonar.models.deepseek_v41.common.ops.indexer_k_store import (
         indexer_k_norm_rope_store,
     )
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         cp_gather_indexer_k_quant_cache_triton,
     )
 
@@ -583,7 +583,7 @@ def test_fused_indexer_q_rope_quant_writes_bf16_weights(use_cutedsl):
     _, weights_ref = _reference(positions, q, cos_sin_cache, weights, softmax_scale, head_scale, n_head, True)
     cutedsl_patch = (
         mock.patch(
-            "aphrodite.models.deepseek_v4.common.ops.fused_indexer_q.has_cutedsl",
+            "sonar.models.deepseek_v4.common.ops.fused_indexer_q.has_cutedsl",
             return_value=False,
         )
         if not use_cutedsl

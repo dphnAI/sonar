@@ -7,19 +7,19 @@ import torch
 import transformers
 from transformers import AutoConfig, AutoModel, PreTrainedModel
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.models.transformers.base import Base as TransformersBase
-from aphrodite.model_executor.models.utils import WeightsMapper
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.transformers_utils.config import try_get_safetensors_metadata
+from sonar.config import ModelConfig
+from sonar.model_executor.models.transformers.base import Base as TransformersBase
+from sonar.model_executor.models.utils import WeightsMapper
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.transformers_utils.config import try_get_safetensors_metadata
 
 from ..registry import _MULTIMODAL_EXAMPLE_MODELS, HF_EXAMPLE_MODELS
 
 
 def test_cosmos3_new_checkpoint_weights_mapper():
-    from aphrodite.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
+    from sonar.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
 
-    mapper = Cosmos3ForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = Cosmos3ForConditionalGeneration.hf_to_sonar_mapper
 
     assert mapper.apply_list(
         [
@@ -77,9 +77,9 @@ def test_cosmos3_new_checkpoint_weights_mapper():
 
 def test_cosmos3_modelopt_quantizer_weights_mapper():
     """Drop ModelOpt-native fake-quant buffers but keep FP8 scale sidecars."""
-    from aphrodite.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
+    from sonar.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
 
-    mapper = Cosmos3ForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = Cosmos3ForConditionalGeneration.hf_to_sonar_mapper
 
     assert (
         mapper.apply_list(
@@ -109,11 +109,11 @@ def test_cosmos3_modelopt_quantizer_weights_mapper():
 
 
 def test_cosmos3_edge_checkpoint_weights_mapper():
-    from aphrodite.model_executor.models.cosmos3_edge import (
+    from sonar.model_executor.models.cosmos3_edge import (
         Cosmos3EdgeForConditionalGeneration,
     )
 
-    mapper = Cosmos3EdgeForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = Cosmos3EdgeForConditionalGeneration.hf_to_sonar_mapper
 
     assert mapper.apply_list(
         [
@@ -181,14 +181,14 @@ def test_cosmos3_edge_checkpoint_weights_mapper():
 
 def test_cosmos3_edge_modelopt_quantizer_weights_mapper():
     """ModelOpt/Diffusers FP8 checkpoints ship native fake-quant buffers
-    (``*_quantizer._amax`` / ``._scale``) alongside the Aphrodite-consumable
-    ``weight_scale`` / ``input_scale`` sidecars. Aphrodite must drop the former
+    (``*_quantizer._amax`` / ``._scale``) alongside the Sonar-consumable
+    ``weight_scale`` / ``input_scale`` sidecars. Sonar must drop the former
     (it has no parameter for them) while keeping the latter."""
-    from aphrodite.model_executor.models.cosmos3_edge import (
+    from sonar.model_executor.models.cosmos3_edge import (
         Cosmos3EdgeForConditionalGeneration,
     )
 
-    mapper = Cosmos3EdgeForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = Cosmos3EdgeForConditionalGeneration.hf_to_sonar_mapper
 
     # Native ModelOpt quantizer buffers are dropped.
     assert (
@@ -203,7 +203,7 @@ def test_cosmos3_edge_modelopt_quantizer_weights_mapper():
         == []
     )
 
-    # The FP8 scale sidecars Aphrodite actually consumes are kept and remapped.
+    # The FP8 scale sidecars Sonar actually consumes are kept and remapped.
     assert mapper.apply_list(
         [
             "layers.0.self_attn.to_q.weight",
@@ -221,11 +221,11 @@ def test_cosmos3_edge_modelopt_quantizer_weights_mapper():
 
 @pytest.mark.cpu_test
 def test_bailing_vl_mapper_handles_module_and_parameter_names():
-    from aphrodite.model_executor.models.bailing_moe_v3_vl import (
+    from sonar.model_executor.models.bailing_moe_v3_vl import (
         BailingMoeV3VLForConditionalGeneration,
     )
 
-    mapper = BailingMoeV3VLForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = BailingMoeV3VLForConditionalGeneration.hf_to_sonar_mapper
     names = {
         "model.visual": "visual",
         "model.visual.blocks.0.attn.qkv.weight": "visual.blocks.0.attn.qkv.weight",
@@ -318,7 +318,7 @@ def test_hf_model_weights_mapper(model_arch: str):
     if issubclass(model_cls, TransformersBase):
         # Transformers backend models create their mapper during __init__
         # by inspecting the HF model instance. We simulate this by calling
-        # _create_hf_to_aphrodite_mapper with a minimal proxy object.
+        # _create_hf_to_sonar_mapper with a minimal proxy object.
         model_cls = type(
             "ProxyModelCls",
             (),
@@ -327,13 +327,13 @@ def test_hf_model_weights_mapper(model_arch: str):
                 "_maybe_apply_model_mapping": lambda self: None,
             },
         )()
-        TransformersBase._create_hf_to_aphrodite_mapper(model_cls)
+        TransformersBase._create_hf_to_sonar_mapper(model_cls)
 
     original_weights = create_repo_dummy_weights(model_id)
     hf_dummy_model = create_dummy_model(model_id, model_arch)
     hf_converted_weights = hf_dummy_model.named_parameters()
     hf_converted_buffers = hf_dummy_model.named_buffers()
-    mapper: WeightsMapper = getattr(model_cls, "hf_to_aphrodite_mapper")  # noqa: B009
+    mapper: WeightsMapper = getattr(model_cls, "hf_to_sonar_mapper")  # noqa: B009
 
     mapped_original_weights = mapper.apply(original_weights)
     mapped_hf_converted_weights = mapper.apply(hf_converted_weights)

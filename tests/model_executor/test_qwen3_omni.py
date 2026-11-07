@@ -10,8 +10,8 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config import ParallelConfig
-from aphrodite.multimodal.processing import InputProcessingContext
+from sonar.config import ParallelConfig
+from sonar.multimodal.processing import InputProcessingContext
 
 
 # Helper function to print input IDs with coalesced audio/video tokens.
@@ -137,7 +137,7 @@ def test_qwen3_omni_get_updates_use_audio_in_video(
     monkeypatch,
 ):
     """Test the get_updates_use_audio_in_video method directly."""
-    from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+    from sonar.model_executor.models.qwen3_omni_moe_thinker import (
         Qwen3OmniMoeThinkerMultiModalProcessor,
         Qwen3OmniMoeThinkerProcessingInfo,
     )
@@ -222,8 +222,8 @@ def test_qwen3_omni_get_updates_use_audio_in_video(
 
 @pytest.mark.skip_global_cleanup
 def test_qwen3_omni_exposes_eagle3_to_its_text_backbone():
-    from aphrodite.model_executor.models.interfaces import EagleModelMixin, SupportsEagle3
-    from aphrodite.model_executor.models.qwen3_omni_moe_thinker import (
+    from sonar.model_executor.models.interfaces import EagleModelMixin, SupportsEagle3
+    from sonar.model_executor.models.qwen3_omni_moe_thinker import (
         Qwen3OmniMoeThinkerForConditionalGeneration,
     )
 
@@ -254,7 +254,7 @@ def test_qwen3_omni_exposes_eagle3_to_its_text_backbone():
 
 @pytest.mark.skip_global_cleanup
 def test_qwen3_omni_text_model_collects_post_deepstack_aux_hidden_states():
-    from aphrodite.model_executor.models.qwen3_omni_moe_thinker import Qwen3MoeLLMModel
+    from sonar.model_executor.models.qwen3_omni_moe_thinker import Qwen3MoeLLMModel
 
     class DummyLayer(nn.Module):
         def forward(self, positions, hidden_states, residual):
@@ -276,7 +276,7 @@ def test_qwen3_omni_text_model_collects_post_deepstack_aux_hidden_states():
     inputs_embeds = torch.tensor([[1.0]])
     deepstack_inputs = {"deepstack_input_embeds_0": torch.tensor([[3.0]])}
     with patch(
-        "aphrodite.model_executor.models.qwen3_omni_moe_thinker.get_pp_group",
+        "sonar.model_executor.models.qwen3_omni_moe_thinker.get_pp_group",
         return_value=pp_group,
     ):
         result = model.forward(
@@ -297,7 +297,7 @@ def test_qwen3_omni_text_model_collects_post_deepstack_aux_hidden_states():
 
 def _dspark_vocab_stub(input_vocab_size: int, draft_vocab_size: int):
     """A Qwen3 DSpark model with only what `load_weights` reads."""
-    from aphrodite.model_executor.models.qwen3_dspark import Qwen3DSparkForCausalLM
+    from sonar.model_executor.models.qwen3_dspark import Qwen3DSparkForCausalLM
 
     model = Qwen3DSparkForCausalLM.__new__(
         Qwen3DSparkForCausalLM  # type: ignore[type-abstract]  # protocol attrs unset
@@ -353,7 +353,7 @@ def test_qwen3_dspark_accepts_draft_vocab_at_least_target(draft_vocab_size):
 
 @pytest.mark.skip_global_cleanup
 def test_dspark_shares_target_embedding_with_smaller_draft_vocabulary():
-    from aphrodite.v1.worker.gpu.spec_decode.dspark import utils as dspark_utils
+    from sonar.v1.worker.gpu.spec_decode.dspark import utils as dspark_utils
 
     target_embedding = nn.Embedding(100, 8)
     draft_embedding = nn.Embedding(99, 8)
@@ -366,7 +366,7 @@ def test_dspark_shares_target_embedding_with_smaller_draft_vocabulary():
         hf_config=SimpleNamespace(model_type="qwen3"),
         get_vocab_size=Mock(return_value=99),
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         speculative_config=SimpleNamespace(
             draft_model_config=draft_model_config,
             draft_parallel_config=SimpleNamespace(tensor_parallel_size=1),
@@ -390,31 +390,31 @@ def test_dspark_shares_target_embedding_with_smaller_draft_vocabulary():
     with (
         patch.object(dspark_utils, "replace", side_effect=fake_replace),
         patch(
-            "aphrodite.v1.worker.gpu.spec_decode.eagle.utils.get_pp_group",
+            "sonar.v1.worker.gpu.spec_decode.eagle.utils.get_pp_group",
             return_value=SimpleNamespace(world_size=1),
         ),
         patch(
-            "aphrodite.v1.worker.gpu.spec_decode.utils.get_pp_group",
+            "sonar.v1.worker.gpu.spec_decode.utils.get_pp_group",
             return_value=SimpleNamespace(world_size=1),
         ),
         patch(
-            "aphrodite.compilation.backends.set_model_tag",
+            "sonar.compilation.backends.set_model_tag",
             return_value=nullcontext(),
         ),
         patch(
-            "aphrodite.model_executor.model_loader.get_model",
+            "sonar.model_executor.model_loader.get_model",
             return_value=draft_model,
         ),
         patch(
-            "aphrodite.model_executor.models.qwen3_dflash.dflash_has_any_non_causal",
+            "sonar.model_executor.models.qwen3_dflash.dflash_has_any_non_causal",
             return_value=False,
         ),
         patch(
-            "aphrodite.model_executor.models.utils.get_draft_quant_config",
+            "sonar.model_executor.models.utils.get_draft_quant_config",
             return_value=None,
         ),
     ):
-        loaded_model = dspark_utils.load_dspark_model(target_model, aphrodite_config)
+        loaded_model = dspark_utils.load_dspark_model(target_model, sonar_config)
 
     assert loaded_model.model.embed_tokens is target_embedding
 

@@ -27,7 +27,7 @@
 
 using namespace cute;
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename ElementAB_, typename ElementD_,
           template <typename, typename, typename> typename Epilogue_,
@@ -145,4 +145,4 @@ struct cutlass_3x_gemm_sm120 {
       Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>>;
 };
 
-}  // namespace aphrodite
+}  // namespace sonar

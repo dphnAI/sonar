@@ -28,7 +28,7 @@ model:
   nightly_required: true
   install:
     docker:
-      note: "NVIDIA: dedicated hy4-preview image until changes land in aphrodite:latest. AMD: vllm/vllm-openai-rocm:nightly from 2026-09-22 or later."
+      note: "NVIDIA: dedicated hy4-preview image until changes land in sonar:latest. AMD: vllm/vllm-openai-rocm:nightly from 2026-09-22 or later."
     pip:
       note: "Hy4-preview's latest optimizations aren't in a stable release yet — use nightly wheels or build from source."
   architecture: moe
@@ -87,13 +87,13 @@ hardware_overrides:
   # Suggest enable hpc-ops for better performance on Blackwell
   blackwell:
     extra_env:
-      APHRODITE_ENABLE_HPC_OPS: "1"
+      SONAR_ENABLE_HPC_OPS: "1"
     extra_args:
       - "--attention-backend"
       - "FLASHMLA_SPARSE"
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
     extra_args:
       - "--max-model-len"
       - "262144"
@@ -120,11 +120,11 @@ strategy_overrides:
           - "--gpu-memory-utilization"
           - "0.96"
         extra_env:
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
-          APHRODITE_ROCM_USE_AITER_MHA: "1"
-          APHRODITE_ROCM_USE_AITER_RMSNORM: "1"
-          APHRODITE_ROCM_USE_AITER_LINEAR: "1"
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER_MHA: "1"
+          SONAR_ROCM_USE_AITER_RMSNORM: "1"
+          SONAR_ROCM_USE_AITER_LINEAR: "1"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 
 guide: |
   # Hy4-preview Usage Guide
@@ -137,7 +137,7 @@ guide: |
 
   On the architecture side, inspired by DeepSeek and GLM, the attention module employs Gated DeepSeek Sparse Attention (Gated DSA) with IndexCache for cross-layer sparse index reuse. The residual pathway uses iHC (identity Hyper-Connections) to expand inter-layer information flow.
 
-  ## Aphrodite Setup
+  ## Sonar Setup
 
   Choose one of the following setup methods.
 
@@ -147,7 +147,7 @@ guide: |
   docker run --gpus all \
     -p 8000:8000 \
     --ipc=host \
-    -e APHRODITE_ENABLE_HPC_OPS=1 \
+    -e SONAR_ENABLE_HPC_OPS=1 \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai:hy4-preview tencent/Hy4-preview-FP8 \
       --tensor-parallel-size 8 \
@@ -160,24 +160,24 @@ guide: |
       --served-model-name hy4-preview
   ```
 
-  Build Aphrodite from source:
+  Build Sonar from source:
 
   ```bash
   uv venv --python 3.12 --seed --managed-python
   source .venv/bin/activate
   git clone https://github.com/vllm-project/vllm.git
-  cd aphrodite
+  cd sonar
   uv pip install --editable . --torch-backend=auto
   ```
 
-  ## Aphrodite Deployment
+  ## Sonar Deployment
 
   Start the FP8 model with MTP enabled:
 
   ```bash
-  export APHRODITE_ENABLE_HPC_OPS=1
+  export SONAR_ENABLE_HPC_OPS=1
 
-  aphrodite serve tencent/Hy4-preview-FP8 \
+  sonar serve tencent/Hy4-preview-FP8 \
     --tensor-parallel-size 8 \
     --speculative-config '{"num_speculative_tokens":3,"method":"mtp"}' \
     --attention-backend FLASHMLA_SPARSE \
@@ -193,9 +193,9 @@ guide: |
   Spec decoding (native MTP, `k=3`) is opt-in. 
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve tencent/Hy4-preview-FP8 \
+  sonar serve tencent/Hy4-preview-FP8 \
     --tensor-parallel-size 8 \
     --max-model-len 262144 \
     --gpu-memory-utilization 0.85 \
@@ -220,15 +220,15 @@ guide: |
   about 3.81× one 139,264-token request.
   
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
-  export APHRODITE_ROCM_USE_AITER_MHA=1
-  export APHRODITE_ROCM_USE_AITER_RMSNORM=1
-  export APHRODITE_ROCM_USE_AITER_LINEAR=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-  export APHRODITE_USE_RUST_FRONTEND=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
+  export SONAR_ROCM_USE_AITER_MHA=1
+  export SONAR_ROCM_USE_AITER_RMSNORM=1
+  export SONAR_ROCM_USE_AITER_LINEAR=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_USE_RUST_FRONTEND=1
 
-  aphrodite serve tencent/Hy4-preview-FP8 \
+  sonar serve tencent/Hy4-preview-FP8 \
     --tensor-parallel-size 8 \
     --trust-remote-code \
     --kv-cache-dtype fp8 \

@@ -4,9 +4,9 @@ from collections.abc import Callable
 
 import pytest
 
-from aphrodite.config import PassConfig
-from aphrodite.platforms import current_platform
-from aphrodite.utils.flashinfer import is_flashinfer_fp8_blockscale_gemm_supported
+from sonar.config import PassConfig
+from sonar.platforms import current_platform
+from sonar.utils.flashinfer import is_flashinfer_fp8_blockscale_gemm_supported
 
 from .common import (
     INDUCTOR_GRAPH_PARTITION,

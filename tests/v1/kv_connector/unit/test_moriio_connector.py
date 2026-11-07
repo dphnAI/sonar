@@ -12,16 +12,16 @@ import pytest
 import torch
 import zmq
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ModelConfig,
     SchedulerConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     ROLE,
     MoRIIOAgentMetadata,
     MoRIIOConnectorMetadata,
@@ -31,18 +31,18 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common impo
     set_role,
     zmq_ctx,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     KVConnectorRole,
     MoRIIOConnector,
     MoRIIOConnectorScheduler,
     MoRIIOConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import (
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import (
     get_ip,
     make_zmq_path,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -104,12 +104,12 @@ def mock_parallel_groups():
 
     with (
         patch.multiple(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common",
+            "sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common",
             get_tensor_model_parallel_rank=MagicMock(return_value=0),
             get_tensor_model_parallel_world_size=MagicMock(return_value=0),
         ),
         patch.multiple(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector",
+            "sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector",
             get_tensor_model_parallel_world_size=MagicMock(return_value=0),
             get_world_group=MagicMock(return_value=mock_group),
             get_tp_group=MagicMock(return_value=mock_group),
@@ -279,7 +279,7 @@ class FakeMoRIIOConnectorWorker(MoRIIOConnectorWorker):
 
     def __init__(
         self,
-        aphrodite_config,
+        sonar_config,
         engine_id,
         *args,
         hand_shake_latency: float = 1.8,
@@ -287,10 +287,10 @@ class FakeMoRIIOConnectorWorker(MoRIIOConnectorWorker):
         kv_cache_config=None,
         **kwargs,
     ):
-        super().__init__(aphrodite_config, engine_id, kv_cache_config or _make_test_kv_cache_config())
+        super().__init__(sonar_config, engine_id, kv_cache_config or _make_test_kv_cache_config())
 
 
-def create_aphrodite_config(
+def create_sonar_config(
     model: str = "facebook/opt-125m",
     max_num_seqs: int = 16,
     max_num_batched_tokens: int = 64,
@@ -300,8 +300,8 @@ def create_aphrodite_config(
     enable_permute_local_kv: bool = False,
     role="kv_consumer",
     read_mode: bool = False,
-) -> AphroditeConfig:
-    """Initialize AphroditeConfig for testing."""
+) -> SonarConfig:
+    """Initialize SonarConfig for testing."""
     scheduler_config = SchedulerConfig(
         max_num_seqs=max_num_seqs,
         max_num_batched_tokens=max_num_batched_tokens,
@@ -331,7 +331,7 @@ def create_aphrodite_config(
         enable_permute_local_kv=enable_permute_local_kv,
         kv_connector_extra_config={"read_mode": read_mode, "backend": "xgmi"},
     )
-    return AphroditeConfig(
+    return SonarConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -343,11 +343,11 @@ def create_aphrodite_config(
 def test_write_mode_saves_local_block_ids():
     """Write mode records local block ids in MoRIIOConnectorMetadata.reqs_to_save."""
     # Setup Scheduler and Request
-    aphrodite_config = create_aphrodite_config(role="kv_producer")
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(role="kv_producer")
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -391,10 +391,10 @@ def test_write_mode_with_chunked_prefill_saves_local_block_ids():
     MAX_NUM_BATCHED_TOKENS = 64
     NUM_TOKENS = MAX_NUM_BATCHED_TOKENS * 2 + MAX_NUM_BATCHED_TOKENS // 2
 
-    aphrodite_config = create_aphrodite_config(max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS, role="kv_producer")
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    sonar_config = create_sonar_config(max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS, role="kv_producer")
+    BLOCK_SIZE = sonar_config.cache_config.block_size
 
-    scheduler = create_scheduler(aphrodite_config)
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
 
@@ -439,11 +439,11 @@ def test_write_mode_with_chunked_prefill_saves_local_block_ids():
 def test_read_mode_loads_remote_block_ids():
     """Read mode loads remote block ids into local cache mapping."""
     # Setup Scheduler and Request
-    aphrodite_config = create_aphrodite_config(role="kv_consumer", read_mode=True)
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(role="kv_consumer", read_mode=True)
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -548,7 +548,7 @@ def test_register_kv_caches(mock_parallel_groups):
     """Test that MoRIIOConnector.register_kv_caches correctly registers kv caches."""
     ROLE = "kv_consumer"
     IP = get_ip()
-    aphrodite_config = create_aphrodite_config(role=ROLE)
+    sonar_config = create_sonar_config(role=ROLE)
     DEFAULT_PORT = 6301
     TP_RANK = 0
     DP_RANK = 0
@@ -566,12 +566,12 @@ def test_register_kv_caches(mock_parallel_groups):
     }
 
     with (
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Event"),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Thread"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Event"),
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Thread"),
     ):
         # Create connector
-        assert aphrodite_config.kv_transfer_config is not None
-        aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
+        assert sonar_config.kv_transfer_config is not None
+        sonar_config.kv_transfer_config.kv_connector_extra_config.update(
             {
                 "proxy_ip": "127.0.0.1",
                 "proxy_ping_port": 12345,
@@ -579,14 +579,14 @@ def test_register_kv_caches(mock_parallel_groups):
             }
         )
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             connector = MoRIIOConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 _make_test_kv_cache_config(),
             )
             connector.connector_worker = FakeMoRIIOConnectorWorker(
-                aphrodite_config, connector.engine_id, hand_shake_latency=0
+                sonar_config, connector.engine_id, hand_shake_latency=0
             )
 
         from mori.io import (
@@ -622,7 +622,7 @@ def test_register_kv_caches(mock_parallel_groups):
 def test_moriio_handshake_returns_metadata(mock_parallel_groups):
     """MoRIIO handshake socket returns valid agent metadata over ZMQ."""
     ROLE = "kv_consumer"
-    aphrodite_config = create_aphrodite_config(role=ROLE)
+    sonar_config = create_sonar_config(role=ROLE)
     # Create test kv cache tensors using KVCacheSpec layout
     shape = compute_layer_kv_cache_shape_bytes(
         FullAttentionSpec(block_size=16, num_kv_heads=4, head_size=64, dtype=torch.float16),
@@ -638,14 +638,14 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
 
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine.MoRIIOWrapper",
+            "sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine.MoRIIOWrapper",
             FakeMoRIIOWrapper,
         ),
     ):
         handshake_port = _find_free_port()
         # Create connector
-        assert aphrodite_config.kv_transfer_config is not None
-        aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
+        assert sonar_config.kv_transfer_config is not None
+        sonar_config.kv_transfer_config.kv_connector_extra_config.update(
             {
                 "proxy_ip": "127.0.0.1",
                 "proxy_ping_port": 12345,
@@ -653,9 +653,9 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
                 "handshake_port": handshake_port,
             }
         )
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             connector = MoRIIOConnector(
-                aphrodite_config,
+                sonar_config,
                 KVConnectorRole.WORKER,
                 _make_test_kv_cache_config(),
             )
@@ -940,10 +940,10 @@ def _make_sliding_window_only_kv_cache_config() -> KVCacheConfig:
 
 
 def _read_scheduler(kv_cache_config: KVCacheConfig, disable_hma: bool = False) -> MoRIIOConnectorScheduler:
-    aphrodite_config = create_aphrodite_config(role="kv_producer", read_mode=True)
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hma
-    with set_current_aphrodite_config(aphrodite_config):
-        connector = MoRIIOConnector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)
+    sonar_config = create_sonar_config(role="kv_producer", read_mode=True)
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hma
+    with set_current_sonar_config(sonar_config):
+        connector = MoRIIOConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
     assert connector.connector_scheduler is not None
     return connector.connector_scheduler
 
@@ -1088,33 +1088,33 @@ def test_single_group_path_unchanged():
 
 def _fake_speculative_config(num_speculative_tokens: int = 1) -> SimpleNamespace:
     """Minimal speculative_config stand-in, enough for
-    AphroditeConfig.num_lookahead_tokens."""
+    SonarConfig.num_lookahead_tokens."""
     return SimpleNamespace(
         num_speculative_tokens=num_speculative_tokens,
         speculator_config=SimpleNamespace(num_lookahead_tokens=num_speculative_tokens),
     )
 
 
-def _spec_aphrodite_config() -> AphroditeConfig:
-    aphrodite_config = create_aphrodite_config(role="kv_producer", read_mode=False)
-    aphrodite_config.speculative_config = _fake_speculative_config()
+def _spec_sonar_config() -> SonarConfig:
+    sonar_config = create_sonar_config(role="kv_producer", read_mode=False)
+    sonar_config.speculative_config = _fake_speculative_config()
     # HMA off => the WRITE+hybrid guard is skipped, so construction reaches the
     # spec-decode guard (the only path that hits it).
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = True
-    return aphrodite_config
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = True
+    return sonar_config
 
 
 def test_spec_decode_rejected_with_sliding_window_groups():
     """MoRIIO + speculative decoding fails closed on sliding-window models,
     since the prompt-block clamp only covers full-attention groups. The only
     reachable path is a uniform SWA model with HMA disabled."""
-    aphrodite_config = _spec_aphrodite_config()
+    sonar_config = _spec_sonar_config()
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         pytest.raises(NotImplementedError, match="speculative decoding"),
     ):
         MoRIIOConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.SCHEDULER,
             _make_sliding_window_only_kv_cache_config(),
         )
@@ -1122,10 +1122,10 @@ def test_spec_decode_rejected_with_sliding_window_groups():
 
 def test_spec_decode_allowed_with_full_attention_only():
     """Full-attention-only models (e.g. GLM) do not trip the spec guard."""
-    aphrodite_config = _spec_aphrodite_config()
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = _spec_sonar_config()
+    with set_current_sonar_config(sonar_config):
         connector = MoRIIOConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.SCHEDULER,
             _make_test_kv_cache_config(),
         )
@@ -1134,11 +1134,11 @@ def test_spec_decode_allowed_with_full_attention_only():
 
 def test_spec_decode_allowed_with_sliding_window_in_read_mode():
     """The spec guard is WRITE-mode only; READ mode is unaffected."""
-    aphrodite_config = create_aphrodite_config(role="kv_consumer", read_mode=True)
-    aphrodite_config.speculative_config = _fake_speculative_config()
-    with set_current_aphrodite_config(aphrodite_config):
+    sonar_config = create_sonar_config(role="kv_consumer", read_mode=True)
+    sonar_config.speculative_config = _fake_speculative_config()
+    with set_current_sonar_config(sonar_config):
         connector = MoRIIOConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.SCHEDULER,
             _make_hybrid_kv_cache_config(),
         )
@@ -1147,13 +1147,13 @@ def test_spec_decode_allowed_with_sliding_window_in_read_mode():
 
 def test_hybrid_write_mode_rejected():
     """Hybrid KV cache groups are unsupported in WRITE mode and fail closed."""
-    aphrodite_config = create_aphrodite_config(role="kv_producer", read_mode=False)
+    sonar_config = create_sonar_config(role="kv_producer", read_mode=False)
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         pytest.raises(NotImplementedError),
     ):
         MoRIIOConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.SCHEDULER,
             _make_hybrid_kv_cache_config(),
         )
@@ -1161,20 +1161,20 @@ def test_hybrid_write_mode_rejected():
 
 def test_worker_layer_to_group_routing(mock_parallel_groups):
     """The worker maps every layer to its KV cache group correctly."""
-    aphrodite_config = create_aphrodite_config(role="kv_consumer", read_mode=True)
+    sonar_config = create_sonar_config(role="kv_consumer", read_mode=True)
     # Building the worker directly bypasses MoRIIOConnector._set_port_defaults,
     # so provide the ports manually.
-    assert aphrodite_config.kv_transfer_config is not None
-    aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
+    assert sonar_config.kv_transfer_config is not None
+    sonar_config.kv_transfer_config.kv_connector_extra_config.update(
         {
             "http_port": 12346,
             "handshake_port": 12347,
             "notify_port": 12348,
         }
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         worker = FakeMoRIIOConnectorWorker(
-            aphrodite_config,
+            sonar_config,
             "engine0",
             hand_shake_latency=0,
             kv_cache_config=_make_hybrid_kv_cache_config(),

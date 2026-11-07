@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use aphrodite_engine_core_client::mock_engine::MockEngineDataSockets;
-use aphrodite_engine_core_client::protocol::request::{EngineCoreRequest, EngineCoreRequestType};
-use aphrodite_engine_core_client::protocol::utility::EngineCoreUtilityRequest;
-use aphrodite_engine_core_client::protocol::{decode_msgpack, encode_msgpack};
 use futures::{Stream, StreamExt as _, stream};
+use sonar_engine_core_client::mock_engine::MockEngineDataSockets;
+use sonar_engine_core_client::protocol::request::{EngineCoreRequest, EngineCoreRequestType};
+use sonar_engine_core_client::protocol::utility::EngineCoreUtilityRequest;
+use sonar_engine_core_client::protocol::{decode_msgpack, encode_msgpack};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;

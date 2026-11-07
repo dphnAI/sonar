@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """cand_logits.candidate_logits against AITER's dense
-deepgemm_fp8_paged_mqa_logits, called the way Aphrodite's decode indexer calls it
+deepgemm_fp8_paged_mqa_logits, called the way Sonar's decode indexer calls it
 on gfx942 (rocm_aiter_mla_sparse.rocm_fp8_paged_mqa_logits).
 
 For one decode request of 6 rows, every compact logit and id must be
@@ -14,13 +14,13 @@ candidate_top_k_512 takes from the dense rows within the candidate blocks.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _on_gfx942() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942
+    from sonar.platforms.rocm import on_gfx942
 
     return on_gfx942()
 
@@ -88,8 +88,8 @@ def _gather_reference(dense, context_lens, cand):
 @pytest.mark.parametrize("heads", [32, 64])
 @pytest.mark.parametrize("ctx", [8192, 131072])
 def test_candidate_logits_bit_identical_to_dense(ctx, heads, seq_lens_2d):
-    from aphrodite.models.deepseek_v41.amd.ops import cand_logits, topk
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import paged_mqa_logits_module
+    from sonar.models.deepseek_v41.amd.ops import cand_logits, topk
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import paged_mqa_logits_module
 
     aiter_logits = paged_mqa_logits_module()
     if aiter_logits is None:

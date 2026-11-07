@@ -7,22 +7,22 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.attention.ops import triton_unified_attention as attention
-from aphrodite.v1.attention.ops.triton_attention_helpers import (
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.utils.math_utils import next_power_of_2
+from sonar.utils.torch_utils import set_random_seed
+from sonar.v1.attention.ops import triton_unified_attention as attention
+from sonar.v1.attention.ops.triton_attention_helpers import (
     apply_softcap,
     compute_tile_loop_bounds,
     softmax_step,
 )
-from aphrodite.v1.attention.ops.triton_unified_attention import (
+from sonar.v1.attention.ops.triton_unified_attention import (
     MAX_3D_QUERY_LEN,
     reduce_segments,
     unified_attention,
 )
-from aphrodite.v1.kv_cache_interface import KVQuantMode
+from sonar.v1.kv_cache_interface import KVQuantMode
 
 pytestmark = pytest.mark.skip_global_cleanup
 

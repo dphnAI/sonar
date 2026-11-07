@@ -3,7 +3,7 @@
 Sweep tuning is optional. The converter always creates an initial `config.yml`
 that can be deployed directly. Scheduler calculation is disabled by default:
 TP/DP and concurrency stages remove explicit `max-num-seqs` and
-`max-num-batched-tokens` so Aphrodite resolves its normal scheduler defaults.
+`max-num-batched-tokens` so Sonar resolves its normal scheduler defaults.
 
 Use `--tune-scheduler` only when you explicitly want workload-derived scheduler
 values before the dedicated scheduler stage. For benchmark-backed tuning, the
@@ -14,13 +14,13 @@ dependency order:
 TP/DP -> concurrency -> scheduler
 ```
 
-The examples below assume tuning is run inside the target Aphrodite CPU container so
+The examples below assume tuning is run inside the target Sonar CPU container so
 hardware detection sees the same CPU, NUMA, memory, and cgroup limits as the
 deployment.
 
-## 1. Start the Aphrodite CPU Docker Shell
+## 1. Start the Sonar CPU Docker Shell
 
-From the Aphrodite source tree:
+From the Sonar source tree:
 
 ```bash
 mkdir -p recipe-output
@@ -35,7 +35,7 @@ docker run --rm -it \
   -v "$PWD/recipe-output:/output" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
   -w /output \
-  aphrodite/aphrodite-openai-cpu:latest-x86_64
+  sonar/sonar-openai-cpu:latest-x86_64
 ```
 
 `/recipes` is mounted read-only from the source tree and `/output` is writable.
@@ -43,7 +43,7 @@ Run the converter, generated sweep scripts, and hardware detection inside this
 container.
 
 For additional container details, see
-[RUNTIME_TUNING.md](RUNTIME_TUNING.md#aphrodite-cpu-docker-shell).
+[RUNTIME_TUNING.md](RUNTIME_TUNING.md#sonar-cpu-docker-shell).
 
 ## 2. Recommended: Tune All
 
@@ -62,7 +62,7 @@ flowchart TD
     O2[/"concurrency-recommendation.json<br/>recommended max_concurrency"/]
 
     A3("3. Tune scheduler<br/>max-num-seqs + max-num-batched-tokens")
-    O3[/"recommended-config.yml<br/>final Aphrodite server config"/]
+    O3[/"recommended-config.yml<br/>final Sonar server config"/]
 
     I --> A1
     A1 --> O1
@@ -102,8 +102,8 @@ seed concurrency while TP/DP and maximum concurrency are being measured.
 The default Tune All policy is:
 
 ```text
-Stage 1: TP/DP        -> Aphrodite scheduler defaults
-Stage 2: concurrency -> Aphrodite scheduler defaults
+Stage 1: TP/DP        -> Sonar scheduler defaults
+Stage 2: concurrency -> Sonar scheduler defaults
 Stage 3: scheduler   -> calculate and benchmark scheduler candidates
 ```
 
@@ -119,7 +119,7 @@ With that flag, the existing workload formulas are enabled. In particular,
 `max-num-batched-tokens` uses the estimated decode and prefill pressure.
 
 A scheduler-only sweep is also an explicit opt-in to scheduler calculation: it
-uses the workload formulas as benchmark seeds and compares them with Aphrodite
+uses the workload formulas as benchmark seeds and compares them with Sonar
 defaults.
 
 ### Generate the Tune All package
@@ -127,7 +127,7 @@ defaults.
 Inside the container:
 
 ```bash
-python3 /recipes/recipe_json_to_aphrodite_config.py \
+python3 /recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -146,16 +146,16 @@ The initial configuration remains directly deployable:
 
 ```bash
 source /output/env.sh
-aphrodite serve --config /output/config.yml
+sonar serve --config /output/config.yml
 ```
 
-Before measurements, `config.yml` retains the recipe/Aphrodite scheduler defaults.
+Before measurements, `config.yml` retains the recipe/Sonar scheduler defaults.
 The sweep package separately carries explicit workload-derived values for
 `max-num-seqs` and `max-num-batched-tokens`, so the benchmark can compare both
 policies without making the workload heuristic the deployment default.
 
 Stop a manually started server before running the sweep because the generated
-sweep scripts start and stop their own Aphrodite servers.
+sweep scripts start and stop their own Sonar servers.
 
 Run all tuning stages:
 
@@ -227,7 +227,7 @@ generator keeps the generic layouts and relies on the third policy.
 
 By default, parallel-layout candidates change only TP and DP. The generated
 benchmark config removes explicit `max-num-seqs` and
-`max-num-batched-tokens`, so every layout uses Aphrodite-resolved scheduler
+`max-num-batched-tokens`, so every layout uses Sonar-resolved scheduler
 defaults. This prevents a scheduler value derived from the seed concurrency
 from becoming part of the TP/DP selection.
 
@@ -252,31 +252,31 @@ workaround by default:
 --tp-dp-numa-bind-workaround
 ```
 
-Hardware detection builds one `APHRODITE_CPU_OMP_THREADS_BIND` CPU list per effective
-NUMA node. On x86 it selects one logical CPU per physical core, matching Aphrodite's
+Hardware detection builds one `SONAR_CPU_OMP_THREADS_BIND` CPU list per effective
+NUMA node. On x86 it selects one logical CPU per physical core, matching Sonar's
 auto-binding SMT policy, and excludes one physical core from each NUMA node for
 non-OMP work. The resulting value is written to `env.sh`, for example:
 
 ```bash
-export APHRODITE_CPU_OMP_THREADS_BIND='48-62|64-78|80-94|96-110'
+export SONAR_CPU_OMP_THREADS_BIND='48-62|64-78|80-94|96-110'
 ```
 
 The exact CPU IDs depend on the effective container/cgroup cpuset and NUMA
 topology. Discontinuous CPU IDs are preserved as comma-separated ranges.
 
-`APHRODITE_CPU_NUM_OF_RESERVED_CPU` is not used by this workaround because Aphrodite only
+`SONAR_CPU_NUM_OF_RESERVED_CPU` is not used by this workaround because Sonar only
 applies its reserved-CPU logic in automatic binding mode. With an explicit
-`APHRODITE_CPU_OMP_THREADS_BIND`, reserved cores must already be omitted from the
+`SONAR_CPU_OMP_THREADS_BIND`, reserved cores must already be omitted from the
 generated lists.
 
-After the Aphrodite CPU DP NUMA-binding issue is fixed, disable the workaround
+After the Sonar CPU DP NUMA-binding issue is fixed, disable the workaround
 without removing the implementation:
 
 ```bash
 --no-tp-dp-numa-bind-workaround
 ```
 
-An explicit non-`auto` `APHRODITE_CPU_OMP_THREADS_BIND` supplied by the recipe is
+An explicit non-`auto` `SONAR_CPU_OMP_THREADS_BIND` supplied by the recipe is
 preserved.
 
 ### Stage 2: Tune Concurrency
@@ -294,7 +294,7 @@ boundary search** instead of uniformly sampling the entire workload range.
 
 The supplied `--concurrency` is the seed. The controller grows upward until it
 finds the first SLA failure (or shrinks downward when the seed fails), then
-binary-searches the integer PASS/FAIL bracket. One Aphrodite server remains running
+binary-searches the integer PASS/FAIL bracket. One Sonar server remains running
 throughout this refinement, so midpoint probes do not reload the model.
 
 For example:
@@ -316,7 +316,7 @@ A point is SLA-feasible only when all of the following hold:
    minimum (`0.99`, or 99%, by default).
 
 The combined-compliance check is intentionally stricter than looking at the
-TTFT and TPOT P99 columns independently. `aphrodite bench serve --goodput` counts
+TTFT and TPOT P99 columns independently. `sonar bench serve --goodput` counts
 requests that satisfy all supplied latency objectives, and the recommender
 estimates the combined compliant-request fraction across repeated runs as:
 
@@ -344,10 +344,10 @@ Generated runners accept `--growth-factor VALUE` and
 `--max-concurrency-cap VALUE`.
 
 Without TTFT/TPOT objectives there is no SLA boundary. In that mode the
-generated runner keeps Aphrodite Workload Explorer:
+generated runner keeps Sonar Workload Explorer:
 
 ```text
-aphrodite bench sweep serve_workload --workload-var max_concurrency
+sonar bench sweep serve_workload --workload-var max_concurrency
 ```
 
 The stage writes:
@@ -357,7 +357,7 @@ sweep/concurrency-recommendation.json
 ```
 
 `max_concurrency` is benchmark/deployment metadata. It is **not** written as a
-`aphrodite serve` configuration parameter.
+`sonar serve` configuration parameter.
 
 ### Stage 3: Tune Scheduler
 
@@ -374,7 +374,7 @@ fixed input/output token shape
 
 The scheduler stage keeps an explicit `max-num-seqs` at the per-replica
 concurrency lower bound while tuning `max-num-batched-tokens`. It also compares
-the explicit sequence limit with the Aphrodite default.
+the explicit sequence limit with the Sonar default.
 
 The per-replica sequence baseline is recalculated as:
 
@@ -385,16 +385,16 @@ max-num-seqs = ceil(selected max_concurrency / selected data-parallel-size)
 The directed scheduler sweep does not test `max-num-seqs` below this value;
 doing so limits immediately active requests and can turn scheduler queueing into
 severe TTFT degradation. It keeps the existing batch-budget curve around the
-baseline and also measures three Aphrodite-default reference candidates:
+baseline and also measures three Sonar-default reference candidates:
 
 | Reference candidate | `max-num-seqs` | `max-num-batched-tokens` |
 | --- | --- | --- |
-| `aphrodite_default_max_num_seqs` | Aphrodite default | generated value |
-| `aphrodite_default_max_num_batched_tokens` | generated value | Aphrodite default |
-| `aphrodite_defaults` | Aphrodite default | Aphrodite default |
+| `sonar_default_max_num_seqs` | Sonar default | generated value |
+| `sonar_default_max_num_batched_tokens` | generated value | Sonar default |
+| `sonar_defaults` | Sonar default | Sonar default |
 
 The default references do not hard-code values such as 128 or 2048. The sweep
-omits the selected scheduler argument and lets the installed Aphrodite resolve its
+omits the selected scheduler argument and lets the installed Sonar resolve its
 normal platform-, world-size-, model-, and usage-context-aware default.
 
 If a default-reference candidate wins, the corresponding scheduler key is
@@ -419,17 +419,17 @@ warmup containing one full concurrency window. Warmup output is retained as
 Generated scripts also handle sweep-run failures without discarding completed
 work:
 
-- If the installed Aphrodite CLI supports `--continue-on-error`, the generated script
+- If the installed Sonar CLI supports `--continue-on-error`, the generated script
   enables it.
-- If the installed Aphrodite does not expose that option, the script omits it and
+- If the installed Sonar does not expose that option, the script omits it and
   automatically retries an interrupted sweep with `--resume`.
 - The default is two automatic resume retries. Override it with
-  `APHRODITE_RECIPE_SWEEP_RETRIES`.
+  `SONAR_RECIPE_SWEEP_RETRIES`.
 
 For example:
 
 ```bash
-export APHRODITE_RECIPE_SWEEP_RETRIES=3
+export SONAR_RECIPE_SWEEP_RETRIES=3
 /output/sweep/run_full_sweep.sh
 ```
 
@@ -443,7 +443,7 @@ Use this when only the parallel layout needs to be measured. This mode stops
 after selecting `tensor-parallel-size` and `data-parallel-size`:
 
 ```bash
-python3 /recipes/recipe_json_to_aphrodite_config.py \
+python3 /recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -474,7 +474,7 @@ Use this when TP/DP and scheduler configuration are already fixed and only
 concurrent serving capacity needs to be measured:
 
 ```bash
-python3 /recipes/recipe_json_to_aphrodite_config.py \
+python3 /recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -501,7 +501,7 @@ Run:
 Use this when TP/DP and target concurrency are already known:
 
 ```bash
-python3 /recipes/recipe_json_to_aphrodite_config.py \
+python3 /recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --hardware xeon6 \
   --detect-hardware \
@@ -528,7 +528,7 @@ Run:
 
 ## 6. Recommendation Policy
 
-With TTFT/TPOT objectives, benchmark commands use Aphrodite `--goodput`.
+With TTFT/TPOT objectives, benchmark commands use Sonar `--goodput`.
 
 For TP/DP and scheduler selection, the recommender:
 
@@ -590,7 +590,7 @@ metrics, candidate tables, and automatic coverage observations. It uses only
 Python's standard library. A report-generation error is printed as a warning
 and does not change the success of the completed sweep.
 
-The TTFT and TPOT objectives supplied to `recipe_json_to_aphrodite_config.py` are
+The TTFT and TPOT objectives supplied to `recipe_json_to_sonar_config.py` are
 embedded in every generated recommender and in `report.py`.
 `run_full_sweep.sh` also passes those values explicitly to every recommendation
 stage and the report. Report generation stops with an error if a stale or
@@ -635,19 +635,19 @@ After Tune All completes:
 
 ```bash
 source /output/env.sh
-aphrodite serve --config /output/sweep/recommended-config.yml
+sonar serve --config /output/sweep/recommended-config.yml
 ```
 
 ## Select sweep stages
 
 Sweep implementation and reporting helpers live in `tools/recipes/sweep/`.
-The converter remains `tools/recipes/recipe_json_to_aphrodite_config.py`.
+The converter remains `tools/recipes/recipe_json_to_sonar_config.py`.
 
 Use `--sweep-stage concurrency` to generate only a concurrency sweep against
 the supplied recipe's fixed TP/DP layout, for example:
 
 ```bash
-python3 tools/recipes/recipe_json_to_aphrodite_config.py \
+python3 tools/recipes/recipe_json_to_sonar_config.py \
   --model meta-llama/Llama-3.1-8B-Instruct --hardware xeon6 \
   --input-tokens 128 --output-tokens 128 --concurrency 32 \
   --ttft-sla-ms 3000 --tpot-sla-ms 100 \

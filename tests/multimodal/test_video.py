@@ -16,9 +16,9 @@ import torch
 from transformers import AutoVideoProcessor, Qwen3VLVideoProcessor
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.assets.base import get_aphrodite_public_assets
-from aphrodite.models.minimax_m3.common.mm_preprocess import MiniMaxM3VideoBackend
-from aphrodite.multimodal.video import (
+from sonar.assets.base import get_sonar_public_assets
+from sonar.models.minimax_m3.common.mm_preprocess import MiniMaxM3VideoBackend
+from sonar.multimodal.video import (
     PYNVVIDEOCODEC_VIDEO_BACKEND,
     VIDEO_LOADER_REGISTRY,
     ClefOmniVideoBackend,
@@ -35,9 +35,9 @@ from aphrodite.multimodal.video import (
     VideoTargetMetadata,
     get_video_loader_backend_for_processor,
 )
-from aphrodite.multimodal.video_decoders import decode_video, resolve_video_backend_kwargs
-from aphrodite.multimodal.video_decoders.opencv import OpenCVVideoBackendMixin
-from aphrodite.multimodal.video_decoders.pynvvideocodec import (
+from sonar.multimodal.video_decoders import decode_video, resolve_video_backend_kwargs
+from sonar.multimodal.video_decoders.opencv import OpenCVVideoBackendMixin
+from sonar.multimodal.video_decoders.pynvvideocodec import (
     PYNVVIDEOCODEC_DECODE_BATCH_SIZE,
     PYNVVIDEOCODEC_DECODER_CACHE_SIZE,
     PYNVVIDEOCODEC_DECODER_CAPS_CACHE_SIZE,
@@ -46,8 +46,8 @@ from aphrodite.multimodal.video_decoders.pynvvideocodec import (
     _get_decoder_caps,
     _pynv_decoder_pool,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.processor import get_video_processor_cls_name_from_config
+from sonar.platforms import current_platform
+from sonar.transformers_utils.processor import get_video_processor_cls_name_from_config
 
 from .utils import (
     create_edit_list_trimmed_video,
@@ -120,10 +120,10 @@ def test_video_loader_type_doesnt_exist():
 def test_video_decoder_backends_are_lazy_imported():
     code = """
 import sys
-import aphrodite.multimodal.video  # noqa: F401
+import sonar.multimodal.video  # noqa: F401
 
 backend_modules = {
-    f"aphrodite.multimodal.video_decoders.{backend}"
+    f"sonar.multimodal.video_decoders.{backend}"
     for backend in ("opencv", "torchcodec", "pynvvideocodec", "deepstream")
 }
 loaded = sorted(backend_modules & sys.modules.keys())
@@ -160,7 +160,7 @@ def test_decode_video_imports_only_selected_backend(
         imports.append((name, package))
         return FakeBackendModule
 
-    monkeypatch.setattr("aphrodite.multimodal.video_decoders.import_module", fake_import_module)
+    monkeypatch.setattr("sonar.multimodal.video_decoders.import_module", fake_import_module)
     result = decode_video(
         backend,
         loader_cls=None,
@@ -172,7 +172,7 @@ def test_decode_video_imports_only_selected_backend(
     )
 
     assert result is decoded
-    assert imports == [(f".{backend}", "aphrodite.multimodal.video_decoders")]
+    assert imports == [(f".{backend}", "sonar.multimodal.video_decoders")]
 
 
 @pytest.mark.parametrize(
@@ -299,7 +299,7 @@ def test_pynvvideocodec_backend_accounts_raw_decoded_frames(
 
     pool = RecordingPool()
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", FakeNvc)
-    monkeypatch.setattr("aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
+    monkeypatch.setattr("sonar.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
     monkeypatch.setattr(
         PyNvVideoCodecVideoBackendMixin,
         "_decode_to_pinned_host",
@@ -371,7 +371,7 @@ def test_pynvvideocodec_codec_uses_dynamic_sampling_strategy(
 
     pool = RecordingPool()
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", FakeNvc)
-    monkeypatch.setattr("aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
+    monkeypatch.setattr("sonar.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
     monkeypatch.setattr(
         PyNvVideoCodecVideoBackendMixin,
         "_decode_to_pinned_host",
@@ -1375,7 +1375,7 @@ def test_video_processor_from_model_repo(
     extracts the ``video_processor_type`` field, and verifies it maps
     to the expected backend and loader class.  When a corresponding HF
     ``VideoProcessor.sample_frames`` implementation exists, the test
-    also verifies that the Aphrodite backend produces identical frame indices.
+    also verifies that the Sonar backend produces identical frame indices.
     """
     video_processor = get_video_processor_cls_name_from_config(model_repo)
     assert video_processor is not None, (
@@ -1403,27 +1403,27 @@ def test_video_processor_from_model_repo(
             height=8,
         )
 
-        _, aphrodite_meta = loader.load_bytes(video_bytes)  # type: ignore[attr-defined]
+        _, sonar_meta = loader.load_bytes(video_bytes)  # type: ignore[attr-defined]
 
         hf_metadata = VideoMetadata(
-            total_num_frames=aphrodite_meta["total_num_frames"],
-            fps=aphrodite_meta["fps"],
-            duration=aphrodite_meta["duration"],
+            total_num_frames=sonar_meta["total_num_frames"],
+            fps=sonar_meta["fps"],
+            duration=sonar_meta["duration"],
         )
         hf_indices = processor.sample_frames(hf_metadata, **(hf_sample_kwargs or {}))
-        last_frame = aphrodite_meta["total_num_frames"] - 1
+        last_frame = sonar_meta["total_num_frames"] - 1
         if appends_last_frame and hf_indices[-1] != last_frame:
             hf_indices = np.append(hf_indices, last_frame)
-        aphrodite_indices = np.array(aphrodite_meta["frames_indices"])
+        sonar_indices = np.array(sonar_meta["frames_indices"])
         np.testing.assert_array_equal(
             hf_indices,
-            aphrodite_indices,
+            sonar_indices,
             err_msg=(
                 f"{model_repo!r} fps={fps} duration={duration_secs}s: "
                 f"HF has {len(hf_indices)} indices "
                 f"{hf_indices[:5].tolist()}..{hf_indices[-5:].tolist()}, "
-                f"Aphrodite has {len(aphrodite_indices)} indices "
-                f"{aphrodite_indices[:5].tolist()}..{aphrodite_indices[-5:].tolist()}"
+                f"Sonar has {len(sonar_indices)} indices "
+                f"{sonar_indices[:5].tolist()}..{sonar_indices[-5:].tolist()}"
             ),
         )
 
@@ -1435,7 +1435,7 @@ def test_video_backend_handles_broken_frames(monkeypatch: pytest.MonkeyPatch):
     them gracefully without crashing and returns accurate metadata.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
 
         # Load the pre-corrupted video file that contains broken frames
         corrupted_video_path = ASSETS_DIR / "corrupted.mp4"
@@ -1474,7 +1474,7 @@ def test_video_backend_handles_edit_list_trimmed_video(
     resample over the true stream length instead.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
 
         video_data, num_visible = create_edit_list_trimmed_video(num_frames=90, trim_start_frame=60)
 
@@ -1505,7 +1505,7 @@ def test_opencv_demux_counts_frames_when_video_header_lacks_metadata(
     decoding.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
         loader = VIDEO_LOADER_REGISTRY.load("opencv")
 
         webm_data = create_live_webm_video(num_frames=20, fps=10)
@@ -1542,7 +1542,7 @@ def test_video_recovery_simulated_failures(monkeypatch: pytest.MonkeyPatch):
     import cv2
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
 
         # Load corrupted.mp4 (26 frames, frame 17 is genuinely corrupted)
         video_path = ASSETS_DIR / "corrupted.mp4"
@@ -1641,7 +1641,7 @@ def test_video_recovery_with_corrupted_file(monkeypatch: pytest.MonkeyPatch):
     4. Metadata is consistent with loaded frames
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
 
         corrupted_video_path = ASSETS_DIR / "corrupted.mp4"
 
@@ -1700,7 +1700,7 @@ def test_video_recovery_dynamic_backend(monkeypatch: pytest.MonkeyPatch):
     loading all frames. This test verifies recovery works in that context.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv_dynamic")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv_dynamic")
 
         corrupted_video_path = ASSETS_DIR / "corrupted.mp4"
 
@@ -1741,7 +1741,7 @@ def test_video_recovery_dynamic_backend(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def dummy_video_path(tmp_path):
-    image_path = get_aphrodite_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
+    image_path = get_sonar_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
 
     video_path = tmp_path / "test_RGB_video.mp4"
     create_video_from_image(str(image_path), str(video_path), num_frames=1800, fps=30)
@@ -1757,7 +1757,7 @@ def test_torchcodec_backend_loads_frames(dummy_video_path, monkeypatch: pytest.M
     """Test that the torchcodec codec backend can load frames."""
     pytest.importorskip("torchcodec")
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv")
 
         with open(dummy_video_path, "rb") as f:
             video_data = f.read()
@@ -1779,7 +1779,7 @@ def test_torchcodec_dynamic_backend_loads_frames(dummy_video_path, monkeypatch: 
     """Test that the torchcodec codec with dynamic sampling can load frames."""
     pytest.importorskip("torchcodec")
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv_dynamic")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "opencv_dynamic")
 
         with open(dummy_video_path, "rb") as f:
             video_data = f.read()
@@ -2003,7 +2003,7 @@ def test_video_loader_frames_sampling(
     """Test video loader frames sampling functionality."""
     if kwargs.get("backend") == "torchcodec":
         pytest.importorskip("torchcodec")
-    monkeypatch.setenv("APHRODITE_VIDEO_LOADER_BACKEND", loader_key)
+    monkeypatch.setenv("SONAR_VIDEO_LOADER_BACKEND", loader_key)
     loader = VIDEO_LOADER_REGISTRY.load(loader_key)
 
     with open(dummy_video_path, "rb") as f:

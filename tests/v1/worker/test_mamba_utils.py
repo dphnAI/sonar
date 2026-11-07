@@ -8,23 +8,23 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.mamba.mamba_utils import (
+from sonar.model_executor.layers.mamba.mamba_utils import (
     MambaStateCopyFunc,
     MambaStateCopyFuncsByType,
     get_conv_copy_spec,
     get_temporal_copy_spec,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.core.sched.output import CachedRequestData, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.core.sched.output import CachedRequestData, SchedulerOutput
+from sonar.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.worker.gpu.block_table import BlockTables
-from aphrodite.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
-from aphrodite.v1.worker.mamba_utils import (
+from sonar.v1.worker.gpu.block_table import BlockTables
+from sonar.v1.worker.gpu.model_states.mamba_hybrid import MambaHybridModelState
+from sonar.v1.worker.mamba_utils import (
     MambaCopyBuffers,
     MambaSpecDecodeGPUContext,
     _reinterpret_u64_as_i64,
@@ -144,7 +144,7 @@ def test_resumed_req_ids_cleared_from_mamba_state_idx():
     )
 
     with patch(
-        "aphrodite.v1.worker.mamba_utils.get_mamba_groups",
+        "sonar.v1.worker.mamba_utils.get_mamba_groups",
         return_value=([0], spec),
     ):
         preprocess_mamba(
@@ -647,8 +647,8 @@ def test_v2_align_ctx_binds_request_slot_tables_for_state_copies():
     state._mamba_state_copy_funcs = _COPY_FUNCS
     state.max_num_reqs = cfg.max_num_reqs
     state.device = device
-    state.aphrodite_config = MagicMock()
-    state.aphrodite_config.compilation_config.static_forward_context = forward_context
+    state.sonar_config = MagicMock()
+    state.sonar_config.compilation_config.static_forward_context = forward_context
 
     state.initialize_kv_cache(kv_cache_config, block_tables)
 
@@ -2530,7 +2530,7 @@ class TestPostprocessMambaFusedKernel:
         dtype,
     ):
         """SD and DS copies should independently match memmove semantics."""
-        from aphrodite.model_executor.layers.mamba import mamba_utils as model_mamba_utils
+        from sonar.model_executor.layers.mamba import mamba_utils as model_mamba_utils
 
         cfg = test_config
         cfg.dtype = dtype
@@ -2570,7 +2570,7 @@ class TestPostprocessMambaFusedKernel:
         sd_source_temporal = torch.randn(cfg.num_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device)
 
         # SD GPU path.
-        monkeypatch.delenv("APHRODITE_SSM_CONV_STATE_LAYOUT", raising=False)
+        monkeypatch.delenv("SONAR_SSM_CONV_STATE_LAYOUT", raising=False)
         model_mamba_utils.get_conv_state_layout.cache_clear()
         sd_conv = sd_source_conv.clone()
         sd_temporal = sd_source_temporal.clone()
@@ -2619,7 +2619,7 @@ class TestPostprocessMambaFusedKernel:
         )
 
         # DS GPU path on the DS twin.
-        monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")
+        monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "DS")
         model_mamba_utils.get_conv_state_layout.cache_clear()
         try:
             ds_conv = ds_source_conv.clone()

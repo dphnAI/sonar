@@ -9,8 +9,8 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from aphrodite.model_executor.model_loader import weight_utils
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.model_executor.model_loader import weight_utils
+from sonar.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     runai_safetensors_weights_iterator,
     safetensors_weights_iterator,

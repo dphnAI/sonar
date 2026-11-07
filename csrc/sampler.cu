@@ -10,7 +10,7 @@
   #include <hipcub/hipcub.hpp>
 #endif
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename scalar_t>
 __global__ void apply_repetition_penalties_kernel(
@@ -757,7 +757,7 @@ __launch_bounds__(kNumThreadsPerBlock) void topKPerRowDecode512DeviceLengthAware
 }
 #endif  // USE_ROCM
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void apply_repetition_penalties_(
     torch::stable::Tensor& logits,  // [num_seqs, vocab_size], in-place
@@ -790,9 +790,9 @@ void apply_repetition_penalties_(
   const torch::stable::accelerator::DeviceGuard device_guard(
       logits.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(
       logits.scalar_type(), "apply_repetition_penalties_kernel", [&] {
-        aphrodite::apply_repetition_penalties_kernel<scalar_t>
+        sonar::apply_repetition_penalties_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(
                 logits.mutable_data_ptr<scalar_t>(),
                 prompt_mask.const_data_ptr<bool>(),
@@ -838,7 +838,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
 
     constexpr int kNumThreadsPerSplitBlock = 1024;
     if (multipleBlocksPerRowConfig == 1) {
-      aphrodite::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerSplitBlock>
+      sonar::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerSplitBlock>
           <<<numRows, kNumThreadsPerSplitBlock, 2 * topK * sizeof(int32_t),
              stream>>>(logits.const_data_ptr<float>(),
                        seqLens.const_data_ptr<int>(),
@@ -853,7 +853,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
     const auto outLogitsAux = torch::stable::empty(
         {numRows, multipleBlocksPerRowConfig, topK},
         torch::headeronly::ScalarType::Float, std::nullopt, logits.device());
-    aphrodite::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerSplitBlock>
+    sonar::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerSplitBlock>
         <<<dim3(numRows, multipleBlocksPerRowConfig), kNumThreadsPerSplitBlock,
            2 * topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
@@ -862,8 +862,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
             outLogitsAux.mutable_data_ptr<float>(), static_cast<int>(stride0),
             static_cast<int>(next_n), seqLensIs2D, multipleBlocksPerRowConfig);
     constexpr int kNumThreadsPerBlockMerge = 1024;
-    aphrodite::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerBlockMerge,
-                                                    true>
+    sonar::topKPerRowDecode512DeviceLengthAware<kNumThreadsPerBlockMerge, true>
         <<<numRows, kNumThreadsPerBlockMerge, topK * sizeof(int32_t), stream>>>(
             nullptr, seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(),
@@ -876,7 +875,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
 
   if (numColumns < kSortingAlgorithmThreshold) {
     // Use insertion sort
-    aphrodite::topKPerRowDecode<kNumThreadsPerBlock, false>
+    sonar::topKPerRowDecode<kNumThreadsPerBlock, false>
         <<<numRows, kNumThreadsPerBlock, topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), static_cast<int>(stride0),
@@ -884,7 +883,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
             static_cast<int>(next_n), seqLensIs2D);
   } else if (numColumns < kSplitWorkThreshold) {
     // From this threshold, use radix sort instead
-    aphrodite::topKPerRowDecode<kNumThreadsPerBlock, true>
+    sonar::topKPerRowDecode<kNumThreadsPerBlock, true>
         <<<numRows, kNumThreadsPerBlock, topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), static_cast<int>(stride0),
@@ -901,7 +900,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
       // two blocks once its live device length reaches the long-context
       // crossover. The grid and workspace shapes remain capture-stable.
       constexpr int multipleBlocksPerRowConfig =
-          aphrodite::kGfx950C4AShortRowNumBlocks;
+          sonar::kGfx950C4AShortRowNumBlocks;
       const auto outIndicesAux = torch::stable::empty(
           {numRows, multipleBlocksPerRowConfig, topK},
           torch::headeronly::ScalarType::Int, std::nullopt, logits.device());
@@ -910,7 +909,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
           torch::headeronly::ScalarType::Float, std::nullopt, logits.device());
 
       constexpr int kNumThreadsPerSplitBlock = 1024;
-      aphrodite::topKPerRowDecodeDeviceLengthAware<kNumThreadsPerSplitBlock>
+      sonar::topKPerRowDecodeDeviceLengthAware<kNumThreadsPerSplitBlock>
           <<<dim3(numRows, multipleBlocksPerRowConfig),
              kNumThreadsPerSplitBlock, 2 * topK * sizeof(int32_t), stream>>>(
               logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
@@ -919,8 +918,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
               static_cast<int>(next_n), seqLensIs2D,
               outLogitsAux.mutable_data_ptr<float>());
       constexpr int kNumThreadsPerBlockMerge = 1024;
-      aphrodite::topKPerRowDecodeDeviceLengthAware<kNumThreadsPerBlockMerge,
-                                                   true>
+      sonar::topKPerRowDecodeDeviceLengthAware<kNumThreadsPerBlockMerge, true>
           <<<numRows, kNumThreadsPerBlockMerge, topK * sizeof(int32_t),
              stream>>>(
               outLogitsAux.const_data_ptr<float>(),
@@ -957,7 +955,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
 
     if (useGfx950TopK1024) {
       constexpr int kNumThreadsPerSplitBlock = 1024;
-      aphrodite::topKPerRowDecode<kNumThreadsPerSplitBlock, true, true>
+      sonar::topKPerRowDecode<kNumThreadsPerSplitBlock, true, true>
           <<<dim3(numRows, multipleBlocksPerRowConfig),
              kNumThreadsPerSplitBlock, 2 * topK * sizeof(int32_t), stream>>>(
               logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
@@ -966,7 +964,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
               static_cast<int>(next_n), seqLensIs2D,
               outLogitsAux.mutable_data_ptr<float>());
     } else {
-      aphrodite::topKPerRowDecode<kNumThreadsPerBlock, true, true>
+      sonar::topKPerRowDecode<kNumThreadsPerBlock, true, true>
           <<<dim3(numRows, multipleBlocksPerRowConfig), kNumThreadsPerBlock,
              2 * topK * sizeof(int32_t), stream>>>(
               logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
@@ -977,7 +975,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
     }
 
     constexpr int kNumThreadsPerBlockMerge = 1024;
-    aphrodite::topKPerRowDecode<kNumThreadsPerBlockMerge, true, false, true>
+    sonar::topKPerRowDecode<kNumThreadsPerBlockMerge, true, false, true>
         <<<numRows, kNumThreadsPerBlockMerge, topK * sizeof(int32_t), stream>>>(
             outLogitsAux.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), multipleBlocksPerRowConfig * topK,
@@ -1000,7 +998,7 @@ void top_k_per_row_prefill(const torch::stable::Tensor& logits,
 
   int numInsertionBlocks =
       std::min(static_cast<int>(numRows), kSortingAlgorithmThreshold);
-  aphrodite::topKPerRowPrefill<kNumThreadsPerBlock, false>
+  sonar::topKPerRowPrefill<kNumThreadsPerBlock, false>
       <<<numInsertionBlocks, kNumThreadsPerBlock, topK * sizeof(int32_t),
          stream>>>(logits.const_data_ptr<float>(),
                    rowStarts.const_data_ptr<int>(),
@@ -1010,7 +1008,7 @@ void top_k_per_row_prefill(const torch::stable::Tensor& logits,
 
   if (numRows > kSortingAlgorithmThreshold) {
     int numRadixBlocks = numRows - kSortingAlgorithmThreshold;
-    aphrodite::topKPerRowPrefill<kNumThreadsPerBlock, true>
+    sonar::topKPerRowPrefill<kNumThreadsPerBlock, true>
         <<<numRadixBlocks, kNumThreadsPerBlock, topK * sizeof(int32_t),
            stream>>>(
             logits.const_data_ptr<float>(), rowStarts.const_data_ptr<int>(),

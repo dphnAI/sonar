@@ -14,8 +14,8 @@ import huggingface_hub.constants
 from tqdm.asyncio import tqdm
 from transformers import AutoTokenizer, PythonBackend, TokenizersBackend
 
-# NOTE(simon): do not import Aphrodite here so the benchmark script
-# can run without Aphrodite installed.
+# NOTE(simon): do not import Sonar here so the benchmark script
+# can run without Sonar installed.
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 
@@ -465,7 +465,7 @@ async def async_request_openai_audio(
     request_func_input: RequestFuncInput,
     pbar: tqdm | None = None,
 ) -> RequestFuncOutput:
-    # Lazy import without PlaceholderModule to avoid aphrodite dep.
+    # Lazy import without PlaceholderModule to avoid sonar dep.
     import soundfile
 
     api_url = request_func_input.api_url
@@ -572,10 +572,10 @@ async def async_request_openai_audio(
 
 
 def get_model(pretrained_model_name_or_path: str) -> str:
-    if os.getenv("APHRODITE_USE_MODELSCOPE", "False").lower() == "true":
+    if os.getenv("SONAR_USE_MODELSCOPE", "False").lower() == "true":
         from modelscope import snapshot_download
 
-        from aphrodite.model_executor.model_loader.weight_utils import get_lock
+        from sonar.model_executor.model_loader.weight_utils import get_lock
 
         # Use file lock to prevent multiple processes from
         # downloading the same model weights at the same time.
@@ -600,11 +600,11 @@ def get_tokenizer(
         pretrained_model_name_or_path = get_model(pretrained_model_name_or_path)
     if tokenizer_mode == "mistral":
         try:
-            from aphrodite.tokenizers.mistral import MistralTokenizer
+            from sonar.tokenizers.mistral import MistralTokenizer
         except ImportError as e:
             raise ImportError(
-                "MistralTokenizer requires aphrodite package.\n"
-                "Please install it with `pip install aphrodite-engine` "
+                "MistralTokenizer requires Sonar.\n"
+                "Install it following https://sonar.dphn.ai/getting-started/installation/ "
                 "to use mistral tokenizer mode."
             ) from e
         return MistralTokenizer.from_pretrained(str(pretrained_model_name_or_path))
@@ -618,7 +618,7 @@ def get_tokenizer(
 
 ASYNC_REQUEST_FUNCS = {
     "tgi": async_request_tgi,
-    "aphrodite": async_request_openai_completions,
+    "sonar": async_request_openai_completions,
     "lmdeploy": async_request_openai_completions,
     "deepspeed-mii": async_request_deepspeed_mii,
     "openai": async_request_openai_completions,

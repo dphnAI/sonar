@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.experts.swordfish_moe import SwordfishExperts
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.experts.swordfish_moe import SwordfishExperts
 
 
 @pytest.mark.parametrize("grouped", [False, True])
@@ -40,8 +40,8 @@ def test_swordfish_forwards_activation_config(grouped):
     w2 = torch.empty((1, 2, 2, 1))
     ids = torch.zeros((1, 1), dtype=torch.int32)
     weights = torch.ones((1, 1))
-    activation_path = "aphrodite.model_executor.layers.fused_moe.modular_kernel.apply_moe_activation"
-    ops_path = "aphrodite.model_executor.layers.fused_moe.experts.swordfish_moe"
+    activation_path = "sonar.model_executor.layers.fused_moe.modular_kernel.apply_moe_activation"
+    ops_path = "sonar.model_executor.layers.fused_moe.experts.swordfish_moe"
     with (
         patch(activation_path) as activation,
         patch(f"{ops_path}.ops.swordfish_moe_mm", side_effect=[torch.ones((1, 256)), hidden]),

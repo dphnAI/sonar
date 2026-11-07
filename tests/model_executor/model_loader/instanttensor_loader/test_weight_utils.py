@@ -10,21 +10,21 @@ import pytest
 import torch
 from safetensors.torch import save_file
 
-from aphrodite.config import EngramConfig, LoadConfig
-from aphrodite.model_executor.model_loader import DefaultModelLoader
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config import EngramConfig, LoadConfig
+from sonar.model_executor.model_loader import DefaultModelLoader
+from sonar.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     instanttensor_weights_iterator,
     safetensors_weights_iterator,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 _ENGRAM_PREFIX = "model.language_model.layers.1.ple.ple_embedding.ngram_embedding"
 
 
 @pytest.fixture
 def mock_instanttensor(monkeypatch):
-    from aphrodite.model_executor.model_loader import weight_utils
+    from sonar.model_executor.model_loader import weight_utils
 
     native_open = MagicMock()
     reader = native_open.return_value.__enter__.return_value
@@ -64,7 +64,7 @@ def test_instanttensor_ep_collective_loading(mock_instanttensor, tmp_path, weigh
 def test_instanttensor_embedding_table_routing(
     mock_instanttensor,
     tmp_path,
-    default_aphrodite_config,
+    default_sonar_config,
     local_ids,
     separate_shard,
     embedding,
@@ -112,7 +112,7 @@ def test_instanttensor_embedding_table_routing(
     reader = native_open.return_value.__enter__.return_value
     reader.tensors.return_value = iter(expected_gpu.items())
 
-    default_aphrodite_config.engram_config = EngramConfig(cpu_offload=cpu_offload)
+    default_sonar_config.engram_config = EngramConfig(cpu_offload=cpu_offload)
     loader = DefaultModelLoader(LoadConfig(load_format="instanttensor", use_tqdm_on_load=False))
     loader.local_expert_ids = local_ids
     model_config = SimpleNamespace(model=str(tmp_path), revision=None)

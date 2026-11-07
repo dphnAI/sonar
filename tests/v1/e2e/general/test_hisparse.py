@@ -7,23 +7,23 @@ import prometheus_client
 import pytest
 import torch
 
-from aphrodite.config import AttentionConfig, HiSparseConfig, KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
+from sonar.config import AttentionConfig, HiSparseConfig, KVTransferConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.connector import (
     HiSparseConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
     HiSparseConnectorWorker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiConnector,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.gpu_sync_debug import gpu_sync_allowed
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.engine.core_client import InprocClient
-from aphrodite.v1.hisparse.coordinator import get_hisparse_coordinator
-from tests.conftest import AphroditeRunner
+from sonar.platforms import current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.utils.gpu_sync_debug import gpu_sync_allowed
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.engine.core_client import InprocClient
+from sonar.v1.hisparse.coordinator import get_hisparse_coordinator
+from tests.conftest import SonarRunner
 from tests.utils import fork_new_process_for_each_test
 
 MODEL = "deepseek-ai/DeepSeek-V3.2"
@@ -48,7 +48,7 @@ def _shrink_config(config):
     return config
 
 
-def _num_hisparse_spills(runner: AphroditeRunner) -> int:
+def _num_hisparse_spills(runner: SonarRunner) -> int:
     client = runner.llm.llm_engine.engine_core
     assert isinstance(client, InprocClient)
     scheduler = client.engine_core.scheduler
@@ -61,13 +61,13 @@ def _offload_load_bytes() -> float:
     return sum(
         sample.value
         for metric in prometheus_client.REGISTRY.collect()
-        if metric.name == "aphrodite:kv_offload_load_bytes"
+        if metric.name == "sonar:kv_offload_load_bytes"
         for sample in metric.samples
-        if sample.name == "aphrodite:kv_offload_load_bytes_total"
+        if sample.name == "sonar:kv_offload_load_bytes_total"
     )
 
 
-def _get_hisparse_worker(runner: AphroditeRunner) -> HiSparseConnectorWorker:
+def _get_hisparse_worker(runner: SonarRunner) -> HiSparseConnectorWorker:
     client = runner.llm.llm_engine.engine_core
     assert isinstance(client, InprocClient)
     engine_core = client.engine_core
@@ -93,7 +93,7 @@ def _get_hisparse_worker(runner: AphroditeRunner) -> HiSparseConnectorWorker:
 @fork_new_process_for_each_test
 def test_hisparse_spill_and_prefix_restore(
     monkeypatch: pytest.MonkeyPatch,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     with_offloading: bool,
     attention_backend: str | None,
 ):
@@ -110,8 +110,8 @@ def test_hisparse_spill_and_prefix_restore(
     if attention_backend and not current_platform.is_device_capability_family(100):
         pytest.skip("FA4 sparse MLA requires SM 10.x")
 
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_DEEP_GEMM_WARMUP", "skip")
 
     target = [1000 + i % 64 for i in range(257)]
     pressure = [[2000 + request_idx * 128 + i % 64 for i in range(257)] for request_idx in range(4)]
@@ -137,7 +137,7 @@ def test_hisparse_spill_and_prefix_restore(
             },
         )
 
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         load_format="dummy",
         hf_overrides=_shrink_config,
@@ -255,16 +255,16 @@ def test_hisparse_spill_and_prefix_restore(
 @fork_new_process_for_each_test
 def test_hisparse_host_exhaustion_defers_requests(
     monkeypatch: pytest.MonkeyPatch,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
 ):
     """A full host pool defers requests instead of leaving pages GPU-only."""
     capability = current_platform.get_device_capability()
     if capability is None or capability.major < 9:
         pytest.skip("Sparse MLA requires Hopper or newer")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_DEEP_GEMM_WARMUP", "skip")
     prompts = [[1000 + request_idx * 64 + i % 64 for i in range(257)] for request_idx in range(3)]
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         load_format="dummy",
         hf_overrides=_shrink_config,
@@ -326,17 +326,17 @@ def test_hisparse_host_exhaustion_defers_requests(
 @fork_new_process_for_each_test
 def test_hisparse_terminal_prefix_reuse(
     monkeypatch: pytest.MonkeyPatch,
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
 ):
     """Finished requests publish mirrored host KV after a late acknowledgement."""
     capability = current_platform.get_device_capability()
     if capability is None or capability.major < 9:
         pytest.skip("Sparse MLA requires Hopper or newer")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("SONAR_DEEP_GEMM_WARMUP", "skip")
     target = [1000 + i % 64 for i in range(257)]
     sampling = SamplingParams(temperature=0, max_tokens=1, ignore_eos=True)
-    with aphrodite_runner(
+    with sonar_runner(
         MODEL,
         load_format="dummy",
         hf_overrides=_shrink_config,

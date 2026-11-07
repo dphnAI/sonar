@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.transformers_utils.configs.speculators.base import SpeculatorsConfig
+from sonar.transformers_utils.configs.speculators.base import SpeculatorsConfig
 
 
 def _dflash_config(**overrides):

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-This example shows how to use Aphrodite for running offline inference with
+This example shows how to use Sonar for running offline inference with
 the correct prompt format on vision language models for multimodal embedding.
 
 For most models, the prompt format should follow corresponding examples
@@ -13,9 +13,9 @@ from typing import Literal, NamedTuple, TypedDict, get_args
 
 from PIL.Image import Image
 
-from aphrodite import LLM
-from aphrodite.multimodal.utils import fetch_image
-from aphrodite.utils import FlexibleArgumentParser
+from sonar import LLM
+from sonar.multimodal.utils import fetch_image
+from sonar.utils import FlexibleArgumentParser
 
 
 class TextQuery(TypedDict):
@@ -158,7 +158,7 @@ model_example_map = {
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser(
-        description="Demo on using Aphrodite for offline inference with vision language models for multimodal embedding"
+        description="Demo on using Sonar for offline inference with vision language models for multimodal embedding"
     )
     parser.add_argument(
         "--model-name",

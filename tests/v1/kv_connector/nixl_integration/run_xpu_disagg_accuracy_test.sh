@@ -56,7 +56,7 @@ trap 'kill $(jobs -pr)' SIGINT SIGTERM EXIT
 
 cleanup() {
   echo "Cleaning up any running Sonar instances..."
-  pkill -f "aphrodite serve" || true
+  pkill -f "sonar serve" || true
   sleep 2
 }
 
@@ -75,8 +75,8 @@ launch_baseline() {
 
   BASELINE_BASE_CMD="
   ZE_AFFINITY_MASK=$BASELINE_GPU_ID \
-  APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 aphrodite serve $MODEL_NAME \
+  SONAR_WORKER_MULTIPROC_METHOD=spawn \
+  SONAR_ENABLE_V1_MULTIPROCESSING=1 sonar serve $MODEL_NAME \
       --host ${BASELINE_HOST} \
       --port ${BASELINE_PORT} \
       --max-model-len ${MAX_MODEL_LEN}\
@@ -103,12 +103,12 @@ launch_pd() {
 
   echo "Starting prefill on GPU ${PREFILL_GPU_ID}, port ${PREFILL_PORT}"
   ZE_AFFINITY_MASK="${PREFILL_GPU_ID}" \
-  APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS=200 \
-  APHRODITE_NIXL_SIDE_CHANNEL_HOST="${PREFILL_HOST}" \
-  APHRODITE_NIXL_SIDE_CHANNEL_PORT="${PREFILL_NIXL_SIDE_PORT}" \
-  APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 \
-  aphrodite serve "$MODEL_NAME" \
+  SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS=200 \
+  SONAR_NIXL_SIDE_CHANNEL_HOST="${PREFILL_HOST}" \
+  SONAR_NIXL_SIDE_CHANNEL_PORT="${PREFILL_NIXL_SIDE_PORT}" \
+  SONAR_WORKER_MULTIPROC_METHOD=spawn \
+  SONAR_ENABLE_V1_MULTIPROCESSING=1 \
+  sonar serve "$MODEL_NAME" \
     --host "${PREFILL_HOST}" \
     --port "${PREFILL_PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
@@ -122,10 +122,10 @@ launch_pd() {
 
   echo "Starting decode on GPU ${DECODE_GPU_ID}, port ${DECODE_PORT}"
   ZE_AFFINITY_MASK="${DECODE_GPU_ID}" \
-  APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS=200 \
-  APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 \
-  aphrodite serve "$MODEL_NAME" \
+  SONAR_EXECUTE_MODEL_TIMEOUT_SECONDS=200 \
+  SONAR_WORKER_MULTIPROC_METHOD=spawn \
+  SONAR_ENABLE_V1_MULTIPROCESSING=1 \
+  sonar serve "$MODEL_NAME" \
     --host "${DECODE_HOST}" \
     --port "${DECODE_PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \

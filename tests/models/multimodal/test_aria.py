@@ -6,12 +6,12 @@ import torch
 from transformers import AriaTextConfig
 from transformers.models.aria.modeling_aria import AriaTextMoELayer as HFMoE
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.config import SonarConfig
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig,
 )
-from aphrodite.model_executor.models.aria import AriaTextModel, AriaTextMoELayer
-from aphrodite.model_executor.models.utils import AutoWeightsLoader
+from sonar.model_executor.models.aria import AriaTextModel, AriaTextMoELayer
+from sonar.model_executor.models.utils import AutoWeightsLoader
 
 
 @pytest.mark.cpu_test
@@ -55,7 +55,7 @@ def test_aria_expert_weights_load_with_checkpoint_layout(checkpoint_name: str, l
 
     layer = AriaTextMoELayer(config, quant_config=None, prefix="mlp")
     loaded = AutoWeightsLoader(layer).load_weights(
-        [(checkpoint_name, checkpoint_weight)], mapper=AriaTextModel.hf_to_aphrodite_mapper
+        [(checkpoint_name, checkpoint_weight)], mapper=AriaTextModel.hf_to_sonar_mapper
     )
 
     assert loaded == {loaded_name}
@@ -72,7 +72,7 @@ def test_aria_quant_config_renames_expert_modules():
         ],
         quant_format="pack-quantized",
     )
-    AriaTextModel.__new__(AriaTextModel, aphrodite_config=AphroditeConfig(quant_config=quant_config))
+    AriaTextModel.__new__(AriaTextModel, sonar_config=SonarConfig(quant_config=quant_config))
 
     assert quant_config.ignore == [
         "model.layers.0.mlp.experts.gate_up_proj",
@@ -85,6 +85,6 @@ def test_aria_quant_config_renames_expert_modules():
 def test_aria_expert_scale_names(name: str, expected: str):
     suffixes = ["weight_scale", "input_scale"]
     names = [f"model.layers.0.mlp.experts.{name}.{suffix}" for suffix in suffixes]
-    assert AriaTextModel.hf_to_aphrodite_mapper.apply_list(names) == [
+    assert AriaTextModel.hf_to_sonar_mapper.apply_list(names) == [
         f"model.layers.0.mlp.experts.{expected}.{suffix}" for suffix in suffixes
     ]

@@ -35,7 +35,7 @@ model:
     amd: "vllm/vllm-openai-rocm:mistral-large-4"
   install:
     docker:
-      note: "Mistral Large 4 support ships in these images; no Aphrodite release or nightly wheel includes it yet. The ROCm image also carries the MXFP4 expert path and the AITER tuning tables."
+      note: "Mistral Large 4 support ships in these images; no Sonar release or nightly wheel includes it yet. The ROCm image also carries the MXFP4 expert path and the AITER tuning tables."
     pip: false
   architecture: moe
   parameter_count: "1T"
@@ -52,7 +52,7 @@ model:
     # Validated up to 256k; the checkpoint advertises 1,048,576 positions.
     - "--max-model-len"
     - "262144"
-    # Every validated run used these; current Aphrodite defaults on B200/GB300
+    # Every validated run used these; current Sonar defaults on B200/GB300
     # (16384 / 1024) are untested with this model.
     - "--max-num-batched-tokens"
     - "8192"
@@ -63,7 +63,7 @@ model:
   base_env:
     # Cold starts (weight load + DeepGEMM warmup + CUDA graph capture) took
     # 1300-1800 s, past the 600 s default.
-    APHRODITE_ENGINE_READY_TIMEOUT_S: "6000"
+    SONAR_ENGINE_READY_TIMEOUT_S: "6000"
 
 dependencies:
   - note: "Mistral tokenizer and image processing for Mistral Large 4"
@@ -136,17 +136,17 @@ variants:
           # FP8 → MXFP4 routed experts, layer by layer at load (peak memory:
           # the MXFP4 model plus one layer of FP8 experts). a8w4 = FP8
           # activations; a4w4 (MXFP4 activations) measured level with it at TP4.
-          APHRODITE_FP8_MOE_REQUANT: "mxfp4"
-          APHRODITE_FP8_MOE_REQUANT_ACT: "a8w4"
+          SONAR_FP8_MOE_REQUANT: "mxfp4"
+          SONAR_FP8_MOE_REQUANT_ACT: "a8w4"
       # The ROCm image carries ML4 kernels and AITER tables a wheel doesn't.
       mi350x:
         install:
           pip: false
-        docker_serve_command: "aphrodite serve"
+        docker_serve_command: "sonar serve"
       mi355x:
         install:
           pip: false
-        docker_serve_command: "aphrodite serve"
+        docker_serve_command: "sonar serve"
   mxfp4:
     model_id: "amd/Mistral-Large-4-1T-A52B-Quark-MXFP4"
     precision: mxfp4
@@ -159,11 +159,11 @@ variants:
       mi350x:
         install:
           pip: false
-        docker_serve_command: "aphrodite serve"
+        docker_serve_command: "sonar serve"
       mi355x:
         install:
           pip: false
-        docker_serve_command: "aphrodite serve"
+        docker_serve_command: "sonar serve"
     description: "AMD Quark OCP MXFP4 routed experts (static weight, dynamic activation scales); attention, shared experts, dense layers, router, head, vision encoder and the DSpark drafter keep the original precision. ~578 GB, fits four MI350 Series GPUs."
 
 # Only the validated layouts are offered:
@@ -200,10 +200,10 @@ strategy_min_gpus:
 hardware_overrides:
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
       # AITER's Triton sparse MLA, and AITER custom all-reduce up to 128 MiB
       # (large prefill steps): +2–5% output tok/s at TP4.
-      APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
+      SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
       AITER_CUSTOM_AR_MAX_SIZE: "134217728"
 
 strategy_overrides:
@@ -211,7 +211,7 @@ strategy_overrides:
     env:
       # Each stage must own layer 35 (the KV-sharing source) and the indexer
       # layers its shared-index layers reuse. Valid for PP2 only.
-      APHRODITE_PP_LAYER_PARTITION: "35,37"
+      SONAR_PP_LAYER_PARTITION: "35,37"
   pd_cluster:
     # Validated: P DP/EP on one node → D TP on one node
     # (4+4 GB300, 8+8 B200).
@@ -541,7 +541,7 @@ presets:
       | P TP8 → D TP8 | 31.7 (c32, 229) | 15.8 (c16, 243) | 4.19 / 3.75 ms |
 
       Both DP8/EP prefill layouts are prefill-bound at 32k and 60k. GSM8K-200
-      (Aphrodite `tests/evals/gsm8k`, through the proxy) 0.855–0.900, within noise
+      (Sonar `tests/evals/gsm8k`, through the proxy) 0.855–0.900, within noise
       of colocated TP8 + DSpark (0.890 / 0.885). B200 per-GPU throughput is
       ~0.8x GB300 in the same layouts.
 
@@ -586,7 +586,7 @@ presets:
       - "--max-num-seqs"
       - "64"
     env:
-      APHRODITE_FP8_MOE_REQUANT_ACT: "a4w4"
+      SONAR_FP8_MOE_REQUANT_ACT: "a4w4"
     runbook: |
       Measured on MI350X, TP4, a4w4 experts, FP8 KV cache, against the
       standard decode on the same GPUs.
@@ -648,7 +648,7 @@ presets:
       - "--additional-config"
       - '{"decode_backend":"latency_specialized"}'
     env:
-      APHRODITE_FP8_MOE_REQUANT_ACT: "a4w4"
+      SONAR_FP8_MOE_REQUANT_ACT: "a4w4"
     runbook: |
       Measured on MI355X, a4w4 experts, FP8 KV cache, DSpark: c1 / c4 TPOT p50
       3.56 / 6.14 ms on real prompts (1.05x / 1.02x vs the TP4 preset).
@@ -694,7 +694,7 @@ notes:
       hardware: [gb300]
       strategies: [multi_node_dep]
     body: |
-      DP8/EP over two GB300 trays was validated with Aphrodite's internal load
+      DP8/EP over two GB300 trays was validated with Sonar's internal load
       balancer: node 0 served the API for all 8 DP ranks, and node 1 ran with
       `--headless --data-parallel-start-rank 4` instead of
       `--data-parallel-hybrid-lb`. Measured with DSpark: 209.8 output tok/s/GPU
@@ -722,7 +722,7 @@ notes:
       strategies: [single_node_tp]
     body: |
       With HiSparse KV offload (`--kv-transfer-config '{"kv_connector":"HiSparseConnector",...}'`),
-      also set `APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=trtllm`. The default single-node
+      also set `SONAR_FLASHINFER_ALLREDUCE_BACKEND=trtllm`. The default single-node
       FlashInfer all-reduce (MNNVL) crashes the engine with `CUDA error: unspecified
       launch failure` once HiSparse spills KV to host
       ([vllm#64327](https://github.com/vllm-project/vllm/issues/64327); fix in
@@ -747,11 +747,11 @@ notes:
     body: |
       ROCm has no NVFP4 kernels. Serve the FP8 checkpoint, whose routed
       experts are re-quantized to OCP MXFP4 at load
-      (`APHRODITE_FP8_MOE_REQUANT=mxfp4`; expert weights drop from ~125 to ~69 GiB
+      (`SONAR_FP8_MOE_REQUANT=mxfp4`; expert weights drop from ~125 to ~69 GiB
       per GPU at TP8), or the AMD Quark MXFP4 checkpoint.
-      `APHRODITE_FP8_MOE_REQUANT_ACT` picks the activation format: `a8w4` (FP8, the
+      `SONAR_FP8_MOE_REQUANT_ACT` picks the activation format: `a8w4` (FP8, the
       default) or `a4w4` (MXFP4, required by the specialized decode).
-      `APHRODITE_ROCM_USE_AITER=1` runs the MoE, GEMMs, MLA decode, RMSNorm and the
+      `SONAR_ROCM_USE_AITER=1` runs the MoE, GEMMs, MLA decode, RMSNorm and the
       TP all-reduce on AITER; every AMD number here was measured with it on.
       The latent KV cache is FP8 (E4M3) by default on ROCm, 1.86x the capacity
       of bf16; `--kv-cache-dtype bfloat16` opts out.
@@ -766,7 +766,7 @@ notes:
     when:
       strategies: [multi_node_tp_pp]
     body: |
-      `APHRODITE_PP_LAYER_PARTITION=35,37` is required for PP2 so each stage owns
+      `SONAR_PP_LAYER_PARTITION=35,37` is required for PP2 so each stage owns
       layer 35 (the source of the cross-layer KV sharing) and the indexer
       layers its shared-index layers reuse. PP2 x TP8 on 2x 8 H200 scored
       GSM8K 0.960, the same as TP16. DSpark is not offered with PP.
@@ -803,8 +803,8 @@ troubleshooting:
       hardware: [amd]
     body: |
       The specialized decode is default-deny: it starts only at TP4 on
-      gfx950, with MXFP4 a4w4 experts (`APHRODITE_FP8_MOE_REQUANT=mxfp4
-      APHRODITE_FP8_MOE_REQUANT_ACT=a4w4`), Model Runner V2, an FP8 (E4M3) or bf16
+      gfx950, with MXFP4 a4w4 experts (`SONAR_FP8_MOE_REQUANT=mxfp4
+      SONAR_FP8_MOE_REQUANT_ACT=a4w4`), Model Runner V2, an FP8 (E4M3) or bf16
       latent KV cache and no context, data, pipeline or expert parallelism.
       The error lists every reason; fix them or drop `--additional-config`.
 
@@ -827,14 +827,14 @@ guide: |
   Both checkpoints ship the DSpark drafter. The speculative depth is fixed at 3 by
   the checkpoint.
 
-  Aphrodite serves the model on model runner V2 (the default) with breakable CUDA graphs,
+  Sonar serves the model on model runner V2 (the default) with breakable CUDA graphs,
   FlashMLA sparse attention and an FP8 latent KV cache (`fp8_ds_mla`) by default, so
   no attention or KV-cache flags are needed. The checkpoint advertises 1,048,576
   positions; we validated up to 256k, which is the `--max-model-len` set here.
 
   ## Prerequisites
 
-  - **Aphrodite**: the `vllm/vllm-openai:mistral-large-4` image. No Aphrodite release or
+  - **Sonar**: the `vllm/vllm-openai:mistral-large-4` image. No Sonar release or
     nightly wheel includes Mistral Large 4 support yet.
   - **AMD**: the ROCm image `vllm/vllm-openai-rocm:mistral-large-4`.
   - **mistral_common**: `mistral_common[image] >= 1.13.0` (included in both images).
@@ -883,10 +883,10 @@ guide: |
   ## AMD (ROCm)
 
   Mistral Large 4 runs on AMD Instinct MI350 Series GPUs (gfx950) with the ROCm build
-  of Aphrodite (image `vllm/vllm-openai-rocm:mistral-large-4`). The routed experts run as
+  of Sonar (image `vllm/vllm-openai-rocm:mistral-large-4`). The routed experts run as
   OCP MXFP4 on AITER's fused MoE, either from the
   AMD Quark MXFP4 checkpoint or from the FP8 checkpoint re-quantized at load
-  (`APHRODITE_FP8_MOE_REQUANT=mxfp4`, layer by layer, so peak load memory stays low). With
+  (`SONAR_FP8_MOE_REQUANT=mxfp4`, layer by layer, so peak load memory stays low). With
   MXFP4 experts the model fits four GPUs, so one 8-GPU node serves two TP4 replicas.
   The sparse MLA runs on AITER's MLA decode kernels (`ROCM_AITER_MLA_SPARSE`), the
   DSA indexer on AITER's gfx950 indexer kernels, and the latent KV cache is plain FP8

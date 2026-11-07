@@ -6,14 +6,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.warmup.qwen_vl_triton_warmup import (
+from sonar.model_executor.warmup.qwen_vl_triton_warmup import (
     _warm_mrope,
     _warm_vision,
 )
 
 
 def test_vision_warmup_calls_only_position_and_rotary_paths() -> None:
-    from aphrodite.model_executor.models.qwen3_vl import Qwen3_VisionTransformer
+    from sonar.model_executor.models.qwen3_vl import Qwen3_VisionTransformer
 
     calls: list[tuple[str, object]] = []
 
@@ -60,7 +60,7 @@ def test_vision_warmup_calls_only_position_and_rotary_paths() -> None:
 
 @pytest.mark.parametrize("owners_fused, skipped", [((), False), ((True,), True), ((True, False), False)])
 def test_mrope_warmup_launches_triton_shapes(owners_fused, skipped) -> None:
-    from aphrodite.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
+    from sonar.model_executor.layers.rotary_embedding.mrope import MRotaryEmbedding
 
     launched: list[tuple[torch.Size, torch.Size]] = []
 

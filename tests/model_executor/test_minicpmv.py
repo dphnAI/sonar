@@ -3,8 +3,8 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.minicpmv import MiniCPMV2_6
-from aphrodite.model_executor.models.minicpmv4_6 import (
+from sonar.model_executor.models.minicpmv import MiniCPMV2_6
+from sonar.model_executor.models.minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     _expand_flags,
     _select_vision_items,

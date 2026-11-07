@@ -21,7 +21,7 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
                             torch::stable::Tensor& output,
                             torch::stable::Tensor& workspace,
                             int64_t max_seq_len) {
-  namespace P = aphrodite::persistent;
+  namespace P = sonar::persistent;
 
   const torch::stable::accelerator::DeviceGuard device_guard(
       logits.get_device_index());
@@ -44,25 +44,24 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
 
   // Allow static fallback storage in addition to the 128 KiB dynamic buffer.
   if (num_rows > 64 &&
-      max_seq_len >= aphrodite::sampled_topk::kMinSampledLength<TopK> &&
+      max_seq_len >= sonar::sampled_topk::kMinSampledLength<TopK> &&
       max_smem_per_block >= 144 * 1024) {
-    auto kernel = aphrodite::sampled_topk::sampled_topk_kernel<TopK, InT>;
+    auto kernel = sonar::sampled_topk::sampled_topk_kernel<TopK, InT>;
     constexpr size_t smem_size =
-        aphrodite::filtered_topk::FILTERED_TOPK_SMEM_DYNAMIC;
+        sonar::filtered_topk::FILTERED_TOPK_SMEM_DYNAMIC;
     cudaError_t status = cudaFuncSetAttribute(
         kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
     STD_TORCH_CHECK(status == cudaSuccess,
                     "sampled_topk smem failed: ", cudaGetErrorString(status));
-    kernel<<<num_rows, aphrodite::sampled_topk::kThreads, smem_size, stream>>>(
+    kernel<<<num_rows, sonar::sampled_topk::kThreads, smem_size, stream>>>(
         input, lengths.const_data_ptr<int32_t>(),
         output.mutable_data_ptr<int32_t>(), stride,
         static_cast<int>(std::min(max_seq_len, logits.size(1))));
   } else if (num_rows > 32 && max_smem_per_block >= 128 * 1024) {
-    cudaError_t status =
-        aphrodite::FilteredTopKRaggedTransform<InT, int32_t, TopK>(
-            input, output.mutable_data_ptr<int32_t>(),
-            lengths.const_data_ptr<int32_t>(), static_cast<uint32_t>(num_rows),
-            static_cast<uint32_t>(TopK), static_cast<uint32_t>(stride), stream);
+    cudaError_t status = sonar::FilteredTopKRaggedTransform<InT, int32_t, TopK>(
+        input, output.mutable_data_ptr<int32_t>(),
+        lengths.const_data_ptr<int32_t>(), static_cast<uint32_t>(num_rows),
+        static_cast<uint32_t>(TopK), static_cast<uint32_t>(stride), stream);
     STD_TORCH_CHECK(status == cudaSuccess,
                     "FilteredTopK failed: ", cudaGetErrorString(status));
   } else {
@@ -166,7 +165,7 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
         return;
       }
       cudaError_t status =
-          aphrodite::FilteredTopKRaggedTransform<InT, int32_t, TopK>(
+          sonar::FilteredTopKRaggedTransform<InT, int32_t, TopK>(
               input, output.mutable_data_ptr<int32_t>(),
               lengths.const_data_ptr<int32_t>(),
               static_cast<uint32_t>(num_rows), static_cast<uint32_t>(TopK),

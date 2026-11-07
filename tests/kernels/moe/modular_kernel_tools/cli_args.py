@@ -5,8 +5,8 @@ import argparse
 
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 
 from .common import Config
 from .mk_objects import (

@@ -17,9 +17,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from transformers import AutoConfig, Glm5NextConfig, PreTrainedConfig
 
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.speculative import SpeculativeConfig
+from sonar.config.model import ModelConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.config.speculative import SpeculativeConfig
 
 
 def _make_hf_config(**kwargs) -> PreTrainedConfig:
@@ -47,7 +47,7 @@ def test_none_overrides_fall_back_to_arch_mapping():
     assert hf_config.architectures == ["DeepSeekMTPModel"]
 
 
-_DSPARK_CONFIG = "aphrodite.v1.worker.gpu.spec_decode.dspark.config.DSparkSpeculatorConfig"
+_DSPARK_CONFIG = "sonar.v1.worker.gpu.spec_decode.dspark.config.DSparkSpeculatorConfig"
 _SELF_CONTAINED_DRAFT_SPECULATORS = {
     "Gemma4DSparkModel": _DSPARK_CONFIG,
     "DSparkMiniMaxDraftModel": _DSPARK_CONFIG,
@@ -74,7 +74,7 @@ def _make_speculative_config(
     target.using_transformers_backend.return_value = False
     speculative_kwargs.setdefault("model", "draft")
 
-    with patch("aphrodite.config.ModelConfig", return_value=draft):
+    with patch("sonar.config.ModelConfig", return_value=draft):
         return SpeculativeConfig(
             **speculative_kwargs,
             target_model_config=target,
@@ -325,7 +325,7 @@ def _make_mtp_speculative_config(
     )
     target_model_config.using_transformers_backend.return_value = False
 
-    with patch("aphrodite.config.ModelConfig", return_value=draft_model_config):
+    with patch("sonar.config.ModelConfig", return_value=draft_model_config):
         return SpeculativeConfig(
             model="draft",
             method="mtp",

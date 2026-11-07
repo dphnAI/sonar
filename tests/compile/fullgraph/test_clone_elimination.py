@@ -5,13 +5,13 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.decorators import support_torch_compile
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
 
 # This import automatically registers `torch.ops.silly.attention`
@@ -33,16 +33,16 @@ class SnapshotModel(nn.Module):
 
 @pytest.mark.parametrize("splitting_ops", [["silly::attention"], []], ids=["piecewise", "full_graph"])
 @torch.inference_mode()
-def test_snapshot_clone_survives_input_mutation(splitting_ops, disable_aphrodite_compile_cache):
+def test_snapshot_clone_survives_input_mutation(splitting_ops, disable_sonar_compile_cache):
     """Ensure a clone of the input keeps its value when the input is later mutated."""
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             cudagraph_mode=CUDAGraphMode.NONE,
             splitting_ops=splitting_ops,
         )
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         model = SnapshotModel()
 
     x = torch.randn(16, 8, device="cuda")

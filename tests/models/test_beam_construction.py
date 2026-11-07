@@ -15,11 +15,11 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.models.beam.nvidia import model as beam
-from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.configs.beam import BeamConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
+from sonar import LLM, SamplingParams
+from sonar.models.beam.nvidia import model as beam
+from sonar.platforms import current_platform
+from sonar.transformers_utils.configs.beam import BeamConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.eagle3_utils import (
     set_eagle3_aux_hidden_state_layers,
 )
 
@@ -114,7 +114,7 @@ def test_eplb_is_rejected_until_validated(monkeypatch):
         parallel_config=SimpleNamespace(enable_eplb=True, use_sequence_parallel_moe=False),
     )
     with pytest.raises(NotImplementedError, match="EPLB"):
-        beam.BeamForCausalLM(aphrodite_config=config)
+        beam.BeamForCausalLM(sonar_config=config)
 
 
 def test_sequence_parallel_moe_is_rejected_until_validated():
@@ -125,7 +125,7 @@ def test_sequence_parallel_moe_is_rejected_until_validated():
         parallel_config=SimpleNamespace(enable_eplb=False, use_sequence_parallel_moe=True),
     )
     with pytest.raises(NotImplementedError, match="sequence-parallel"):
-        beam.BeamForCausalLM(aphrodite_config=config)
+        beam.BeamForCausalLM(sonar_config=config)
 
 
 def test_dense_only_pipeline_stage_initializes(monkeypatch):
@@ -145,7 +145,7 @@ def test_dense_only_pipeline_stage_initializes(monkeypatch):
         parallel_config=SimpleNamespace(enable_eplb=False, use_sequence_parallel_moe=False),
     )
 
-    model = beam.BeamForCausalLM(aphrodite_config=config)
+    model = beam.BeamForCausalLM(sonar_config=config)
 
     assert model.moe_layers == []
     assert model.num_moe_layers == 0

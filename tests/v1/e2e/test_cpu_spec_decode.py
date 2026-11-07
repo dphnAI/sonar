@@ -6,9 +6,9 @@ import os
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar import LLM, SamplingParams
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 from tests.models.utils import check_logprobs_close
 from tests.v1.e2e.spec_decode.utils import compute_acceptance_len
 
@@ -18,7 +18,7 @@ if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
 
 # Bound the KV cache so the run does not scale with host memory.
-os.environ.setdefault("APHRODITE_CPU_KVCACHE_SPACE", "1")
+os.environ.setdefault("SONAR_CPU_KVCACHE_SPACE", "1")
 
 MODEL = "Qwen/Qwen3-0.6B"
 NUM_LOGPROBS = 5
@@ -79,8 +79,8 @@ def test_ngram_spec_decode_matches_baseline(baseline_refs):
         },
     )
     got = _tuples(llm.generate(PROMPTS, SP))
-    drafted = _spec_metric(llm, "aphrodite:spec_decode_num_draft_tokens")
-    accepted = _spec_metric(llm, "aphrodite:spec_decode_num_accepted_tokens")
+    drafted = _spec_metric(llm, "sonar:spec_decode_num_draft_tokens")
+    accepted = _spec_metric(llm, "sonar:spec_decode_num_accepted_tokens")
     del llm
 
     assert drafted > 0, "ngram proposer drafted no tokens; the test would be vacuous"
@@ -147,7 +147,7 @@ def test_v2_speculator_smoke(model: str, speculative_config: dict):
     """Gates that drafts are accepted often enough for speculation to pay off."""
     llm = _make_llm(model=model, speculative_config=speculative_config)
     try:
-        assert llm.llm_engine.aphrodite_config.use_v2_model_runner, (
+        assert llm.llm_engine.sonar_config.use_v2_model_runner, (
             f"{speculative_config['method']} fell back to the V1 runner; this test is meant to cover the V2 path"
         )
         llm.generate(SMOKE_PROMPTS, SMOKE_SP)

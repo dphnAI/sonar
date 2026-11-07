@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Precision tests for aphrodite's chunk_kda Triton operator.
+"""Precision tests for sonar's chunk_kda Triton operator.
 
 Compares chunk_kda against a naive recurrent reference (float32).
 Uses torch.rand for q/k/v to match FLA's test pattern.
@@ -10,12 +10,12 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.third_party.flash_linear_attention.ops.kda import (
+from sonar.third_party.flash_linear_attention.ops.kda import (
     chunk_kda,
     chunk_kda_with_fused_gate,
     fused_kda_gate,
 )
-from aphrodite.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
+from sonar.third_party.flash_linear_attention.ops.l2norm import l2norm_fwd
 
 DEVICE = "cuda"
 

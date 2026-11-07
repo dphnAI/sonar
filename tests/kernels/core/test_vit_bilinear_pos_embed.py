@@ -9,11 +9,11 @@ Compares ``triton_pos_embed_interpolate`` against the pure-PyTorch
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
 
 if HAS_TRITON:
-    from aphrodite.model_executor.models.qwen3_vl import (
+    from sonar.model_executor.models.qwen3_vl import (
         pos_embed_interpolate_native,
         triton_pos_embed_interpolate,
     )

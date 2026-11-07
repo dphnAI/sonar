@@ -13,12 +13,12 @@ from torch.utils.benchmark import Measurement as TMeasurement
 from utils import make_rand_tensors
 from weight_shapes import WEIGHT_SHAPES
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.fp8_utils import (
     w8a8_triton_block_scaled_mm,
 )
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-from aphrodite.utils.math_utils import cdiv
+from sonar.utils.argparse_utils import FlexibleArgumentParser
+from sonar.utils.math_utils import cdiv
 
 DEFAULT_MODELS = list(WEIGHT_SHAPES.keys())
 DEFAULT_BATCH_SIZES = [1, 16, 32, 64, 128, 256, 512]

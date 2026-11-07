@@ -12,53 +12,53 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.quantization import (
+import sonar.envs as envs
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.config.model import ModelConfig
+from sonar.config.quantization import (
     QuantizationConfigArgs,
     resolve_quantization_config,
 )
-from aphrodite.logger import _print_warning_once
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.model_executor.layers.fused_moe.experts import rocm_aiter_moe
-from aphrodite.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import NvFp4MoeBackend
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
+from sonar.logger import _print_warning_once
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.model_executor.layers.fused_moe.experts import rocm_aiter_moe
+from sonar.model_executor.layers.fused_moe.oracle import nvfp4 as nvfp4_oracle
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import Mxfp4MoeBackend
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import NvFp4MoeBackend
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4 import (  # noqa: E501
     CompressedTensorsW4A4Nvfp4MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
-from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
-from aphrodite.model_executor.layers.quantization.online.mxfp4 import Mxfp4OnlineMoEMethod
-from aphrodite.model_executor.layers.quantization.online.mxfp8 import Mxfp8OnlineMoEMethod
-from aphrodite.model_executor.layers.quantization.online.requantization import (
+from sonar.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
+from sonar.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from sonar.model_executor.layers.quantization.online.mxfp4 import Mxfp4OnlineMoEMethod
+from sonar.model_executor.layers.quantization.online.mxfp8 import Mxfp8OnlineMoEMethod
+from sonar.model_executor.layers.quantization.online.requantization import (
     is_requantization_source,
 )
-from aphrodite.model_executor.layers.quantization.quark.quark import QuarkConfig
-from aphrodite.model_executor.layers.quantization.quark.quark_moe import (
+from sonar.model_executor.layers.quantization.quark.quark import QuarkConfig
+from sonar.model_executor.layers.quantization.quark.quark_moe import (
     QuarkNvfp4MoEMethod,
     QuarkOCP_MX_MoEMethod,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import (
     mxfp4_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
     mxfp8_e4m3_quantize,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     dequantize_to_dtype,
 )
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.model_executor.model_loader.reload.layerwise import (
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.model_executor.model_loader.reload.layerwise import (
     finalize_layerwise_reload,
     initialize_layerwise_reload,
     record_metadata_for_reloading,
 )
-from aphrodite.model_executor.model_loader.utils import get_model_architecture
-from aphrodite.platforms import current_platform
-from tests.quantization.utils import load_model_without_aphrodite_runner
+from sonar.model_executor.model_loader.utils import get_model_architecture
+from sonar.platforms import current_platform
+from tests.quantization.utils import load_model_without_sonar_runner
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_rocm(),
@@ -168,9 +168,9 @@ def single_rank_parallel_state(monkeypatch: pytest.MonkeyPatch):
     This is faster than the `dist_init` fixture.
     """
     for name in ("_WORLD", "_TP", "_ETP", "_DCP", "_PP", "_DP", "_EP", "_PCP"):
-        monkeypatch.setattr(f"aphrodite.distributed.parallel_state.{name}", _SingleRankGroup())
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
-    monkeypatch.setattr("aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
+        monkeypatch.setattr(f"sonar.distributed.parallel_state.{name}", _SingleRankGroup())
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_rank", lambda: 0)
+    monkeypatch.setattr("sonar.model_executor.parameter.get_tensor_model_parallel_world_size", lambda: 1)
 
 
 @pytest.fixture(autouse=True)
@@ -323,7 +323,7 @@ def _unpadded_block(padded: torch.Tensor, expected: torch.Tensor) -> torch.Tenso
 
 @pytest.mark.parametrize("load_path", ["load_weights", "fused_gate_up", "weight_loader"])
 def test_online_shared_expert_loads_bf16_weights_into_mxfp4_slot(
-    default_aphrodite_config,
+    default_sonar_config,
     single_rank_parallel_state,
     load_path: str,
 ) -> None:
@@ -332,7 +332,7 @@ def test_online_shared_expert_loads_bf16_weights_into_mxfp4_slot(
     `weight_loader` covers DeepSeek-style model loaders, which bypass
     `RoutedExperts.load_weights`.
     """
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     hidden_size = intermediate_size = 64
     num_routed_experts = 2
     device = current_platform.device_type
@@ -405,12 +405,12 @@ def test_online_shared_expert_loads_bf16_weights_into_mxfp4_slot(
 
 
 def test_online_shared_expert_reload_compatibility(
-    default_aphrodite_config,
+    default_sonar_config,
     single_rank_parallel_state,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Reload a BF16 shared weight into its MXFP4 slot via meta staging."""
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     online_config = OnlineQuantizationConfig(QuantizationConfigArgs(targets={"*shared_expert*": "mxfp4"}))
     quant_config = QuarkConfig(_QUARK_MXFP4_CONFIG)
     quant_config.online_quantization_config = online_config
@@ -459,7 +459,7 @@ def test_online_shared_expert_reload_compatibility(
 
         assert layer.w13_weight.is_meta
         list(layer.load_weights(checkpoint_weights(reloaded_gate)))
-        finalize_layerwise_reload(layer, default_aphrodite_config.model_config)
+        finalize_layerwise_reload(layer, default_sonar_config.model_config)
         assert not layer.w13_weight.is_meta
         assert torch.equal(_unpadded_block(layer.w13_weight[2], expected_weight), expected_weight)
         assert torch.equal(_unpadded_block(layer.w13_weight_scale[2], expected_scale), expected_scale)
@@ -489,40 +489,40 @@ def test_online_quantization(
     architecture: str,
     tmp_path: Path,
     monkeypatch,
-    caplog_aphrodite,
+    caplog_sonar,
     single_rank_parallel_state,
     workspace_init,
 ) -> None:
     """Online MXFP4 fuses each architecture's shared expert into its MoE."""
     _enable_aiter(monkeypatch, fse=True)
     if architecture == "Glm5NextForCausalLM":
-        from aphrodite.models.glm5next.common import model as glm5_next_model
+        from sonar.models.glm5next.common import model as glm5_next_model
 
         for attention in ("Glm5NextLinearAttention", "Glm5NextMLAAttention"):
             monkeypatch.setattr(glm5_next_model, attention, _StubAttention)
         monkeypatch.setattr(glm5_next_model, "_fused_shared_experts_tuned", lambda _: True)
     elif architecture == "Glm4MoeLiteForCausalLM":
-        from aphrodite.model_executor.models import glm4_moe_lite
+        from sonar.model_executor.models import glm4_moe_lite
 
         monkeypatch.setattr(glm4_moe_lite, "Glm4MoeLiteAttention", _StubAttention)
         monkeypatch.setattr(glm4_moe_lite, "Glm4MoeLiteMLAAttention", _StubAttention)
     elif architecture == "DeepseekV32ForCausalLM":
-        from aphrodite.models.deepseek_v32.amd import model as deepseek_v32_model
+        from sonar.models.deepseek_v32.amd import model as deepseek_v32_model
 
         monkeypatch.setattr(deepseek_v32_model, "DeepseekV32MLAAttention", _StubAttention)
     elif architecture == "Qwen3_5MoeForCausalLM":
-        from aphrodite.model_executor.models import qwen3_5
+        from sonar.model_executor.models import qwen3_5
 
         monkeypatch.setattr(qwen3_5, "Qwen3NextAttention", _StubAttention)
     elif architecture == "Qwen4ExpForCausalLM":
-        from aphrodite.models.qwen4_exp.amd import model as qwen4_exp_model
+        from sonar.models.qwen4_exp.amd import model as qwen4_exp_model
 
         monkeypatch.setattr(qwen4_exp_model, "Qwen3NextAttention", _StubAttention)
     _write_minimal_moe_config(tmp_path, architecture)
     expected_shared_expert_name = "shared_expert" if architecture.startswith("Qwen") else "shared_experts"
     target_pattern = f"*{expected_shared_expert_name}*"
 
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         str(tmp_path),
         dtype="bfloat16",
         quantization="quark",
@@ -531,7 +531,7 @@ def test_online_quantization(
         },
         model_loader_cls=DummyModelLoader,
     )
-    expected_model_cls, resolved_architecture = get_model_architecture(aphrodite_config.model_config)
+    expected_model_cls, resolved_architecture = get_model_architecture(sonar_config.model_config)
     assert resolved_architecture == architecture
     assert isinstance(model, expected_model_cls)
 
@@ -567,14 +567,14 @@ def test_online_quantization(
     assert routed_experts.w13_weight_scale.dtype == torch.uint8
     assert routed_experts.w2_weight.dtype == expected_weight_dtype
     assert routed_experts.w2_weight_scale.dtype == torch.uint8
-    assert aphrodite_config.quant_config is not None
-    assert aphrodite_config.quant_config.online_quantization_config is not None
+    assert sonar_config.quant_config is not None
+    assert sonar_config.quant_config.online_quantization_config is not None
     assert not any(
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
-        for warning in _fse_warnings(caplog_aphrodite)
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
+        for warning in _fse_warnings(caplog_sonar)
     )
     parent_name = "block_sparse_moe" if architecture == "MiniMaxM3SparseForCausalLM" else "mlp"
-    assert _online_quantization_logs(caplog_aphrodite) == [
+    assert _online_quantization_logs(caplog_sonar) == [
         "Quantizing 2 layers of types: "
         f"{parent_name}.{shared_expert_name}.down_proj: 1 "
         f"(from targets: {target_pattern}, mxfp4); "
@@ -658,8 +658,8 @@ _FSE_ROUTED_SHARED_TARGETS = {
     "*shared_experts*": "mxfp4",
 }
 
-_ONLINE_QUANTIZATION_LOGGER = "aphrodite.model_executor.model_loader.base_loader"
-_FSE_LOGGER = "aphrodite.model_executor.layers.fused_moe.utils"
+_ONLINE_QUANTIZATION_LOGGER = "sonar.model_executor.model_loader.base_loader"
+_FSE_LOGGER = "sonar.model_executor.layers.fused_moe.utils"
 
 
 def _enable_aiter(monkeypatch: pytest.MonkeyPatch, *, moe: bool = True, fse: bool | None = None) -> None:
@@ -667,16 +667,16 @@ def _enable_aiter(monkeypatch: pytest.MonkeyPatch, *, moe: bool = True, fse: boo
     # Other tests reload `envs`, which can leave these flags pinned as attributes
     # that shadow the environment variables.
     for name in (
-        "APHRODITE_ROCM_USE_AITER",
-        "APHRODITE_ROCM_USE_AITER_MOE",
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
+        "SONAR_ROCM_USE_AITER",
+        "SONAR_ROCM_USE_AITER_MOE",
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS",
     ):
         monkeypatch.delitem(vars(envs), name, raising=False)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
     if moe:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1")
     if fse is not None:
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", str(int(fse)))
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS", str(int(fse)))
     rocm_aiter_ops.refresh_env_variables()
 
 
@@ -788,25 +788,25 @@ def test_fse_online_quantization_routed_shared(
     routed_method_cls: type,
     tmp_path: Path,
     monkeypatch,
-    caplog_aphrodite,
+    caplog_sonar,
     single_rank_parallel_state,
     workspace_init,
 ) -> None:
     """Routed and/or shared experts are (re)quantized online. The shared experts
     are fused into the routed experts only with
-    `APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`.
+    `SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`.
     """
     architecture = "MiniMaxM3SparseForCausalLM"
     _enable_aiter(monkeypatch, fse=fse_requested)
     _write_minimal_moe_config(tmp_path, architecture, checkpoint_quant_config)
     _use_checkpoint_quantization(monkeypatch)
-    model, aphrodite_config = load_model_without_aphrodite_runner(
+    model, sonar_config = load_model_without_sonar_runner(
         str(tmp_path),
         dtype="bfloat16",
         model_config_kwargs={"quantization_config": QuantizationConfigArgs(targets=targets)},
         model_loader_cls=DummyModelLoader,
     )
-    expected_model_cls, resolved_architecture = get_model_architecture(aphrodite_config.model_config)
+    expected_model_cls, resolved_architecture = get_model_architecture(sonar_config.model_config)
     assert resolved_architecture == architecture
     assert isinstance(model, expected_model_cls)
 
@@ -815,16 +815,16 @@ def test_fse_online_quantization_routed_shared(
     # the routed experts' online keys.
     if fse_requested and "*shared_expert*" not in targets:
         assert any(
-            "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
+            "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
             and "do not match the routed expert keys" in warning
-            for warning in _fse_warnings(caplog_aphrodite)
-        ), _fse_warnings(caplog_aphrodite)
+            for warning in _fse_warnings(caplog_sonar)
+        ), _fse_warnings(caplog_sonar)
         return
 
     assert not any(
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
-        for warning in _fse_warnings(caplog_aphrodite)
-    ), _fse_warnings(caplog_aphrodite)
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be enabled" in warning
+        for warning in _fse_warnings(caplog_sonar)
+    ), _fse_warnings(caplog_sonar)
 
     moes = [
         module
@@ -879,7 +879,7 @@ def test_fse_online_quantization_routed_shared(
             f"block_sparse_moe.shared_experts.{projection}: 1 (from targets: {shared_target}, {targets[shared_target]})"
             for projection in ("down_proj", "gate_up_proj")
         ]
-    assert _online_quantization_logs(caplog_aphrodite) == [
+    assert _online_quantization_logs(caplog_sonar) == [
         f"Quantizing {len(quantized)} layers of types: " + "; ".join(quantized)
     ]
 
@@ -914,7 +914,7 @@ def test_fse_online_quantization_bf16_routed_quantized_shared_raises(
     _write_minimal_moe_config(tmp_path, architecture, _QUARK_BF16_ROUTED_MXFP8_SHARED_QUANT_CONFIG)
     _use_checkpoint_quantization(monkeypatch)
     with pytest.raises(NotImplementedError, match="quantized online from high"):
-        load_model_without_aphrodite_runner(
+        load_model_without_sonar_runner(
             str(tmp_path),
             dtype="bfloat16",
             model_config_kwargs={"quantization_config": QuantizationConfigArgs(targets=_ROUTED_SHARED_MXFP4)},
@@ -923,7 +923,7 @@ def test_fse_online_quantization_bf16_routed_quantized_shared_raises(
 
 
 def test_fse_online_quantization_routed_shared_loads_checkpoint_weights(
-    default_aphrodite_config,
+    default_sonar_config,
     monkeypatch,
     single_rank_parallel_state,
 ) -> None:
@@ -932,9 +932,9 @@ def test_fse_online_quantization_routed_shared_loads_checkpoint_weights(
     The weights are loaded through `MiniMaxM3Model.load_weights` with checkpoint names
     (`w1/w2/w3`, `shared_experts.*`, `weight_scale_inv`), as the model loader does.
     """
-    from aphrodite.models.minimax_m3.amd.model import MiniMaxM3Model
+    from sonar.models.minimax_m3.amd.model import MiniMaxM3Model
 
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     hidden_size = intermediate_size = 64
     num_routed_experts = 2
     shared_slot = num_routed_experts
@@ -1064,7 +1064,7 @@ def test_fse_online_quantization_routed_shared_loads_checkpoint_weights(
 def test_online_gate_up_proj_target_disables_fse(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    caplog_aphrodite,
+    caplog_sonar,
     single_rank_parallel_state,
     workspace_init,
 ) -> None:
@@ -1074,7 +1074,7 @@ def test_online_gate_up_proj_target_disables_fse(
     _enable_aiter(monkeypatch, fse=True)
     _write_minimal_moe_config(tmp_path, architecture)
 
-    model, _ = load_model_without_aphrodite_runner(
+    model, _ = load_model_without_sonar_runner(
         str(tmp_path),
         dtype="bfloat16",
         quantization="quark",
@@ -1091,13 +1091,13 @@ def test_online_gate_up_proj_target_disables_fse(
     )
     assert not moe.is_fused_shared_expert_enabled
     assert moe.shared_experts is not None
-    assert _online_quantization_logs(caplog_aphrodite) == [
+    assert _online_quantization_logs(caplog_sonar) == [
         f"Quantizing 1 layers of types: mlp.shared_experts.gate_up_proj: 1 (from targets: {target_pattern}, mxfp4)"
     ]
     # The untargeted down_proj is unquantized: its keys do not match.
-    [warning] = _fse_warnings(caplog_aphrodite)
+    [warning] = _fse_warnings(caplog_sonar)
     assert warning.startswith(
-        "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be "
+        "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS is enabled but cannot be "
         "enabled - skipping shared-expert fusion: shared expert (weight, activation) "
         "keys "
     )
@@ -1111,7 +1111,7 @@ def test_online_moe_quantize_weights_places_routed_then_shared_experts(num_share
     """Chunked routed experts come first and the staged shared experts last."""
     import types
 
-    from aphrodite.model_executor.layers.quantization.online.moe_base import (
+    from sonar.model_executor.layers.quantization.online.moe_base import (
         OnlineMoEMethodBase,
     )
 
@@ -1162,7 +1162,7 @@ def test_online_moe_quantize_weights_places_routed_then_shared_experts(num_share
 
 
 if current_platform.is_rocm():
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     ROCM_GFX950 = on_gfx950()
 else:
@@ -1173,7 +1173,7 @@ else:
 def test_nvfp4_moe_requantization_on_rocm(
     requantize: bool,
     tmp_path: Path,
-    default_aphrodite_config,
+    default_sonar_config,
     single_rank_parallel_state,
     workspace_init,
     monkeypatch: pytest.MonkeyPatch,
@@ -1195,7 +1195,7 @@ def test_nvfp4_moe_requantization_on_rocm(
             NotImplementedError,
             match="NVFP4 MoE experts .* is not supported on ROCm",
         ):
-            load_model_without_aphrodite_runner(
+            load_model_without_sonar_runner(
                 str(tmp_path),
                 dtype="bfloat16",
                 model_loader_cls=DummyModelLoader,
@@ -1204,11 +1204,11 @@ def test_nvfp4_moe_requantization_on_rocm(
 
     if not ROCM_GFX950:
         pytest.skip("AITER MXFP4 MoE requires gfx950")
-    default_aphrodite_config.model_config = ModelConfig()
-    default_aphrodite_config.kernel_config.moe_backend = "aiter"
+    default_sonar_config.model_config = ModelConfig()
+    default_sonar_config.kernel_config.moe_backend = "aiter"
 
     nvfp4_oracle_logger = Mock()
-    monkeypatch.setattr("aphrodite.model_executor.layers.fused_moe.oracle.nvfp4.logger", nvfp4_oracle_logger)
+    monkeypatch.setattr("sonar.model_executor.layers.fused_moe.oracle.nvfp4.logger", nvfp4_oracle_logger)
 
     hidden_size = intermediate_size = 256
     num_experts, top_k = 8, 2
@@ -1246,13 +1246,13 @@ def test_nvfp4_moe_requantization_on_rocm(
 
 
 def test_nvfp4_oracle_only_skipped_for_requantized_layers(
-    default_aphrodite_config,
+    default_sonar_config,
     single_rank_parallel_state,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Only the targeted layer's NVFP4 checkpoint method skips backend selection."""
     _enable_aiter(monkeypatch)
-    default_aphrodite_config.model_config = ModelConfig()
+    default_sonar_config.model_config = ModelConfig()
     quant_config = ModelOptMxFp8Config(
         is_checkpoint_mxfp8_serialized=True,
         kv_cache_quant_algo=None,
@@ -1272,12 +1272,12 @@ def test_nvfp4_oracle_only_skipped_for_requantized_layers(
             backend, experts_cls = real_select(config, weight_key, activation_key)
         else:
             # No native NVFP4 MoE backend on ROCm: pretend one was selected.
-            backend, experts_cls = NvFp4MoeBackend.APHRODITE_CUTLASS, Mock()
+            backend, experts_cls = NvFp4MoeBackend.SONAR_CUTLASS, Mock()
         selected.append(("skipped" if skipped else "selected", backend))
         return backend, experts_cls
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.compressed_tensors."
+        "sonar.model_executor.layers.quantization.compressed_tensors."
         "compressed_tensors_moe.compressed_tensors_moe_w4a4_nvfp4."
         "select_nvfp4_moe_backend",
         select,
@@ -1299,7 +1299,7 @@ def test_nvfp4_oracle_only_skipped_for_requantized_layers(
 
     assert selected == [
         ("skipped", NvFp4MoeBackend.EMULATION),
-        ("selected", NvFp4MoeBackend.APHRODITE_CUTLASS),
+        ("selected", NvFp4MoeBackend.SONAR_CUTLASS),
     ]
     assert isinstance(layers[0].quant_method, Mxfp4OnlineMoEMethod)
     assert isinstance(

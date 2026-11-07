@@ -14,9 +14,9 @@ import openai
 import pytest
 import pytest_asyncio
 
-import aphrodite.envs as envs
-from aphrodite.platforms import current_platform
-from aphrodite.tokenizers import get_tokenizer
+import sonar.envs as envs
+from sonar.platforms import current_platform
+from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer, multi_gpu_only, requires_fp8
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -214,7 +214,7 @@ async def test_thinking_token_budget_limits_reasoning(client: openai.AsyncOpenAI
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    envs.APHRODITE_USE_RUST_FRONTEND,
+    envs.SONAR_USE_RUST_FRONTEND,
     reason="the Rust frontend does not serve /v1/responses",
 )
 @pytest.mark.parametrize("client", ["default"], indirect=True)

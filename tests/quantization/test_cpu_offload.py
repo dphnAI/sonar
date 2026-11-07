@@ -31,7 +31,7 @@ def test_cpu_offload_fp8():
 )
 def test_cpu_offload_gptq(monkeypatch):
     # This quant method is sensitive to dummy weights, so we force real weights
-    monkeypatch.setenv("APHRODITE_TEST_FORCE_LOAD_FORMAT", "auto")
+    monkeypatch.setenv("SONAR_TEST_FORCE_LOAD_FORMAT", "auto")
     # Test GPTQ Marlin
     compare_two_settings(
         "Qwen/Qwen2-1.5B-Instruct-GPTQ-Int4",
@@ -47,7 +47,7 @@ def test_cpu_offload_gptq(monkeypatch):
 )
 def test_cpu_offload_awq(monkeypatch):
     # This quant method is sensitive to dummy weights, so we force real weights
-    monkeypatch.setenv("APHRODITE_TEST_FORCE_LOAD_FORMAT", "auto")
+    monkeypatch.setenv("SONAR_TEST_FORCE_LOAD_FORMAT", "auto")
     # Test AWQ Marlin
     compare_two_settings(
         "Qwen/Qwen2-1.5B-Instruct-AWQ",
@@ -63,7 +63,7 @@ def test_cpu_offload_awq(monkeypatch):
 )
 def test_cpu_offload_compressed_tensors(monkeypatch):
     # This quant method is sensitive to dummy weights, so we force real weights
-    monkeypatch.setenv("APHRODITE_TEST_FORCE_LOAD_FORMAT", "auto")
+    monkeypatch.setenv("SONAR_TEST_FORCE_LOAD_FORMAT", "auto")
     # Test wNa16
     compare_two_settings(
         "nm-testing/Qwen1.5-MoE-A2.7B-Chat-quantized.w4a16",

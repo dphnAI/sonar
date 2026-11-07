@@ -7,7 +7,7 @@ import torch
 
 
 def test_nemotron_h_lm_head_receives_quant_config():
-    from aphrodite.model_executor.models.nemotron_h import NemotronHForCausalLM
+    from sonar.model_executor.models.nemotron_h import NemotronHForCausalLM
 
     mock_quant_config = Mock()
 
@@ -15,21 +15,21 @@ def test_nemotron_h_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_aphrodite_config = Mock()
-    mock_aphrodite_config.model_config.hf_config = mock_hf_config
-    mock_aphrodite_config.model_config.dtype = None
-    mock_aphrodite_config.scheduler_config = Mock()
-    mock_aphrodite_config.quant_config = mock_quant_config
+    mock_sonar_config = Mock()
+    mock_sonar_config.model_config.hf_config = mock_hf_config
+    mock_sonar_config.model_config.dtype = None
+    mock_sonar_config.scheduler_config = Mock()
+    mock_sonar_config.quant_config = mock_quant_config
 
     with (
-        patch("aphrodite.model_executor.models.nemotron_h.NemotronHModel") as MockModel,
-        patch("aphrodite.model_executor.models.nemotron_h.ParallelLMHead") as MockLMHead,
-        patch("aphrodite.model_executor.models.nemotron_h.LogitsProcessor"),
+        patch("sonar.model_executor.models.nemotron_h.NemotronHModel") as MockModel,
+        patch("sonar.model_executor.models.nemotron_h.ParallelLMHead") as MockLMHead,
+        patch("sonar.model_executor.models.nemotron_h.LogitsProcessor"),
     ):
         MockModel.return_value.make_empty_intermediate_tensors = Mock()
         MockModel.return_value.has_moe = False
 
-        NemotronHForCausalLM(aphrodite_config=mock_aphrodite_config)
+        NemotronHForCausalLM(sonar_config=mock_sonar_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs
@@ -37,7 +37,7 @@ def test_nemotron_h_lm_head_receives_quant_config():
 
 
 def test_relu2_fp8_fusion_uses_registry():
-    from aphrodite.model_executor.models.nemotron_h import NemotronHMLP
+    from sonar.model_executor.models.nemotron_h import NemotronHMLP
 
     projected = torch.empty((1, 1), dtype=torch.bfloat16)
     fused = Mock()
@@ -51,7 +51,7 @@ def test_relu2_fp8_fusion_uses_registry():
     mlp.act_fn = act_fn
 
     with patch(
-        "aphrodite.model_executor.models.nemotron_h.maybe_fused_act_quant",
+        "sonar.model_executor.models.nemotron_h.maybe_fused_act_quant",
         return_value=fused,
     ) as maybe_fused:
         result = mlp(Mock())

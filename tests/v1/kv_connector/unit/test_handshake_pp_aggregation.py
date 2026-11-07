@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
     KVConnectorHandshakeMetadata,
 )
-from aphrodite.v1.engine import core as engine_core_module
+from sonar.v1.engine import core as engine_core_module
 
 pytestmark = pytest.mark.cpu_test
 
@@ -25,9 +25,9 @@ class _FakeExecutor:
 
     def __init__(
         self,
-        aphrodite_config: Any,
+        sonar_config: Any,
     ) -> None:
-        del aphrodite_config
+        del sonar_config
         self.handshake_metadata = self.handshake_metadata_src
         self.handshake_calls = 0
         _FakeExecutor.last_instance = self
@@ -59,21 +59,21 @@ def _run_engine_core_handshake(
     _FakeExecutor.handshake_metadata_src = handshake_metadata
     _FakeExecutor.last_instance = None
 
-    monkeypatch.setattr("aphrodite.plugins.load_general_plugins", lambda: None)
+    monkeypatch.setattr("sonar.plugins.load_general_plugins", lambda: None)
     monkeypatch.setattr(
         engine_core_module.EngineCore,
         "_initialize_kv_caches",
-        lambda self, aphrodite_config: SimpleNamespace(kv_cache_groups=[object()]),
+        lambda self, sonar_config: SimpleNamespace(kv_cache_groups=[object()]),
     )
     monkeypatch.setattr(
         engine_core_module,
         "StructuredOutputManager",
-        lambda aphrodite_config: object(),
+        lambda sonar_config: object(),
     )
     monkeypatch.setattr(
         engine_core_module,
         "resolve_kv_cache_block_sizes",
-        lambda kv_cache_config, aphrodite_config: (16, 16),
+        lambda kv_cache_config, sonar_config: (16, 16),
     )
     monkeypatch.setattr(engine_core_module, "freeze_gc_heap", lambda: None)
     monkeypatch.setattr(engine_core_module, "maybe_attach_gc_debug_callback", lambda: None)
@@ -82,7 +82,7 @@ def _run_engine_core_handshake(
     monkeypatch.setattr(engine_core_module, "init_none_hash", lambda hash_fn: None)
     monkeypatch.setattr(engine_core_module, "get_request_block_hasher", lambda *args: None)
 
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         parallel_config=SimpleNamespace(data_parallel_rank_local=0),
         scheduler_config=SimpleNamespace(
             get_scheduler_cls=lambda: _FakeScheduler,
@@ -105,7 +105,7 @@ def _run_engine_core_handshake(
         ),
     )
 
-    engine_core_module.EngineCore(aphrodite_config, _FakeExecutor, log_stats=False)
+    engine_core_module.EngineCore(sonar_config, _FakeExecutor, log_stats=False)
     assert _FakeExecutor.last_instance is not None
     return _FakeExecutor.last_instance
 

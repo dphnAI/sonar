@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for ``aphrodite/entrypoints/cohere/api_router.py``.
+"""Unit tests for ``sonar/entrypoints/cohere/api_router.py``.
 
 Covers:
 
 * The optional-import guard: ``attach_router`` is a no-op when the
   ``cohere`` SDK isn't installed.
 * The env-var opt-in gate: ``attach_router`` is a no-op unless
-  ``APHRODITE_ENABLE_COHERE_API=1`` is set.
+  ``SONAR_ENABLE_COHERE_API=1`` is set.
 * The router wiring: response shapes (JSON + SSE), error translation,
   and the ``cohere_serving_chat_v2 is None`` fallback (501 Not
   Implemented).
@@ -26,44 +26,44 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
-from aphrodite.entrypoints.cohere import api_router as api_router_mod
-from aphrodite.entrypoints.cohere.api_router import attach_router
-from aphrodite.entrypoints.cohere.protocol import (
+from sonar.entrypoints.cohere import api_router as api_router_mod
+from sonar.entrypoints.cohere.api_router import attach_router
+from sonar.entrypoints.cohere.protocol import (
     AssistantMessageResponse,
     CohereChatV2Response,
 )
-from aphrodite.entrypoints.cohere.serving import (
+from sonar.entrypoints.cohere.serving import (
     _API_SERVER_ONLY_TEMPLATE_KWARGS,
     CohereServingChatV2,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     ReasoningParserKwargs,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
-from aphrodite.entrypoints.serve.exception_handling.handlers.aphrodite_error import (
-    aphrodite_error_handler,
-)
-from aphrodite.entrypoints.serve.exception_handling.handlers.http import (
+from sonar.entrypoints.serve.engine.protocol import ErrorInfo, ErrorResponse
+from sonar.entrypoints.serve.exception_handling.handlers.http import (
     http_exception_handler,
 )
-from aphrodite.entrypoints.serve.exception_handling.handlers.validation import (
+from sonar.entrypoints.serve.exception_handling.handlers.sonar_error import (
+    sonar_error_handler,
+)
+from sonar.entrypoints.serve.exception_handling.handlers.validation import (
     validation_exception_handler,
 )
-from aphrodite.exceptions import AphroditeError, AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
+from sonar.exceptions import SonarError, SonarValidationError
+from sonar.sampling_params import SamplingParams
 
 
 @pytest.fixture(autouse=True)
 def _enable_cohere_api(monkeypatch):
     """Auto-enable the Cohere API gate for every test in this module.
 
-    The endpoint is opt-in in production (``APHRODITE_ENABLE_COHERE_API=1``);
+    The endpoint is opt-in in production (``SONAR_ENABLE_COHERE_API=1``);
     every test in this file exercises the enabled path *except* the
     dedicated gate test in :class:`TestEnvVarGate`, which unsets the
     flag inside the test body.
     """
-    monkeypatch.setenv("APHRODITE_ENABLE_COHERE_API", "1")
+    monkeypatch.setenv("SONAR_ENABLE_COHERE_API", "1")
 
 
 # ----------------------------------------------------------------------
@@ -158,11 +158,11 @@ def _build_render_app(chat_handler, render_handler, *, enable_scale_out: bool = 
     return app
 
 
-def _build_app_with_aphrodite_handlers(handler: _Handler | None) -> FastAPI:
-    """Build a FastAPI app that mirrors the real Aphrodite setup by installing
-    validation, HTTP, and Aphrodite exception handlers. The
+def _build_app_with_sonar_handlers(handler: _Handler | None) -> FastAPI:
+    """Build a FastAPI app that mirrors the real Sonar setup by installing
+    validation, HTTP, and Sonar exception handlers. The
     :class:`CohereErrorEnvelopeMiddleware` registered by ``attach_router``
-    is expected to translate any resulting Aphrodite ``ErrorResponse`` body
+    is expected to translate any resulting Sonar ``ErrorResponse`` body
     into the ``CohereError`` wire shape.
     """
     app = FastAPI()
@@ -173,7 +173,7 @@ def _build_app_with_aphrodite_handlers(handler: _Handler | None) -> FastAPI:
     app.state.cohere_serving_chat_v2 = handler
     app.exception_handler(RequestValidationError)(validation_exception_handler)
     app.exception_handler(HTTPException)(http_exception_handler)
-    app.exception_handler(AphroditeError)(aphrodite_error_handler)
+    app.exception_handler(SonarError)(sonar_error_handler)
     return app
 
 
@@ -197,7 +197,7 @@ class TestOptionalCohereImport:
 
     ``attach_router`` checks the env-var gate before the SDK probe, so
     the SDK-missing branch is only reachable when the operator opts in
-    via ``APHRODITE_ENABLE_COHERE_API=1``. The flag-off-and-SDK-missing case
+    via ``SONAR_ENABLE_COHERE_API=1``. The flag-off-and-SDK-missing case
     below exists to pin down that ordering — the flag-off short-circuits
     """
 
@@ -209,10 +209,10 @@ class TestOptionalCohereImport:
         for the endpoint, so surfacing the SDK gap is misleading noise.
         Only the flag-off DEBUG message should fire.
         """
-        monkeypatch.delenv("APHRODITE_ENABLE_COHERE_API", raising=False)
+        monkeypatch.delenv("SONAR_ENABLE_COHERE_API", raising=False)
         monkeypatch.setattr(api_router_mod, "_SDK_AVAILABLE", False)
 
-        with caplog.at_level("DEBUG", logger="aphrodite.entrypoints.cohere.api_router"):
+        with caplog.at_level("DEBUG", logger="sonar.entrypoints.cohere.api_router"):
             app = FastAPI()
             attach_router(app)
 
@@ -225,12 +225,12 @@ class TestOptionalCohereImport:
 
     def test_flag_on_but_sdk_missing_logs_warning(self, monkeypatch, caplog):
         """Misconfiguration path: the operator explicitly opted into the
-        endpoint via ``APHRODITE_ENABLE_COHERE_API=1`` (already set by the
+        endpoint via ``SONAR_ENABLE_COHERE_API=1`` (already set by the
         autouse fixture) but forgot to install ``cohere``.
         """
         monkeypatch.setattr(api_router_mod, "_SDK_AVAILABLE", False)
 
-        with caplog.at_level("DEBUG", logger="aphrodite.entrypoints.cohere.api_router"):
+        with caplog.at_level("DEBUG", logger="sonar.entrypoints.cohere.api_router"):
             app = FastAPI()
             attach_router(app)
 
@@ -239,7 +239,7 @@ class TestOptionalCohereImport:
         warn_sdk_records = [
             rec
             for rec in caplog.records
-            if "APHRODITE_ENABLE_COHERE_API=1" in rec.message and "SDK is not installed" in rec.message
+            if "SONAR_ENABLE_COHERE_API=1" in rec.message and "SDK is not installed" in rec.message
         ]
         assert warn_sdk_records, (
             "expected a WARNING that pairs the opt-in flag with the "
@@ -254,12 +254,12 @@ class TestOptionalCohereImport:
 
 
 # ----------------------------------------------------------------------
-# APHRODITE_ENABLE_COHERE_API gate
+# SONAR_ENABLE_COHERE_API gate
 # ----------------------------------------------------------------------
 
 
 class TestEnvVarGate:
-    """The Cohere v2 endpoint is opt-in via ``APHRODITE_ENABLE_COHERE_API``.
+    """The Cohere v2 endpoint is opt-in via ``SONAR_ENABLE_COHERE_API``.
 
     Even with the SDK installed, :func:`attach_router` must skip route
     registration and middleware installation unless the env flag is
@@ -268,24 +268,24 @@ class TestEnvVarGate:
     """
 
     def test_attach_router_noop_when_flag_unset(self, monkeypatch, caplog):
-        monkeypatch.delenv("APHRODITE_ENABLE_COHERE_API", raising=False)
+        monkeypatch.delenv("SONAR_ENABLE_COHERE_API", raising=False)
 
         # The flag-off skip logs at DEBUG on purpose: this is the default
-        # state for every non-Cohere Aphrodite deployment, so an INFO log on
+        # state for every non-Cohere Sonar deployment, so an INFO log on
         # every server startup would be pointless noise. The test raises
         # caplog's level accordingly.
-        with caplog.at_level("DEBUG", logger="aphrodite.entrypoints.cohere.api_router"):
+        with caplog.at_level("DEBUG", logger="sonar.entrypoints.cohere.api_router"):
             app = FastAPI()
             attach_router(app)
 
         paths = [getattr(r, "path", None) for r in app.routes]
         assert "/cohere/v2/chat" not in paths
-        debug_flag_records = [rec for rec in caplog.records if "APHRODITE_ENABLE_COHERE_API is not set" in rec.message]
+        debug_flag_records = [rec for rec in caplog.records if "SONAR_ENABLE_COHERE_API is not set" in rec.message]
         assert debug_flag_records, "expected a DEBUG message that the cohere flag is off"
         assert all(rec.levelname == "DEBUG" for rec in debug_flag_records)
 
     def test_attach_router_noop_when_flag_zero(self, monkeypatch):
-        monkeypatch.setenv("APHRODITE_ENABLE_COHERE_API", "0")
+        monkeypatch.setenv("SONAR_ENABLE_COHERE_API", "0")
 
         app = FastAPI()
         attach_router(app)
@@ -365,10 +365,10 @@ class TestEndpoint:
     @pytest.mark.parametrize(
         "exc",
         [
-            AphroditeValidationError("bad temperature", parameter="temperature"),
+            SonarValidationError("bad temperature", parameter="temperature"),
             ValueError("bad temperature"),
         ],
-        ids=["aphrodite_validation_error", "value_error"],
+        ids=["sonar_validation_error", "value_error"],
     )
     def test_handler_client_error_returns_400_envelope(self, exc):
         """Client-caused handler errors are 4xx, matching the OpenAI routes."""
@@ -381,7 +381,7 @@ class TestEndpoint:
     def test_non_json_content_type_rejected(self):
         """The ``validate_json_request`` dependency raises
         ``RequestValidationError`` (HTTP 422) for non-JSON content
-        types, matching the behavior of the other Aphrodite API routers.
+        types, matching the behavior of the other Sonar API routers.
         """
         app = _build_app(handler=None)
         with TestClient(app) as client:
@@ -532,7 +532,7 @@ class TestRenderEndpoint:
     def test_conversion_client_error_returns_400_envelope(self):
         """Conversion runs inside the same ``try`` as the render call, so
         a bad v2 body that slips past Pydantic still yields a 4xx in the
-        Cohere error envelope rather than an unhandled 500 with Aphrodite's shape.
+        Cohere error envelope rather than an unhandled 500 with Sonar's shape.
         """
 
         class _Boom:
@@ -561,7 +561,7 @@ class TestRenderEndpoint:
 
 
 class TestCohereErrorEnvelope:
-    """When the app installs Aphrodite's global exception handlers, validation
+    """When the app installs Sonar's global exception handlers, validation
     and HTTP errors escape as ``ErrorResponse`` bodies before the route
     handler runs. The middleware installed by ``attach_router`` must
     normalise those bodies to the ``CohereError`` shape declared on the
@@ -572,10 +572,10 @@ class TestCohereErrorEnvelope:
 
     def test_validation_error_body_is_cohere_shaped(self):
         # ``model=""`` and ``messages=[]`` trip our custom field
-        # validators, which raise AphroditeValidationError and are routed
-        # through ``aphrodite_error_handler`` in the real Aphrodite
+        # validators, which raise SonarValidationError and are routed
+        # through ``sonar_error_handler`` in the real Sonar
         # server (producing the ``{"error": {...}}`` shape).
-        app = _build_app_with_aphrodite_handlers(handler=None)
+        app = _build_app_with_sonar_handlers(handler=None)
         with TestClient(app) as client:
             r = client.post("/cohere/v2/chat", json={"messages": [], "model": ""})
         assert r.status_code == HTTPStatus.BAD_REQUEST
@@ -589,7 +589,7 @@ class TestCohereErrorEnvelope:
     @pytest.mark.parametrize("path", ["/cohere/v2/chat", "/cohere/v2/chat/render"])
     def test_required_tool_choice_without_tools_returns_400(self, path):
         """Reject an impossible tool choice before reaching either handler."""
-        app = _build_app_with_aphrodite_handlers(handler=None)
+        app = _build_app_with_sonar_handlers(handler=None)
         with TestClient(app) as client:
             response = client.post(
                 path,
@@ -605,7 +605,7 @@ class TestCohereErrorEnvelope:
         # A raised ``HTTPException`` from anywhere in the request cycle
         # is routed through ``http_exception_handler`` (producing the
         # ``ErrorResponse`` shape) and must be translated.
-        app = _build_app_with_aphrodite_handlers(handler=None)
+        app = _build_app_with_sonar_handlers(handler=None)
 
         @app.get("/cohere/v2/boom")
         async def _boom():
@@ -618,7 +618,7 @@ class TestCohereErrorEnvelope:
         assert body == {"message": "teapot"}
 
     def test_non_cohere_path_is_not_translated(self):
-        app = _build_app_with_aphrodite_handlers(handler=None)
+        app = _build_app_with_sonar_handlers(handler=None)
 
         @app.get("/v1/other")
         async def _other():
@@ -628,7 +628,7 @@ class TestCohereErrorEnvelope:
             r = client.get("/v1/other")
         assert r.status_code == HTTPStatus.BAD_REQUEST
         body = r.json()
-        # Non-cohere paths keep the Aphrodite ``ErrorResponse`` shape.
+        # Non-cohere paths keep the Sonar ``ErrorResponse`` shape.
         assert "error" in body
         assert body["error"]["message"] == "nope"
 
@@ -640,7 +640,7 @@ class TestCohereErrorEnvelope:
             yield 'data: {"type":"message-start"}\n\n'
             yield "data: [DONE]\n\n"
 
-        app = _build_app_with_aphrodite_handlers(handler=_Handler(_gen()))
+        app = _build_app_with_sonar_handlers(handler=_Handler(_gen()))
         with TestClient(app) as client:
             r = client.post(
                 "/cohere/v2/chat",
@@ -656,7 +656,7 @@ class TestCohereErrorEnvelope:
         # itself translates it to ``CohereError``; the middleware sees
         # the ``CohereError`` shape and must leave it alone.
         err = ErrorResponse(error=ErrorInfo(message="already cohere", type="Bad Request", code=400))
-        app = _build_app_with_aphrodite_handlers(handler=_Handler(err))
+        app = _build_app_with_sonar_handlers(handler=_Handler(err))
         with TestClient(app) as client:
             r = client.post("/cohere/v2/chat", json=_minimal_request_body())
         assert r.status_code == HTTPStatus.BAD_REQUEST
@@ -667,7 +667,7 @@ class TestCohereErrorEnvelope:
     def test_request_id_preserved_in_translated_body(self):
         # Client-provided ``X-Request-Id`` should be echoed as
         # ``CohereError.id`` so callers can correlate failures.
-        app = _build_app_with_aphrodite_handlers(handler=None)
+        app = _build_app_with_sonar_handlers(handler=None)
         with TestClient(app) as client:
             r = client.post(
                 "/cohere/v2/chat",

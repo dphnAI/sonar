@@ -904,11 +904,11 @@ async def on_startup() -> None:
     global encode_session, prefill_session, decode_session
     timeout = aiohttp.ClientTimeout(total=100_000)
     # vLLM closes an idle keep-alive connection after
-    # APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE seconds (5 by default), while aiohttp keeps
+    # SONAR_HTTP_TIMEOUT_KEEP_ALIVE seconds (5 by default), while aiohttp keeps
     # pooling it for 15. Reusing one it has already closed fails the request
     # with ServerDisconnectedError, and the server logs nothing at all: it
     # closed the socket before the request arrived. Retire ours first.
-    server_keep_alive = float(os.getenv("APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE", "5"))
+    server_keep_alive = float(os.getenv("SONAR_HTTP_TIMEOUT_KEEP_ALIVE", "5"))
     connector = aiohttp.TCPConnector(
         limit=0,
         **({"keepalive_timeout": server_keep_alive / 2} if server_keep_alive > 0 else {"force_close": True}),

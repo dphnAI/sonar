@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.worker.gpu.spec_decode.dflash.speculator import (
+from sonar.platforms import current_platform
+from sonar.v1.worker.gpu.spec_decode.dflash.speculator import (
     shift_draft_block_tables,
 )
 

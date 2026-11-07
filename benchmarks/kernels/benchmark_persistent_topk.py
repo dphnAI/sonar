@@ -18,8 +18,8 @@ from pathlib import Path
 import torch
 from flashinfer.testing import bench_gpu_time_with_cupti
 
-import aphrodite._custom_ops  # noqa: F401
-from aphrodite.platforms import current_platform
+import sonar._custom_ops  # noqa: F401
+from sonar.platforms import current_platform
 
 
 def benchmark(rows: int, width: int, k: int, args) -> dict:

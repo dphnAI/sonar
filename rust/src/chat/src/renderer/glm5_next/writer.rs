@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_text::Prompt;
-use aphrodite_text::tokenizer::DynTokenizer;
+use sonar_text::Prompt;
+use sonar_text::tokenizer::DynTokenizer;
 
 use crate::error::{Result, chat_template_thrown};
 

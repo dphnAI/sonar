@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite.v1.core.sched.output import ScheduledEncoderInputStats, SchedulerOutput
-from aphrodite.v1.engine import EngineCoreEvent, EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs, FinishReason
-from aphrodite.v1.metrics.cache_hit_source import CacheHitSource
-from aphrodite.v1.metrics.stats import (
+from sonar.v1.core.sched.output import ScheduledEncoderInputStats, SchedulerOutput
+from sonar.v1.engine import EngineCoreEvent, EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs, FinishReason
+from sonar.v1.metrics.cache_hit_source import CacheHitSource
+from sonar.v1.metrics.stats import (
     IterationStats,
     LoRARequestStates,
     PrefillStats,
@@ -14,8 +14,8 @@ from aphrodite.v1.metrics.stats import (
     SchedulerIterationDetails,
     SchedulerStats,
 )
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
-from aphrodite.v1.utils import compute_iteration_details
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.utils import compute_iteration_details
 
 
 def test_iteration_stats_repr():

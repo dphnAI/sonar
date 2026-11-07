@@ -12,14 +12,14 @@ from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 from prometheus_client.parser import text_string_to_metric_families
 
-from aphrodite.entrypoints.serve.dev.sleep import metrics as sleep_metrics
-from aphrodite.entrypoints.serve.dev.sleep.api_router import attach_router
-from aphrodite.entrypoints.serve.dev.sleep.metrics import SleepModeOperationMetrics
-from aphrodite.entrypoints.serve.exception_handling.register import init_exception_handler
-from aphrodite.entrypoints.serve.instrumentator.metrics import (
+from sonar.entrypoints.serve.dev.sleep import metrics as sleep_metrics
+from sonar.entrypoints.serve.dev.sleep.api_router import attach_router
+from sonar.entrypoints.serve.dev.sleep.metrics import SleepModeOperationMetrics
+from sonar.entrypoints.serve.exception_handling.register import init_exception_handler
+from sonar.entrypoints.serve.instrumentator.metrics import (
     attach_router as attach_metrics_router,
 )
-from aphrodite.v1.metrics import prometheus as prometheus_metrics
+from sonar.v1.metrics import prometheus as prometheus_metrics
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B"
@@ -32,7 +32,7 @@ def sleep_route_app(monkeypatch):
     app.state.engine_client = AsyncMock()
     metrics = SleepModeOperationMetrics(CollectorRegistry())
     monkeypatch.setattr(
-        "aphrodite.entrypoints.serve.dev.sleep.api_router.sleep_mode_operation_metrics",
+        "sonar.entrypoints.serve.dev.sleep.api_router.sleep_mode_operation_metrics",
         lambda: metrics,
     )
 
@@ -181,13 +181,13 @@ def test_sleep_routes_visible_on_production_metrics_endpoint(monkeypatch, path, 
     )
     assert not any("sleep_mode_operations_total" in sample.name for sample in samples)
     assert any(
-        sample.name == "aphrodite:sleep_mode_operations_in_flight"
+        sample.name == "sonar:sleep_mode_operations_in_flight"
         and sample.labels == {"operation": operation}
         and sample.value == 0
         for sample in samples
     ) == (operation is not None)
     assert any(
-        sample.name == "aphrodite:sleep_mode_operation_duration_seconds_count"
+        sample.name == "sonar:sleep_mode_operation_duration_seconds_count"
         and sample.labels == {"operation": operation}
         and sample.value == 1
         for sample in samples
@@ -209,7 +209,7 @@ def test_sleep_mode():
     with RemoteOpenAIServer(
         MODEL_NAME,
         args,
-        env_dict={"APHRODITE_SERVER_DEV_MODE": "1", "CUDA_VISIBLE_DEVICES": "0"},
+        env_dict={"SONAR_SERVER_DEV_MODE": "1", "CUDA_VISIBLE_DEVICES": "0"},
     ) as remote_server:
         response = requests.post(remote_server.url_for("sleep"), params={"level": "1"})
         assert response.status_code == 200
@@ -272,9 +272,9 @@ def _get_sleep_metrics_from_api(response: requests.Response):
     awake, weights_offloaded, discard_all = None, None, None
 
     for family in text_string_to_metric_families(response.text):
-        if family.name == "aphrodite:engine_sleep_state":
+        if family.name == "sonar:engine_sleep_state":
             for sample in family.samples:
-                if sample.name == "aphrodite:engine_sleep_state":
+                if sample.name == "sonar:engine_sleep_state":
                     for label_name, label_value in sample.labels.items():
                         if label_value == "awake":
                             awake = sample.value

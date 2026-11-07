@@ -7,8 +7,8 @@ import time
 import pytest
 import torch
 
-from aphrodite.distributed.eplb.eplb_utils import CpuGpuEvent, device_stream
-from aphrodite.platforms import current_platform
+from sonar.distributed.eplb.eplb_utils import CpuGpuEvent, device_stream
+from sonar.platforms import current_platform
 
 
 def test_wait_blocks_until_record():

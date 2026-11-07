@@ -5,16 +5,16 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.router import (
+from sonar.model_executor.layers.fused_moe.router import (
     rocm_fp32_router_gemm as rocm_router,
 )
-from aphrodite.model_executor.layers.fused_moe.router.gate_linear import (
+from sonar.model_executor.layers.fused_moe.router.gate_linear import (
     fp32_router_gemm_dispatch_impl,
 )
-from aphrodite.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (
+from sonar.model_executor.layers.fused_moe.router.rocm_fp32_router_gemm import (
     rocm_fp32_router_gemm,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 SHAPES = [
     (3072, 256),
@@ -38,7 +38,7 @@ def _on_gfx950() -> bool:
     if not current_platform.is_rocm():
         return False
     try:
-        from aphrodite.platforms.rocm import on_gfx950
+        from sonar.platforms.rocm import on_gfx950
 
         return on_gfx950()
     except Exception:
@@ -182,7 +182,7 @@ def test_rocm_fp32_router_gemm_custom_op_dispatch(num_tokens: int, dtype: torch.
     x = torch.randn(num_tokens, hidden_size, dtype=dtype, device=device)
     weight = torch.randn(num_experts, hidden_size, dtype=torch.float32, device=device)
 
-    output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, weight, False)
+    output = torch.ops.sonar.fp32_router_gemm_dispatch(x, weight, False)
     direct_output = fp32_router_gemm_dispatch_impl(x, weight, False)
 
     torch.testing.assert_close(output, direct_output, atol=ATOL, rtol=RTOL)
@@ -207,7 +207,7 @@ def test_rocm_fp32_router_gemm_dispatch_accepts_noncontiguous_input(
         raise AssertionError("noncontiguous low-M input used the linear fallback")
 
     monkeypatch.setattr(torch.nn.functional, "linear", fail_fallback)
-    output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, weight, False)
+    output = torch.ops.sonar.fp32_router_gemm_dispatch(x, weight, False)
 
     torch.testing.assert_close(output, expected, atol=ATOL, rtol=RTOL)
 
@@ -220,7 +220,7 @@ def test_rocm_fp32_router_gemm_dynamic_compile_dispatch() -> None:
     weight = torch.randn(num_experts, hidden_size, dtype=torch.float32, device=device)
 
     def dispatch(x: torch.Tensor) -> torch.Tensor:
-        return torch.ops.aphrodite.fp32_router_gemm_dispatch(x, weight, False)
+        return torch.ops.sonar.fp32_router_gemm_dispatch(x, weight, False)
 
     compiled_dispatch = torch.compile(dispatch, dynamic=True, fullgraph=True)
     for num_tokens in (4, 16, 33, 5, 32):
@@ -304,12 +304,12 @@ def _make_gate_linear(
     params_dtype=torch.float32,
 ):
     for module in ("layers.linear", "parameter"):
-        monkeypatch.setattr(f"aphrodite.model_executor.{module}.get_tensor_model_parallel_rank", lambda: 0)
+        monkeypatch.setattr(f"sonar.model_executor.{module}.get_tensor_model_parallel_rank", lambda: 0)
         monkeypatch.setattr(
-            f"aphrodite.model_executor.{module}.get_tensor_model_parallel_world_size",
+            f"sonar.model_executor.{module}.get_tensor_model_parallel_world_size",
             lambda: 1,
         )
-    from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+    from sonar.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
     gate = GateLinear(
         input_size=input_size,

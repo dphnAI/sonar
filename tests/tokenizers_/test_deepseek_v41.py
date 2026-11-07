@@ -10,14 +10,14 @@ from typing import cast
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.renderers.chat_utils import BaseMultiModalItemTracker
-from aphrodite.renderers.deepseek_v4 import DeepseekV4Renderer
-from aphrodite.renderers.params import ChatParams
-from aphrodite.renderers.registry import RENDERER_REGISTRY
-from aphrodite.tokenizers.deepseek_v41 import get_deepseek_v41_tokenizer
-from aphrodite.tokenizers.deepseek_v41_encoding import IMAGE_PLACEHOLDER, encode_messages
-from aphrodite.utils.async_utils import make_async
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.renderers.chat_utils import BaseMultiModalItemTracker
+from sonar.renderers.deepseek_v4 import DeepseekV4Renderer
+from sonar.renderers.params import ChatParams
+from sonar.renderers.registry import RENDERER_REGISTRY
+from sonar.tokenizers.deepseek_v41 import get_deepseek_v41_tokenizer
+from sonar.tokenizers.deepseek_v41_encoding import IMAGE_PLACEHOLDER, encode_messages
+from sonar.utils.async_utils import make_async
 from tests.tokenizers_.test_deepseek_v4 import FakeHfTokenizer
 
 FIXTURES = Path(__file__).parent / "fixtures"

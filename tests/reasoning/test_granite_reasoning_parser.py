@@ -3,7 +3,7 @@
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import DeltaMessage, run_reasoning_extraction
 
 parser_name = "granite"

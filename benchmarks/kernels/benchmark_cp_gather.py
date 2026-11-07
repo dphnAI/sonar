@@ -6,9 +6,9 @@ from collections.abc import Callable
 
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import _custom_ops as ops
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 SCENARIOS = {
     "single-60k": [60_000],

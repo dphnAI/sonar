@@ -8,27 +8,27 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
-from aphrodite.model_executor.layers.quantization.online.nf12_moe import Nf12OnlineMoEMethod
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.utils import replace_parameter
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.online.nf12 import Nf12OnlineLinearMethod
+from sonar.model_executor.layers.quantization.online.nf12_moe import Nf12OnlineMoEMethod
+from sonar.model_executor.model_loader.weight_utils import default_weight_loader
+from sonar.model_executor.utils import replace_parameter
+from sonar.platforms import current_platform
 
 
 @pytest.fixture
-def nf12_backend(default_aphrodite_config):
+def nf12_backend(default_sonar_config):
     if not current_platform.is_cuda() or not torch.cuda.is_available():
         pytest.skip("NF12 requires NVIDIA CUDA")
     if not current_platform.has_device_capability(80):
         pytest.skip("NF12 requires SM80 or newer")
     package = pytest.importorskip("nf12")
-    default_aphrodite_config.model_config = SimpleNamespace(dtype=torch.bfloat16, is_moe=False)
+    default_sonar_config.model_config = SimpleNamespace(dtype=torch.bfloat16, is_moe=False)
     return package
 
 
@@ -103,9 +103,9 @@ def test_nf12_unsupported_local_shape_computes_unquantized(linear_layer, rng, n,
 
 
 @pytest.mark.parametrize("fp16_source", ["model", "weight"])
-def test_nf12_rejects_fp16(nf12_backend, default_aphrodite_config, linear_layer, rng, fp16_source):
+def test_nf12_rejects_fp16(nf12_backend, default_sonar_config, linear_layer, rng, fp16_source):
     if fp16_source == "model":
-        default_aphrodite_config.model_config.dtype = torch.float16
+        default_sonar_config.model_config.dtype = torch.float16
     weight = _randn((32, 128), rng)
     if fp16_source == "weight":
         weight = weight.to(torch.float16)

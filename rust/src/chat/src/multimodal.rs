@@ -8,7 +8,7 @@
 //! `llm-multimodal`, expands rendered prompt placeholders after tokenization,
 //! and builds the engine-facing `MmFeatures` payload.
 //!
-//! Raw media stays above `aphrodite-text`; this module lowers it into token IDs and
+//! Raw media stays above `sonar-text`; this module lowers it into token IDs and
 //! opaque tensor payloads before the request is handed to text generation.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -16,10 +16,6 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
-use aphrodite_engine_core_client::protocol::multimodal::{MmFeatureSpec, MmFeatures, MmKwargsItem};
-use aphrodite_text::Prompt;
-use aphrodite_text::tokenizer::{DynTokenizer, Tokenizer};
 use itertools::{Either, izip};
 use llm_multimodal::registry::ModelRegistryError;
 use llm_multimodal::{
@@ -30,6 +26,10 @@ use llm_multimodal::{
     VideoClip, VisionPreProcessor, VisionPreprocessingContext,
 };
 use serde::{Deserialize, Serialize};
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
+use sonar_engine_core_client::protocol::multimodal::{MmFeatureSpec, MmFeatures, MmKwargsItem};
+use sonar_text::Prompt;
+use sonar_text::tokenizer::{DynTokenizer, Tokenizer};
 use thiserror_ext::AsReport as _;
 use tracing::{Instrument as _, warn};
 
@@ -72,7 +72,7 @@ pub struct MultimodalModelInfo {
 /// Modalities absent from the map are unlimited.
 pub type MmLimitPerPrompt = HashMap<MmModality, MmLimitSpec>;
 
-pub use aphrodite_engine_core_client::protocol::multimodal::MmModality;
+pub use sonar_engine_core_client::protocol::multimodal::MmModality;
 
 /// One modality's limit, in either of the two shapes Python accepts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -767,7 +767,7 @@ fn input_audio_data_url(data: &str, format: Option<&str>) -> Result<String> {
 ///
 /// Embedding inputs share their base modality's budget rather than getting one
 /// of their own, matching Python's `modality.replace("_embeds", "")` in
-/// `aphrodite/renderers/chat_utils.py`.
+/// `sonar/renderers/chat_utils.py`.
 fn media_part_limit_modality(part: &MediaContentPart) -> Option<MmModality> {
     match part {
         MediaContentPart::Text { .. } => None,
@@ -869,7 +869,7 @@ impl MultimodalModelInfo {
     }
 
     /// Timed body of [`Self::prepare_multimodal`]; each stage is a `tracing`
-    /// span aggregated per request by the `aphrodite-tracing` timing layer.
+    /// span aggregated per request by the `sonar-tracing` timing layer.
     #[tracing::instrument(
         name = "mm_stage",
         target = MM_STAGE_TARGET,
@@ -1061,7 +1061,7 @@ impl TokenResolver for TokenizerResolver {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::*;
 
@@ -1385,7 +1385,7 @@ mod tests {
 
     #[tokio::test]
     async fn nemotron_preprocessing_builds_engine_features() {
-        use aphrodite_engine_core_client::protocol::multimodal::MmKwargValue;
+        use sonar_engine_core_client::protocol::multimodal::MmKwargValue;
 
         let info = nemotron_omni_info();
         let media = MediaContentPart::ImageUrl {
@@ -1430,7 +1430,7 @@ mod tests {
 
     #[tokio::test]
     async fn nemotron_image_grid_fits_the_vision_token_budget() {
-        use aphrodite_engine_core_client::protocol::multimodal::MmKwargValue;
+        use sonar_engine_core_client::protocol::multimodal::MmKwargValue;
 
         /// Prepare a 640x480 image after 100 text tokens, returning its
         /// placeholder length and patch count.

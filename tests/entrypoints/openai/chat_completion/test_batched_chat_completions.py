@@ -8,22 +8,22 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from aphrodite.entrypoints.generate.base.protocol import RequestResponseMetadata
-from aphrodite.entrypoints.openai.chat_completion.batch_serving import (
+from sonar.entrypoints.generate.base.protocol import RequestResponseMetadata
+from sonar.entrypoints.openai.chat_completion.batch_serving import (
     OpenAIServingChatBatch,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.reasoning import ReasoningParserManager
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.exceptions import SonarValidationError
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.reasoning import ReasoningParserManager
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.v1.engine.async_llm import AsyncLLM
 from tests.entrypoints.openai.chat_completion.test_serving_chat import (
     BASE_MODEL_PATHS,
     CHAT_TEMPLATE,
@@ -439,7 +439,7 @@ async def test_batched_harmony_response_format_uses_structural_tag() -> None:
 @pytest.mark.skip_global_cleanup
 def test_batch_rejects_kv_transfer_prompt_token_ids():
     """One pre-tokenized prompt cannot stand in for every conversation."""
-    with pytest.raises(AphroditeValidationError, match=r"parameter=kv_transfer_params\.prompt_token_ids"):
+    with pytest.raises(SonarValidationError, match=r"parameter=kv_transfer_params\.prompt_token_ids"):
         BatchChatCompletionRequest(
             model="test-model",
             messages=[

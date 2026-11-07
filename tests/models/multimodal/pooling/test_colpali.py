@@ -14,14 +14,14 @@ import pytest
 import torch
 from PIL import Image
 
-from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
-from aphrodite.platforms import current_platform
-from aphrodite.renderers.chat_utils import (
+from sonar.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
+from sonar.platforms import current_platform
+from sonar.renderers.chat_utils import (
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
 )
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 
 MODELS = [
     "vidore/colpali-v1.3-hf",
@@ -73,11 +73,11 @@ def _make_image_mm_param(
 
 
 def _run_token_embed_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
     model: str,
 ) -> None:
     """Verify per-token embedding shape and L2 normalization."""
-    outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
+    outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
 
     assert len(outputs) == 1
     emb = torch.tensor(outputs[0])
@@ -97,27 +97,27 @@ def _run_token_embed_test(
 
 
 def _run_late_interaction_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify MaxSim scoring matches manual computation."""
-    from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+    from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 
-    q_outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
-    d_outputs = aphrodite_model.token_embed([TEXT_DOCUMENTS[0]])
+    q_outputs = sonar_model.token_embed([TEXT_QUERIES[0]])
+    d_outputs = sonar_model.token_embed([TEXT_DOCUMENTS[0]])
 
     q_emb = torch.tensor(q_outputs[0])
     d_emb = torch.tensor(d_outputs[0])
 
     manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-    aphrodite_scores = aphrodite_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
+    sonar_scores = sonar_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
 
-    assert len(aphrodite_scores) == 1
-    assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+    assert len(sonar_scores) == 1
+    assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 def _run_relevance_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Verify that relevant documents score higher than irrelevant ones."""
     query = "What is machine learning?"
@@ -127,7 +127,7 @@ def _run_relevance_test(
         "Deep learning uses neural networks for complex tasks.",
     ]
 
-    scores = aphrodite_model.score(query, documents)
+    scores = sonar_model.score(query, documents)
 
     assert len(scores) == 3
     assert scores[0] > scores[1], "ML doc should score higher than weather doc"
@@ -138,7 +138,7 @@ def _run_relevance_test(
 
 
 def _run_multimodal_text_query_image_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score a text query against image documents via the multimodal path."""
     red_image = _make_base64_image(64, 64, color=(255, 0, 0))
@@ -149,7 +149,7 @@ def _run_multimodal_text_query_image_docs_test(
         _make_image_mm_param(red_image),
         _make_image_mm_param(blue_image),
     ]
-    scores = aphrodite_model.llm.score(query, image_docs)
+    scores = sonar_model.llm.score(query, image_docs)
 
     assert len(scores) == 2
     for s in scores:
@@ -157,7 +157,7 @@ def _run_multimodal_text_query_image_docs_test(
 
 
 def _run_multimodal_mixed_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score a text query against a mix of text and image documents."""
     red_image = _make_base64_image(64, 64, color=(255, 0, 0))
@@ -168,7 +168,7 @@ def _run_multimodal_mixed_docs_test(
         _make_image_mm_param(red_image),
     ]
 
-    scores = aphrodite_model.llm.score(query, documents)
+    scores = sonar_model.llm.score(query, documents)
 
     assert len(scores) == 2
     for s in scores:
@@ -178,7 +178,7 @@ def _run_multimodal_mixed_docs_test(
 
 
 def _run_multimodal_image_query_text_docs_test(
-    aphrodite_model: AphroditeRunner,
+    sonar_model: SonarRunner,
 ) -> None:
     """Score an image query against text documents."""
     red_image = _make_base64_image(64, 64, color=(255, 0, 0))
@@ -189,7 +189,7 @@ def _run_multimodal_image_query_text_docs_test(
         "The weather forecast shows rain tomorrow.",
     ]
 
-    scores = aphrodite_model.llm.score(image_query, documents)
+    scores = sonar_model.llm.score(image_query, documents)
 
     assert len(scores) == 2
     for s in scores:
@@ -199,36 +199,36 @@ def _run_multimodal_image_query_text_docs_test(
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_default_runner(
-    aphrodite_runner,
+    sonar_runner,
     model: str,
     dtype: str,
 ) -> None:
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as aphrodite_model:
-        _run_token_embed_test(aphrodite_model, model)
-        _run_late_interaction_test(aphrodite_model)
-        _run_relevance_test(aphrodite_model)
-        _run_multimodal_mixed_docs_test(aphrodite_model)
-        _run_multimodal_image_query_text_docs_test(aphrodite_model)
+    ) as sonar_model:
+        _run_token_embed_test(sonar_model, model)
+        _run_late_interaction_test(sonar_model)
+        _run_relevance_test(sonar_model)
+        _run_multimodal_mixed_docs_test(sonar_model)
+        _run_multimodal_image_query_text_docs_test(sonar_model)
 
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_v2_multimodal_text_query_image_docs(
-    aphrodite_runner,
+    sonar_runner,
     monkeypatch: pytest.MonkeyPatch,
     model: str,
     dtype: str,
 ) -> None:
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     attention_backend = "FLASH_ATTN" if current_platform.is_cuda() else None
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -237,6 +237,6 @@ def test_colpali_v2_multimodal_text_query_image_docs(
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
         attention_backend=attention_backend,
         kernel_config={"enable_flashinfer_autotune": False},
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        _run_multimodal_text_query_image_docs_test(aphrodite_model)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        _run_multimodal_text_query_image_docs_test(sonar_model)

@@ -10,14 +10,14 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     EmulationMxfp6LinearKernel,
     MxFp6LinearKernel,
     MxFp6LinearLayerConfig,
     init_mxfp6_linear_kernel,
     register_linear_kernel,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
     kMxfp4Static,
     kMxfp6E2M3Dynamic,
@@ -25,7 +25,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E3M2Dynamic,
     kMxfp6E3M2Static,
 )
-from aphrodite.platforms import PlatformEnum
+from sonar.platforms import PlatformEnum
 
 pytestmark = pytest.mark.cpu_test
 
@@ -90,7 +90,7 @@ class OOTMxFp6LinearKernel(MxFp6LinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_init_mxfp6_linear_kernel_dispatches_to_registered_kernel(platform_mock):
     """init_mxfp6_linear_kernel should select a registered kernel that
     reports itself as supported/able to implement the given config, and
@@ -127,7 +127,7 @@ class UnsupportedMxFp6LinearKernel(MxFp6LinearKernel):
         pass
 
 
-@patch("aphrodite.model_executor.kernels.linear.current_platform")
+@patch("sonar.model_executor.kernels.linear.current_platform")
 def test_init_mxfp6_linear_kernel_raises_when_no_kernel_matches(platform_mock):
     platform_mock._enum = PlatformEnum.UNSPECIFIED
     register_linear_kernel(UnsupportedMxFp6LinearKernel, PlatformEnum.UNSPECIFIED, "mxfp6")

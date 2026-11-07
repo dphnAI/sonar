@@ -8,22 +8,22 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.eplb.eplb_communicator import create_eplb_communicator
-from aphrodite.distributed.eplb.eplb_state import EplbLayerState
-from aphrodite.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.eplb.eplb_communicator import create_eplb_communicator
+from sonar.distributed.eplb.eplb_state import EplbLayerState
+from sonar.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
+from sonar.distributed.parallel_state import (
     ensure_model_parallel_initialized,
     get_dp_group,
     get_eplb_group,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.layer import FusedMoEFactory, MoERunner
-from aphrodite.model_executor.layers.quantization.modelopt import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.layer import FusedMoEFactory, MoERunner
+from sonar.model_executor.layers.quantization.modelopt import (
     ModelOptNvFp4Config,
     ModelOptNvFp4FusedMoE,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.moe.utils import make_test_quant_config
 
 from .eplb_utils import distributed_run, set_env_vars_and_device
@@ -113,12 +113,12 @@ def make_fused_moe_layer(
 def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
     set_env_vars_and_device(env)
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.parallel_config.data_parallel_size = world_size
-    aphrodite_config.parallel_config.enable_expert_parallel = True
-    aphrodite_config.kernel_config.moe_backend = test_config.moe_backend
+    sonar_config = SonarConfig()
+    sonar_config.parallel_config.data_parallel_size = world_size
+    sonar_config.parallel_config.enable_expert_parallel = True
+    sonar_config.kernel_config.moe_backend = test_config.moe_backend
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         ensure_model_parallel_initialized(tensor_model_parallel_size=1, pipeline_model_parallel_size=1)
 
         ep_group = get_dp_group().cpu_group
@@ -155,7 +155,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
             {},
             num_tokens=test_config.num_tokens,
             num_tokens_across_dp=torch.tensor([test_config.num_tokens] * world_size, device="cpu", dtype=torch.int),
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         ):
             for lidx, fml in enumerate(fml_layers):
                 out_before_shuffle.append(fml(hidden_states[lidx].clone(), router_logits[lidx].clone()))
@@ -222,7 +222,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
             {},
             num_tokens=test_config.num_tokens,
             num_tokens_across_dp=torch.tensor([test_config.num_tokens] * world_size, device="cpu", dtype=torch.int),
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
         ):
             for lidx, fml in enumerate(fml_layers):
                 out_after_shuffle.append(fml(hidden_states[lidx].clone(), router_logits[lidx].clone()))

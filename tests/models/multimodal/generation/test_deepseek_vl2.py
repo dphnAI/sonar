@@ -4,16 +4,16 @@
 import pytest
 from PIL import Image
 
-from aphrodite import SamplingParams
+from sonar import SamplingParams
 
-from ....conftest import AphroditeRunner
+from ....conftest import SonarRunner
 
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("image_counts", [(1, 3), (3, 1)])
-def test_deepseek_vl2_encoder_cache_cropping(aphrodite_runner: type[AphroditeRunner], image_counts: tuple[int, int]):
+def test_deepseek_vl2_encoder_cache_cropping(sonar_runner: type[SonarRunner], image_counts: tuple[int, int]):
     images = [Image.new("RGB", (768, 768), color) for color in ("red", "green", "blue")]
-    with aphrodite_runner(
+    with sonar_runner(
         "deepseek-ai/deepseek-vl2-tiny",
         hf_overrides={"architectures": ["DeepseekVLV2ForCausalLM"]},
         max_model_len=4096,

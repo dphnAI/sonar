@@ -18,25 +18,25 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.models.deepseek_v4.common.ops import (
+from sonar import _custom_ops as ops
+from sonar.models.deepseek_v4.common.ops import (
     compute_global_topk_indices_and_lens,
     dequantize_and_gather_k_cache,
     quantize_and_insert_k_cache,
 )
-from aphrodite.models.deepseek_v4.common.ops.fused_compress_quant_cache import (
+from sonar.models.deepseek_v4.common.ops.fused_compress_quant_cache import (
     _fused_kv_compress_norm_rope_insert_indexer_attn,
     _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn,
     _launch_two_stage_sparse_attn_compressor,
     compress_norm_rope_store_triton,
 )
-from aphrodite.models.deepseek_v4.compressor import _get_c128_boundary
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.attention.backends.mla.compressor_utils import (
+from sonar.models.deepseek_v4.compressor import _get_c128_boundary
+from sonar.platforms import current_platform
+from sonar.triton_utils import tl, triton
+from sonar.v1.attention.backends.mla.compressor_utils import (
     get_dspark_swa_index_width,
 )
-from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
     cp_gather_indexer_k_quant_cache_triton,
     indexer_k_quant_and_cache_triton,
 )
@@ -73,7 +73,7 @@ def test_compute_global_topk_reuses_output_buffers():
 @pytest.mark.parametrize("use_graph", [False, True])
 def test_dspark_context_kv_matches_query_insert(cache_dtype, kv_mxfp8, num_tokens, use_graph):
     """KV-only insertion must preserve every cache byte, including graph replay."""
-    from aphrodite.models.deepseek_v41.nvidia.dspark import _insert_context_kv
+    from sonar.models.deepseek_v41.nvidia.dspark import _insert_context_kv
 
     torch.manual_seed(42)
     block_size = 256
@@ -176,8 +176,8 @@ def test_dspark_context_kv_matches_query_insert(cache_dtype, kv_mxfp8, num_token
 @pytest.mark.parametrize("kv_mxfp8", [False, True])
 def test_v41_pcp_swa_cache_matches_non_pcp_writer(kv_mxfp8, monkeypatch):
     """PCP SWA writes must preserve the established CUDA cache bytes."""
-    from aphrodite.models.deepseek_v41 import attention as attention_module
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
+    from sonar.models.deepseek_v41 import attention as attention_module
+    from sonar.models.deepseek_v41.attention import DeepseekV4Attention
 
     torch.manual_seed(43)
     block_size = 64
@@ -283,7 +283,7 @@ def test_v41_fused_save_compress_and_insert(compress_ratio: int, use_graph: bool
     a Torch reference with BF16 rounding before RoPE. Replays change both
     inputs and history so stale scratch/cache values cannot satisfy the test.
     """
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         fused_save_compress_norm,
         rope_quant_insert,
     )
@@ -456,7 +456,7 @@ def test_v41_rope_insert_mxfp8_record(compress_ratio: int):
     Byte-exact against the reference quantizer, including the rows and page
     padding the kernel must leave alone.
     """
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         rope_quant_insert,
     )
 
@@ -506,8 +506,8 @@ def test_v41_fp8_gather_is_grid_width_invariant(gather_len, one_pass, monkeypatc
     alone, so otherwise each platform would only ever see one of them.
     """
     monkeypatch.setattr(current_platform, "is_rocm", lambda: one_pass)
-    from aphrodite.models.deepseek_v41.common.ops import quantize_and_insert_k_cache
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    from sonar.models.deepseek_v41.common.ops import quantize_and_insert_k_cache
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         dequantize_and_gather_k_cache_triton,
     )
 
@@ -565,7 +565,7 @@ def test_v41_mxfp8_cache_round_trip():
     the check is that every dim survives within one MXFP8 tile step, and that
     the bytes on the way match the reference quantizer.
     """
-    from aphrodite.models.deepseek_v41.common.ops import (
+    from sonar.models.deepseek_v41.common.ops import (
         dequantize_and_gather_k_cache,
         quantize_and_insert_k_cache,
     )
@@ -642,7 +642,7 @@ def test_v41_rope_insert_nvfp4_record(compress_ratio: int):
     e4m3 range); values are checked as round-to-nearest on the e2m1 grid, whose
     coarsest step is 2 between 4 and 6, so half a step is ``1.0 * scale``.
     """
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         rope_quant_insert,
     )
 
@@ -693,8 +693,8 @@ def test_v41_rope_insert_nvfp4_record(compress_ratio: int):
 @pytest.mark.parametrize("partial", [False, True])
 def test_v41_nvfp4_gather_matches_insert(num_reqs, num_tokens, partial):
     """The NVFP4 gather dequantizes exactly what the insert kernel wrote."""
-    from aphrodite.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         rope_quant_insert,
     )
 
@@ -834,7 +834,7 @@ def test_v41_nvfp4_gather_ragged_batch(block_size, num_reqs, partial):
     ragged batches: empty requests, partial last blocks and a long context, a
     shuffled block table holding -1 in every slot the gather must not read,
     and an offset into a wider strided workspace."""
-    from aphrodite.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
+    from sonar.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
 
     torch.manual_seed(19)
     device = "cuda"
@@ -875,7 +875,7 @@ def test_v41_nvfp4_gather_ragged_batch(block_size, num_reqs, partial):
 def test_v41_nvfp4_gather_decodes_every_code_and_scale():
     """Every (packed byte, e4m3 scale byte) pair: token t holds the bytes
     0..255, and scale byte t for all of its 32 groups."""
-    from aphrodite.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
+    from sonar.models.deepseek_v41.common.ops import dequantize_and_gather_k_cache
 
     device, block_size = "cuda", 64
     codes = torch.arange(256, device=device).to(torch.uint8)
@@ -903,14 +903,14 @@ def test_v41_nvfp4_gather_decodes_every_code_and_scale():
 )
 @pytest.mark.parametrize("record", ["swa_fp8", "compressed_fp8", "compressed_fp4"])
 def test_v41_cache_writers_match_flashmla_decode(record: str):
-    """FlashMLA and Aphrodite's gathers read back the token a V4.1 writer put mid
+    """FlashMLA and Sonar's gathers read back the token a V4.1 writer put mid
     page in a padded block, so all agree on the interleaved record layout."""
-    import aphrodite.v1.attention.ops.flashmla as fm
-    from aphrodite.models.deepseek_v41.common.ops.cache_utils import (
+    import sonar.v1.attention.ops.flashmla as fm
+    from sonar.models.deepseek_v41.common.ops.cache_utils import (
         dequantize_and_gather_k_cache,
         dequantize_and_gather_k_cache_triton,
     )
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         rope_quant_insert,
     )
 
@@ -970,7 +970,7 @@ def test_v41_rope_insert_plain_row(compress_ratio: int, store_fp8: bool):
     Non-boundary positions, negative slots and untouched rows must keep their
     prior contents.
     """
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         rope_quant_insert,
     )
 
@@ -1042,14 +1042,14 @@ def test_v41_compressor_metadata_maps_tokens_to_their_ring():
     dummy batches) must stay at PAD."""
     from unittest.mock import MagicMock
 
-    from aphrodite.models.deepseek_v41.compressor import CompressorMetadataBuilder
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.kv_cache_interface import CircularBufferSpec
+    from sonar.models.deepseek_v41.compressor import CompressorMetadataBuilder
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.kv_cache_interface import CircularBufferSpec
 
     capacity = 8
-    aphrodite_config = MagicMock()
-    aphrodite_config.scheduler_config.max_num_batched_tokens = 16
-    aphrodite_config.parallel_config.prefill_context_parallel_size = 1
+    sonar_config = MagicMock()
+    sonar_config.scheduler_config.max_num_batched_tokens = 16
+    sonar_config.parallel_config.prefill_context_parallel_size = 1
     spec = CircularBufferSpec(
         block_size=capacity,
         num_kv_heads=1,
@@ -1058,7 +1058,7 @@ def test_v41_compressor_metadata_maps_tokens_to_their_ring():
         dtype=torch.float32,
     )
     device = torch.device("cuda")
-    builder = CompressorMetadataBuilder(spec, ["state"], aphrodite_config, device)
+    builder = CompressorMetadataBuilder(spec, ["state"], sonar_config, device)
 
     # Three requests: 3 tokens at positions 13..15 on ring block 5, 2 tokens
     # at positions 7..8 on ring block 2, then 2 tokens on the null block;
@@ -1088,9 +1088,9 @@ def test_v41_compressor_metadata_maps_tokens_to_their_ring():
 
 def test_v41_pcp_compressor_latent_is_gathered_for_cache_writes(monkeypatch):
     """PCP compresses locally and publishes the gathered latent to both caches."""
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41 import attention as attention_module
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Attention
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41 import attention as attention_module
+    from sonar.models.deepseek_v41.attention import DeepseekV4Attention
 
     local_latent = torch.arange(8, dtype=torch.float32).view(2, 4)
     cache_positions = torch.tensor([0, 1, 10, 11])
@@ -1148,12 +1148,12 @@ def test_v41_pcp_compressor_latent_is_gathered_for_cache_writes(monkeypatch):
 @torch.inference_mode()
 def test_v41_attention_joins_cache_writes_before_consumption(use_aux, use_graph):
     """Both reused-event joins must publish this forward's states and cache rows."""
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41.attention import (
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41.attention import (
         DeepseekV4Attention,
         DeepseekV4Indexer,
     )
-    from aphrodite.models.deepseek_v41.compressor import DeepseekCompressor
+    from sonar.models.deepseek_v41.compressor import DeepseekCompressor
 
     torch.manual_seed(43)
     raw = torch.randn(19, 1024, device="cuda")
@@ -1281,13 +1281,13 @@ def test_v41_attention_joins_cache_writes_before_consumption(use_aux, use_graph)
 )
 def test_v41_pcp_ring_links_match_request_positions(pcp_size, lengths, prefilling, starts, monkeypatch):
     """Cross-chunk predecessors and open ring writes must belong to the request."""
-    from aphrodite.models.deepseek_v41 import compressor as compressor_module
-    from aphrodite.models.deepseek_v41.compressor import (
+    from sonar.models.deepseek_v41 import compressor as compressor_module
+    from sonar.models.deepseek_v41.compressor import (
         CompressorMetadata,
         CompressorMetadataBuilder,
     )
-    from aphrodite.v1.worker.gpu import pcp_manager as pcp_manager_module
-    from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+    from sonar.v1.worker.gpu import pcp_manager as pcp_manager_module
+    from sonar.v1.worker.gpu.pcp_manager import PCPManager
 
     monkeypatch.setattr(
         pcp_manager_module,
@@ -1347,7 +1347,7 @@ def test_v41_pcp_ring_links_match_request_positions(pcp_size, lengths, prefillin
         capacity=capacity,
         tail_size=1,
         device=torch.device("cpu"),
-        aphrodite_config=SimpleNamespace(scheduler_config=SimpleNamespace(max_num_seqs=len(lengths))),
+        sonar_config=SimpleNamespace(scheduler_config=SimpleNamespace(max_num_seqs=len(lengths))),
     )
     expected_rows = {block: max(key for key in gathered_keys if key >> 32 == block) for block in blocks}
     expected_slots = [
@@ -1382,8 +1382,8 @@ def test_v41_pcp_ring_links_match_request_positions(pcp_size, lengths, prefillin
 
 
 def _build_pcp_ring_metadata(ranks, all_gather, spec, config, device, monkeypatch):
-    from aphrodite.models.deepseek_v41 import compressor as compressor_module
-    from aphrodite.models.deepseek_v41.compressor import CompressorMetadataBuilder
+    from sonar.models.deepseek_v41 import compressor as compressor_module
+    from sonar.models.deepseek_v41.compressor import CompressorMetadataBuilder
 
     monkeypatch.setattr(
         compressor_module,
@@ -1400,15 +1400,15 @@ def _build_pcp_ring_metadata(ranks, all_gather, spec, config, device, monkeypatc
 @pytest.mark.parametrize("num_speculative_tokens", [0, 5, 9])
 def test_v41_pcp_compressor_preserves_pairs_and_decode_state(pcp_size, num_speculative_tokens, monkeypatch):
     """Cross-rank pairs and rejection rollback preserve the reference latents."""
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41 import compressor as compressor_module
-    from aphrodite.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41 import compressor as compressor_module
+    from sonar.models.deepseek_v41.common.ops.fused_compress_quant_cache import (
         fused_save_compress_norm,
     )
-    from aphrodite.models.deepseek_v41.compressor import DeepseekCompressor
-    from aphrodite.v1.attention.backend import CommonAttentionMetadata
-    from aphrodite.v1.kv_cache_interface import CircularBufferSpec
-    from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+    from sonar.models.deepseek_v41.compressor import DeepseekCompressor
+    from sonar.v1.attention.backend import CommonAttentionMetadata
+    from sonar.v1.kv_cache_interface import CircularBufferSpec
+    from sonar.v1.worker.gpu.pcp_manager import PCPManager
 
     torch.manual_seed(42)
     device = torch.device("cuda")
@@ -1560,7 +1560,7 @@ def _on_gfx950() -> bool:
     if not current_platform.is_rocm():
         return False
     try:
-        from aphrodite.platforms.rocm import _ON_GFX950
+        from sonar.platforms.rocm import _ON_GFX950
 
         return _ON_GFX950
     except Exception:
@@ -1569,7 +1569,7 @@ def _on_gfx950() -> bool:
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-only dispatch")
 def test_cp_gather_despecialized_kernel_is_gfx950_only(monkeypatch):
-    from aphrodite.v1.attention.ops import rocm_aiter_mla_sparse as mod
+    from sonar.v1.attention.ops import rocm_aiter_mla_sparse as mod
 
     class FakeKernel:
         def __init__(self):
@@ -1795,11 +1795,11 @@ def test_get_c128_boundary(starts, query_start_loc, expected):
 def test_c128_skip_is_not_baked_into_cuda_graph(monkeypatch):
     """A graph captured on a batch with no C128 boundary must still launch the
     compressor on replay; only eager steps may skip it."""
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v4 import compressor as compressor_mod
-    from aphrodite.models.deepseek_v4.compressor import DeepseekCompressor
-    from aphrodite.models.deepseek_v4.nvidia.ops import sparse_attn_compress_cutedsl
+    from sonar.config import CUDAGraphMode
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v4 import compressor as compressor_mod
+    from sonar.models.deepseek_v4.compressor import DeepseekCompressor
+    from sonar.models.deepseek_v4.nvidia.ops import sparse_attn_compress_cutedsl
 
     launches = torch.zeros(1, dtype=torch.int32, device="cuda")
     monkeypatch.setattr(compressor_mod, "_SAVE_PARTIAL_STATES_KERNEL", lambda **kw: None)
@@ -2490,7 +2490,7 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
     fused kernel and the C128 split kernel against the PyTorch reference.
     """
     cutedsl = pytest.importorskip("cutlass")  # noqa: F841
-    from aphrodite.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (
+    from sonar.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (
         fused_kv_compress_norm_rope_insert_sparse_attn_cutedsl,
         split_kv_compress_norm_rope_insert_sparse_attn_cutedsl,
     )
@@ -2733,9 +2733,9 @@ def test_v41_rocm_csa2_full_pipeline(monkeypatch):
     chain on aux 0 and the indexer weights projection on aux 1; the join must
     publish both cache writes before _produce_k / forward_q run.
     """
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterMLAAttention
-    from aphrodite.models.deepseek_v41.compressor import DeepseekCompressor
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterMLAAttention
+    from sonar.models.deepseek_v41.compressor import DeepseekCompressor
 
     torch.manual_seed(43)
     num_tokens = 19
@@ -2855,8 +2855,8 @@ def test_v41_rocm_csa2_full_pipeline(monkeypatch):
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm stream coverage")
 def test_v41_rocm_csa2_reindex_pipeline():
     """_forward_csa2_reindex: serial projections, then SWA q path vs q-side."""
-    from aphrodite.forward_context import ForwardContext, override_forward_context
-    from aphrodite.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterMLAAttention
+    from sonar.forward_context import ForwardContext, override_forward_context
+    from sonar.models.deepseek_v41.amd.rocm import DeepseekV41ROCMAiterMLAAttention
 
     torch.manual_seed(45)
     num_tokens = 19
@@ -2933,7 +2933,7 @@ def test_v41_indexer_forward_q(quant_tuple):
     """forward_q runs wq_b then the fused RoPE/quant and unpacks both shapes."""
     from unittest.mock import patch
 
-    from aphrodite.models.deepseek_v41.attention import DeepseekV4Indexer
+    from sonar.models.deepseek_v41.attention import DeepseekV4Indexer
 
     num_tokens, n_head, head_dim = 5, 32, 128
     qr = torch.randn(num_tokens, 1280)
@@ -2960,7 +2960,7 @@ def test_v41_indexer_forward_q(quant_tuple):
         expected = (q_quant, None, weights_out)
 
     with patch(
-        "aphrodite.models.deepseek_v41.attention.fused_indexer_q_rope_quant",
+        "sonar.models.deepseek_v41.attention.fused_indexer_q_rope_quant",
         return_value=fused_return,
     ) as mock_fused:
         result = DeepseekV4Indexer.forward_q(fake, qr, None, indexer_weights, positions, rotary)

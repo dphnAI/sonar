@@ -12,11 +12,11 @@ from safetensors.torch import save_file
 from torch import nn
 from transformers import PreTrainedConfig
 
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.speculative import SpeculativeConfig
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
-from aphrodite.model_executor.models.nemotron_parse3_5 import MBartDecoderNoPos
-from aphrodite.model_executor.models.nemotron_parse3_5_mtp import (
+from sonar.config.load import LoadConfig
+from sonar.config.speculative import SpeculativeConfig
+from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
+from sonar.model_executor.models.nemotron_parse3_5 import MBartDecoderNoPos
+from sonar.model_executor.models.nemotron_parse3_5_mtp import (
     ParseAuxMTPModel,
     _ParseAuxMTPInner,
 )

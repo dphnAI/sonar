@@ -20,4 +20,4 @@ server_args: >-
   --max-num-batched-tokens 16384
   --max-num-seqs 128
 env:
-  APHRODITE_SERVER_DEV_MODE: "1"
+  SONAR_SERVER_DEV_MODE: "1"

@@ -15,8 +15,8 @@ import pytest
 import torch
 
 # this import statement is needed to ensure the ops are registered
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.platforms import current_platform
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.platforms import current_platform
 from tests.kernels.utils import opcheck
 
 aiter_available = importlib.util.find_spec("aiter") is not None
@@ -39,7 +39,7 @@ def test_per_tensor_quant_static_schema():
     out = torch.empty_like(x, dtype=FP8_DTYPE)
     scale = torch.ones(1, dtype=torch.float32, device="cuda")
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_per_tensor_quant,
+        torch.ops.sonar.rocm_aiter_per_tensor_quant,
         (out, x, scale, False),
     )
 
@@ -50,7 +50,7 @@ def test_per_tensor_quant_dynamic_schema():
     out = torch.empty_like(x, dtype=FP8_DTYPE)
     scale = torch.empty(1, dtype=torch.float32, device="cuda")
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_per_tensor_quant,
+        torch.ops.sonar.rocm_aiter_per_tensor_quant,
         (out, x, scale, True),
     )
 
@@ -59,7 +59,7 @@ def test_per_token_quant_dynamic_schema():
     """Dynamic per-token: op computes scale into a freshly allocated buffer."""
     x = _x()
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_per_token_quant,
+        torch.ops.sonar.rocm_aiter_per_token_quant,
         (x, FP8_DTYPE, None),
     )
 
@@ -68,7 +68,7 @@ def test_group_fp8_quant_schema():
     """Dynamic per-token-group quant."""
     x = _x()
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_group_fp8_quant,
+        torch.ops.sonar.rocm_aiter_group_fp8_quant,
         (x, 128),
     )
 
@@ -76,7 +76,7 @@ def test_group_fp8_quant_schema():
 @pytest.mark.parametrize("dynamic", [True, False])
 def test_per_tensor_quant_matches_native(dynamic):
     """Wrapper output matches the native scaled_fp8_quant reference."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     torch.manual_seed(0)
     x = _x()
@@ -123,7 +123,7 @@ def test_per_token_quant_matches_native():
 def test_rms_norm_determinism():
     """AITER RMSNorm produces bitwise-identical results across repeated calls."""
     # Import to ensure ops are registered
-    import aphrodite.kernels.aiter_ops  # noqa: F401
+    import sonar.kernels.aiter_ops  # noqa: F401
 
     torch.manual_seed(0)
     M, N = 32, 512
@@ -131,7 +131,7 @@ def test_rms_norm_determinism():
     weight = torch.ones(N, dtype=torch.bfloat16, device="cuda")
     eps = 1e-5
 
-    reference = torch.ops.aphrodite_aiter.rms_norm(x, weight, eps)
+    reference = torch.ops.sonar_aiter.rms_norm(x, weight, eps)
     for i in range(3):
-        result = torch.ops.aphrodite_aiter.rms_norm(x, weight, eps)
+        result = torch.ops.sonar_aiter.rms_norm(x, weight, eps)
         assert torch.equal(reference, result), f"Run {i + 1} differs from reference"

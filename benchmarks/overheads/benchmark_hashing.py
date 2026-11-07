@@ -3,8 +3,8 @@
 import cProfile
 import pstats
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from sonar import LLM, SamplingParams
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 # A very long prompt, total number of tokens is about 15k.
 LONG_PROMPT = ["You are an expert in large language models, aren't you?"] * 1000

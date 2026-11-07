@@ -156,7 +156,7 @@ pub struct EngineCoreOutput {
 /// Python models this as a plain `@dataclass`, so it is serialized by msgspec
 /// as a map (named fields).
 ///
-/// Original Python definition: `RequestError` in `aphrodite/outputs.py`.
+/// Original Python definition: `RequestError` in `sonar/outputs.py`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestError {
     pub code: String,
@@ -168,7 +168,7 @@ pub struct RequestError {
 impl RequestError {
     /// `code` of an error caused by the request itself, e.g. a structured-output
     /// constraint the engine's backend cannot compile. Python raises
-    /// `AphroditeValidationError` for it.
+    /// `SonarValidationError` for it.
     pub const VALIDATION_ERROR: &str = "validation_error";
 
     /// Whether the request itself is invalid, so frontends report a client
@@ -185,7 +185,7 @@ impl RequestError {
 /// computed by the frontend, not carried on the wire.
 ///
 /// Original Python definition: `RequestSpecDecodeMetrics` in
-/// `aphrodite/v1/metrics/stats.py`.
+/// `sonar/v1/metrics/stats.py`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestSpecDecodeMetrics {
     /// Configured `num_speculative_tokens`.

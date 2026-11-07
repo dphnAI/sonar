@@ -32,9 +32,9 @@ model:
   nightly_required: true
   install:
     pip:
-      note: "Nightly wheels are recommended and verified by this recipe; stable Aphrodite ≥0.30.0 also runs the model."
+      note: "Nightly wheels are recommended and verified by this recipe; stable Sonar ≥0.30.0 also runs the model."
     docker:
-      note: "Use the Aphrodite nightly image."
+      note: "Use the Sonar nightly image."
   architecture: moe
   parameter_count: "176B"
   active_parameters: "6B"
@@ -78,7 +78,7 @@ features:
       - "--max-model-len"
       - "1000000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - text_only
@@ -173,8 +173,8 @@ variants:
           - "--gdn-prefill-backend"
           - "aiter_flydsl"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
           AITER_USE_FLYDSL_MOE_SORTING: "1"
 
 # TP+EP is the default deployment; it benchmarks consistently faster than
@@ -229,7 +229,7 @@ troubleshooting:
       On nodes with slow weight loading, a cold TP2 start of the MXFP4
       checkpoint can take longer than the 600 s default ready timeout. On the
       validation node each TP2 rank took 380–450 s to load its weights. Raise
-      the limit with `APHRODITE_ENGINE_READY_TIMEOUT_S=1800`.
+      the limit with `SONAR_ENGINE_READY_TIMEOUT_S=1800`.
 
 guide: |
   ## Overview
@@ -282,7 +282,7 @@ guide: |
   checkpoint tested by this recipe.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.8-Flash-Next-FP8 \
+  sonar serve Qwen/Qwen3.8-Flash-Next-FP8 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --gpu-memory-utilization 0.90 \
@@ -315,7 +315,7 @@ guide: |
   Use TEP8 with the Triton MoE backend on Hopper:
 
   ```bash
-  aphrodite serve Qwen/Qwen3.8-Flash-Next-FP8 \
+  sonar serve Qwen/Qwen3.8-Flash-Next-FP8 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --moe-backend triton \
@@ -335,13 +335,13 @@ guide: |
   ### Recommended FP8 configuration on 8x H100
 
   H100's 80GB/GPU is not enough headroom for the 51B N-gram/PLE embedding table
-  — it relies on PLE CPU offload, which Aphrodite enables by default. Use TEP8 with
+  — it relies on PLE CPU offload, which Sonar enables by default. Use TEP8 with
   the Triton MoE backend; as on other hardware, expert parallelism is faster
   than plain TP, and plain TP8 is incompatible with the FP8 checkpoint's
   128-wide quantization blocks.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.8-Flash-Next-FP8 \
+  sonar serve Qwen/Qwen3.8-Flash-Next-FP8 \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
     --moe-backend triton \
@@ -365,8 +365,8 @@ guide: |
   checkpoint, which quantizes the routed experts to MXFP4 with AMD Quark. The
   variant sets:
 
-  - `APHRODITE_ROCM_USE_AITER=1`, which turns on the AITER kernels.
-  - `APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`, which fuses the shared
+  - `SONAR_ROCM_USE_AITER=1`, which turns on the AITER kernels.
+  - `SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`, which fuses the shared
     expert into the routed-expert MoE kernel.
   - `AITER_USE_FLYDSL_MOE_SORTING=1`, which sorts MoE tokens with a FlyDSL
     kernel.
@@ -394,10 +394,10 @@ guide: |
 
   ### FP8 configuration on a 4x MI355X GPU
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=0
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=0
 
-  aphrodite serve Qwen/Qwen3.8-Flash-Next-FP8 \
+  sonar serve Qwen/Qwen3.8-Flash-Next-FP8 \
   --tensor-parallel-size 4 \
   --max-model-len auto \
   --gpu-memory-utilization 0.9
@@ -408,7 +408,7 @@ guide: |
 
   ### Full native context
 
-  The checkpoint advertises a native 262,144-token context, which Aphrodite uses when
+  The checkpoint advertises a native 262,144-token context, which Sonar uses when
   `--max-model-len` is omitted. Startup and bounded evaluation were validated with
   this limit configured, but a single 262K-token request was not tested.
 
@@ -427,11 +427,11 @@ guide: |
   implementation supports both ModelRunner V1 and V2. PLE CPU offload is required
   for DEP, and also required for TP/TEP on 80GB-class GPUs (H100) where the
   embedding table alone exceeds available headroom — optional only on GPUs with
-  more VRAM per rank (H200 and above). Aphrodite enables it by default; set it
+  more VRAM per rank (H200 and above). Sonar enables it by default; set it
   explicitly with `--engram-config '{"cpu_offload":true}'`.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.8-Flash-Next-FP8 \
+  sonar serve Qwen/Qwen3.8-Flash-Next-FP8 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --max-model-len 262144 \
@@ -490,9 +490,9 @@ guide: |
 
   ## KV cache offloading
 
-  Offloading is available upstream since Aphrodite v0.30.0 ([vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145)).
+  Offloading is available upstream since Sonar v0.30.0 ([vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145)).
   Validation used [Qwen/Qwen3.8-Flash-Next-FP8](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8) on 4×H200 (TP4),
-  Aphrodite commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
+  Sonar commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
   `--max-model-len 16384`, `--max-num-seqs 16` and `--max-num-batched-tokens 8192`.
   Qwen validation used the FP8 variant with `--limit-mm-per-prompt '{"image":0,"video":0}'`.
   Validation used `TieringOffloadingSpec`: 8 GiB total CPU tier, `blocks_per_chunk: 1`,

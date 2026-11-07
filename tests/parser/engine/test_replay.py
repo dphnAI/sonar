@@ -17,10 +17,10 @@ from typing import NamedTuple
 
 import pytest
 
-from aphrodite.parser.engine import registered_adapters as _adapters_mod
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import ParserState
-from aphrodite.parser.mistral import MistralParser
+from sonar.parser.engine import registered_adapters as _adapters_mod
+from sonar.parser.engine.parser_engine import ParserEngine
+from sonar.parser.engine.parser_engine_config import ParserState
+from sonar.parser.mistral import MistralParser
 from tests.parser.engine.replay_harness import (
     DUMMY_TOOLS,
     MockTokenizer,

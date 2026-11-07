@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import get_samples
+from sonar.benchmarks.datasets import get_samples
 
 
 @pytest.fixture(scope="session")

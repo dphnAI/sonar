@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.models.deepseek_v4.amd.rocm import _wo_a_block_scale_to_e8m0
+from sonar.models.deepseek_v4.amd.rocm import _wo_a_block_scale_to_e8m0
 
 
 def test_wo_a_block_scale_to_e8m0_from_float():

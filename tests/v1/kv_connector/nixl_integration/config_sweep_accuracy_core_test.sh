@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Core PD-disagg sweep sized for a 2-GPU pod so it can run on every PR; the
-# full 4-GPU sweeps (TP2/TP2, FlashInfer, the wider DP-EP and SW sets,
-# cross-layer, Mamba1) run nightly only (see .buildkite/test_areas/
-# disaggregated.yaml). run_accuracy_test.sh spreads engines over the visible
-# GPUs, so with 2 GPUs every TP>1 config co-locates prefill and decode ranks
-# on the same GPUs. Shared configs cap GPU_MEMORY_UTILIZATION at 0.4 so two
+# Core PD-disagg sweep sized for a 2-GPU pod. run_accuracy_test.sh spreads
+# engines over the visible GPUs, so with 2 GPUs every TP>1 config co-locates
+# prefill and decode ranks on the same GPUs. Shared configs cap
+# GPU_MEMORY_UTILIZATION at 0.4 so two
 # engines fit side by side; the TP1/TP1 configs keep one dedicated GPU per
 # side at the utilization the nightly sweep uses for the same model.
 SCRIPT="v1/kv_connector/nixl_integration/run_accuracy_test.sh"
@@ -44,9 +42,9 @@ mode_configs=(
 # selects SW_ATTN.
 arch_configs=(
   "GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=deepseek-ai/deepseek-vl2-tiny"
-  "APHRODITE_SSM_CONV_STATE_LAYOUT=DS GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=ibm-granite/granite-4.0-h-tiny APHRODITE_SERVE_EXTRA_ARGS=--max-model-len,8192,--trust-remote-code"
-  "APHRODITE_SSM_CONV_STATE_LAYOUT=DS GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=Qwen/Qwen3.5-0.8B"
-  "GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=google/gemma-4-E2B-it APHRODITE_SERVE_EXTRA_ARGS=--max-model-len,8192"
+  "SONAR_SSM_CONV_STATE_LAYOUT=DS GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=ibm-granite/granite-4.0-h-tiny SONAR_SERVE_EXTRA_ARGS=--max-model-len,8192,--trust-remote-code"
+  "SONAR_SSM_CONV_STATE_LAYOUT=DS GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=Qwen/Qwen3.5-0.8B"
+  "GPU_MEMORY_UTILIZATION=0.8 MODEL_NAMES=google/gemma-4-E2B-it SONAR_SERVE_EXTRA_ARGS=--max-model-len,8192"
 )
 
 run_tests() {

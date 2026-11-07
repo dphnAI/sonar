@@ -4,15 +4,15 @@ import copy
 
 import pytest
 
-from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT, KVConnectorOutput
-from aphrodite.v1.request import FinishReason, RequestStatus
+from sonar.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT, KVConnectorOutput
+from sonar.v1.request import FinishReason, RequestStatus
 
 from .utils import (
     assert_scheduler_empty,
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -20,11 +20,11 @@ pytestmark = pytest.mark.cpu_test
 
 def test_basic_lifecycle():
     """Test lifecycle of a Remote Decode request."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -110,11 +110,11 @@ def test_basic_lifecycle():
 
 def test_short_prompt_lifecycle():
     """Test lifecycle of a Remote Decode request with short prompt."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # Not enough tokens for full block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_TOKENS = BLOCK_SIZE // 2
     request = create_request(
         request_id=1,
@@ -155,11 +155,11 @@ def test_short_prompt_lifecycle():
 
 def test_prefix_cache_lifecycle():
     """Test that remote decode params still work with a prefix cache hit."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # Prime the KVCache.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 3
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -209,11 +209,11 @@ def test_prefix_cache_lifecycle():
 
 def test_abort_during_kv_transfer():
     """Test aborting request does not release blocks for remote decode."""
-    aphrodite_config = create_aphrodite_config()
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config()
+    scheduler = create_scheduler(sonar_config)
 
     # Prime the KVCache.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 

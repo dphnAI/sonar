@@ -3,10 +3,10 @@
 import pytest
 import torch
 
-from aphrodite.config import ModelConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
-from aphrodite.utils.serial_utils import tensor2base64
+from sonar.config import ModelConfig
+from sonar.exceptions import SonarValidationError
+from sonar.renderers.chat_utils import parse_chat_messages, parse_chat_messages_async
+from sonar.utils.serial_utils import tensor2base64
 
 from .utils import (
     assert_mm_data_inputs,
@@ -161,7 +161,7 @@ def test_parse_chat_messages_video_and_video_embeds_mixed(
     video_url,
 ):
     """Test that mixing raw video and video_embeds is rejected."""
-    with pytest.raises(AphroditeValidationError, match="Mixing raw video"):
+    with pytest.raises(SonarValidationError, match="Mixing raw video"):
         parse_chat_messages(
             [
                 {

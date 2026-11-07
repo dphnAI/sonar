@@ -8,21 +8,21 @@ Run `pytest tests/kernels/moe/test_grouped_topk.py`.
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     CompilationConfig,
+    SonarConfig,
     get_cached_compilation_config,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe.router.grouped_topk_router import (
     GroupedTopk,
     GroupedTopKRouter,
     fused_grouped_topk,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
@@ -30,8 +30,8 @@ from aphrodite.utils.torch_utils import set_random_seed
 @pytest.mark.parametrize("use_fused", [False, True])
 def test_kimi_grouped_topk_masks_padding_when_enabled(skip_padding: bool, use_fused: bool, monkeypatch):
     set_random_seed(0)
-    monkeypatch.setenv("APHRODITE_USE_FUSED_MOE_GROUPED_TOPK", str(int(use_fused)))
-    monkeypatch.setenv("APHRODITE_MOE_SKIP_PADDING", "1")
+    monkeypatch.setenv("SONAR_USE_FUSED_MOE_GROUPED_TOPK", str(int(use_fused)))
+    monkeypatch.setenv("SONAR_MOE_SKIP_PADDING", "1")
     hidden_states = torch.randn((2, 16), device="cuda")
     gating_output = torch.randn((2, 896), device="cuda")
     is_padding = torch.tensor([False, True], device="cuda")
@@ -45,7 +45,7 @@ def test_kimi_grouped_topk_masks_padding_when_enabled(skip_padding: bool, use_fu
     )
 
     baseline_weights, baseline_ids = router._compute_routing(hidden_states, gating_output, torch.int32)
-    with set_forward_context(None, AphroditeConfig(), is_padding=is_padding):
+    with set_forward_context(None, SonarConfig(), is_padding=is_padding):
         topk_weights, topk_ids = router._compute_routing(hidden_states, gating_output, torch.int32)
 
     torch.testing.assert_close(topk_weights[0], baseline_weights[0], rtol=0, atol=0)
@@ -158,7 +158,7 @@ def test_grouped_topk(
     input_dtype: torch.dtype,
     bias_dtype: torch.dtype,
 ):
-    aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["all", "+grouped_topk"]))
+    sonar_config = SonarConfig(compilation_config=CompilationConfig(custom_ops=["all", "+grouped_topk"]))
     get_cached_compilation_config.cache_clear()
 
     set_random_seed(0)
@@ -166,9 +166,9 @@ def test_grouped_topk(
     gating_output = torch.randn((n_token, n_expert), dtype=input_dtype, device="cuda")
     e_score_correction_bias = torch.randn((n_expert,), dtype=bias_dtype, device="cuda")
 
-    with set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
-        m.setenv("APHRODITE_USE_FUSED_MOE_GROUPED_TOPK", "0")
-        m.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
+    with set_current_sonar_config(sonar_config), monkeypatch.context() as m:
+        m.setenv("SONAR_USE_FUSED_MOE_GROUPED_TOPK", "0")
+        m.setattr(envs, "SONAR_BATCH_INVARIANT", True)
         grouped_topk = GroupedTopk(
             topk=topk,
             renormalize=renormalize,

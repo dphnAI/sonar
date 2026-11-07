@@ -5,9 +5,9 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-import aphrodite.v1.attention.ops.triton_prefill_attention as prefill_ops
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.ops.triton_prefill_attention import context_attention_fwd
+import sonar.v1.attention.ops.triton_prefill_attention as prefill_ops
+from sonar.platforms import current_platform
+from sonar.v1.attention.ops.triton_prefill_attention import context_attention_fwd
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -253,7 +253,7 @@ def _capture_tile_config(monkeypatch, *, is_rocm: bool, on_gfx1x: bool, dtype=to
     monkeypatch.setattr(platform, "is_cuda_alike", lambda: True)
     monkeypatch.setattr(platform, "has_device_capability", lambda *a, **k: True)
     if is_rocm:
-        import aphrodite.platforms.rocm as rocm_platform
+        import sonar.platforms.rocm as rocm_platform
 
         monkeypatch.setattr(rocm_platform, "on_gfx1x", lambda: on_gfx1x)
 

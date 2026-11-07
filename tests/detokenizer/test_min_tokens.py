@@ -4,9 +4,9 @@
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite import SamplingParams
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.detokenizer import FastIncrementalDetokenizer
+from sonar import SamplingParams
+from sonar.v1.engine import EngineCoreRequest
+from sonar.v1.engine.detokenizer import FastIncrementalDetokenizer
 
 PROMPT = "Hello, my name is Lee, and I'm a student in the " + "college of engineering"
 

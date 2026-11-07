@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     Locality,
     LookupResult,
     Medium,
@@ -27,19 +27,19 @@ from aphrodite.v1.kv_offload.base import (
     ScheduleEndContext,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.config import (
+from sonar.v1.kv_offload.config import (
     OffloadingCacheConfig,
     OffloadingConfig,
     OffloadingModelConfig,
     OffloadingParallelConfig,
 )
-from aphrodite.v1.kv_offload.tiering.base import JobResult, TransferJob
-from aphrodite.v1.kv_offload.tiering.manager import (
+from sonar.v1.kv_offload.tiering.base import JobResult, TransferJob
+from sonar.v1.kv_offload.tiering.manager import (
     CPUPrimaryTierOffloadingManager,
     TieringOffloadingManager,
 )
-from aphrodite.v1.kv_offload.tiering.obj.config import ObjStoreConfig
-from aphrodite.v1.kv_offload.tiering.obj.manager import ObjectStoreSecondaryTierManager
+from sonar.v1.kv_offload.tiering.obj.config import ObjStoreConfig
+from sonar.v1.kv_offload.tiering.obj.manager import ObjectStoreSecondaryTierManager
 
 # ---------------------------------------------------------------------------
 # Shared stubs
@@ -243,11 +243,11 @@ def _make_tier(
         primary_kv_view = memoryview(tensor.numpy())
     with (
         patch(
-            "aphrodite.v1.kv_offload.tiering.obj.manager.nixl_agent_config",
+            "sonar.v1.kv_offload.tiering.obj.manager.nixl_agent_config",
             side_effect=lambda backends, capture_telemetry=False: SimpleNamespace(capture_telemetry=capture_telemetry),
         ),
         patch(
-            "aphrodite.v1.kv_offload.tiering.obj.manager.nixl_agent",
+            "sonar.v1.kv_offload.tiering.obj.manager.nixl_agent",
             side_effect=MockNixlAgent,
         ),
     ):

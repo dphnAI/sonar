@@ -10,26 +10,26 @@ is unset.
 
 from __future__ import annotations
 
-from aphrodite import SamplingParams
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.distributed.kv_events import (
+from sonar import SamplingParams
+from sonar.config.kv_events import KVEventsConfig
+from sonar.distributed.kv_events import (
     MEDIUM_CPU,
     MEDIUM_STORAGE,
     BlockRemoved,
     BlockStored,
 )
-from aphrodite.lora.request import LoRARequest
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.lora.request import LoRARequest
+from sonar.utils.hashing import sha256
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import (
     get_block_hash,
     get_request_block_hasher,
     make_block_hash_with_group_id,
     maybe_convert_block_hash,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.single_type_kv_cache_manager import register_all_kvcache_specs
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -37,8 +37,8 @@ from aphrodite.v1.kv_cache_interface import (
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import Request
-from aphrodite.v1.simple_kv_offload.manager import (
+from sonar.v1.request import Request
+from sonar.v1.simple_kv_offload.manager import (
     SimpleCPUOffloadScheduler,
     StoreRequestState,
 )
@@ -52,10 +52,10 @@ from tests.v1.simple_kv_offload.test_scheduler import (
     _alloc_and_register,
     _allocate_cp_gpu_blocks,
     _allocate_gpu_blocks,
-    _make_aphrodite_config,
     _make_cp_request,
     _make_kv_cache_config,
     _make_scratch_kv_cache_config,
+    _make_sonar_config,
     make_request,
     make_scheduler_output,
     simulate_store_completion,
@@ -70,7 +70,7 @@ def _make_mixed_kv_cache_config(
 ) -> KVCacheConfig:
     """Build a KVCacheConfig with a FullAttention group plus optional
     SlidingWindow and Mamba groups for per-group metadata tests."""
-    register_all_kvcache_specs(aphrodite_config=None)
+    register_all_kvcache_specs(sonar_config=None)
     groups = []
     tensors = []
 
@@ -152,16 +152,16 @@ def make_events_scheduler(
     """Build a SimpleCPUOffloadScheduler with kv cache events enabled."""
     if kv_cache_config is None:
         kv_cache_config = _make_kv_cache_config(num_gpu_blocks, num_groups)
-    aphrodite_config = _make_aphrodite_config()
+    sonar_config = _make_sonar_config()
     if enable_events:
-        aphrodite_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True)
-    aphrodite_config.parallel_config.decode_context_parallel_size = dcp_world_size
+        sonar_config.kv_events_config = KVEventsConfig(enable_kv_cache_events=True)
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_world_size
 
     virtual_block_size = BLOCK_SIZE * dcp_world_size
     cpu_capacity_bytes = _BYTES_PER_BLOCK * num_cpu_blocks * num_groups
 
     sched = SimpleCPUOffloadScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=virtual_block_size,
@@ -179,7 +179,7 @@ def make_events_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         kv_cache_config=kv_cache_config,
         num_groups=num_groups,
     )

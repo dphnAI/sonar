@@ -92,7 +92,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: Intel Xeon 6 CPUs
-  - Aphrodite CPU >= 0.8.5 for this validated Xeon 6 configuration
+  - Sonar CPU >= 0.8.5 for this validated Xeon 6 configuration
 
   ### pip (Intel Xeon 6 CPUs)
 
@@ -109,14 +109,14 @@ guide: |
   ## Intel Xeon 6
 
   ```bash
-  aphrodite serve Qwen/QwQ-32B \
+  sonar serve Qwen/QwQ-32B \
     --tensor-parallel-size 1 \
     --enable-auto-tool-choice \
     --tool-call-parser hermes \
     --reasoning-parser deepseek_r1
   ```
 
-  Docker (the image entrypoint is `aphrodite serve`):
+  Docker (the image entrypoint is `sonar serve`):
 
   ```bash
   docker run \
@@ -132,7 +132,7 @@ guide: |
   W8A8 INT8:
 
   ```bash
-  aphrodite serve RedHatAI/QwQ-32B-quantized.w8a8
+  sonar serve RedHatAI/QwQ-32B-quantized.w8a8
   ```
 
   The example uses TP=1. Adjust tensor parallelism based on system topology;
@@ -147,7 +147,7 @@ guide: |
   - `--max-num-seqs`: concurrency and scheduler-capacity tuning.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
 
   These settings may still appear in validated hardware-specific overrides. Tune
   them at deployment time based on platform resources, workload shape, and
@@ -157,5 +157,5 @@ guide: |
 
   - [Model card](https://huggingface.co/Qwen/QwQ-32B)
   - [W8A8 variant](https://huggingface.co/RedHatAI/QwQ-32B-quantized.w8a8)
-  - [Aphrodite reasoning outputs](https://docs.vllm.ai/en/latest/features/reasoning_outputs.html)
-  - [Aphrodite tool calling](https://docs.vllm.ai/en/latest/features/tool_calling.html)
+  - [Sonar reasoning outputs](https://docs.vllm.ai/en/latest/features/reasoning_outputs.html)
+  - [Sonar tool calling](https://docs.vllm.ai/en/latest/features/tool_calling.html)

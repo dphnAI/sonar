@@ -27,32 +27,32 @@ MODEL_NAME = "Qwen/Qwen3-0.6B"
 def _server_with_logitproc_entrypoint(
     env_dict: dict[str, str] | None,
     model: str,
-    aphrodite_serve_args: list[str],
+    sonar_serve_args: list[str],
 ) -> None:
-    """Start Aphrodite server with dummy logitproc entrypoint."""
-    from aphrodite.entrypoints.cli import main
+    """Start Sonar server with dummy logitproc entrypoint."""
+    from sonar.entrypoints.cli import main
 
     if env_dict is not None:
         os.environ.update(env_dict)
 
-    # Emulate `aphrodite serve <model> <CLI args>`
-    sys.argv = ["aphrodite", "serve", model] + aphrodite_serve_args
+    # Emulate `sonar serve <model> <CLI args>`
+    sys.argv = ["sonar", "serve", model] + sonar_serve_args
     main.main()
 
 
 def _server_with_logitproc_fqcn(
     env_dict: dict[str, str] | None,
     model: str,
-    aphrodite_serve_args: list[str],
+    sonar_serve_args: list[str],
 ) -> None:
-    """Start Aphrodite server with dummy logitproc specified by FQCN."""
-    from aphrodite.entrypoints.cli import main
+    """Start Sonar server with dummy logitproc specified by FQCN."""
+    from sonar.entrypoints.cli import main
 
     if env_dict is not None:
         os.environ.update(env_dict)
 
-    # Emulate `aphrodite serve <model> <CLI args>`
-    sys.argv = ["aphrodite", "serve", model] + aphrodite_serve_args
+    # Emulate `sonar serve <model> <CLI args>`
+    sys.argv = ["sonar", "serve", model] + sonar_serve_args
     main.main()
 
 
@@ -78,10 +78,10 @@ def server(default_server_args, request, monkeypatch):
     entrypoint
     """
     # Test that logitproc info is passed to workers
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1")
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "1")
     # These tests exercise the V1-interface logits processor; Model Runner V2
     # rejects V1-interface processors at load time by design.
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "0")
 
     if request.param:
         # Launch server, append FQCN argument, inject dummy logitproc module
@@ -122,12 +122,12 @@ api_keyword_args = {
 def test_custom_logitsprocs(server, model_name: str):
     """Test custom logitsprocs when starting OpenAI server from CLI.
 
-    Launch Aphrodite OpenAI-compatible server, configured to load a custom logitproc
+    Launch Sonar OpenAI-compatible server, configured to load a custom logitproc
     that has a well-defined behavior (mask out all tokens except one
     `target_token`).
 
     Pass in requests, 50% of which pass a `target_token` value
-    in through `extra_body["aphrodite_xargs"]`, 50% of which do not.
+    in through `extra_body["sonar_xargs"]`, 50% of which do not.
 
     Validate that requests which activate the custom logitproc, repeat the same
     token
@@ -150,7 +150,7 @@ def test_custom_logitsprocs(server, model_name: str):
                 target_token = random.choice([128, 67])
                 # For requests which activate the dummy logitproc, choose one of
                 # two `target_token` values which are known not to be EOS tokens
-                request_keyword_args["extra_body"] = {"aphrodite_xargs": {DUMMY_LOGITPROC_ARG: target_token}}
+                request_keyword_args["extra_body"] = {"sonar_xargs": {DUMMY_LOGITPROC_ARG: target_token}}
             batch = await client.completions.create(
                 model=model_name,
                 prompt=prompt,
@@ -182,7 +182,7 @@ async def test_invalid_custom_logitsproc_arg(client: openai.AsyncOpenAI, model_n
     # Pass invalid (non-int) target_token value to dummy logits processor
     request_keyword_args: dict[str, Any] = {
         **api_keyword_args,
-        "extra_body": {"aphrodite_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}},
+        "extra_body": {"sonar_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}},
     }
 
     with pytest.raises(openai.OpenAIError) as exc_info:

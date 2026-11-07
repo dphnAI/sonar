@@ -3,9 +3,9 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import StructuredOutputsParams
+from sonar import SamplingParams
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import StructuredOutputsParams
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -76,7 +76,7 @@ def test_validate_trace_replay_rejects_out_of_vocab():
     # The non-negative check passes at construction, but the token id exceeds
     # the vocabulary; verify() must reject it before it reaches the sampler.
     params = SamplingParams(trace_decode_token_ids=[0, 100])
-    with pytest.raises(AphroditeValidationError, match="out-of-vocab"):
+    with pytest.raises(SonarValidationError, match="out-of-vocab"):
         params._validate_trace_replay(_make_model_config(vocab_size=100), speculative_config=None)
 
 

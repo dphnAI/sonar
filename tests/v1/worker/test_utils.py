@@ -11,27 +11,27 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.v1.attention.backends.mla.index_group as index_group_module
-import aphrodite.v1.hisparse.runtime as hisparse_runtime_module
-from aphrodite.config import CacheConfig, CUDAGraphMode
-from aphrodite.config.mamba import MambaBackendEnum, MambaConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse import (
+import sonar.v1.attention.backends.mla.index_group as index_group_module
+import sonar.v1.hisparse.runtime as hisparse_runtime_module
+from sonar.config import CacheConfig, CUDAGraphMode
+from sonar.config.mamba import MambaBackendEnum, MambaConfig
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse import (
     worker as hisparse_worker_module,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
     HiSparseConnectorWorker,
     _flatten_row_mirrors,
     _select_written_row_mirrors,
     _SlotMappingStaging,
 )
-from aphrodite.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.mem_utils import MemorySnapshot
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
-from aphrodite.v1.hisparse.backend import CUDAHiSparseBackend, HiSparseBackend
-from aphrodite.v1.hisparse.runtime import HiSparseCacheHandle
-from aphrodite.v1.hisparse.types import SparseKVPageTransfer, SparseKVRowMirror
-from aphrodite.v1.worker.utils import (
+from sonar.model_executor.layers.mamba.mamba_mixer2 import MambaMixer2
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.utils.mem_utils import MemorySnapshot
+from sonar.v1.core.kv_cache_utils import KVCacheBlockCopy
+from sonar.v1.hisparse.backend import CUDAHiSparseBackend, HiSparseBackend
+from sonar.v1.hisparse.runtime import HiSparseCacheHandle
+from sonar.v1.hisparse.types import SparseKVPageTransfer, SparseKVRowMirror
+from sonar.v1.worker.utils import (
     bind_kv_cache,
     bind_kv_cache_to_layers,
     copy_kv_cache_blocks_inplace,
@@ -400,10 +400,10 @@ def test_shared_host_pool_registers_layer_spans_in_one_backing(monkeypatch):
             SimpleNamespace(host_resident=True, layers=["c"], offset=24, layer_stride=20, size=44),
         ],
     )
-    aphrodite_config = SimpleNamespace()
-    pool = hisparse_runtime_module.HiSparseHostPool(aphrodite_config, config)
+    sonar_config = SimpleNamespace()
+    pool = hisparse_runtime_module.HiSparseHostPool(sonar_config, config)
     backing = pool.allocate(44)
-    allocate.assert_called_once_with(aphrodite_config, [12, 12, 20], 4, 16, use_shared_host_pool=True)
+    allocate.assert_called_once_with(sonar_config, [12, 12, 20], 4, 16, use_shared_host_pool=True)
     assert backing.numel() == 44
     assert backing.data_ptr() == region.base_tensor.data_ptr()
     assert pool.registered is region.base_tensor
@@ -605,7 +605,7 @@ def test_hisparse_tail_restore_preserves_imported_rows(monkeypatch, request, is_
 
     restore_pages = worker._restore_pages
     if device == "cuda":
-        import aphrodite.utils.gpu_sync_debug as gpu_sync_debug
+        import sonar.utils.gpu_sync_debug as gpu_sync_debug
 
         monkeypatch.setattr(gpu_sync_debug, "_SYNC_CHECK_MODE", "error")
         monkeypatch.setattr(gpu_sync_debug, "_sync_check_enabled", False)
@@ -1142,8 +1142,8 @@ def test_hisparse_cache_handles_join_index_groups_during_construction(monkeypatc
     monkeypatch.setattr(CUDAHiSparseBackend, "check_available", lambda self: None)
     monkeypatch.setattr(
         hisparse_runtime_module.ResolvedHiSparseConfig,
-        "from_aphrodite_config",
-        classmethod(lambda cls, aphrodite_config, model_top_k: resolved),
+        "from_sonar_config",
+        classmethod(lambda cls, sonar_config, model_top_k: resolved),
     )
     shared_states: list[object] = []
     streams: list[object] = []
@@ -1212,8 +1212,8 @@ def test_hisparse_worker_shutdown_releases_pinned_state(monkeypatch):
     worker.cache_handles = []
     worker.pinned_host_pools = []
     worker.shared_host_region = object()
-    worker.aphrodite_config = SimpleNamespace(instance_id="shutdown")
-    pool = hisparse_runtime_module.get_hisparse_host_pool(worker.aphrodite_config, None)
+    worker.sonar_config = SimpleNamespace(instance_id="shutdown")
+    pool = hisparse_runtime_module.get_hisparse_host_pool(worker.sonar_config, None)
     released = False
 
     def release_pinned_state(runtimes, pinned_host_pools, shared_host_region):
@@ -1228,9 +1228,9 @@ def test_hisparse_worker_shutdown_releases_pinned_state(monkeypatch):
     worker.shutdown()
 
     assert released
-    new_pool = hisparse_runtime_module.get_hisparse_host_pool(worker.aphrodite_config, None)
+    new_pool = hisparse_runtime_module.get_hisparse_host_pool(worker.sonar_config, None)
     assert new_pool is not pool
-    hisparse_runtime_module.drop_hisparse_host_pool(worker.aphrodite_config)
+    hisparse_runtime_module.drop_hisparse_host_pool(worker.sonar_config)
 
 
 class _TestReplaySSMMixer(MambaMixer2):
@@ -1292,8 +1292,8 @@ def test_bind_kv_cache_shares_replayssm_trackers_by_cache_group(layers_only):
     assert [m._updates_replayssm_trackers for m in mixers] == [False, True, True]
 
 
-def test_bind_kv_cache(default_aphrodite_config):
-    from aphrodite.model_executor.layers.attention import Attention
+def test_bind_kv_cache(default_sonar_config):
+    from sonar.model_executor.layers.attention import Attention
 
     ctx = {
         "layers.0.self_attn": Attention(32, 128, 0.1, prefix="layers.0.self_attn"),
@@ -1320,8 +1320,8 @@ def test_bind_kv_cache(default_aphrodite_config):
     assert runner_kv_caches[3] is kv_cache["layers.3.self_attn"]
 
 
-def test_bind_kv_cache_non_attention(default_aphrodite_config):
-    from aphrodite.model_executor.layers.attention import Attention
+def test_bind_kv_cache_non_attention(default_sonar_config):
+    from sonar.model_executor.layers.attention import Attention
 
     # example from Jamba PP=2
     ctx = {
@@ -1343,8 +1343,8 @@ def test_bind_kv_cache_non_attention(default_aphrodite_config):
     assert runner_kv_caches[1] is kv_cache["model.layers.28.attn"]
 
 
-def test_bind_kv_cache_draft_model(default_aphrodite_config):
-    from aphrodite.model_executor.layers.attention import Attention
+def test_bind_kv_cache_draft_model(default_sonar_config):
+    from sonar.model_executor.layers.attention import Attention
 
     layer_names = [
         "model.layers.0.attn",

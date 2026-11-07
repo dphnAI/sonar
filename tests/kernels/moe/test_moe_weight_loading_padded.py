@@ -14,11 +14,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
+from sonar.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
 )
-from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
-from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
+from sonar.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+from sonar.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
 
@@ -622,9 +622,9 @@ class TestLoadWeightsExpertMapping:
         for call, expected in zip(calls, weight.chunk(2) * 2):
             torch.testing.assert_close(call[3], expected, rtol=0, atol=0)
 
-    def test_non_gated_mapping_uses_stacked_up_proj_without_warning(self, caplog_aphrodite):
+    def test_non_gated_mapping_uses_stacked_up_proj_without_warning(self, caplog_sonar):
         mapping = self._mapping(("up_proj", "down_proj", None), is_gated=False)
-        assert "Unexpected gate/up projection names" not in caplog_aphrodite.text
+        assert "Unexpected gate/up projection names" not in caplog_sonar.text
         assert mapping[:2] == [
             ("experts.w13_weight", "experts.up_proj", 0, "w1"),
             ("experts.w2_weight", "experts.down_proj", 0, "w2"),
@@ -638,9 +638,9 @@ class TestLoadWeightsExpertMapping:
             )
         ]
 
-    def test_gated_mapping_with_unknown_names_warns_and_skips_fused(self, caplog_aphrodite):
+    def test_gated_mapping_with_unknown_names_warns_and_skips_fused(self, caplog_sonar):
         mapping = self._mapping(("fc1", "fc2", "fc3"))
-        assert "Unexpected gate/up projection names: fc1, fc3" in caplog_aphrodite.text
+        assert "Unexpected gate/up projection names: fc1, fc3" in caplog_sonar.text
         assert [name for _, name, _, _ in mapping[:3]] == [
             "experts.0.fc1.",
             "experts.0.fc2.",

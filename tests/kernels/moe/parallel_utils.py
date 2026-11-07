@@ -12,19 +12,19 @@ from torch.distributed import ProcessGroup
 from torch.multiprocessing import spawn  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import ParamSpec
 
-from aphrodite.utils.import_utils import has_deep_ep, has_deep_ep_v2
-from aphrodite.utils.network_utils import get_file_store_init_method
+from sonar.utils.import_utils import has_deep_ep, has_deep_ep_v2
+from sonar.utils.network_utils import get_file_store_init_method
 
 if has_deep_ep():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
         DeepEPHTPrepareAndFinalize,
     )
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
         DeepEPLLPrepareAndFinalize,
     )
 
 if has_deep_ep_v2():
-    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+    from sonar.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
         DeepEPV2PrepareAndFinalize,
     )
 
@@ -231,7 +231,7 @@ def make_deepep_v2_a2a(
 ):
     import deep_ep
 
-    from aphrodite.utils.nccl import query_nccl_gin_type
+    from sonar.utils.nccl import query_nccl_gin_type
 
     probe = torch.zeros(1, device=pgi.device)
     torch.distributed.all_reduce(probe, group=pg)

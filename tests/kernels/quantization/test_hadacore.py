@@ -7,8 +7,8 @@ import pytest
 import torch
 from compressed_tensors.transform import deterministic_hadamard_matrix
 
-from aphrodite import _custom_ops as ops
-from aphrodite.platforms import current_platform
+from sonar import _custom_ops as ops
+from sonar.platforms import current_platform
 
 if current_platform.is_rocm():
     pytest.skip(

@@ -7,10 +7,10 @@ import random
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.rotary_embedding import RotaryEmbedding
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 
@@ -97,26 +97,26 @@ def assert_rope_close_rocm(
 
 
 @pytest.fixture
-def default_aphrodite_config(monkeypatch):
+def default_sonar_config(monkeypatch):
     """Enable the AITER triton rope on ROCm for fp16-consistent numerics.
 
     The fused CUDA kernel runs native fp16 while forward_native upcasts to
     fp32, so on ROCm we route through the AITER triton rope (+rotary_embedding)
     to match. Its env gates are cached at import, hence refresh_env_variables().
     """
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.config import CompilationConfig, SonarConfig, set_current_sonar_config
 
     is_rocm = current_platform.is_rocm()
     if is_rocm:
-        config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["+rotary_embedding"]))
+        config = SonarConfig(compilation_config=CompilationConfig(custom_ops=["+rotary_embedding"]))
     else:
-        config = AphroditeConfig()
+        config = SonarConfig()
     try:
-        with monkeypatch.context() as m, set_current_aphrodite_config(config):
+        with monkeypatch.context() as m, set_current_sonar_config(config):
             if is_rocm:
-                m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-                m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1")
+                m.setenv("SONAR_ROCM_USE_AITER", "1")
+                m.setenv("SONAR_ROCM_USE_AITER_TRITON_ROPE", "1")
                 rocm_aiter_ops.refresh_env_variables()
             yield config
     finally:
@@ -140,7 +140,7 @@ def default_aphrodite_config(monkeypatch):
 )
 @torch.inference_mode()
 def test_concat_and_cache_mla_rope_fused(
-    default_aphrodite_config,
+    default_sonar_config,
     dtype: torch.dtype,
     is_neox_style: bool,
     seq_len: int,

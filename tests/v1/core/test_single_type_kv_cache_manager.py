@@ -6,17 +6,17 @@ import random
 import pytest
 import torch
 
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     get_request_block_hasher,
     init_none_hash,
     make_block_hash_with_group_id,
 )
-from aphrodite.v1.core.single_type_kv_cache_manager import (
+from sonar.v1.core.single_type_kv_cache_manager import (
     ChunkedLocalAttentionManager,
     CircularBufferManager,
     FullAttentionManager,
@@ -24,7 +24,7 @@ from aphrodite.v1.core.single_type_kv_cache_manager import (
     RSWAManager,
     SlidingWindowManager,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     CircularBufferSpec,
     FullAttentionSpec,
@@ -32,7 +32,7 @@ from aphrodite.v1.kv_cache_interface import (
     RSWASpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 pytestmark = pytest.mark.cpu_test
 

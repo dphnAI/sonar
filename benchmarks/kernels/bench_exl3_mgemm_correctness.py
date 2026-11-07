@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 from safetensors import safe_open
 
-from aphrodite import _custom_ops as ops
+from sonar import _custom_ops as ops
 
 
 @dataclass

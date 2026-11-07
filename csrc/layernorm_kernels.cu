@@ -8,7 +8,7 @@
 #include "dispatch_utils.h"
 #include "quantization/vectorization_utils.cuh"
 
-namespace aphrodite {
+namespace sonar {
 
 // TODO(woosuk): Further optimize this kernel.
 template <typename scalar_t, int VEC_SIZE, int NUM_DIMS, bool HasWeight>
@@ -62,7 +62,7 @@ __global__ void rms_norm_kernel(
     float x = static_cast<float>(val);
     variance += x * x;
   };
-  aphrodite::vectorize_read_with_alignment<VEC_SIZE>(
+  sonar::vectorize_read_with_alignment<VEC_SIZE>(
       input_row, hidden_size, threadIdx.x, blockDim.x, vec_op, scalar_op);
 
   using BlockReduce = cub::BlockReduce<float, 1024>;
@@ -216,7 +216,7 @@ fused_add_rms_norm_kernel(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
               torch::stable::Tensor& input,  // [..., hidden_size]
@@ -251,7 +251,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
   int64_t input_shape_d3 = (num_dims >= 4) ? input.size(-3) : 0;
 
   // For large num_tokens, use smaller blocks to increase SM concurrency.
-  const bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
+  const bool batch_invariant_launch = sonar::sonar_is_batch_invariant();
   const int max_block_size =
       batch_invariant_launch ? 1024 : ((num_tokens < 256) ? 1024 : 256);
   dim3 grid(num_tokens);
@@ -259,8 +259,8 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
   const bool has_weight = weight.has_value();
-  APHRODITE_STABLE_DISPATCH_RANK234(num_dims, [&] {
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
+  SONAR_STABLE_DISPATCH_RANK234(num_dims, [&] {
+    SONAR_STABLE_DISPATCH_FLOATING_TYPES(
         input.scalar_type(), "rms_norm_kernel", [&] {
           const scalar_t* weight_ptr =
               has_weight ? weight->const_data_ptr<scalar_t>() : nullptr;
@@ -269,9 +269,9 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
           const int block_size =
               std::min(hidden_size / calculated_vec_size, max_block_size);
           dim3 block(block_size);
-          APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
+          SONAR_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
             if (has_weight) {
-              aphrodite::rms_norm_kernel<scalar_t, vec_size, tensor_rank, true>
+              sonar::rms_norm_kernel<scalar_t, vec_size, tensor_rank, true>
                   <<<grid, block, 0, stream>>>(
                       out.mutable_data_ptr<scalar_t>(),
                       input.const_data_ptr<scalar_t>(), input_stride_d2,
@@ -279,7 +279,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
                       input_shape_d3, weight_ptr, weight_stride, epsilon,
                       num_tokens, hidden_size);
             } else {
-              aphrodite::rms_norm_kernel<scalar_t, vec_size, tensor_rank, false>
+              sonar::rms_norm_kernel<scalar_t, vec_size, tensor_rank, false>
                   <<<grid, block, 0, stream>>>(
                       out.mutable_data_ptr<scalar_t>(),
                       input.const_data_ptr<scalar_t>(), input_stride_d2,
@@ -293,17 +293,17 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
 }
 
 #define LAUNCH_FUSED_ADD_RMS_NORM(width, has_weight)                       \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+  SONAR_STABLE_DISPATCH_FLOATING_TYPES(                                    \
       input.scalar_type(), "fused_add_rms_norm_kernel", [&] {              \
         if (has_weight) {                                                  \
-          aphrodite::fused_add_rms_norm_kernel<scalar_t, width, true>      \
+          sonar::fused_add_rms_norm_kernel<scalar_t, width, true>          \
               <<<grid, block, 0, stream>>>(                                \
                   input.mutable_data_ptr<scalar_t>(), input_stride,        \
                   residual.mutable_data_ptr<scalar_t>(),                   \
                   weight->const_data_ptr<scalar_t>(), epsilon, num_tokens, \
                   hidden_size, residual_stride);                           \
         } else {                                                           \
-          aphrodite::fused_add_rms_norm_kernel<scalar_t, width, false>     \
+          sonar::fused_add_rms_norm_kernel<scalar_t, width, false>         \
               <<<grid, block, 0, stream>>>(                                \
                   input.mutable_data_ptr<scalar_t>(), input_stride,        \
                   residual.mutable_data_ptr<scalar_t>(), nullptr, epsilon, \
@@ -334,7 +334,7 @@ void fused_add_rms_norm(torch::stable::Tensor& input,     // [..., hidden_size]
      not depend on num_tokens, otherwise the same token would use a different
      reduction width (and thus a different floating-point summation order)
      across batches; lock it to 1024 to keep results bit-exact. */
-  const bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
+  const bool batch_invariant_launch = sonar::sonar_is_batch_invariant();
   const int max_block_size =
       batch_invariant_launch ? 1024 : ((num_tokens < 256) ? 1024 : 256);
   dim3 block(std::min(hidden_size, max_block_size));

@@ -25,7 +25,7 @@ namespace swordfish {
 
 namespace {
 
-template <aphrodite::ScalarTypeId type_id, bool W8 = false, int M_TILES = 1>
+template <sonar::ScalarTypeId type_id, bool W8 = false, int M_TILES = 1>
 __global__ void swordfish_decode_moe_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
     const int32_t* __restrict__ B,
@@ -139,17 +139,17 @@ __global__ void swordfish_decode_moe_kernel(
         FragB frag_b0, frag_b1;
         if constexpr (W8) {
           const marlin::I4& src = j < 2 ? bqa : bqb;
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
               src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU8B128.id(), false>(
               src.elems[(2 * j + 1) & 3],
               reinterpret_cast<scalar_t2*>(&frag_b1));
         } else {
           const int b_quant_0 = bqa.elems[j];
           const int b_quant_1 = b_quant_0 >> 8;
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
               b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+          marlin::dequant<scalar_t2, sonar::kU4B8.id(), false>(
               b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
         }
         frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
@@ -294,7 +294,7 @@ __global__ void swordfish_decode_moe_kernel(
   }
 }
 
-template <aphrodite::ScalarTypeId type_id, bool W8>
+template <sonar::ScalarTypeId type_id, bool W8>
 void launch_moe(const void* a, const int32_t* b, const void* s, void* c,
                 const int32_t* sorted_ids, const int32_t* expert_ids,
                 const int32_t* num_post_padded, const float* topk_w, int top_k,
@@ -442,13 +442,13 @@ torch::stable::Tensor swordfish_moe_mm(
 
   if (a_st == torch::headeronly::ScalarType::Half) {
     if (w8) {
-      launch_moe<aphrodite::kFloat16.id(), true>(
+      launch_moe<sonar::kFloat16.id(), true>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
           c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
           mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
           int(size_k), int(size_n), int(group_size), stream);
     } else {
-      launch_moe<aphrodite::kFloat16.id(), false>(
+      launch_moe<sonar::kFloat16.id(), false>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
           c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
           mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
@@ -456,13 +456,13 @@ torch::stable::Tensor swordfish_moe_mm(
     }
   } else {
     if (w8) {
-      launch_moe<aphrodite::kBFloat16.id(), true>(
+      launch_moe<sonar::kBFloat16.id(), true>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
           c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
           mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
           int(size_k), int(size_n), int(group_size), stream);
     } else {
-      launch_moe<aphrodite::kBFloat16.id(), false>(
+      launch_moe<sonar::kBFloat16.id(), false>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
           c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
           mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),

@@ -8,8 +8,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.utils.import_utils import get_triton_kernels_version, has_triton_kernels
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.utils.import_utils import get_triton_kernels_version, has_triton_kernels
 from tests.utils import wait_for_gpu_memory_to_clear
 
 if not has_triton_kernels():
@@ -28,20 +28,20 @@ from triton_kernels.numerics_details.mxfp import downcast_to_mxfp, upcast_from_m
 from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
 from triton_kernels.testing import assert_close
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
-from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (
+from sonar.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
+from sonar.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (
     OAITritonExperts,
     UnfusedOAITritonExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import mx_scale_kwargs
-from aphrodite.platforms import current_platform
-from aphrodite.utils.math_utils import round_up
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import mx_scale_kwargs
+from sonar.platforms import current_platform
+from sonar.utils.math_utils import round_up
+from sonar.utils.torch_utils import set_random_seed
 
 from .utils import make_dummy_moe_config, mxfp4_w_layouts, shuffle_weight
 
@@ -298,7 +298,7 @@ def test_oai_triton_moe(
     topk_weights, topk_ids = torch.topk(router_logits, k=topk, dim=-1, sorted=True)
     topk_weights = torch.nn.functional.softmax(topk_weights, dim=-1)
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         out_ref = torch_moe_impl(x, w1, w2, w1_bias, w2_bias, topk_weights, topk_ids)
 
         out = oai_triton_moe_impl(
@@ -386,7 +386,7 @@ def test_unfused_oai_triton_experts_apply_direct_deepseek_v4_topology(workspace_
     workspace2 = torch.empty(ws2_shape, dtype=dtype, device="cuda")
     output = torch.empty(out_shape, dtype=dtype, device="cuda")
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         out_ref = torch_moe_impl(x, w1, w2, w1_bias, w2_bias, topk_weights, topk_ids)
         experts.apply(
             output=output,

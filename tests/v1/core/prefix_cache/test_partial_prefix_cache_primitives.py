@@ -5,17 +5,17 @@ from collections.abc import Callable
 
 import pytest
 
-import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.distributed.kv_events import BlockRemoved, BlockStored
-from aphrodite.multimodal.inputs import (
+import sonar.v1.core.kv_cache_utils as kv_cache_utils
+from sonar.distributed.kv_events import BlockRemoved, BlockStored
+from sonar.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
     PlaceholderRange,
 )
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.sampling_params import SamplingParams
+from sonar.utils.hashing import sha256
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     BlockHashListWithBlockSize,
     KVCacheBlock,
@@ -23,7 +23,7 @@ from aphrodite.v1.core.kv_cache_utils import (
     hash_block_tokens,
     init_none_hash,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 pytestmark = pytest.mark.cpu_test
 

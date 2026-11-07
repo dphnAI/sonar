@@ -101,9 +101,9 @@ hardware_overrides:
       - "--enable-flashinfer-autotune"
     extra_env:
       PYTHONNOUSERSITE: "1"
-      APHRODITE_USE_DEEP_GEMM: "0"
-      APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
-      APHRODITE_FLOAT32_MATMUL_PRECISION: "high"
+      SONAR_USE_DEEP_GEMM: "0"
+      SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
+      SONAR_FLOAT32_MATMUL_PRECISION: "high"
   amd:
     extra_args:
       - "--tensor-parallel-size"
@@ -111,8 +111,8 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_FA"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -136,12 +136,12 @@ guide: |
   - **NVIDIA:** compute capability >= 7.0; ~220 GB for weights + 240 GB per 1M context tokens
   - **AMD:** MI300X / MI325X / MI350X / MI355X with ROCm 7.0+
 
-  ### Install Aphrodite (NVIDIA)
+  ### Install Sonar (NVIDIA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker (dedicated M2-series image)
@@ -152,9 +152,9 @@ guide: |
     --ipc=host \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     -e PYTHONNOUSERSITE=1 \
-    -e APHRODITE_USE_DEEP_GEMM=0 \
-    -e APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER=0 \
-    -e APHRODITE_FLOAT32_MATMUL_PRECISION=high \
+    -e SONAR_USE_DEEP_GEMM=0 \
+    -e SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER=0 \
+    -e SONAR_FLOAT32_MATMUL_PRECISION=high \
     vllm/vllm-openai:v0.28.0 MiniMaxAI/MiniMax-M2.5 \
         --tensor-parallel-size 4 \
         --max-num-seqs 512 \
@@ -176,10 +176,10 @@ guide: |
 
   ```bash
   PYTHONNOUSERSITE=1 \
-  APHRODITE_USE_DEEP_GEMM=0 \
-  APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER=0 \
-  APHRODITE_FLOAT32_MATMUL_PRECISION=high \
-  aphrodite serve MiniMaxAI/MiniMax-M2.5 \
+  SONAR_USE_DEEP_GEMM=0 \
+  SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER=0 \
+  SONAR_FLOAT32_MATMUL_PRECISION=high \
+  sonar serve MiniMaxAI/MiniMax-M2.5 \
     --tensor-parallel-size 4 \
     --max-num-seqs 512 \
     --max-num-batched-tokens 32768 \
@@ -204,7 +204,7 @@ guide: |
   ### TP4+EP (recommended for H100)
 
   ```bash
-  aphrodite serve MiniMaxAI/MiniMax-M2.5 \
+  sonar serve MiniMaxAI/MiniMax-M2.5 \
     --tensor-parallel-size 4 \
     --enable-expert-parallel \
     --tool-call-parser minimax_m2 \
@@ -216,7 +216,7 @@ guide: |
   ### AMD ROCm — TP2
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve MiniMaxAI/MiniMax-M2.5 \
+  SONAR_ROCM_USE_AITER=1 sonar serve MiniMaxAI/MiniMax-M2.5 \
     --tensor-parallel-size 2 \
     --tool-call-parser minimax_m2 \
     --reasoning-parser minimax_m2 \
@@ -227,8 +227,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model MiniMaxAI/MiniMax-M2.5 \
     --endpoint /v1/completions \
     --dataset-name random \
@@ -241,7 +241,7 @@ guide: |
   ## Troubleshooting
 
   - See [MiniMax-M2](./MiniMax-M2.yaml) for shared troubleshooting notes
-    (latest Aphrodite fusion behavior, nightly vs stable, DeepGEMM, AITER).
+    (latest Sonar fusion behavior, nightly vs stable, DeepGEMM, AITER).
 
   ## References
 

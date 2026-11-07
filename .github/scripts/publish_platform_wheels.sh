@@ -17,9 +17,9 @@ remote_root="b2:${B2_S3_BUCKET}/platform-wheels/${channel}/${backend}/${architec
 public_root="${B2_PUBLIC_BASE_URL%/}/platform-wheels/${channel}/${backend}/${architecture}"
 
 shopt -s nullglob
-wheels=("$wheel_dir"/*.whl)
+wheels=("$wheel_dir"/sonar-*.whl)
 ((${#wheels[@]} > 0)) || {
-  echo "No wheels found in ${wheel_dir}" >&2
+  echo "No Sonar wheels found in ${wheel_dir}" >&2
   exit 1
 }
 
@@ -35,7 +35,11 @@ if [[ -n "${PRUNE_RELEASE_VERSION:-}" ]]; then
     current_wheels["$(basename "$wheel")"]=1
   done
 
-  wheel_prefix="aphrodite_engine-${PRUNE_RELEASE_VERSION}+${backend}-"
+  if [[ "$backend" == cuda ]]; then
+    wheel_prefix="sonar-${PRUNE_RELEASE_VERSION}-"
+  else
+    wheel_prefix="sonar-${PRUNE_RELEASE_VERSION}+${backend}-"
+  fi
   while IFS= read -r wheel_name; do
     [[ "$wheel_name" == "${wheel_prefix}"*.whl ]] || continue
     [[ -n "${current_wheels[$wheel_name]:-}" ]] && continue
@@ -60,21 +64,25 @@ while IFS= read -r wheel_name; do
       "${public_root}/wheels/${wheel_name}" >>"$entries"
   fi
 done < <(
-  "$rclone" lsf "${remote_root}/wheels" --files-only --include '*.whl' |
+  "$rclone" lsf "${remote_root}/wheels" --files-only --include 'sonar-*.whl' |
     sort -r
 )
 
 index_dir="${output_dir}/whl/${channel}/${backend}/${architecture}"
-package_dir="${index_dir}/simple/aphrodite-engine"
+package_dir="${index_dir}/simple/sonar"
 mkdir -p "$package_dir"
+install_command="uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/${channel}/${backend}/${architecture}/simple --index-strategy first-index"
+case "$backend" in
+  cuda) install_command+=" --torch-backend cu130" ;;
+  cpu) install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel ${channel}" ;;
+esac
 
 python3 .github/scripts/generate_nightly_index.py \
   --entry-file "$entries" \
   --commit "${GITHUB_SHA:-release}" \
   --title "Sonar ${channel} ${backend} wheels" \
   --description "Precompiled ${backend} wheels for ${architecture}." \
-  --install-command \
-    "uv pip install aphrodite-engine --extra-index-url https://sonar.dphn.ai/whl/${channel}/${backend}/${architecture}/simple --index-strategy first-index" \
+  --install-command "$install_command" \
   --output "${index_dir}/index.html"
 
 cp "${index_dir}/index.html" "${package_dir}/index.html"

@@ -5,7 +5,7 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 reference = pytest.importorskip("b12x.attention._shared.mla.compressed_reference")
 
@@ -171,7 +171,7 @@ def test_matches_reference_and_is_deterministic(spec):
 
 @pytest.mark.parametrize("ratio, hole", [(0, False), (1, False), (2, True)])
 def test_single_stage_prefill_mixed_rows_and_capacity_reuse(ratio, hole):
-    from aphrodite.models.deepseek_v41.sm120.prefill_attention import prepare_prefill
+    from sonar.models.deepseek_v41.sm120.prefill_attention import prepare_prefill
 
     c = _case(
         seed=19,

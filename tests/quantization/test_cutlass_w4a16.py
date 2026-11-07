@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests for Cutlass W4A16 (Machete) kernel on Hopper.
 
-Verifies that W4A16 quantized models loaded through aphrodite select the
+Verifies that W4A16 quantized models loaded through sonar select the
 MacheteLinearKernel on sm_90 GPUs, that weights are correctly repacked,
 and that inference produces valid output.
 
@@ -12,7 +12,7 @@ Run `pytest tests/quantization/test_cutlass_w4a16.py`.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.has_device_capability(90) or current_platform.is_rocm():
     pytest.skip(
@@ -20,24 +20,24 @@ if not current_platform.has_device_capability(90) or current_platform.is_rocm():
         allow_module_level=True,
     )
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     MPLinearLayerConfig,
     choose_mp_linear_kernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision import (
+from sonar.model_executor.kernels.linear.mixed_precision import (
     MacheteLinearKernel,
 )
-from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
+from sonar.model_executor.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsLinearMethod,
     CompressedTensorsWNA16,
 )
-from aphrodite.scalar_type import scalar_types
+from sonar.scalar_type import scalar_types
 
 
 @pytest.fixture(scope="function", autouse=True)
 def enable_pickle(monkeypatch):
     """`LLM.apply_model` requires pickling a function."""
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
 
 @pytest.mark.parametrize(
@@ -101,7 +101,7 @@ def test_machete_rejects_invalid_config(full_shape, part_shape, weight_type, gro
 
 def test_kernel_selection_with_disabled_machete(monkeypatch):
     """Verify kernel selection falls back when Machete is disabled."""
-    monkeypatch.setattr("aphrodite.envs.APHRODITE_DISABLED_KERNELS", ["MacheteLinearKernel"])
+    monkeypatch.setattr("sonar.envs.SONAR_DISABLED_KERNELS", ["MacheteLinearKernel"])
 
     config = MPLinearLayerConfig(
         full_weight_shape=(4096, 4096),
@@ -121,9 +121,9 @@ def test_kernel_selection_with_disabled_machete(monkeypatch):
         "nm-testing/tinyllama-oneshot-w4a16-channel-v2",
     ],
 )
-def test_w4a16_machete_e2e(aphrodite_runner, model_name):
+def test_w4a16_machete_e2e(sonar_runner, model_name):
     """Load a W4A16 model, verify Machete kernel is used, and generate."""
-    with aphrodite_runner(model_name, enforce_eager=True, gpu_memory_utilization=0.5) as llm:
+    with sonar_runner(model_name, enforce_eager=True, gpu_memory_utilization=0.5) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -146,12 +146,12 @@ def test_w4a16_machete_e2e(aphrodite_runner, model_name):
         assert len(output[0][1]) > 0
 
 
-def test_w4a16_machete_bfloat16_deterministic(aphrodite_runner):
+def test_w4a16_machete_bfloat16_deterministic(sonar_runner):
     """Verify Machete works with bf16 activations and is deterministic."""
     model_name = "nm-testing/tinyllama-oneshot-w4a16-channel-v2"
     prompt = "The capital of France is"
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         enforce_eager=True,
         dtype="bfloat16",

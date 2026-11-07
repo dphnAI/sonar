@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser import ParserManager
-from aphrodite.reasoning.cohere_command_reasoning_parser import (
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser import ParserManager
+from sonar.reasoning.cohere_command_reasoning_parser import (
     CohereCommand3ReasoningParser,
     CohereCommand4ReasoningParser,
 )
@@ -186,5 +186,5 @@ class TestParserSelection:
         """``cohere_melody`` is optional; other parsers must not depend on it."""
         import sys
 
-        monkeypatch.setitem(sys.modules, "aphrodite.parser.cohere_command", None)
+        monkeypatch.setitem(sys.modules, "sonar.parser.cohere_command", None)
         assert ParserManager.get_parser("hermes", "deepseek_r1", True) is not None

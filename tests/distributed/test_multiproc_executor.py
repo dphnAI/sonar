@@ -12,12 +12,12 @@ import socket
 
 import pytest
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.platforms import current_platform
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.executor import multiproc_executor
-from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
+from sonar.config import SonarConfig
+from sonar.engine.arg_utils import EngineArgs
+from sonar.platforms import current_platform
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.executor import multiproc_executor
+from sonar.v1.executor.multiproc_executor import MultiprocExecutor
 from tests.utils import multi_gpu_test
 
 MODEL = "facebook/opt-125m"
@@ -67,7 +67,7 @@ def test_multiproc_executor_counts_all_local_dp_workers(
     executor._finalizer.detach()
 
 
-def create_aphrodite_config(
+def create_sonar_config(
     tensor_parallel_size: int = 1,
     pipeline_parallel_size: int = 1,
     max_model_len: int = 256,
@@ -76,8 +76,8 @@ def create_aphrodite_config(
     nnodes: int = 1,
     node_rank: int = 0,
     master_port: int = 0,
-) -> AphroditeConfig:
-    """Create a AphroditeConfig for testing using EngineArgs."""
+) -> SonarConfig:
+    """Create a SonarConfig for testing using EngineArgs."""
     engine_args = EngineArgs(
         model=MODEL,
         tensor_parallel_size=tensor_parallel_size,
@@ -87,23 +87,23 @@ def create_aphrodite_config(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
     )
-    aphrodite_config = engine_args.create_engine_config()
+    sonar_config = engine_args.create_engine_config()
 
     # Override distributed node settings if needed
     if nnodes > 1 or node_rank > 0:
-        aphrodite_config.parallel_config.nnodes = nnodes
-        aphrodite_config.parallel_config.node_rank = node_rank
-        aphrodite_config.parallel_config.master_port = master_port
+        sonar_config.parallel_config.nnodes = nnodes
+        sonar_config.parallel_config.node_rank = node_rank
+        sonar_config.parallel_config.master_port = master_port
     if nnodes > 1:
-        aphrodite_config.parallel_config.disable_custom_all_reduce = True
+        sonar_config.parallel_config.disable_custom_all_reduce = True
 
-    return aphrodite_config
+    return sonar_config
 
 
 def create_test_scheduler_output(num_requests: int = 1) -> SchedulerOutput:
     """Create a minimal SchedulerOutput for testing."""
     # This is a simplified version - in practice you'd need proper
-    # SchedulerOutput construction based on the actual Aphrodite v1 API
+    # SchedulerOutput construction based on the actual Sonar v1 API
     return SchedulerOutput(
         scheduled_new_reqs=[],
         scheduled_resumed_reqs=[],
@@ -115,13 +115,13 @@ def create_test_scheduler_output(num_requests: int = 1) -> SchedulerOutput:
 
 def test_multiproc_executor_initialization():
     """Test that MultiprocExecutor can be initialized with proper config."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
     # Create executor - this should initialize workers
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     # Verify executor properties
     assert executor.world_size == 1, "World size should be 1 for single GPU"
@@ -136,13 +136,13 @@ def test_multiproc_executor_initialization():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_initialization_tensor_parallel():
     """Test MultiprocExecutor initialization with tensor parallelism."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
     # Create executor
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     # Verify executor properties
     assert executor.world_size == 2, "World size should be 2 for TP=2"
@@ -160,13 +160,13 @@ def test_multiproc_executor_initialization_tensor_parallel():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_collective_rpc():
     """Test collective RPC calls to all workers."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
     # Create executor
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Test check_health RPC - should work without errors
@@ -184,12 +184,12 @@ def test_multiproc_executor_collective_rpc():
 
 def test_multiproc_executor_failure_callback():
     """Test failure callback registration and invocation."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Test callback registration
@@ -219,12 +219,12 @@ def test_multiproc_executor_failure_callback():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_worker_monitor():
     """Test that worker monitor is set up correctly."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Verify all worker processes are alive
@@ -249,12 +249,12 @@ def test_multiproc_executor_worker_monitor():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_get_response_message_queues():
     """Test message queue retrieval for different ranks."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Get all message queues
@@ -275,12 +275,12 @@ def test_multiproc_executor_get_response_message_queues():
 
 def test_multiproc_executor_shutdown_cleanup():
     """Test that shutdown properly cleans up resources."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     # Verify executor is set up
     assert hasattr(executor, "workers"), "Executor should have workers"
@@ -308,12 +308,12 @@ def test_multiproc_executor_shutdown_cleanup():
 @multi_gpu_test(num_gpus=4)
 def test_multiproc_executor_pipeline_parallel():
     """Test MultiprocExecutor with pipeline parallelism."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=2,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Verify executor properties
@@ -328,9 +328,9 @@ def test_multiproc_executor_pipeline_parallel():
 
         # V2 model runner uses one extra batch to overlap async scheduling.
         expected_concurrent_batches = 2 + int(
-            aphrodite_config.scheduler_config.async_scheduling and aphrodite_config.use_v2_model_runner
+            sonar_config.scheduler_config.async_scheduling and sonar_config.use_v2_model_runner
         )
-        assert aphrodite_config.max_concurrent_batches == expected_concurrent_batches, (
+        assert sonar_config.max_concurrent_batches == expected_concurrent_batches, (
             "Max concurrent batches should follow the configured PP/async scheduling policy"
         )
     finally:
@@ -340,12 +340,12 @@ def test_multiproc_executor_pipeline_parallel():
 
 def test_multiproc_executor_properties():
     """Test various executor properties and configurations."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+    executor = MultiprocExecutor(sonar_config=sonar_config)
 
     try:
         # Test supports_pp property
@@ -382,7 +382,7 @@ def test_multiproc_executor_multi_node():
         s.bind(("", 0))
         port = s.getsockname()[1]
     # symm_mem does not work for simulating multi instance in single node
-    os.environ["APHRODITE_ALLREDUCE_USE_SYMM_MEM"] = "0"
+    os.environ["SONAR_ALLREDUCE_USE_SYMM_MEM"] = "0"
 
     # Use the platform-specific device control env var (e.g.
     # CUDA_VISIBLE_DEVICES on CUDA, ZE_AFFINITY_MASK on XPU) so that each
@@ -400,7 +400,7 @@ def test_multiproc_executor_multi_node():
                 os.environ[device_control_env_var] = "2,3"
 
             # Create config for this node
-            aphrodite_config = create_aphrodite_config(
+            sonar_config = create_sonar_config(
                 tensor_parallel_size=4,  # Total TP across all nodes
                 pipeline_parallel_size=1,
                 nnodes=2,  # 2 nodes
@@ -409,7 +409,7 @@ def test_multiproc_executor_multi_node():
             )
 
             # Create executor for this node
-            executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
+            executor = MultiprocExecutor(sonar_config=sonar_config)
 
             # Verify node-specific properties
             assert executor.world_size == 4, f"World size should be 4 on node {node_rank}"

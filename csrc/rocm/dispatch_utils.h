@@ -14,11 +14,11 @@
 // ROCm devices might use either fn or fnuz, so set up dispatch table for both.
 // A host-based check at runtime will create a preferred FP8 type for ROCm
 // such that the correct kernel is dispatched.
-#define APHRODITE_DISPATCH_CASE_FP8_TYPES(...)                     \
+#define SONAR_DISPATCH_CASE_FP8_TYPES(...)                         \
   AT_DISPATCH_FP8_CASE(at::ScalarType::Float8_e4m3fn, __VA_ARGS__) \
   AT_DISPATCH_FP8_CASE(at::ScalarType::Float8_e4m3fnuz, __VA_ARGS__)
 
 // When using this dispatch macro, the type is 'fp8_t' not 'scalar_t'.
 // See AT_DISPATCH_FP8_CASE above.
-#define APHRODITE_DISPATCH_FP8_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, APHRODITE_DISPATCH_CASE_FP8_TYPES(__VA_ARGS__))
+#define SONAR_DISPATCH_FP8_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, SONAR_DISPATCH_CASE_FP8_TYPES(__VA_ARGS__))

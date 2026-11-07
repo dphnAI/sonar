@@ -71,7 +71,7 @@ default_strategy: single_node_tep
 hardware_overrides:
   amd:
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 guide: |
   ## Overview
@@ -84,7 +84,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** nightly build (`vllm/vllm-openai-rocm:nightly` on AMD)
+  - **Sonar:** nightly build (`vllm/vllm-openai-rocm:nightly` on AMD)
   - **Deployment:** a single node with 8 GPUs, using TP8 + EP8
   - **Precision:** serialized block FP8 weights with BF16 compute
   - **Context length:** 262,144 tokens
@@ -94,7 +94,7 @@ guide: |
   ## Launching the Server
 
   ```bash
-  aphrodite serve inclusionAI/Ling-3.1-flash \
+  sonar serve inclusionAI/Ling-3.1-flash \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
@@ -113,7 +113,7 @@ guide: |
   enable AITER and launch using the command:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve inclusionAI/Ling-3.1-flash \
+  SONAR_ROCM_USE_AITER=1 sonar serve inclusionAI/Ling-3.1-flash \
     --trust-remote-code \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
@@ -167,4 +167,4 @@ guide: |
   ## References
 
   - [Ling-3.1-flash on Hugging Face](https://huggingface.co/inclusionAI/Ling-3.1-flash)
-  - [Aphrodite nightly installation](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/#install-the-latest-code)
+  - [Sonar nightly installation](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/#install-the-latest-code)

@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.parser.abstract_parser import Parser
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.parser.abstract_parser import Parser
 
 from .utils import MockCohereTokenizer, drive_parser, make_parser, token_deltas
 

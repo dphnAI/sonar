@@ -12,17 +12,17 @@ import pytest
 import regex as re
 import torch
 
-from aphrodite.config.cache import (
+from sonar.config.cache import (
     KV_CACHE_DTYPES,
     CacheConfig,
     get_kv_cache_dtype_handler,
     is_known_kv_cache_dtype,
     register_kv_cache_dtype,
 )
-from aphrodite.utils.torch_utils import (
+from sonar.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     KVQuantMode,
     get_kv_quant_mode,
     is_quantized_kv_cache,
@@ -91,12 +91,12 @@ def test_merged_quantized_helpers():
     assert kv_cache_uses_per_token_head_scales("int4_per_token_head") is True
 
 
-def test_re_register_kv_cache_dtype_warns(caplog_aphrodite):
+def test_re_register_kv_cache_dtype_warns(caplog_sonar):
     """Re-registering an existing dtype warns and overwrites."""
-    with caplog_aphrodite.at_level(logging.WARNING, logger="aphrodite"):
+    with caplog_sonar.at_level(logging.WARNING, logger="sonar"):
         register_kv_cache_dtype("test-c8")(TestC8Handler)
 
-    assert any("The kv-cache-dtype 'test-c8' already exists" in message for message in caplog_aphrodite.messages)
+    assert any("The kv-cache-dtype 'test-c8' already exists" in message for message in caplog_sonar.messages)
 
 
 def test_cache_config_accepts_custom_dtype():
@@ -126,7 +126,7 @@ def test_no_snapshot_of_shared_dtype_registry():
     Snapshots (dict(...), .copy(), list(.keys()), etc.) would silently miss
     dtypes registered later by platform backends.
     """
-    aphrodite_root = Path(__file__).resolve().parents[2] / "aphrodite"
+    sonar_root = Path(__file__).resolve().parents[2] / "sonar"
     patterns = [
         re.compile(r"dict\(\s*STR_DTYPE_TO_TORCH_DTYPE\s*\)"),
         re.compile(r"STR_DTYPE_TO_TORCH_DTYPE\.copy\(\)"),
@@ -137,7 +137,7 @@ def test_no_snapshot_of_shared_dtype_registry():
         re.compile(r"tuple\(\s*KV_CACHE_DTYPES"),
     ]
     offenders: dict[str, list[str]] = {}
-    for path in aphrodite_root.rglob("*.py"):
+    for path in sonar_root.rglob("*.py"):
         text = path.read_text()
         for pattern in patterns:
             if pattern.search(text):

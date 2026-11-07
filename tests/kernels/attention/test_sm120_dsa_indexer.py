@@ -5,11 +5,11 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import (
+from sonar.model_executor.kernels.attention.dsa.sm120_indexer import (
     sm120_fp8_mqa_logits,
     sm120_fp8_paged_mqa_logits,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 PAGE_SIZE = 64
 HEAD_DIM = 128
@@ -159,9 +159,9 @@ def test_sm120_fp8_paged_mqa_logits(next_n: int, storage_offset: int, page_paddi
 @pytest.mark.parametrize("next_n", [1, 2, 4, 6, 8])
 @torch.inference_mode()
 def test_sm120_paged_logits_graph_updates_inputs(backend: str, page_size: int, next_n: int) -> None:
-    from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
-    from aphrodite.model_executor.layers.indexer_topk import RADIX_TOPK_WORKSPACE_SIZE
-    from aphrodite.utils.deep_gemm import fp8_fp4_paged_mqa_logits, get_num_sms, get_paged_mqa_logits_metadata
+    from sonar.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
+    from sonar.model_executor.layers.indexer_topk import RADIX_TOPK_WORKSPACE_SIZE
+    from sonar.utils.deep_gemm import fp8_fp4_paged_mqa_logits, get_num_sms, get_paged_mqa_logits_metadata
 
     if backend == "deep_gemm" and use_sm120_dsa_indexer(page_size):
         pytest.skip(f"installed DeepGEMM lacks native SM120 indexers for {page_size}-row pages")
@@ -250,16 +250,16 @@ def test_ragged_decode_preserves_query_weights_and_causal_bounds(
 ) -> None:
     from types import SimpleNamespace
 
-    import aphrodite.model_executor.layers.sparse_attn_indexer as indexer
-    from aphrodite.config import CUDAGraphMode
-    from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
-    from aphrodite.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
-    from aphrodite.v1.attention.backends.mla.indexer import (
+    import sonar.model_executor.layers.sparse_attn_indexer as indexer
+    from sonar.config import CUDAGraphMode
+    from sonar.model_executor.kernels.attention.dsa.sm120_indexer import use_sm120_dsa_indexer
+    from sonar.utils.deep_gemm import get_num_sms, get_paged_mqa_logits_metadata
+    from sonar.v1.attention.backends.mla.indexer import (
         DeepSeekV32IndexerDecodeMetadata,
         DeepseekV32IndexerMetadata,
         DeepseekV32IndexerMetadataBuilder,
     )
-    from aphrodite.v1.worker import workspace
+    from sonar.v1.worker import workspace
 
     if backend == "deep_gemm" and use_sm120_dsa_indexer(page_size):
         pytest.skip(f"installed DeepGEMM lacks native SM120 indexers for {page_size}-row pages")
@@ -302,7 +302,7 @@ def test_ragged_decode_preserves_query_weights_and_causal_bounds(
     page_bytes[:, : page_size * HEAD_DIM].copy_(keys.view(torch.uint8).reshape(pages, -1))
     page_bytes[:, page_size * HEAD_DIM :].copy_(scales.view(torch.uint8).reshape(pages, -1))
     builder = SimpleNamespace(
-        aphrodite_config=SimpleNamespace(speculative_config=None),
+        sonar_config=SimpleNamespace(speculative_config=None),
         decode_seq_lens_buffer=torch.empty((padded_rows,), dtype=torch.int32, device="cuda"),
         offsets_buffer=torch.arange(3, dtype=torch.int32, device="cuda"),
     )
@@ -386,11 +386,11 @@ def test_ragged_decode_preserves_query_weights_and_causal_bounds(
 
 @pytest.mark.parametrize("next_n", [1, 2, 4, 6, 8])
 def test_sm120_candidate_topk_graph_preserves_pool_and_causal_bounds(monkeypatch, next_n: int) -> None:
-    from aphrodite.model_executor.kernels.attention.dsa.sm120_candidate_topk import (
+    from sonar.model_executor.kernels.attention.dsa.sm120_candidate_topk import (
         reserve_sm120_candidate_topk,
         sm120_fp8_candidate_topk,
     )
-    from aphrodite.v1.worker import workspace
+    from sonar.v1.worker import workspace
 
     torch.manual_seed(31)
     batch, heads, page_size, width = 2, 32, 128, 32769

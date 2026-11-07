@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.v1.worker.workspace import reset_workspace_manager
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.v1.worker.workspace import reset_workspace_manager
 
 NEEDS_CLEAN_ENTRY = frozenset(
     {

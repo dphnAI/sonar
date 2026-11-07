@@ -10,9 +10,9 @@ The kernel must match the eager 3-op reference: two Gemma-style RMSNorms
 import pytest
 import torch
 
-from aphrodite.kernels.triton.fused_pre_fc_norms import fused_pre_fc_norms
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.kernels.triton.fused_pre_fc_norms import fused_pre_fc_norms
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 EPS = 1e-6
 DTYPES = [torch.bfloat16, torch.float16, torch.float32]

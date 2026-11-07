@@ -8,11 +8,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
     UMBPStoreConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockIdentityCodec,
     BlockLoadBatch,
     BlockStoreBatch,
@@ -31,20 +31,20 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     UMBPConnectorWorkerMetadata,
     UMBPNamespace,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
     UMBPRuntimeConfig,
     UMBPRuntimeFactory,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
     UMBPStoreConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
     UMBPStoreConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -52,16 +52,16 @@ from aphrodite.v1.kv_cache_interface import (
     KVQuantMode,
     UniformTypeKVCacheSpecs,
 )
-from aphrodite.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
+from sonar.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 from tests.v1.kv_connector.umbp_test_utils import (
     MemoryRuntime,
-    _aphrodite_config,
     _CancellableWorkerHandle,
     _DelayedLoadWorkerHandle,
     _DelayedStoreWorkerHandle,
     _EmbeddedRuntime,
     _kv_cache_config,
     _SchedulerHandle,
+    _sonar_config,
     _StoreRecordingWorkerHandle,
     _WaitRecordingDelayedLoadHandle,
     _WorkerHandle,
@@ -121,7 +121,7 @@ def _uniform_type_kv_cache_config(
 def test_block_identity_codec_does_not_use_physical_block_id():
     codec = BlockIdentityCodec(UMBPNamespace("namespace"), 2, 3)
 
-    assert codec.key(b"\x01\x02", group_id=4) == ("umbp:aphrodite:v1:namespace:tp2:pcp0:dcp0:pp3:g4:0102")
+    assert codec.key(b"\x01\x02", group_id=4) == ("umbp:sonar:v1:namespace:tp2:pcp0:dcp0:pp3:g4:0102")
     assert codec.key(b"\x01\x02", group_id=4) == codec.key(b"\x01\x02", group_id=4)
 
 
@@ -157,8 +157,8 @@ def test_rank_topology_is_part_of_layout_identity():
 )
 def test_rank_topology_derives_ranks_from_worker_rank(rank, expected):
     # Workers are laid out as [PP, PCP, TP], TP innermost.
-    topology = RankTopology.from_aphrodite_config(
-        _aphrodite_config(
+    topology = RankTopology.from_sonar_config(
+        _sonar_config(
             {},
             rank=rank,
             tensor_parallel_size=2,
@@ -196,10 +196,10 @@ def test_namespace_distinguishes_draft_models():
     config = _kv_cache_config()
 
     def namespace(speculative_config):
-        aphrodite_config = _aphrodite_config({"mode": "embedded"})
+        sonar_config = _sonar_config({"mode": "embedded"})
         if speculative_config is not None:
-            aphrodite_config.speculative_config = speculative_config
-        return UMBPNamespace.from_aphrodite_config(aphrodite_config, config).value
+            sonar_config.speculative_config = speculative_config
+        return UMBPNamespace.from_sonar_config(sonar_config, config).value
 
     def draft(model, revision="main"):
         return SimpleNamespace(
@@ -283,10 +283,10 @@ def test_uniform_type_block_major_round_trip_stays_within_layer_pages():
     ],
 )
 def test_namespace_fingerprints_uniform_type_layer_specs(baseline, variant):
-    aphrodite_config = _aphrodite_config({"mode": "embedded"})
+    sonar_config = _sonar_config({"mode": "embedded"})
 
     def namespace(layer2):
-        return UMBPNamespace.from_aphrodite_config(aphrodite_config, _uniform_type_kv_cache_config(layer2)).value
+        return UMBPNamespace.from_sonar_config(sonar_config, _uniform_type_kv_cache_config(layer2)).value
 
     assert namespace(baseline) == namespace(baseline)
     assert namespace(baseline) != namespace(variant)
@@ -296,13 +296,13 @@ def test_scheduler_uses_worker_namespace_for_uniform_type_groups(monkeypatch):
     """The scheduler sees a flattened group spec; keys must still match."""
     install_memory_runtime(monkeypatch)
     worker_config = _uniform_type_kv_cache_config(block_stride=192)
-    aphrodite_config = _aphrodite_config({"mode": "embedded"})
+    sonar_config = _sonar_config({"mode": "embedded"})
     scheduler = UMBPStoreConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         generate_scheduler_kv_cache_config([worker_config]),
     )
-    worker = UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, worker_config)
+    worker = UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, worker_config)
     try:
         handshake(scheduler, worker)
 
@@ -316,7 +316,7 @@ def test_scheduler_defers_lookup_until_worker_handshake(monkeypatch):
     runtime = _EmbeddedRuntime()
     monkeypatch.setitem(UMBPRuntimeFactory._builders, "embedded", lambda _: runtime)
     scheduler = UMBPStoreConnector(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         KVConnectorRole.SCHEDULER,
         _kv_cache_config(),
     )
@@ -331,18 +331,18 @@ def test_scheduler_rejects_inconsistent_worker_namespaces(monkeypatch, no_report
     install_memory_runtime(monkeypatch)
     parallel = {"tensor_parallel_size": 2, "world_size": 2}
     config = _kv_cache_config()
-    other_model = _aphrodite_config({"mode": "embedded"}, rank=1, **parallel)
+    other_model = _sonar_config({"mode": "embedded"}, rank=1, **parallel)
     other_model.model_config.model = "other-model"
     workers = [
         UMBPStoreConnector(
-            _aphrodite_config({"mode": "embedded"}, rank=0, **parallel),
+            _sonar_config({"mode": "embedded"}, rank=0, **parallel),
             KVConnectorRole.WORKER,
             config,
         ),
         UMBPStoreConnector(other_model, KVConnectorRole.WORKER, config),
     ]
     scheduler = UMBPStoreConnector(
-        _aphrodite_config({"mode": "embedded"}, **parallel),
+        _sonar_config({"mode": "embedded"}, **parallel),
         KVConnectorRole.SCHEDULER,
         config,
     )
@@ -361,10 +361,10 @@ def test_scheduler_rejects_inconsistent_worker_namespaces(monkeypatch, no_report
 def test_scheduler_binds_when_ranks_share_a_report_key(monkeypatch):
     """Without DCP, the engine keys every PCP rank's report by its TP rank."""
     install_memory_runtime(monkeypatch)
-    aphrodite_config = _aphrodite_config({"mode": "embedded"}, prefill_context_parallel_size=2, world_size=2)
+    sonar_config = _sonar_config({"mode": "embedded"}, prefill_context_parallel_size=2, world_size=2)
     config = _kv_cache_config()
-    scheduler = UMBPStoreConnector(aphrodite_config, KVConnectorRole.SCHEDULER, config)
-    worker = UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, config)
+    scheduler = UMBPStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, config)
+    worker = UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, config)
     try:
         scheduler.set_xfer_handshake_metadata({0: worker.get_handshake_metadata()})
 
@@ -555,7 +555,7 @@ def test_worker_metadata_aggregates_store_events():
 
 @pytest.mark.parametrize("mode", ["embedded"])
 def test_runtime_config_accepts_local_modes(mode):
-    config = UMBPRuntimeConfig.from_aphrodite(_aphrodite_config({"mode": mode}))
+    config = UMBPRuntimeConfig.from_sonar(_sonar_config({"mode": mode}))
 
     assert config.mode == mode
 
@@ -571,12 +571,12 @@ def test_runtime_adapter_owns_its_configuration(monkeypatch, mode):
         return runtime
 
     monkeypatch.setitem(UMBPRuntimeFactory._builders, mode, build)
-    config = UMBPRuntimeConfig.from_aphrodite(_aphrodite_config({"mode": mode}))
+    config = UMBPRuntimeConfig.from_sonar(_sonar_config({"mode": mode}))
     with pytest.raises(ValueError, match="adapter_key required"):
         UMBPRuntimeFactory.build(config)
-    config = UMBPRuntimeConfig.from_aphrodite(
-        _aphrodite_config({"mode": mode, "adapter_key": "pool"})
-    ).resolve_for_rank_count(4)
+    config = UMBPRuntimeConfig.from_sonar(_sonar_config({"mode": mode, "adapter_key": "pool"})).resolve_for_rank_count(
+        4
+    )
     assert UMBPRuntimeFactory.build(config) is runtime
 
 
@@ -584,7 +584,7 @@ def test_scheduler_tracks_consecutive_load_plan():
     config = _kv_cache_config()
     handle = _SchedulerHandle([True, False])
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         config,
         handle,
         BlockIdentityCodec(UMBPNamespace("test")),
@@ -593,8 +593,8 @@ def test_scheduler_tracks_consecutive_load_plan():
 
     assert scheduler.get_num_new_matched_tokens(request, 0) == (16, False)
     assert handle.queries[0] == [
-        "umbp:aphrodite:v1:test:tp0:pcp0:dcp0:pp0:g0:61",
-        "umbp:aphrodite:v1:test:tp0:pcp0:dcp0:pp0:g0:62",
+        "umbp:sonar:v1:test:tp0:pcp0:dcp0:pp0:g0:61",
+        "umbp:sonar:v1:test:tp0:pcp0:dcp0:pp0:g0:62",
     ]
 
 
@@ -608,7 +608,7 @@ def test_scheduler_lookup_failure_recomputes_and_allows_retry(failure):
 
     handle = _Handle(failure)
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"load_async": False}),
+        _sonar_config({"load_async": False}),
         _kv_cache_config(),
         handle,
         BlockIdentityCodec(UMBPNamespace("lookup-retry")),
@@ -624,10 +624,10 @@ def test_scheduler_lookup_failure_recomputes_and_allows_retry(failure):
 
 @pytest.mark.parametrize(("use_eagle", "expected"), [(False, 32), (True, 16)])
 def test_scheduler_single_group_lookup_drops_last_block_for_eagle(use_eagle, expected):
-    aphrodite_config = _aphrodite_config({"mode": "embedded", "load_async": False})
-    aphrodite_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: use_eagle)
+    sonar_config = _sonar_config({"mode": "embedded", "load_async": False})
+    sonar_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: use_eagle)
     scheduler = UMBPStoreConnectorScheduler(
-        aphrodite_config,
+        sonar_config,
         _kv_cache_config(),
         _SchedulerHandle([True, True]),
         BlockIdentityCodec(UMBPNamespace("eagle")),
@@ -640,7 +640,7 @@ def test_scheduler_single_group_lookup_drops_last_block_for_eagle(use_eagle, exp
 def test_scheduler_emits_async_load_without_scheduled_model_tokens():
     config = _kv_cache_config()
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": True}),
+        _sonar_config({"mode": "embedded", "load_async": True}),
         config,
         _SchedulerHandle([True]),
         BlockIdentityCodec(UMBPNamespace("async-load")),
@@ -673,16 +673,16 @@ def test_load_batch_metadata_roundtrip_preserves_destinations_and_identity():
 
 
 def test_scheduler_cached_decode_uses_save_watermark_and_new_blocks():
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         {
             "mode": "embedded",
             "load_async": False,
             "save_decode_cache": True,
         }
     )
-    aphrodite_config.kv_events_config = SimpleNamespace(enable_kv_cache_events=True)
+    sonar_config.kv_events_config = SimpleNamespace(enable_kv_cache_events=True)
     scheduler = UMBPStoreConnectorScheduler(
-        aphrodite_config,
+        sonar_config,
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("decode")),
@@ -724,7 +724,7 @@ def test_scheduler_cached_decode_uses_save_watermark_and_new_blocks():
 def test_scheduler_decode_store_skips_unverified_speculative_tokens():
     """Scheduled draft tokens reach past the last hashed block; stop there."""
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {
                 "mode": "embedded",
                 "load_async": False,
@@ -764,7 +764,7 @@ def test_scheduler_decode_store_skips_unverified_speculative_tokens():
 
 def test_scheduler_skips_decode_blocks_without_save_decode_cache():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("no-decode")),
@@ -790,10 +790,10 @@ def test_scheduler_skips_decode_blocks_without_save_decode_cache():
 
 @pytest.mark.parametrize("kv_role", ["kv_both", "kv_consumer"])
 def test_kv_consumer_never_stores(kv_role):
-    aphrodite_config = _aphrodite_config({"mode": "embedded", "load_async": False})
-    aphrodite_config.kv_transfer_config.kv_role = kv_role
+    sonar_config = _sonar_config({"mode": "embedded", "load_async": False})
+    sonar_config.kv_transfer_config.kv_role = kv_role
     scheduler = UMBPStoreConnectorScheduler(
-        aphrodite_config,
+        sonar_config,
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("role")),
@@ -819,7 +819,7 @@ def test_restored_prefix_skips_resident_blocks(resident):
     """A restored block that is still in the pool is not stored again."""
     codec = BlockIdentityCodec(UMBPNamespace("restored-residency"))
     handle = _SchedulerHandle({})
-    scheduler = UMBPStoreConnectorScheduler(_aphrodite_config({"mode": "embedded"}), _kv_cache_config(), handle, codec)
+    scheduler = UMBPStoreConnectorScheduler(_sonar_config({"mode": "embedded"}), _kv_cache_config(), handle, codec)
     request = make_request(
         "req",
         num_tokens=49,
@@ -838,7 +838,7 @@ def test_restored_prefix_skips_resident_blocks(resident):
 
 def test_store_event_owns_refs_until_all_ranks_finish():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {"mode": "embedded"},
             tensor_parallel_size=2,
             world_size=2,
@@ -887,7 +887,7 @@ def test_store_event_owns_refs_until_all_ranks_finish():
 
 def test_store_events_deduplicate_in_flight_shared_prefix_objects():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("event-refs")),
@@ -934,7 +934,7 @@ def test_store_events_deduplicate_in_flight_shared_prefix_objects():
 
 def test_scheduler_resumed_request_replaces_stale_block_table():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {
                 "mode": "embedded",
                 "save_decode_cache": True,
@@ -972,7 +972,7 @@ def test_scheduler_resumed_request_replaces_stale_block_table():
 
 def test_scheduler_stores_from_cores_current_block_table():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("current-table")),
@@ -1004,7 +1004,7 @@ def test_scheduler_stores_from_cores_current_block_table():
 
 def test_eager_store_deduplicates_same_step_shared_prefix_keys():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("same-step-dedup")),
@@ -1023,7 +1023,7 @@ def test_eager_store_deduplicates_same_step_shared_prefix_keys():
 
 def test_scheduler_readmission_after_failed_load_uses_new_blocks():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("readmitted")),
@@ -1298,7 +1298,7 @@ def test_connector_finalizes_each_store_once_when_forward_hook_is_skipped(monkey
     """No-forward steps must not strand scheduler events or resubmit stores."""
     runtime = _EmbeddedRuntime()
     monkeypatch.setitem(UMBPRuntimeFactory._builders, "embedded", lambda config: runtime)
-    connector = UMBPStoreConnector(_aphrodite_config({"mode": "embedded"}), KVConnectorRole.WORKER, _kv_cache_config())
+    connector = UMBPStoreConnector(_sonar_config({"mode": "embedded"}), KVConnectorRole.WORKER, _kv_cache_config())
     for event_id in (7, 8):
         plan = BlockTransferPlan(
             key=f"store-{event_id}",
@@ -1362,7 +1362,7 @@ def test_embedded_runtime_register_store_and_load(monkeypatch):
     """Scheduler-built batches restore stored bytes into different blocks."""
     install_memory_runtime(monkeypatch)
     config = _kv_cache_config()
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         {
             "mode": "embedded",
             "load_async": False,
@@ -1371,9 +1371,9 @@ def test_embedded_runtime_register_store_and_load(monkeypatch):
     )
     source_caches = make_kv_caches(fill=True)
     destination_caches = make_kv_caches()
-    scheduler_connector = UMBPStoreConnector(aphrodite_config, KVConnectorRole.SCHEDULER, config)
-    store_worker = UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, config)
-    load_worker = UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, config)
+    scheduler_connector = UMBPStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, config)
+    store_worker = UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, config)
+    load_worker = UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, config)
     try:
         store_worker.register_kv_caches(source_caches)
         load_worker.register_kv_caches(destination_caches)
@@ -1463,7 +1463,7 @@ def test_embedded_tp_dcp_rank_store_completeness(monkeypatch, tp_size, dcp_size)
         num_tokens=token_count + 1,
         block_hashes=request.block_hashes,
     )
-    scheduler = UMBPStoreConnector(_aphrodite_config(extra, **parallel), KVConnectorRole.SCHEDULER, config)
+    scheduler = UMBPStoreConnector(_sonar_config(extra, **parallel), KVConnectorRole.SCHEDULER, config)
     scheduler.reset_cache()
     scheduler.update_state_after_alloc(
         request,
@@ -1478,7 +1478,7 @@ def test_embedded_tp_dcp_rank_store_completeness(monkeypatch, tp_size, dcp_size)
         for tp_rank in range(tp_size):
             assert scheduler.get_num_new_matched_tokens(consumer, 0) == (0, False)
             worker = UMBPStoreConnector(
-                _aphrodite_config(extra, rank=tp_rank, **parallel),
+                _sonar_config(extra, rank=tp_rank, **parallel),
                 KVConnectorRole.WORKER,
                 config,
             )
@@ -1504,15 +1504,15 @@ def test_embedded_logical_hit_requires_all_tp_dcp_objects(monkeypatch):
         lambda config: runtime,
     )
     config = _kv_cache_config()
-    aphrodite_config = _aphrodite_config(
+    sonar_config = _sonar_config(
         {"mode": "embedded", "load_async": False},
         rank=0,
         tensor_parallel_size=2,
         decode_context_parallel_size=2,
         world_size=2,
     )
-    connector = UMBPStoreConnector(aphrodite_config, KVConnectorRole.SCHEDULER, config)
-    handshake(connector, UMBPStoreConnector(aphrodite_config, KVConnectorRole.WORKER, config))
+    connector = UMBPStoreConnector(sonar_config, KVConnectorRole.SCHEDULER, config)
+    handshake(connector, UMBPStoreConnector(sonar_config, KVConnectorRole.WORKER, config))
     scheduler = connector.connector_scheduler
     assert scheduler is not None
     request = make_request(

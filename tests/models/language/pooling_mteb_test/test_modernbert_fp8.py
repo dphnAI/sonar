@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.models.utils import EmbedModelInfo
 from tests.quantization.utils import is_quant_method_supported
 
@@ -20,7 +20,7 @@ def _fp8_scaled_mm_unsupported() -> bool:
     if not is_quant_method_supported("fp8"):
         return True
     if current_platform.is_rocm():
-        from aphrodite.platforms.rocm import get_cdna_version, on_gfx12x
+        from sonar.platforms.rocm import get_cdna_version, on_gfx12x
 
         return get_cdna_version() <= 2 and not on_gfx12x()
     return False
@@ -39,7 +39,7 @@ MODEL_INFO = EmbedModelInfo(
 
 
 def _assert_modernbert_online_fp8(model) -> None:
-    from aphrodite.model_executor.layers.quantization.online.fp8 import (
+    from sonar.model_executor.layers.quantization.online.fp8 import (
         Fp8PerTensorOnlineLinearMethod,
     )
 
@@ -55,7 +55,7 @@ def _assert_modernbert_online_fp8(model) -> None:
             f"{name} was not quantized with online FP8"
         )
         if current_platform.is_xpu():
-            from aphrodite.model_executor.kernels.linear.scaled_mm.xpu import (
+            from sonar.model_executor.kernels.linear.scaled_mm.xpu import (
                 XPUW8A8FP8LinearKernel,
             )
 
@@ -67,22 +67,22 @@ def _assert_modernbert_online_fp8(model) -> None:
     _fp8_scaled_mm_unsupported(),
     reason="No FP8 ScaledMM kernel is available on this GPU type.",
 )
-def test_modernbert_online_fp8_mteb(hf_runner, aphrodite_runner, monkeypatch) -> None:
-    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+def test_modernbert_online_fp8_mteb(hf_runner, sonar_runner, monkeypatch) -> None:
+    monkeypatch.setenv("SONAR_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    def check_online_fp8(aphrodite_model) -> None:
-        aphrodite_model.apply_model(_assert_modernbert_online_fp8)
+    def check_online_fp8(sonar_model) -> None:
+        sonar_model.apply_model(_assert_modernbert_online_fp8)
 
-    aphrodite_extra_kwargs: dict[str, object] = {"quantization": "fp8_per_tensor"}
+    sonar_extra_kwargs: dict[str, object] = {"quantization": "fp8_per_tensor"}
     if current_platform.is_xpu():
-        aphrodite_extra_kwargs["kernel_config"] = {"linear_backend": "xpu"}
+        sonar_extra_kwargs["kernel_config"] = {"linear_backend": "xpu"}
 
     mteb_test_embed_models(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         MODEL_INFO,
-        aphrodite_extra_kwargs=aphrodite_extra_kwargs,
+        sonar_extra_kwargs=sonar_extra_kwargs,
         # Account for Online FP8 kernel variance across GPU architectures.
         atol=2e-3,
-        aphrodite_model_callback=check_online_fp8,
+        sonar_model_callback=check_online_fp8,
     )

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""`BeamModel.hf_to_aphrodite_mapper` must fuse only the dense projections.
+"""`BeamModel.hf_to_sonar_mapper` must fuse only the dense projections.
 
 Beam's checkpoints carry two `gate_proj` names that are *not* the SwiGLU
 gate -- the per-expert `mlp.experts.N.gate_proj` (owned by
@@ -17,11 +17,11 @@ import pytest
 import torch
 from torch import nn
 
-from aphrodite.models.beam.nvidia import model as beam
-from aphrodite.models.beam.nvidia.model import BeamModel
-from aphrodite.transformers_utils.configs.beam import BeamConfig
+from sonar.models.beam.nvidia import model as beam
+from sonar.models.beam.nvidia.model import BeamModel
+from sonar.transformers_utils.configs.beam import BeamConfig
 
-MAPPER = BeamModel.hf_to_aphrodite_mapper
+MAPPER = BeamModel.hf_to_sonar_mapper
 
 
 def _map(name: str) -> tuple[str, int | str | None]:
@@ -92,7 +92,7 @@ def test_attention_output_gate_is_renamed_not_fused():
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @torch.inference_mode()
-def test_checkpoint_norm_names_match_sublayer_order(default_aphrodite_config, monkeypatch):
+def test_checkpoint_norm_names_match_sublayer_order(default_sonar_config, monkeypatch):
     """Load reference names directly and use each weight on its intended branch."""
 
     class Attention(nn.Module):
@@ -102,7 +102,7 @@ def test_checkpoint_norm_names_match_sublayer_order(default_aphrodite_config, mo
     monkeypatch.setattr(beam, "BeamAttention", lambda *args, **kwargs: Attention())
     monkeypatch.setattr(beam, "BeamMLP", lambda **kwargs: nn.Identity())
     config = BeamConfig(hidden_size=8, num_hidden_layers=1, mlp_layer_types=["dense"])
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         model_config=SimpleNamespace(hf_config=config),
         cache_config=None,
         quant_config=None,
@@ -110,7 +110,7 @@ def test_checkpoint_norm_names_match_sublayer_order(default_aphrodite_config, mo
     model = BeamModel.__new__(BeamModel)
     nn.Module.__init__(model)
     model.config = config
-    layer = beam.BeamDecoderLayer(aphrodite_config, prefix="layers.0")
+    layer = beam.BeamDecoderLayer(sonar_config, prefix="layers.0")
     model.layers = nn.ModuleList([layer])
     model.cuda()
     names = [
@@ -139,14 +139,14 @@ def test_checkpoint_norm_names_match_sublayer_order(default_aphrodite_config, mo
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize("tp_size", [4, 8])
 @torch.inference_mode()
-def test_checkpoint_loads_into_merged_qkv_gate(default_aphrodite_config, monkeypatch, tp_size):
+def test_checkpoint_loads_into_merged_qkv_gate(default_sonar_config, monkeypatch, tp_size):
     """All four checkpoint projections load directly into the allocated TP shard."""
-    from aphrodite.models.beam.nvidia import attention
-    from aphrodite.models.beam.nvidia.projection import packed_projection
+    from sonar.models.beam.nvidia import attention
+    from sonar.models.beam.nvidia.projection import packed_projection
 
     for module in (
-        "aphrodite.model_executor.layers.linear",
-        "aphrodite.model_executor.parameter",
+        "sonar.model_executor.layers.linear",
+        "sonar.model_executor.parameter",
     ):
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_rank", lambda: tp_size - 1)
         monkeypatch.setattr(f"{module}.get_tensor_model_parallel_world_size", lambda: tp_size)
@@ -159,7 +159,7 @@ def test_checkpoint_loads_into_merged_qkv_gate(default_aphrodite_config, monkeyp
     model = BeamModel.__new__(BeamModel)
     nn.Module.__init__(model)
     model.config = config
-    model.hf_to_aphrodite_mapper = model.get_weights_mapper(config, tp_size)
+    model.hf_to_sonar_mapper = model.get_weights_mapper(config, tp_size)
     layer = nn.Module()
     layer.self_attn = attn
     model.layers = nn.ModuleList([layer])

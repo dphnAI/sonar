@@ -65,8 +65,8 @@ SILENT_GROUPS = [
     "tests/parser",
     "tests/plugins/bge_m3_sparse_plugin",
     "tests/plugins/prithvi_io_processor_plugin",
-    "tests/plugins/aphrodite_add_dummy_platform",
-    "tests/plugins/aphrodite_add_dummy_stat_logger",
+    "tests/plugins/sonar_add_dummy_platform",
+    "tests/plugins/sonar_add_dummy_stat_logger",
     "tests/plugins_tests",
     "tests/quantization",
     "tests/reasoning",
@@ -138,7 +138,7 @@ def group_files(changed_files: list[str]) -> dict[str, list[str]]:
                 file_groups[directory].append(changed_file)
                 break
         else:
-            if changed_file.startswith(("aphrodite/", "tests/")):
+            if changed_file.startswith(("sonar/", "tests/")):
                 file_groups[""].append(changed_file)
     return file_groups
 

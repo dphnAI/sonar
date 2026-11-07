@@ -14,24 +14,24 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
-from aphrodite.config import (
+from sonar import _custom_ops as ops
+from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+from sonar.config import (
     CUDAGraphMode,
     HiSparseConfig,
     SpeculativeConfig,
-    set_current_aphrodite_config,
+    set_current_sonar_config,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.hisparse.worker import (
     HiSparseConnectorWorker,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.attention import mla_attention
-from aphrodite.model_executor.layers.attention import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.attention import mla_attention
+from sonar.model_executor.layers.attention import (
     sparse_mla_attention as sparse_mla_module,
 )
-from aphrodite.model_executor.layers.attention.mla_attention import _use_masked_mha
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.model_executor.layers.attention.mla_attention import _use_masked_mha
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     GLOBAL_TOPK_MASK_MAX_BYTES,
     SparseMLACommonImpl,
     SparseMLAPrefillMetadata,
@@ -40,9 +40,9 @@ from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
     _topk_mask_shape,
     _use_dense_mha_prefill,
 )
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability
+from sonar.model_executor.layers.linear import ColumnParallelLinear
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability
 from tests.v1.attention.test_mla_backends import (
     BATCH_SPECS,
     BatchSpec,
@@ -50,8 +50,8 @@ from tests.v1.attention.test_mla_backends import (
     create_and_prepopulate_kv_cache,
 )
 from tests.v1.attention.utils import (
-    create_aphrodite_config,
     create_common_attn_metadata,
+    create_sonar_config,
     create_standard_kv_cache_spec,
 )
 
@@ -64,58 +64,58 @@ if not (current_platform.is_cuda() or current_platform.is_rocm()):
         allow_module_level=True,
     )
 
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.model_executor.layers.attention.mla_attention import (
     _canonicalize_sparse_mla_kv_cache_dtype,
 )
-from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+from sonar.model_executor.layers.attention.sparse_mla_attention import (
     SharedTopkIndicesBuffer,
 )
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import current_stream
-from aphrodite.v1.attention.backend import AttentionBackend
-from aphrodite.v1.attention.backends.mla import index_group as index_group_module
+from sonar.utils.math_utils import cdiv
+from sonar.utils.torch_utils import current_stream
+from sonar.v1.attention.backend import AttentionBackend
+from sonar.v1.attention.backends.mla import index_group as index_group_module
 
 if current_platform.is_cuda():
-    from aphrodite.v1.attention.backends.mla import (
+    from sonar.v1.attention.backends.mla import (
         flashattn_mla_sparse as flashattn_sparse_module,
     )
-    from aphrodite.v1.attention.backends.mla.flashattn_mla_sparse import (
+    from sonar.v1.attention.backends.mla.flashattn_mla_sparse import (
         FlashAttnMLASparseFA4Backend,
         FlashAttnMLASparseFA4Impl,
         FlashAttnMLASparseImpl,
         FlashAttnMLASparseMetadataBuilder,
         _fa4_cute_mla_available,
     )
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse import (
     FlashInferMLASparseImpl,
     FlashInferMLASparseTRTLLMBackend,
 )
-from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
+from sonar.v1.attention.backends.mla.flashinfer_mla_sparse_sm120 import (
     FlashInferMLASparseSM120Impl,
 )
-from aphrodite.v1.attention.backends.mla.flashmla_sparse import (
+from sonar.v1.attention.backends.mla.flashmla_sparse import (
     FlashMLASparseBackend,
     FlashMLASparseImpl,
     FlashMLASparseMetadata,
     FlashMLASparseMetadataBuilder,
     triton_convert_req_index_to_global_index,
 )
-from aphrodite.v1.attention.backends.mla.index_group import (
+from sonar.v1.attention.backends.mla.index_group import (
     HiSparseMLAIndexGroup,
     SparseMLAIndexGroupBuilder,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadataBuilder,
 )
-from aphrodite.v1.attention.backends.mla.prefill import get_mla_prefill_backend
-from aphrodite.v1.attention.backends.utils import (
+from sonar.v1.attention.backends.mla.prefill import get_mla_prefill_backend
+from sonar.v1.attention.backends.utils import (
     split_decodes_and_prefills,
     split_prefill_chunks,
 )
-from aphrodite.v1.attention.ops import flashmla
-from aphrodite.v1.hisparse import runtime as hisparse_runtime
-from aphrodite.v1.hisparse.backend import get_hisparse_backend
-from aphrodite.v1.hisparse.runtime import (
+from sonar.v1.attention.ops import flashmla
+from sonar.v1.hisparse import runtime as hisparse_runtime
+from sonar.v1.hisparse.backend import get_hisparse_backend
+from sonar.v1.hisparse.runtime import (
     HiSparseCacheHandle,
     HiSparseRuntime,
     HiSparseSlotInvalidator,
@@ -124,10 +124,10 @@ from aphrodite.v1.hisparse.runtime import (
     build_hisparse_prefill_staging_plan,
     hisparse_prefill_staging_remap,
 )
-from aphrodite.v1.hisparse.types import SparseKVRowMirror
+from sonar.v1.hisparse.types import SparseKVRowMirror
 
 if current_platform.is_rocm():
-    from aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
         ROCMAiterMLASparseBackend,
     )
 
@@ -186,7 +186,7 @@ DEVICE_TYPE = current_platform.device_type
     ],
 )
 def test_rocm_long_bf16_prefill_avoids_nonpersistent_aiter(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     monkeypatch,
@@ -196,18 +196,18 @@ def test_rocm_long_bf16_prefill_avoids_nonpersistent_aiter(
     """MI300 long BF16 prefills must remain correct without AITER ASM dispatch."""
     if not current_platform.is_rocm():
         pytest.skip("ROCm sparse MLA regression")
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     # Exercise the gfx942 routing decision on other ROCm devices too;
     # the numerical kernel still compiles for the actual device.
-    monkeypatch.setattr("aphrodite.platforms.rocm.on_gfx942", lambda: True)
+    monkeypatch.setattr("sonar.platforms.rocm.on_gfx942", lambda: True)
 
     def unsupported_aiter(*args, **kwargs):
         pytest.fail("Long gfx942 BF16 prefill reached nonpersistent AITER")
 
     monkeypatch.setattr(rocm_aiter_ops, "mla_decode_fwd", unsupported_aiter)
     test_sparse_backend_decode_correctness(
-        default_aphrodite_config=default_aphrodite_config,
+        default_sonar_config=default_sonar_config,
         dist_init=dist_init,
         backend_cls=ROCMAiterMLASparseBackend,
         batch_name=batch_name,
@@ -290,7 +290,7 @@ def test_nope_flashinfer_sparse_mla_uses_model_scale(monkeypatch):
     [(128, 64, 128), (256, 0, 256)],
 )
 def test_flashinfer_sparse_mla_attends_tokens_past_grid_limit(
-    default_aphrodite_config, dist_init, qk_nope_head_dim, qk_rope_head_dim, v_head_dim
+    default_sonar_config, dist_init, qk_nope_head_dim, qk_rope_head_dim, v_head_dim
 ):
     """trtllm-gen maps each token to gridDim.z (limit 65535); a larger step,
     e.g. a 64K-token prefill, must still attend every token."""
@@ -577,7 +577,7 @@ def _quantize_dequantize_nvfp4_ds_mla(
     ],
 )
 def test_sparse_backend_decode_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     backend_cls,
     batch_name,
@@ -607,7 +607,7 @@ def test_sparse_backend_decode_correctness(
         and tensor_parallel_size == 4
     ):
         monkeypatch.setattr(
-            "aphrodite.v1.attention.backends.mla.flashmla_sparse.split_prefill_chunks",
+            "sonar.v1.attention.backends.mla.flashmla_sparse.split_prefill_chunks",
             lambda rows, capacity: [(i, i + 1) for i in range(len(rows))],
         )
     if kv_cache_dtype not in backend_cls.supported_kv_cache_dtypes:
@@ -655,7 +655,7 @@ def test_sparse_backend_decode_correctness(
 
     # Note: We use TP=1 to avoid multi-GPU requirements in CI.
     # The test simulates head partitioning via mocked methods below.
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=max_seqlen,
@@ -671,8 +671,8 @@ def test_sparse_backend_decode_correctness(
     # output intentionally differs from that sparse reference. Keep this test
     # on the sparse-MQA path; dense-prefill routing has dedicated ROCm tests.
     if current_platform.is_rocm():
-        aphrodite_config.attention_config.sparse_mla_force_mqa = True
-    model_config = aphrodite_config.model_config
+        sonar_config.attention_config.sparse_mla_force_mqa = True
+    model_config = sonar_config.model_config
     model_config.hf_text_config = SimpleNamespace(
         index_topk=topk_tokens,
         q_lora_rank=None,
@@ -697,7 +697,7 @@ def test_sparse_backend_decode_correctness(
     monkeypatch.setattr(model_config, "get_head_size", MethodType(lambda self: head_size, model_config))
     monkeypatch.setattr(model_config, "get_sliding_window", MethodType(lambda self: None, model_config))
 
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
 
     torch.manual_seed(0)
 
@@ -748,7 +748,7 @@ def test_sparse_backend_decode_correctness(
             tok_indices[0] = 0  # At least one valid index
         sparse_indices[tok_idx] = tok_indices
 
-    all_q_aphrodite, all_kv_c_aphrodite, all_k_pe_aphrodite = [], [], []
+    all_q_sonar, all_kv_c_sonar, all_k_pe_sonar = [], [], []
     kv_c_contexts, k_pe_contexts = [], []
     reference_outputs = []
 
@@ -823,23 +823,23 @@ def test_sparse_backend_decode_correctness(
 
             global_token_idx += 1
 
-        all_q_aphrodite.append(q_c)
-        all_kv_c_aphrodite.append(kv_c_full[ctx_len:])
-        all_k_pe_aphrodite.append(k_pe_full[ctx_len:])
+        all_q_sonar.append(q_c)
+        all_kv_c_sonar.append(kv_c_full[ctx_len:])
+        all_k_pe_sonar.append(k_pe_full[ctx_len:])
         kv_c_contexts.append(kv_c_full[: ctx_len + 1])
         k_pe_contexts.append(k_pe_full[: ctx_len + 1])
 
-    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
-    kv_c_aphrodite = torch.cat(all_kv_c_aphrodite, dim=0)
-    k_pe_aphrodite = torch.cat(all_k_pe_aphrodite, dim=0)
+    query_sonar = torch.cat(all_q_sonar, dim=0)
+    kv_c_sonar = torch.cat(all_kv_c_sonar, dim=0)
+    k_pe_sonar = torch.cat(all_k_pe_sonar, dim=0)
     sdpa_reference = torch.cat(reference_outputs, dim=0)
 
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
-    aphrodite_config.model_config.hf_text_config.index_topk = topk_tokens
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.model_config.hf_text_config.index_topk = topk_tokens
 
     common_attn_metadata = create_common_attn_metadata(
         batch_spec,
-        aphrodite_config.cache_config.block_size,
+        sonar_config.cache_config.block_size,
         device,
         arange_block_indices=True,
     )
@@ -847,11 +847,11 @@ def test_sparse_backend_decode_correctness(
     kv_cache = create_and_prepopulate_kv_cache(
         kv_c_contexts=kv_c_contexts,
         k_pe_contexts=k_pe_contexts,
-        block_size=aphrodite_config.cache_config.block_size,
+        block_size=sonar_config.cache_config.block_size,
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=aphrodite_config.cache_config.num_gpu_blocks,
+        num_blocks=sonar_config.cache_config.num_gpu_blocks,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=False,
         kv_cache_dtype=kv_cache_dtype,
@@ -865,21 +865,21 @@ def test_sparse_backend_decode_correctness(
 
     # The sparse builder clones the layer's dense-MHA prefill backend from
     # static_forward_context; register a mock layer carrying one.
-    prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+    prefill_backend = get_mla_prefill_backend(sonar_config)(
         num_heads=num_heads,
         scale=scale,
         kv_lora_rank=kv_lora_rank,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
         v_head_dim=v_head_dim,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
         prefill_backend=prefill_backend, impl=SimpleNamespace()
     )
 
     builder_cls = backend_cls.get_builder_cls()
-    builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+    builder = builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
     metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
     # Use the pre-computed sparse_indices for the mock indexer
@@ -896,7 +896,7 @@ def test_sparse_backend_decode_correctness(
     mock_kv_b_proj.weight = torch.nn.Parameter(kv_b_proj_weight.T.contiguous())
 
     impl_cls = backend_cls.get_impl_cls()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = impl_cls(
             num_heads=num_heads,
             head_size=head_size,
@@ -904,7 +904,7 @@ def test_sparse_backend_decode_correctness(
             num_kv_heads=1,
             alibi_slopes=None,
             sliding_window=None,
-            kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
+            kv_cache_dtype=sonar_config.cache_config.cache_dtype,
             logits_soft_cap=None,
             attn_type="decoder",
             kv_sharing_target_layer_name=None,
@@ -939,20 +939,20 @@ def test_sparse_backend_decode_correctness(
 
     with torch.inference_mode():
         if backend_cls == FlashMLASparseBackend and kv_cache_dtype == "fp8_ds_mla":
-            from aphrodite.v1.worker.workspace import current_workspace_manager
+            from sonar.v1.worker.workspace import current_workspace_manager
 
             current_workspace_manager().lock()
         backend_output = mock_layer.forward_impl(
-            query_aphrodite,
-            kv_c_aphrodite,
-            k_pe_aphrodite,
+            query_sonar,
+            kv_c_sonar,
+            k_pe_sonar,
             kv_cache,
             metadata,
             out_buffer,
         )
 
     if block_stride_rows is not None and kv_cache_dtype == "auto":
-        expected_row = torch.cat((kv_c_aphrodite[-1], k_pe_aphrodite[-1, 0]))
+        expected_row = torch.cat((kv_c_sonar[-1], k_pe_sonar[-1, 0]))
         torch.testing.assert_close(query_row, expected_row, rtol=0, atol=0)
     elif block_stride_rows is not None:
         assert query_row.any()
@@ -992,7 +992,7 @@ def test_sparse_backend_decode_correctness(
     ],
 )
 def test_sparse_mla_packed_stride(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     workspace_init,
     monkeypatch,
@@ -1003,7 +1003,7 @@ def test_sparse_mla_packed_stride(
     head_dims,
 ):
     test_sparse_backend_decode_correctness(
-        default_aphrodite_config,
+        default_sonar_config,
         dist_init,
         backend_cls,
         "mixed_small",
@@ -1151,14 +1151,14 @@ def test_index_group_convert_during_piecewise_capture():
         NUM_TOPK_TOKENS=num_topk,
     )
 
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B")
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B")
     marker = torch.zeros(1, device=device)
     capture_stream = torch.cuda.Stream(device=device)
-    # torch.cuda.stream routes through Aphrodite's patched torch.cuda.set_stream,
+    # torch.cuda.stream routes through Sonar's patched torch.cuda.set_stream,
     # so current_stream() tracks the capture stream as in production.
     with (
         torch.cuda.stream(capture_stream),
-        set_forward_context(None, aphrodite_config, cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE),
+        set_forward_context(None, sonar_config, cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE),
     ):
         capture = BreakableCUDAGraphCapture()
         with capture:
@@ -1516,7 +1516,7 @@ def test_is_masked_mha_available_model_dims(
     """The allow-list gates masked MHA per exact model geometry: the DeepSeek-V3.2,
     GLM-5 and NoPE GLM-5.3-Flash layouts on an SM100-family GPU with FA4 and an
     unquantized KV cache, nothing else."""
-    import aphrodite.model_executor.layers.attention.sparse_mla_attention as mod
+    import sonar.model_executor.layers.attention.sparse_mla_attention as mod
 
     monkeypatch.setattr(mod.current_platform, "is_device_capability_family", lambda family: True)
     monkeypatch.setattr(mod, "get_flash_attn_version", lambda **kwargs: fa_version)
@@ -1556,7 +1556,7 @@ PREFILL_BATCH_SPECS = {
     ],
 )
 def test_sparse_backend_prefill_correctness(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     batch_name,
     kv_cache_dtype,
@@ -1585,7 +1585,7 @@ def test_sparse_backend_prefill_correctness(
     max_seqlen = max(batch_spec.seq_lens)
     total_cache_tokens = sum(batch_spec.seq_lens)
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=max_seqlen,
@@ -1596,7 +1596,7 @@ def test_sparse_backend_prefill_correctness(
             "attn_module_list_cfg": [{"topk_tokens": topk_tokens}],
         },
     )
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     model_config.hf_text_config = SimpleNamespace(
         index_topk=topk_tokens,
         q_lora_rank=None,
@@ -1622,7 +1622,7 @@ def test_sparse_backend_prefill_correctness(
     monkeypatch.setattr(model_config, "get_head_size", MethodType(lambda self: head_size, model_config))
     monkeypatch.setattr(model_config, "get_sliding_window", MethodType(lambda self: None, model_config))
 
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
     scale = 1.0 / math.sqrt(qk_nope_head_dim + qk_rope_head_dim)
 
     torch.manual_seed(42)
@@ -1697,12 +1697,12 @@ def test_sparse_backend_prefill_correctness(
     k_pe_cat = torch.cat(all_k_pe_new, dim=0)
     ref_output = torch.cat(reference_outputs, dim=0)
 
-    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
-    aphrodite_config.model_config.hf_text_config.index_topk = topk_tokens
+    sonar_config.cache_config.cache_dtype = kv_cache_dtype
+    sonar_config.model_config.hf_text_config.index_topk = topk_tokens
 
     common_attn_metadata = create_common_attn_metadata(
         batch_spec,
-        aphrodite_config.cache_config.block_size,
+        sonar_config.cache_config.block_size,
         device,
         arange_block_indices=True,
     )
@@ -1714,7 +1714,7 @@ def test_sparse_backend_prefill_correctness(
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=aphrodite_config.cache_config.num_gpu_blocks,
+        num_blocks=sonar_config.cache_config.num_gpu_blocks,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=False,
         kv_cache_dtype=kv_cache_dtype,
@@ -1722,21 +1722,21 @@ def test_sparse_backend_prefill_correctness(
 
     # The sparse builder clones the layer's dense-MHA prefill backend from
     # static_forward_context; register a mock layer carrying one.
-    prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+    prefill_backend = get_mla_prefill_backend(sonar_config)(
         num_heads=num_heads,
         scale=scale,
         kv_lora_rank=kv_lora_rank,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
         v_head_dim=v_head_dim,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
         prefill_backend=prefill_backend, impl=SimpleNamespace()
     )
 
     builder_cls = backend_cls.get_builder_cls()
-    builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+    builder = builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
     if batch_name == "masked_mha_chunked_context":
         builder.chunked_prefill_workspace_size = block_size * batch_spec.batch_size
         builder.chunked_prefill_workspace = torch.empty(
@@ -1761,7 +1761,7 @@ def test_sparse_backend_prefill_correctness(
     mock_kv_b_proj.weight = torch.nn.Parameter(kv_b_proj_weight.T.contiguous())
 
     impl_cls = backend_cls.get_impl_cls()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = impl_cls(
             num_heads=num_heads,
             head_size=head_size,
@@ -1961,7 +1961,7 @@ def test_triton_convert_returns_valid_counts(num_topk_tokens: int, reuse_buffers
 
 def test_hisparse_generic_stream_orders_ipc_event():
     """Generic copy streams must record IPC events and restore the compute stream."""
-    from aphrodite.v1.hisparse.backend import CUDAHiSparseBackend
+    from sonar.v1.hisparse.backend import CUDAHiSparseBackend
 
     backend = CUDAHiSparseBackend()
     compute_stream = torch.accelerator.current_stream()
@@ -2493,7 +2493,7 @@ def test_hisparse_expanded_hash_keeps_union_bound():
     """Extra hash capacity must not admit more rows than the declared union."""
     script = """
 import torch
-from aphrodite import _custom_ops
+from sonar import _custom_ops
 host = torch.zeros((64, 16), dtype=torch.uint8).pin_memory()
 hot = torch.zeros((1, 64, 16), dtype=torch.uint8, device="cuda")
 table = torch.zeros((1, 1), dtype=torch.int32, device="cuda")
@@ -3116,7 +3116,7 @@ def test_hisparse_invalidation_covers_every_index_group():
 
 
 @requires_hisparse_ops
-def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init, workspace_init, monkeypatch):
+def test_hisparse_mixed_batch_bf16_row_split(default_sonar_config, dist_init, workspace_init, monkeypatch):
     """Host-resident mixed batch on the bf16 path is row-split.
 
     Two long-context speculative-decode requests + one short local-prefill
@@ -3146,7 +3146,7 @@ def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init
     total_cache_tokens = sum(batch_spec.seq_lens)
     total_tokens = batch_spec.compute_num_tokens()
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=max_seqlen,
@@ -3157,11 +3157,11 @@ def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init
             "attn_module_list_cfg": [{"topk_tokens": topk_tokens}],
         },
     )
-    aphrodite_config.attention_config.hisparse_config = HiSparseConfig(
+    sonar_config.attention_config.hisparse_config = HiSparseConfig(
         device_buffer_size=2 * topk_tokens,
     )
-    aphrodite_config.speculative_config = SpeculativeConfig(method="ngram", num_speculative_tokens=1)
-    model_config = aphrodite_config.model_config
+    sonar_config.speculative_config = SpeculativeConfig(method="ngram", num_speculative_tokens=1)
+    model_config = sonar_config.model_config
     model_config.hf_text_config = SimpleNamespace(
         index_topk=topk_tokens,
         q_lora_rank=None,
@@ -3191,10 +3191,10 @@ def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init
         MethodType(lambda self, parallel_config: 1, model_config),
     )
 
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
     common_attn_metadata = create_common_attn_metadata(
         batch_spec,
-        aphrodite_config.cache_config.block_size,
+        sonar_config.cache_config.block_size,
         device,
         arange_block_indices=True,
     )
@@ -3207,31 +3207,31 @@ def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init
     kv_cache = create_and_prepopulate_kv_cache(
         kv_c_contexts=kv_c_contexts,
         k_pe_contexts=k_pe_contexts,
-        block_size=aphrodite_config.cache_config.block_size,
+        block_size=sonar_config.cache_config.block_size,
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=aphrodite_config.cache_config.num_gpu_blocks,
+        num_blocks=sonar_config.cache_config.num_gpu_blocks,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=False,
         kv_cache_dtype="auto",
     )
 
-    prefill_backend = get_mla_prefill_backend(aphrodite_config)(
+    prefill_backend = get_mla_prefill_backend(sonar_config)(
         num_heads=num_heads,
         scale=1.0 / math.sqrt(head_size),
         kv_lora_rank=kv_lora_rank,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
         v_head_dim=v_head_dim,
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
     )
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(
         prefill_backend=prefill_backend, impl=SimpleNamespace()
     )
 
     builder_cls = FlashMLASparseBackend.get_builder_cls()
-    builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+    builder = builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
     metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     assert isinstance(metadata.prefill, SparseMLAPrefillMetadata)
 
@@ -3258,7 +3258,7 @@ def test_hisparse_mixed_batch_bf16_row_split(default_aphrodite_config, dist_init
     mock_indexer = SimpleNamespace(topk_indices_buffer=sparse_indices, topk_tokens=topk_tokens)
 
     impl_cls = FlashMLASparseBackend.get_impl_cls()
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         impl = impl_cls(
             num_heads=num_heads,
             head_size=head_size,
@@ -3603,7 +3603,7 @@ def test_hisparse_keeps_speculative_rows_as_decodes():
     capture.
     """
     builder = object.__new__(FlashAttnMLASparseMetadataBuilder)
-    builder.aphrodite_config = SimpleNamespace(
+    builder.sonar_config = SimpleNamespace(
         attention_config=SimpleNamespace(hisparse_config=object()),
         speculative_config=SimpleNamespace(num_speculative_tokens=3, parallel_drafting=False),
         parallel_config=SimpleNamespace(decode_context_parallel_size=1),
@@ -3771,7 +3771,7 @@ def test_flashinfer_sm120_hisparse_decode_uses_index_group(monkeypatch):
 
 def test_sparse_mqa_plain_lane_wiring(monkeypatch):
     """Under DCP the plain lane converts with the DCP filter at the flat stride."""
-    import aphrodite.model_executor.layers.attention.sparse_mla_attention as sparse_mla
+    import sonar.model_executor.layers.attention.sparse_mla_attention as sparse_mla
 
     num_tokens, topk_tokens, block_size, head_dim = 3, 8, 4, 6
     # Flat row stride (8) differs from block size (4): the wrong one misaddresses.
@@ -3818,7 +3818,7 @@ def test_sparse_mqa_plain_lane_wiring(monkeypatch):
 def test_sparse_mqa_hisparse_lanes(monkeypatch, num_decode_tokens, all_resident, split_q):
     """HiSparse runs all-resident and decode-only batches in one call against the
     hot cache, and otherwise splits into one decode and one staged-prefill call."""
-    import aphrodite.model_executor.layers.attention.sparse_mla_attention as sparse_mla
+    import sonar.model_executor.layers.attention.sparse_mla_attention as sparse_mla
 
     num_tokens, topk_tokens, block_size, head_dim = 5, 8, 4, 6
     num_prefill = num_tokens - num_decode_tokens
@@ -3960,7 +3960,7 @@ def test_hisparse_resident_prefill_reads_residency_by_state_row(num_decode_token
 
 def test_hisparse_flashmla_reorders_full_speculative_window_as_decode():
     builder = object.__new__(FlashMLASparseMetadataBuilder)
-    builder.aphrodite_config = SimpleNamespace(
+    builder.sonar_config = SimpleNamespace(
         attention_config=SimpleNamespace(hisparse_config=object()),
         speculative_config=SimpleNamespace(
             num_speculative_tokens=3,
@@ -4131,7 +4131,7 @@ def test_fa4_sparse_decode_kernel_correctness(num_heads, return_lse):
 @pytest.mark.parametrize("is_decode", [True, False], ids=["decode", "prefill"])
 def test_fa4_sparse_hook_routes_lanes(monkeypatch, is_decode):
     """The hook runs a decode batch on FA4 and every other batch on trtllm-gen."""
-    import aphrodite.model_executor.layers.attention.sparse_mla_attention as sparse_mla
+    import sonar.model_executor.layers.attention.sparse_mla_attention as sparse_mla
 
     counts = [1, 2, 3, 4, 5, 6, 7]
     num_tokens, dcp = len(counts), 2
@@ -4193,15 +4193,15 @@ def test_fa4_sparse_hook_routes_lanes(monkeypatch, is_decode):
 def test_fa4_sparse_gate(monkeypatch, config, expected):
     """``validate_configuration`` on a fixed SM100: one row per gate reason."""
     has_flashinfer = config.get("flashinfer", True)
-    monkeypatch.setattr("aphrodite.utils.flashinfer.has_flashinfer", lambda: has_flashinfer)
+    monkeypatch.setattr("sonar.utils.flashinfer.has_flashinfer", lambda: has_flashinfer)
     monkeypatch.setattr(flashattn_sparse_module, "_fa4_cute_mla_available", lambda: None)
     dcp = config.get("dcp", 1)
-    aphrodite_config = _build_sparse_dcp_aphrodite_config(monkeypatch, config.get("heads", 16), dcp)
-    hf_text_config = aphrodite_config.model_config.hf_text_config
+    sonar_config = _build_sparse_dcp_sonar_config(monkeypatch, config.get("heads", 16), dcp)
+    hf_text_config = sonar_config.model_config.hf_text_config
     hf_text_config.index_topk = config.get("index_topk", 128)
     hf_text_config.qk_rope_head_dim = config.get("rope", 64)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         reasons = FlashAttnMLASparseFA4Backend.validate_configuration(
             head_size=576,
             dtype=torch.bfloat16,
@@ -4251,7 +4251,7 @@ def test_flashmla_common_metadata_requires_uniform_decodes():
 
 def test_flashmla_fp8_metadata_excludes_zero_token_decode_padding(monkeypatch):
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.mla.flashmla_sparse.get_mla_metadata",
+        "sonar.v1.attention.backends.mla.flashmla_sparse.get_mla_metadata",
         lambda: (object(), None),
     )
     builder = SimpleNamespace(
@@ -4305,7 +4305,7 @@ def test_flashmla_fp8_paths_accept_decode_subset(monkeypatch, use_mixed_batch: b
         return topk_indices, valid_counts
 
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.mla.flashmla_sparse.triton_convert_req_index_to_global_index",
+        "sonar.v1.attention.backends.mla.flashmla_sparse.triton_convert_req_index_to_global_index",
         convert_indices,
     )
 
@@ -4386,13 +4386,13 @@ def test_flashmla_fp8_paths_accept_decode_subset(monkeypatch, use_mixed_batch: b
     assert lse is None
 
 
-def _build_sparse_dcp_aphrodite_config(
+def _build_sparse_dcp_sonar_config(
     monkeypatch: pytest.MonkeyPatch,
     local_heads: int,
     dcp_world_size: int,
     comm_backend: str = "ag_rs",
 ):
-    """Minimal sparse-MLA AphroditeConfig for the FlashMLASparse DCP head-envelope
+    """Minimal sparse-MLA SonarConfig for the FlashMLASparse DCP head-envelope
     guard. TP is simulated by mocking ``get_num_attention_heads`` to return the
     per-rank head count, as the decode-correctness test above does.
     """
@@ -4403,7 +4403,7 @@ def _build_sparse_dcp_aphrodite_config(
     head_size = kv_lora_rank + qk_rope_head_dim
     topk_tokens = 128
 
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=4096,
@@ -4413,7 +4413,7 @@ def _build_sparse_dcp_aphrodite_config(
             "attn_module_list_cfg": [{"topk_tokens": topk_tokens}],
         },
     )
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     model_config.dtype = torch.bfloat16
     model_config.hf_text_config = SimpleNamespace(
         index_topk=topk_tokens,
@@ -4438,13 +4438,13 @@ def _build_sparse_dcp_aphrodite_config(
     monkeypatch.setattr(model_config, "get_head_size", MethodType(lambda self: head_size, model_config))
     monkeypatch.setattr(model_config, "get_sliding_window", MethodType(lambda self: None, model_config))
 
-    aphrodite_config.cache_config.cache_dtype = "fp8_ds_mla"
-    aphrodite_config.parallel_config.decode_context_parallel_size = dcp_world_size
-    aphrodite_config.parallel_config.dcp_comm_backend = comm_backend
+    sonar_config.cache_config.cache_dtype = "fp8_ds_mla"
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_world_size
+    sonar_config.parallel_config.dcp_comm_backend = comm_backend
     # The base builder clones the layer's dense-MHA prefill backend from
     # static_forward_context; the guard tests never run prefill.
-    aphrodite_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(prefill_backend=None)
-    return aphrodite_config
+    sonar_config.compilation_config.static_forward_context["placeholder"] = SimpleNamespace(prefill_backend=None)
+    return sonar_config
 
 
 @pytest.mark.skipif(
@@ -4466,15 +4466,15 @@ def test_fp8_dcp_head_envelope_guard(monkeypatch, local_heads, dcp_world_size, s
     heads, so the builder must reject configs where the two pad differently.
     """
     device = torch.device(DEVICE_TYPE)
-    aphrodite_config = _build_sparse_dcp_aphrodite_config(monkeypatch, local_heads, dcp_world_size)
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    sonar_config = _build_sparse_dcp_sonar_config(monkeypatch, local_heads, dcp_world_size)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
     builder_cls = FlashMLASparseBackend.get_builder_cls()
 
     if should_raise:
         with pytest.raises(NotImplementedError, match="envelope"):
-            builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+            builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
     else:
-        builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+        builder = builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
         gathered_heads = local_heads * dcp_world_size
         local_pad = 64 if local_heads <= 64 else 128
         gathered_pad = 64 if gathered_heads <= 64 else 128
@@ -4491,10 +4491,10 @@ def test_fp8_dcp_accepts_comm_backend(monkeypatch, comm_backend):
     """The mixed-batch path returns (out, lse) for every token in the layout
     both DCP combines consume, so neither comm backend is rejected."""
     device = torch.device(DEVICE_TYPE)
-    aphrodite_config = _build_sparse_dcp_aphrodite_config(monkeypatch, 16, 4, comm_backend)
-    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
+    sonar_config = _build_sparse_dcp_sonar_config(monkeypatch, 16, 4, comm_backend)
+    kv_cache_spec = create_standard_kv_cache_spec(sonar_config)
     builder_cls = FlashMLASparseBackend.get_builder_cls()
-    builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
+    builder = builder_cls(kv_cache_spec, ["placeholder"], sonar_config, device)
     assert builder.fp8_use_mixed_batch
 
 
@@ -4512,7 +4512,7 @@ def test_fp8_mixed_batch_dcp_neutralizes_empty_rows(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.mla.flashmla_sparse.triton_filter_and_convert_dcp_index",
+        "sonar.v1.attention.backends.mla.flashmla_sparse.triton_filter_and_convert_dcp_index",
         lambda *args, **kwargs: local_indices,
     )
 
@@ -4705,7 +4705,7 @@ def test_sparse_mla_common_impl_resolves_buffer_lazily():
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm model implementation")
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8"])
-def test_rocm_fused_v32_dense_prefill_matches_mqa(tmp_path, aphrodite_runner, kv_cache_dtype):
+def test_rocm_fused_v32_dense_prefill_matches_mqa(tmp_path, sonar_runner, kv_cache_dtype):
     """Fused normalization, RoPE and mixed dispatch preserve generation/logprobs.
 
     Chunking unequal prompts exercises prefill alongside decode. The two long
@@ -4714,7 +4714,7 @@ def test_rocm_fused_v32_dense_prefill_matches_mqa(tmp_path, aphrodite_runner, kv
     """
     import json
 
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     config = {
         "architectures": ["DeepseekV32ForCausalLM"],
@@ -4778,7 +4778,7 @@ def test_rocm_fused_v32_dense_prefill_matches_mqa(tmp_path, aphrodite_runner, kv
     sampling = SamplingParams(temperature=0, max_tokens=16, ignore_eos=True, logprobs=5)
     results = []
     for force_mqa in [True, False]:
-        with aphrodite_runner(
+        with sonar_runner(
             str(tmp_path),
             load_format="dummy",
             skip_tokenizer_init=True,

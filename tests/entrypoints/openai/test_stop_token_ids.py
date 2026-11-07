@@ -12,10 +12,10 @@ request because to_sampling_params() never fell back to defaults.
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.completion.protocol import (
+from sonar.entrypoints.openai.completion.protocol import (
     CompletionRequest,
 )
 

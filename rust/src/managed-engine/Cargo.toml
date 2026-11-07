@@ -1,5 +1,5 @@
 [package]
-name = "aphrodite-managed-engine"
+name = "sonar-managed-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

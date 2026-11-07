@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from aphrodite.utils.jsontree import json_count_leaves
+from sonar.utils.jsontree import json_count_leaves
 
 
 def test_json_count_leaves():

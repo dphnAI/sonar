@@ -8,8 +8,8 @@ import msgspec.msgpack
 import pytest
 import zmq
 
-from aphrodite.config.kv_events import KVEventsConfig
-from aphrodite.distributed.kv_events import EventPublisherFactory
+from sonar.config.kv_events import KVEventsConfig
+from sonar.distributed.kv_events import EventPublisherFactory
 
 from .test_events import SampleBatch
 
@@ -185,9 +185,9 @@ def enable_ray_v2_backend():
     import ray
 
     saved = {
-        "APHRODITE_ENABLE_V1_MULTIPROCESSING": os.environ.get("APHRODITE_ENABLE_V1_MULTIPROCESSING"),
+        "SONAR_ENABLE_V1_MULTIPROCESSING": os.environ.get("SONAR_ENABLE_V1_MULTIPROCESSING"),
     }
-    os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+    os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
     if ray.is_initialized():
         ray.shutdown()
     try:

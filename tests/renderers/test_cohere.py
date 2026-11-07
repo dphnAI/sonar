@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for ``aphrodite/renderers/cohere.py``.
+"""Unit tests for ``sonar/renderers/cohere.py``.
 
 The tests focus on the pure-Python helpers that produce the render-config
 dicts passed to ``cohere_melody.render_cmd3`` / ``render_cmd4``. We also
@@ -19,8 +19,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.renderers import ChatParams
-from aphrodite.renderers.cohere import (
+from sonar.renderers import ChatParams
+from sonar.renderers.cohere import (
     CohereRenderer,
     MelodyContentType,
     _build_render_config,
@@ -32,7 +32,7 @@ from aphrodite.renderers.cohere import (
     _tool_to_melody,
     _v2_tool_content_to_melody_block,
 )
-from aphrodite.tokenizers.hf import HfTokenizer
+from sonar.tokenizers.hf import HfTokenizer
 
 # ======================================================================
 # _role_to_melody
@@ -607,7 +607,7 @@ class TestBuildRenderConfig:
 
     def test_default_format_is_cmd4(self):
         # Bare kwargs -> cmd4 (the current Command A+ prompt format).
-        # Mirrors ``_DEFAULT_FORMAT`` in ``aphrodite/renderers/cohere.py`` and
+        # Mirrors ``_DEFAULT_FORMAT`` in ``sonar/renderers/cohere.py`` and
         # the ``--cohere-format`` CLI default.
         fmt, cfg = _build_render_config(self._conv(), {})
         assert fmt == "cmd4"
@@ -860,8 +860,8 @@ class TestBuildRenderConfig:
     @pytest.mark.parametrize("cohere_only_key", ["template_jinja", "template"])
     def test_cohere_only_template_kwargs_are_rejected(self, cohere_only_key):
         # ``chat_template_kwargs.template_jinja`` / ``.template`` are
-        # accepted at Cohere's own API surface but not at Aphrodite's -- raw
-        # template source in Aphrodite must flow through the standard
+        # accepted at Cohere's own API surface but not at Sonar's -- raw
+        # template source in Sonar must flow through the standard
         # ``chat_template`` request field so the
         # ``--trust-request-chat-template`` guard applies uniformly.
         # Silently dropping these keys would hide client misconfiguration,
@@ -888,7 +888,7 @@ class TestBuildRenderConfig:
         assert "additional_template_fields" not in cfg
 
     def test_chat_template_arg_populates_template_jinja(self):
-        # The standard Aphrodite ``chat_template`` request field is the sole
+        # The standard Sonar ``chat_template`` request field is the sole
         # supported channel for raw template source and is forwarded to
         # melody under its ``template_jinja`` config key.
         _, cfg = _build_render_config(
@@ -915,7 +915,7 @@ class TestBuildRenderConfig:
         # v2 → melody mapping runs over the original v2 blocks rather
         # than the flattened string content on the OpenAI-shape tool
         # message.
-        from aphrodite.renderers.cohere import TOOL_MESSAGE_V2_CONTENT_KEY
+        from sonar.renderers.cohere import TOOL_MESSAGE_V2_CONTENT_KEY
 
         conv = [
             {"role": "user", "content": "q"},
@@ -982,7 +982,7 @@ class _MockParallelConfig:
 
 
 @dataclass
-class _MockAphroditeConfig:
+class _MockSonarConfig:
     model_config: _MockModelConfig
     parallel_config: _MockParallelConfig
 
@@ -997,7 +997,7 @@ async def test_async_cohere_renderer_does_not_block_event_loop():
 
     mock_tokenizer = Mock(spec=HfTokenizer)
     renderer = CohereRenderer(
-        _MockAphroditeConfig(_MockModelConfig(), _MockParallelConfig()),
+        _MockSonarConfig(_MockModelConfig(), _MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
 
@@ -1064,7 +1064,7 @@ class TestRequestCitationsReachRenderedPrompt:
         # rather than failing collection. Two guards:
         # * ``cohere_melody`` -- the Rust binding this test drives.
         # * ``cohere`` -- required transitively by
-        #   ``aphrodite.entrypoints.cohere.{protocol,serving}`` (both
+        #   ``sonar.entrypoints.cohere.{protocol,serving}`` (both
         #   unconditionally ``from cohere.types import ...`` at module
         #   scope) which every test in this class imports locally.
         pytest.importorskip("cohere")
@@ -1103,9 +1103,9 @@ class TestRequestCitationsReachRenderedPrompt:
         # extension isn't importable.
         melody = self._melody()
 
-        from aphrodite.entrypoints.cohere.protocol import CohereChatV2Request
-        from aphrodite.entrypoints.cohere.serving import CohereServingChatV2
-        from aphrodite.renderers.cohere import _build_render_config
+        from sonar.entrypoints.cohere.protocol import CohereChatV2Request
+        from sonar.entrypoints.cohere.serving import CohereServingChatV2
+        from sonar.renderers.cohere import _build_render_config
 
         request = CohereChatV2Request(
             model="m",
@@ -1194,9 +1194,9 @@ class TestRequestCitationsReachRenderedPrompt:
         # markers regardless of what we passed in.
         melody = self._melody()
 
-        from aphrodite.entrypoints.cohere.protocol import CohereChatV2Request
-        from aphrodite.entrypoints.cohere.serving import CohereServingChatV2
-        from aphrodite.renderers.cohere import _build_render_config
+        from sonar.entrypoints.cohere.protocol import CohereChatV2Request
+        from sonar.entrypoints.cohere.serving import CohereServingChatV2
+        from sonar.renderers.cohere import _build_render_config
 
         request = CohereChatV2Request(
             model="m",

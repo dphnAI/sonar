@@ -14,17 +14,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from openai.types.responses import ResponseFunctionToolCall
 
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     ExtractedToolCallInformation,
     FunctionCall,
     ToolCall,
 )
-from aphrodite.entrypoints.mcp.tool import HarmonyPythonTool
-from aphrodite.entrypoints.openai.responses.context import ParsableContext
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.parser.abstract_parser import DelegatingParser
+from sonar.entrypoints.mcp.tool import HarmonyPythonTool
+from sonar.entrypoints.openai.responses.context import ParsableContext
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.parser.abstract_parser import DelegatingParser
 
 pytestmark = pytest.mark.skip_global_cleanup
 
@@ -321,7 +321,7 @@ def test_process_extracts_tool_calls():
     ("tool_name", "session_name", "dispatched_name", "arguments"),
     [
         ("code_interpreter", "python", "python", {"code": "print(42)"}),
-        ("web_search_preview", "browser", "search", {"query": "Aphrodite"}),
+        ("web_search_preview", "browser", "search", {"query": "Sonar"}),
         ("container.exec", "container", "exec", {"cmd": ["pwd"]}),
     ],
 )

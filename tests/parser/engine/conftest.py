@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
 

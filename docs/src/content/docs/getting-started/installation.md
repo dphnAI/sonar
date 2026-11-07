@@ -6,6 +6,12 @@ description: Install Sonar on NVIDIA, AMD, Intel, CPU, Apple, and TPU systems.
 Sonar supports Linux and macOS. Use WSL 2 to run Sonar on Windows. Native
 Windows builds are not supported.
 
+The Python distribution, command, and import are named `sonar`. The `sonar`
+project on PyPI is unrelated: bare `pip install sonar` or `uv pip install sonar`
+installs that project. Use the installer below or the Sonar wheel index for your
+platform. Keep the index arguments and `--index-strategy first-index` when
+installing or upgrading with uv.
+
 ## Automatic installer
 
 The installer detects the operating system, CPU architecture, and accelerator.
@@ -47,17 +53,19 @@ create an environment and install Sonar.
 ```bash
 uv venv --python 3.12 --seed
 source .venv/bin/activate
-uv pip install aphrodite-engine --torch-backend=cu130
+uv pip install sonar \
+  --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple \
+  --index-strategy first-index \
+  --torch-backend cu130
 ```
-
-The package name remains `aphrodite-engine`. The command name remains
-`aphrodite`.
 
 Use a nightly build when you need the latest commit.
 
 ```bash
-uv pip install aphrodite-engine \
-  --extra-index-url https://sonar.dphn.ai/nightly
+uv pip install sonar \
+  --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
+  --index-strategy first-index \
+  --torch-backend cu130
 ```
 
 ### Develop with precompiled extensions
@@ -71,7 +79,7 @@ git clone https://github.com/dphnAI/sonar.git
 cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
-APHRODITE_USE_PRECOMPILED=1 \
+SONAR_USE_PRECOMPILED=1 \
   uv pip install --editable . --torch-backend=cu130
 ```
 
@@ -140,7 +148,7 @@ cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 uv pip install -r requirements/build.txt -r requirements/rocm.txt
-APHRODITE_TARGET_DEVICE=rocm uv pip install . --no-build-isolation
+SONAR_TARGET_DEVICE=rocm uv pip install . --no-build-isolation
 ```
 
 Install a compatible ROCm and PyTorch build before this procedure. The supported
@@ -157,7 +165,7 @@ source /opt/intel/oneapi/setvars.sh
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 uv pip install -r requirements/build.txt -r requirements/xpu.txt
-APHRODITE_TARGET_DEVICE=xpu uv pip install . --no-build-isolation
+SONAR_TARGET_DEVICE=xpu uv pip install . --no-build-isolation
 ```
 
 ## CPU
@@ -170,10 +178,10 @@ cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 uv pip install -r requirements/build/cpu.txt -r requirements/cpu.txt
-APHRODITE_TARGET_DEVICE=cpu uv pip install . --no-build-isolation
+SONAR_TARGET_DEVICE=cpu uv pip install . --no-build-isolation
 ```
 
-Set `APHRODITE_CPU_KVCACHE_SPACE` to the KV cache size in GiB. Start with a
+Set `SONAR_CPU_KVCACHE_SPACE` to the KV cache size in GiB. Start with a
 conservative value if other processes use the same host.
 
 ## Apple silicon
@@ -186,7 +194,7 @@ cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 uv pip install -r requirements/metal.txt
-APHRODITE_TARGET_DEVICE=metal uv pip install . --no-build-isolation
+SONAR_TARGET_DEVICE=metal uv pip install . --no-build-isolation
 ```
 
 Metal supports hybrid attention models, but it cannot reuse their recurrent
@@ -203,7 +211,7 @@ cd sonar
 uv venv --python 3.12 --seed
 source .venv/bin/activate
 uv pip install -r requirements/tpu.txt
-APHRODITE_TARGET_DEVICE=tpu uv pip install . --no-build-isolation
+SONAR_TARGET_DEVICE=tpu uv pip install . --no-build-isolation
 ```
 
 Use the PyTorch XLA installation procedure for your TPU image before you build

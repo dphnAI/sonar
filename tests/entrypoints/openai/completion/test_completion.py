@@ -10,9 +10,9 @@ import regex as re
 from openai import BadRequestError
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tokenizers import get_tokenizer
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.sampling_params import SamplingParams
+from sonar.tokenizers import get_tokenizer
 from tests.utils import RemoteOpenAIServer
 
 # any model with a chat template should work here
@@ -242,7 +242,7 @@ async def test_too_many_completion_logprobs(client: openai.AsyncOpenAI, model_na
             prompt=[0, 0, 0, 0, 0],
             max_tokens=5,
             temperature=0.0,
-            # Aphrodite has higher default max_logprobs (20 instead of 5) to support
+            # Sonar has higher default max_logprobs (20 instead of 5) to support
             # both Completion API and Chat Completion API
             logprobs=21,
         )
@@ -253,7 +253,7 @@ async def test_too_many_completion_logprobs(client: openai.AsyncOpenAI, model_na
             prompt=[0, 0, 0, 0, 0],
             max_tokens=5,
             temperature=0.0,
-            # Aphrodite has higher default max_logprobs (20 instead of 5) to support
+            # Sonar has higher default max_logprobs (20 instead of 5) to support
             # both Completion API and Chat Completion API
             logprobs=30,
             stream=True,
@@ -607,7 +607,7 @@ async def test_batch_completions(client: openai.AsyncOpenAI, model_name: str):
             max_tokens=5,
             temperature=0.0,
             extra_body=dict(
-                # NOTE: this has to be true for n > 1 in Aphrodite, but
+                # NOTE: this has to be true for n > 1 in Sonar, but
                 # not necessary for official client.
                 use_beam_search=True
             ),

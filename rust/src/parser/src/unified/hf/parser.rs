@@ -20,9 +20,9 @@
 use std::mem::take;
 use std::sync::Arc;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, TokenAnchor, TokenAttribution};
 use serde::Deserialize;
 use serde_json::{Map, Value};
+use sonar_tokenizer::{DecodedText, DynTokenizer, TokenAnchor, TokenAttribution};
 use thiserror_ext::AsReport as _;
 use winnow::error::{ErrMode, ModalResult};
 use winnow::stream::{Partial, Stream};

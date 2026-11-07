@@ -6,8 +6,8 @@ from tempfile import TemporaryDirectory
 import httpx
 import pytest
 
-from aphrodite import envs
-from aphrodite.version import __version__ as APHRODITE_VERSION
+from sonar import envs
+from sonar.version import __version__ as SONAR_VERSION
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -26,7 +26,7 @@ def server():
             "--max-num-seqs",
             "128",
             "--uds",
-            f"{tmpdir}/aphrodite.sock",
+            f"{tmpdir}/sonar.sock",
         ]
 
         with RemoteOpenAIServer(MODEL_NAME, args) as remote_server:
@@ -41,6 +41,6 @@ async def test_show_version(server: RemoteOpenAIServer):
     response.raise_for_status()
 
     payload = response.json()
-    assert payload["version"] == APHRODITE_VERSION
-    if envs.APHRODITE_USE_RUST_FRONTEND:
-        assert payload["rust_frontend_version"] == APHRODITE_VERSION
+    assert payload["version"] == SONAR_VERSION
+    if envs.SONAR_USE_RUST_FRONTEND:
+        assert payload["rust_frontend_version"] == SONAR_VERSION

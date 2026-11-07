@@ -24,7 +24,7 @@ import functools
 
 import torch
 
-from aphrodite.triton_utils import triton
+from sonar.triton_utils import triton
 
 HEAD_DIM = 128
 CONV_WIDTH = 4
@@ -122,7 +122,7 @@ def _gated_rmsnorm(x: torch.Tensor, gate: torch.Tensor, weight: torch.Tensor, ep
 
 
 def _triton_gated_norm(inp: Inputs, core_attn_out: torch.Tensor) -> torch.Tensor:
-    from aphrodite.third_party.flash_linear_attention.ops.kda import rms_norm_gated
+    from sonar.third_party.flash_linear_attention.ops.kda import rms_norm_gated
 
     return rms_norm_gated(
         core_attn_out,
@@ -135,10 +135,10 @@ def _triton_gated_norm(inp: Inputs, core_attn_out: torch.Tensor) -> torch.Tensor
 
 
 def triton_chain(inp: Inputs, fused_norm: bool = False) -> None:
-    from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
         causal_conv1d_update,
     )
-    from aphrodite.models.kimi_k3.amd.ops.third_party.kda import (
+    from sonar.models.kimi_k3.amd.ops.third_party.kda import (
         fused_recurrent_kda_packed_decode,
     )
 
@@ -169,7 +169,7 @@ def triton_chain(inp: Inputs, fused_norm: bool = False) -> None:
 
 
 def fused(inp: Inputs) -> None:
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     ops.fused_kda_decode(
         x=inp.mixed_qkv,
@@ -225,7 +225,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not hasattr(torch.ops._C, "fused_kda_decode"):
-        raise SystemExit("Aphrodite was built without the fused KDA decode kernel")
+        raise SystemExit("Sonar was built without the fused KDA decode kernel")
 
     props = torch.cuda.get_device_properties(0)
     bench = _bench_graph if args.graph else _bench

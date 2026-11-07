@@ -8,13 +8,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio import moriio_engine
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     MoRIIOMode,
     MoRIIOTransferAck,
     TransferError,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnector,
     MoRIIOConnectorWorker,
     get_moriio_expected_ack_count,
@@ -22,7 +22,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector i
     resolve_moriio_transfer_ack,
     validate_moriio_heterogeneous_tp_kv_heads,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine import (
     MoRIIOWrapper,
 )
 
@@ -272,7 +272,7 @@ def test_worker_get_finished_counts_structured_release_fan_in():
 
 @pytest.mark.parametrize("exit_kind", ["killed", "eof"])
 def test_worker_reports_unexpected_heartbeat_exit(exit_kind):
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_heartbeat import (
         MoRIIOHeartbeat,
     )
 

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def check_cuda_context():
@@ -75,8 +75,8 @@ class TestSetCudaContext:
 
 
 def test_get_device_capability_uses_visible_device_ordinal(monkeypatch):
-    import aphrodite.platforms.interface as platform_interface
-    from aphrodite.platforms.cuda import NvmlCudaPlatform, pynvml
+    import sonar.platforms.interface as platform_interface
+    from sonar.platforms.cuda import NvmlCudaPlatform, pynvml
 
     seen_indices: list[int] = []
 
@@ -119,7 +119,7 @@ def _stub_nvml(monkeypatch) -> dict[str, int]:
     `NonNvmlCudaPlatform` where NVML is unavailable, and that class reads
     `torch.cuda` instead, which needs a real device.
     """
-    from aphrodite.platforms.cuda import NvmlCudaPlatform, pynvml
+    from sonar.platforms.cuda import NvmlCudaPlatform, pynvml
 
     calls = {"init": 0, "shutdown": 0}
 
@@ -152,7 +152,7 @@ def test_has_device_capability_does_not_reinit_nvml(monkeypatch):
     `triton_reshape_and_cache_flash` calls it per attention layer per step for
     fp8 and bfloat16 KV caches (issue #50381).
     """
-    from aphrodite.platforms.cuda import NvmlCudaPlatform
+    from sonar.platforms.cuda import NvmlCudaPlatform
 
     calls = _stub_nvml(monkeypatch)
     try:
@@ -170,7 +170,7 @@ def test_has_device_capability_does_not_reinit_nvml(monkeypatch):
 
 def test_has_device_capability_comparisons(monkeypatch):
     """Dropping the redundant NVML context must not change the answers."""
-    from aphrodite.platforms.cuda import NvmlCudaPlatform
+    from sonar.platforms.cuda import NvmlCudaPlatform
 
     _stub_nvml(monkeypatch)
     try:

@@ -46,7 +46,7 @@ builds, and nightly wheels.
 ## Serve a model
 
 ```bash
-aphrodite serve Qwen/Qwen3-0.6B \
+sonar serve Qwen/Qwen3-0.6B \
   --served-model-name qwen3
 ```
 
@@ -90,6 +90,6 @@ git clone https://github.com/dphnAI/sonar.git
 cd sonar
 uv venv --python 3.13 --seed --prompt sonar
 source .venv/bin/activate
-APHRODITE_USE_PRECOMPILED=1 \
+SONAR_USE_PRECOMPILED=1 \
   uv pip install --editable . --torch-backend=cu130
 ```

@@ -3,13 +3,13 @@
 
 //! Shared lowering from batched preprocessor output to per-item engine kwargs.
 
-use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
-use aphrodite_engine_core_client::protocol::multimodal::{
+use itertools::izip;
+use llm_multimodal::{FieldLayout, PreprocessedEncoderInputs};
+use sonar_engine_core_client::protocol::dtype::ModelDtype;
+use sonar_engine_core_client::protocol::multimodal::{
     MmBatchedField, MmField, MmFieldElem, MmFlatField, MmKwargsItem, MmSharedField, MmSlice,
     SliceSpec,
 };
-use itertools::izip;
-use llm_multimodal::{FieldLayout, PreprocessedEncoderInputs};
 
 use super::{PreparedItem, ResolvedMultimodalSpec, tensor};
 use crate::error::{Result, bail_multimodal, multimodal};

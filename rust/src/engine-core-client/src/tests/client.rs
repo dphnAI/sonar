@@ -491,7 +491,7 @@ where
 fn init_tracing() {
     TRACING.call_once(|| {
         let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("aphrodite_engine_core_client=debug"));
+            .unwrap_or_else(|_| EnvFilter::new("sonar_engine_core_client=debug"));
         let _ = tracing_subscriber::fmt().with_test_writer().with_env_filter(filter).try_init();
     });
 }
@@ -1486,7 +1486,7 @@ async fn client_fail_closes_when_main_output_path_receives_dp_control() {
     .await;
     assert_eq!(client.engine_identities()[0], b"engine-0");
     assert!(client.ready_responses()[0].max_model_len > 0);
-    assert_eq!(client.aphrodite_version(), "test-aphrodite-version");
+    assert_eq!(client.sonar_version(), "test-sonar-version");
 
     let mut stream_1 = client.call(sample_request_with_id("req-1")).await.unwrap().into_outputs();
     let mut stream_2 = client.call(sample_request_with_id("req-2")).await.unwrap().into_outputs();
@@ -2936,15 +2936,15 @@ async fn wake_up_requires_every_engine_to_be_fully_awake() {
     client.shutdown().await.unwrap();
 }
 
-/// Render the `aphrodite:engine_sleep_state` series of one model as
+/// Render the `sonar:engine_sleep_state` series of one model as
 /// `awake,weights_offloaded,discard_all` for engines 0 and 1.
 fn engine_sleep_state_series(model_name: &str) -> [String; 2] {
-    let rendered = aphrodite_metrics::METRICS.render().unwrap();
+    let rendered = sonar_metrics::METRICS.render().unwrap();
     [0, 1].map(|engine| {
         ["awake", "weights_offloaded", "discard_all"]
             .map(|state| {
                 let prefix = format!(
-                    "aphrodite:engine_sleep_state{{model_name=\"{model_name}\",engine=\"{engine}\",sleep_state=\"{state}\"}} "
+                    "sonar:engine_sleep_state{{model_name=\"{model_name}\",engine=\"{engine}\",sleep_state=\"{state}\"}} "
                 );
                 rendered
                     .lines()
@@ -3497,7 +3497,7 @@ fn python_msgpack_fixtures_match_rust_encoding_and_record_nixl_metrics() {
             extra_args: None,
             routed_experts_prompt_start: 0,
             stream_interval: None,
-            aphrodite_sampling: Default::default(),
+            sonar_sampling: Default::default(),
         },
     );
 
@@ -3689,7 +3689,7 @@ fn python_msgpack_fixtures_match_rust_encoding_and_record_nixl_metrics() {
     assert_eq!(nixl_stats.num_failed_handshakes, [1]);
     assert_eq!(nixl_stats.num_notifications_after_expiry, [2]);
 
-    let metrics = aphrodite_metrics::Metrics::new();
+    let metrics = sonar_metrics::Metrics::new();
     let recorder = SchedulerStatsRecorder::new(
         &metrics.scheduler,
         "test-model",
@@ -3706,26 +3706,30 @@ fn python_msgpack_fixtures_match_rust_encoding_and_record_nixl_metrics() {
         },
     );
     let rendered_metrics = metrics.render().unwrap();
+    assert!(
+        rendered_metrics.contains(
+            "sonar:nixl_xfer_time_seconds_count{model_name=\"test-model\",engine=\"0\"} 2"
+        )
+    );
+    assert!(
+        rendered_metrics.contains(
+            "sonar:nixl_bytes_transferred_count{model_name=\"test-model\",engine=\"0\"} 2"
+        )
+    );
     assert!(rendered_metrics.contains(
-        "aphrodite:nixl_xfer_time_seconds_count{model_name=\"test-model\",engine=\"0\"} 2"
+        "sonar:nixl_bytes_transferred_sum{model_name=\"test-model\",engine=\"0\"} 12288"
     ));
     assert!(rendered_metrics.contains(
-        "aphrodite:nixl_bytes_transferred_count{model_name=\"test-model\",engine=\"0\"} 2"
+        "sonar:nixl_num_failed_transfers_total{model_name=\"test-model\",engine=\"0\"} 2"
     ));
     assert!(rendered_metrics.contains(
-        "aphrodite:nixl_bytes_transferred_sum{model_name=\"test-model\",engine=\"0\"} 12288"
+        "sonar:nixl_num_failed_notifications_total{model_name=\"test-model\",engine=\"0\"} 1"
     ));
     assert!(rendered_metrics.contains(
-        "aphrodite:nixl_num_failed_transfers_total{model_name=\"test-model\",engine=\"0\"} 2"
+        "sonar:nixl_num_notifications_after_expiry_total{model_name=\"test-model\",engine=\"0\"} 2"
     ));
     assert!(rendered_metrics.contains(
-        "aphrodite:nixl_num_failed_notifications_total{model_name=\"test-model\",engine=\"0\"} 1"
-    ));
-    assert!(rendered_metrics.contains(
-        "aphrodite:nixl_num_notifications_after_expiry_total{model_name=\"test-model\",engine=\"0\"} 2"
-    ));
-    assert!(rendered_metrics.contains(
-        "aphrodite:umbp_transfer_bytes_total{model_name=\"test-model\",engine=\"0\",\
+        "sonar:umbp_transfer_bytes_total{model_name=\"test-model\",engine=\"0\",\
          operation=\"load\"} 8192"
     ));
 
@@ -3764,7 +3768,7 @@ fn python_msgpack_fixtures_match_rust_encoding_and_record_nixl_metrics() {
     assert!(ready_response.supports_draft_weight_updates);
     assert_eq!(ready_response.effective_attention_block_size, Some(64));
     assert_eq!(
-        ready_response.aphrodite_config,
+        ready_response.sonar_config,
         Some(serde_json::json!({
             "model_config": {"model": "test-model", "max_model_len": 32768},
             "cache_config": {"num_gpu_blocks": 1000, "gpu_memory_utilization": 0.9},

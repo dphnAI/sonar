@@ -6,12 +6,12 @@ import asyncio
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.inputs import ExplicitEncoderDecoderPrompt
-from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.engine.exceptions import EngineGenerateError
+from sonar import SamplingParams
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.inputs import ExplicitEncoderDecoderPrompt
+from sonar.sampling_params import RequestOutputKind
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.engine.exceptions import EngineGenerateError
 from tests.v1.shutdown.utils import SHUTDOWN_TEST_TIMEOUT_SEC
 
 MODELS = ["meta-llama/Llama-3.2-1B"]

@@ -30,12 +30,12 @@ a running server for the installed version's exact request schema.
 Use `/tokenize` to convert text to token IDs. Use `/detokenize` for the reverse
 operation. These endpoints use the tokenizer loaded by the server.
 
-To serve only a model's tokenizer, run `aphrodite tokenizer <model>`. It loads
+To serve only a model's tokenizer, run `sonar tokenizer <model>`. It loads
 the tokenizer and model config without weights, an engine, or a GPU, and serves
 `/tokenize` and `/detokenize` with the same request and response formats as
-`aphrodite serve`, including chat `messages`. It also serves `/v1/models`,
+`sonar serve`, including chat `messages`. It also serves `/v1/models`,
 `/health`, `/version`, and `/metrics`. Pass `--enable-tokenizer-info-endpoint`
-to expose `/tokenizer_info`. It accepts the `aphrodite serve` options for the
+to expose `/tokenizer_info`. It accepts the `sonar serve` options for the
 tokenizer, chat template, host, port, and API key.
 
 ## Render and derender
@@ -85,7 +85,7 @@ EC connector has published embeddings.
 import httpx
 
 MODEL = "Qwen/Qwen3-VL-2B-Instruct"
-RENDER = "http://localhost:8100"  # aphrodite launch render ...
+RENDER = "http://localhost:8100"  # sonar launch render ...
 ENCODE = "http://localhost:8200"  # encode worker
 PREFILL = "http://localhost:8300"  # prefill worker
 

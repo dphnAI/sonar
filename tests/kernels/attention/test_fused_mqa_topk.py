@@ -7,21 +7,21 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.kernels.attention.dsa.fused_mqa_topk import (
+import sonar.envs as envs
+from sonar import _custom_ops as ops
+from sonar.model_executor.kernels.attention.dsa.fused_mqa_topk import (
     fused_mqa_topk_available,
     fused_mqa_topk_min_keys,
     fused_mqa_topk_prefill,
     get_fused_mqa_topk_workspaces,
 )
-from aphrodite.model_executor.layers.sparse_attn_indexer import as_fp32_logits
-from aphrodite.utils.deep_gemm import (
+from sonar.model_executor.layers.sparse_attn_indexer import as_fp32_logits
+from sonar.utils.deep_gemm import (
     fp8_fp4_mqa_logits,
     mqa_logits_mx_inputs,
     mqa_logits_use_mx_scales,
 )
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
     DeepseekV32IndexerPrefillChunkMetadata,
     DeepseekV32IndexerPrefillMetadata,
@@ -359,7 +359,7 @@ def _kpool_inputs(pool_lens=(20000, 70000), q_rows=96, tail=2, seed=919):
 
 def _run_kpool_indexer(monkeypatch, inputs, fused_mqa_topk, budget_mb=512):
     """Run the GLM-5.3-Flash kpool indexer prefill on one packed chunk."""
-    import aphrodite.models.glm5next.nvidia.sparse_indexer as kpool_indexer
+    import sonar.models.glm5next.nvidia.sparse_indexer as kpool_indexer
 
     q, k, scales, weights, starts, ends, positions = inputs
     rows, keys = q.shape[0], k.shape[0]
@@ -396,8 +396,8 @@ def _run_kpool_indexer(monkeypatch, inputs, fused_mqa_topk, budget_mb=512):
         lambda: SimpleNamespace(attn_metadata={"indexer": metadata}),
     )
     monkeypatch.setattr(kpool_indexer, "current_workspace_manager", lambda: workspace)
-    monkeypatch.setattr(envs, "APHRODITE_USE_FUSED_MQA_TOPK", fused_mqa_topk)
-    monkeypatch.setattr(envs, "APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB", budget_mb)
+    monkeypatch.setattr(envs, "SONAR_USE_FUSED_MQA_TOPK", fused_mqa_topk)
+    monkeypatch.setattr(envs, "SONAR_SPARSE_INDEXER_MAX_LOGITS_MB", budget_mb)
     calls: list[torch.Size] = []
     fused_fn = kpool_indexer.fused_mqa_topk_prefill
 

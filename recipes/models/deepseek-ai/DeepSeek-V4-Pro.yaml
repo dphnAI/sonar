@@ -139,7 +139,7 @@ variants:
     precision: fp8
     vram_minimum_gb: 960
     description: "Preview FP4+FP8 weights with the DSpark draft module baked in — same base checkpoint as the fp8 variant plus a fused speculative decoder."
-    # DSpark support landed after the recipe baseline (0.20.0), in Aphrodite 0.25.0.
+    # DSpark support landed after the recipe baseline (0.20.0), in Sonar 0.25.0.
     min_vllm_version: "0.25.0"
     default_modes:
       spec_decoding: dspark
@@ -208,7 +208,7 @@ hardware_overrides:
       - "--compilation-config"
       - '{"mode": 3, "cudagraph_mode": "FULL_DECODE_ONLY"}'
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
 
 strategy_overrides:
   single_node_tp:
@@ -244,7 +244,7 @@ strategy_overrides:
       - '{"cudagraph_mode":"FULL_AND_PIECEWISE", "custom_ops":["all"]}'
   pd_cluster:
     env:
-      APHRODITE_USE_NCCL_SYMM_MEM: "1"
+      SONAR_USE_NCCL_SYMM_MEM: "1"
       NCCL_CUMEM_ENABLE: "1"
       NCCL_MNNVL_ENABLE: "1"
       NCCL_NVLS_ENABLE: "1"
@@ -314,11 +314,11 @@ presets:
     json_args:
       "--speculative-config": { num_speculative_tokens: 6 }
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_FLOAT32_MATMUL_PRECISION: "high"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_FLOAT32_MATMUL_PRECISION: "high"
       TORCH_CUDA_ARCH_LIST: "10.0"
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_RPC_TIMEOUT: "600000"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_RPC_TIMEOUT: "600000"
     # --max-num-seqs equals the concurrency. Graphs capture every decode batch of up to
     # that many sequences (target plus six drafts each) and mixed batches of 100-500 tokens.
     points:
@@ -333,7 +333,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,100,200,300,400,500]}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       c4:
         label: "4 (low latency)"
         concurrency: 4
@@ -348,7 +348,7 @@ presets:
           - "--sparse-indexer-topk-backend"
           - "deep_select"
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       c6:
         label: "6"
         concurrency: 6
@@ -360,7 +360,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,35,42,100,200,300,400,500]}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       c10:
         label: "10"
         concurrency: 10
@@ -389,21 +389,21 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,100,200,300,400,500]}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
     runbook: |
       The TP8 points of the B200 AgentX lane (`dsv4-fp4-b200-vllm-agentic-mtp` and its low-concurrency
       companion, [SemiAnalysisAI/InferenceX#4554](https://github.com/SemiAnalysisAI/InferenceX/pull/4554)) serve the
-      0813 checkpoint with DSpark (six draft tokens) as one aggregated Aphrodite worker on one 8-GPU B200 node: TP8, no
+      0813 checkpoint with DSpark (six draft tokens) as one aggregated Sonar worker on one 8-GPU B200 node: TP8, no
       expert parallelism, no host KV offload. Each GPU holds a fixed 50 GiB KV cache and `--max-num-seqs` equals the
       concurrency.
 
       Concurrency 4 is the low-latency variant: a 40 GiB KV cache, the `deep_select` sparse indexer top-k backend and
       graph capture up to 16384 tokens. Concurrency 10 sets `--prefix-cache-retention-interval 32768` and
       `--prefill-schedule-interval 64`, shards the indexer at 4096 rows (`indexer_tp_shard_min_rows`) and leaves
-      `APHRODITE_DSV4_MEGA_FP8_COMBINE` unset. Concurrency 4 and 10 were measured on a second pinned image, shown on
+      `SONAR_DSV4_MEGA_FP8_COMBINE` unset. Concurrency 4 and 10 were measured on a second pinned image, shown on
       those points.
 
-      Left out of the command: the lane also exported `APHRODITE_PREFIX_CACHE_RETENTION_INTERVAL`, which Aphrodite removed in
+      Left out of the command: the lane also exported `SONAR_PREFIX_CACHE_RETENTION_INTERVAL`, which Sonar removed in
       v0.30.0 ([vllm#55353](https://github.com/vllm-project/vllm/pull/55353)) in favour of the flag above, so it had
       no effect on the image it ran on; and `--served-model-name`, which the builder replaces with the checkpoint ID.
       The throughput points in InferenceX swap block verification for synthetic rejection at a committed
@@ -415,7 +415,7 @@ presets:
     strategy: single_node_dep
     variants: [default]
     workload: "Agentic (InferenceX AgentX)"
-    description: "Data-parallel ranks with expert parallelism and a Simple CPU KV tier behind a consistent-hash Aphrodite Router: DEP8 for concurrency 64 to 192, TP4 x DP2 at 32 and TP2 x DP4 at 48 and 64."
+    description: "Data-parallel ranks with expert parallelism and a Simple CPU KV tier behind a consistent-hash Sonar Router: DEP8 for concurrency 64 to 192, TP4 x DP2 at 32 and TP2 x DP4 at 48 and 64."
     source: { label: "InferenceX #4554", href: "https://github.com/SemiAnalysisAI/InferenceX/pull/4554", key: "dsv4-fp4-b200-vllm-agentic-mtp", revision: 2c044c3 }
     image: "vllm/vllm-openai:nightly-8e2beaa3bff595577a069d49d96bde9074294ec2@sha256:3207cb99c0f59b92f7d47a74da8c6eb5467565d811a4f8d9df51df5188f59c70"
     select:
@@ -445,11 +445,11 @@ presets:
       "--speculative-config": { num_speculative_tokens: 6 }
       "--kv-transfer-config": { kv_connector_extra_config: { cpu_bytes_to_use_per_rank: 241500000000, enable_cross_layers_blocks: "true", lazy_offload: false } }
     env:
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_FLOAT32_MATMUL_PRECISION: "high"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_FLOAT32_MATMUL_PRECISION: "high"
       TORCH_CUDA_ARCH_LIST: "10.0"
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "7200"
-      APHRODITE_RPC_TIMEOUT: "600000"
+      SONAR_ENGINE_READY_TIMEOUT_S: "7200"
+      SONAR_RPC_TIMEOUT: "600000"
       PYTORCH_ALLOC_CONF: "expandable_segments:True"
       PYTHONHASHSEED: "42"
     # --max-num-seqs is per DP rank; --max-num-batched-tokens is an 8192-token prefill budget
@@ -472,7 +472,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112],"mode":0}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       dep8_c96:
         label: "96 (DEP8)"
         concurrency: 96
@@ -490,7 +490,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168],"mode":0}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       dep8_c128:
         label: "128 (DEP8)"
         concurrency: 128
@@ -508,7 +508,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224],"mode":0}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       dep8_c160:
         label: "160 (DEP8)"
         concurrency: 160
@@ -526,7 +526,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280],"mode":0}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       dep8_c192:
         label: "192 (DEP8)"
         concurrency: 192
@@ -544,7 +544,7 @@ presets:
           - "--compilation-config"
           - '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336],"mode":0}'
         env:
-          APHRODITE_DSV4_MEGA_FP8_COMBINE: "1"
+          SONAR_DSV4_MEGA_FP8_COMBINE: "1"
       tp4dp2_c32:
         label: "32 (TP4 x DP2)"
         concurrency: 32
@@ -602,15 +602,15 @@ presets:
       concurrency 64 to 192, TP4 x DP2 at 32 and TP2 x DP4 at 48 and 64, all with expert parallelism and the Simple
       CPU KV tier. Each rank gets 241.5 GB of host memory (1932 GB across the node), so size it to the machine.
       `--max-num-seqs` is per DP rank, and `--max-num-batched-tokens` is an 8192-token prefill budget plus seven
-      verification slots per sequence. The TP4 x DP2 and TP2 x DP4 points leave `APHRODITE_DSV4_MEGA_FP8_COMBINE` unset.
+      verification slots per sequence. The TP4 x DP2 and TP2 x DP4 points leave `SONAR_DSV4_MEGA_FP8_COMBINE` unset.
       TP2 x DP4 was measured on a second pinned image, shown on those points.
 
-      The lane fronts the server with Aphrodite Router 0.1.14 (`--policy consistent_hash`, `--intra-node-data-parallel-size`
+      The lane fronts the server with Sonar Router 0.1.14 (`--policy consistent_hash`, `--intra-node-data-parallel-size`
       equal to the server's DP size, as on the router tab), plus `--request-timeout-secs 14400` so long agentic
       requests outlive the default and `--disable-retries` so a failed request is not replayed. Clients send a stable
       per-conversation `X-Session-ID` so the router keeps a conversation on the rank that holds its prefix.
 
-      Left out of the command: `APHRODITE_PREFIX_CACHE_RETENTION_INTERVAL` (removed in Aphrodite v0.30.0,
+      Left out of the command: `SONAR_PREFIX_CACHE_RETENTION_INTERVAL` (removed in Sonar v0.30.0,
       [vllm#55353](https://github.com/vllm-project/vllm/pull/55353), so it had no effect), `--served-model-name`
       (the builder replaces it with the checkpoint ID) and the router's Prometheus port. The throughput points in
       InferenceX swap block verification for synthetic rejection at a committed acceptance length so every point is
@@ -629,7 +629,7 @@ presets:
       key: dsv4-fp4-mi355x-vllm-agentic-mtp
       revision: 5ec3c995988e5d3632c1ff53e8ae39da3e799892
     image:
-      aphrodite: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
+      sonar: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
       model_revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
       pip: [Pillow, fastapi, uvicorn]
     tp: 8
@@ -653,12 +653,12 @@ presets:
       - "--enable-prefix-caching"
       - "--no-disable-hybrid-kv-cache-manager"
     env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "10800"
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
-      APHRODITE_ROCM_USE_AITER_MOE: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
+      SONAR_ENGINE_READY_TIMEOUT_S: "10800"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER_MOE: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
       OMP_NUM_THREADS: "1"
     json_args:
       --compilation-config: {mode: 3, cudagraph_mode: FULL_AND_PIECEWISE}
@@ -676,7 +676,7 @@ presets:
     runbook: |
       This opt-in profile serves [DeepSeek-V4-Pro-0813](https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813)
       on one 8× MI355X node. The monokernel is enabled only for the TP8 arm;
-      [Aphrodite #61482](https://github.com/vllm-project/vllm/pull/61482) added this
+      [Sonar #61482](https://github.com/vllm-project/vllm/pull/61482) added this
       DSpark-compatible path. These presets do not change the generic defaults.
 
       **Qualification blocked:** the source enables nondefault INT4 QuickReduce
@@ -723,7 +723,7 @@ presets:
 
       The TP8 scheduler caps are twice the listed client concurrency for AgentX
       fan-out. No host-memory offload is enabled. The source's obsolete
-      `APHRODITE_PREFIX_CACHE_RETENTION_INTERVAL=32768` has no effect in this image;
+      `SONAR_PREFIX_CACHE_RETENTION_INTERVAL=32768` has no effect in this image;
       the presets retain the effective CLI default of `0` (semantic checkpoints).
 
       Evidence: [sweep 40260921924, attempt 3](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40260921924/attempts/3)
@@ -748,7 +748,7 @@ presets:
       key: dsv4-fp4-mi355x-vllm-agentic-mtp
       revision: 5ec3c995988e5d3632c1ff53e8ae39da3e799892
     image:
-      aphrodite: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
+      sonar: "vllm/vllm-openai-rocm:nightly-e4a5b5537344b103ed10de7764378ef09604ef3d"
       model_revision: 72e1d3230f6c080a530b0a1d46f8eb4602340597
       pip: [Pillow, fastapi, uvicorn, "vllm-router==0.1.14"]
     select:
@@ -772,12 +772,12 @@ presets:
       - "--long-prefill-token-threshold"
       - "16384"
     env:
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "10800"
-      APHRODITE_USE_V2_MODEL_RUNNER: "1"
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
-      APHRODITE_ROCM_USE_AITER_MOE: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
+      SONAR_ENGINE_READY_TIMEOUT_S: "10800"
+      SONAR_USE_V2_MODEL_RUNNER: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER_MOE: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "0"
       OMP_NUM_THREADS: "1"
     json_args:
       --compilation-config: {mode: 3, cudagraph_mode: FULL_AND_PIECEWISE}
@@ -871,7 +871,7 @@ guide: |
   ```
 
   The fused checkpoints are ~893 GB on disk versus ~865 GB for the preview — the draft
-  module is the difference. Both require **Aphrodite 0.25.0**, above this recipe's 0.20.0
+  module is the difference. Both require **Sonar 0.25.0**, above this recipe's 0.20.0
   baseline; the Install block bumps automatically when either is selected.
 
   ## Reasoning modes
@@ -892,7 +892,7 @@ guide: |
 
   Note that the 0813 release ships no Jinja chat template — the repo provides an
   `encoding/` folder with `encode_messages` / `parse_message_from_completion_text`
-  helpers instead. Serving through Aphrodite with `--tokenizer-mode deepseek_v4` (the
+  helpers instead. Serving through Sonar with `--tokenizer-mode deepseek_v4` (the
   **Tool Calling** pill) applies the built-in DeepSeek-V4 encoding, so the OpenAI-
   compatible endpoint works without the helper scripts.
 
@@ -945,7 +945,7 @@ guide: |
   - **H200 (8× GPU)**: DP + EP with `--data-parallel-size 8`. Context is capped at
     800K tokens (`--max-model-len 800000`) to leave KV headroom with dense params
     replicated across ranks — applies to both single-node and multi-node H200.
-  - **MI355X (8× GPU)**: validated with ROCm + AITER (`APHRODITE_ROCM_USE_AITER=1`),
+  - **MI355X (8× GPU)**: validated with ROCm + AITER (`SONAR_ROCM_USE_AITER=1`),
     `--gpu-memory-utilization 0.9`, `--max-num-seqs 128`,
     `--max-num-batched-tokens 8192`, and `--distributed-executor-backend mp`.
   - **GB200 NVL4 (4× GPU per tray)**: the ~960 GB mixed-precision checkpoint does not
@@ -955,9 +955,9 @@ guide: |
   ### MI355X (8×288GB)
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Pro \
+  sonar serve deepseek-ai/DeepSeek-V4-Pro \
     --host localhost \
     --port 8001 \
     --dtype auto \
@@ -1008,13 +1008,13 @@ guide: |
   - **Simple** — `SimpleCPUOffloadConnector`: spills KV blocks to a per-rank region of CPU
     DRAM on each node. The simplest way to extend effective KV capacity for a single instance.
   - **Mooncake** — `MooncakeStoreConnector`: pools CPU DRAM into a distributed shared KV
-    store — either embedded (each rank's Aphrodite worker runs a Mooncake client that donates a DRAM segment)
+    store — either embedded (each rank's Sonar worker runs a Mooncake client that donates a DRAM segment)
     or standalone (a per-node `mooncake_store_service` owns the node's DRAM and contributes
     it to the pool, decoupling cache lifetime from the engine). A cluster-wide
     `mooncake_master` coordinates the pool; across 2+ instances, GPU workers share it for
     cross-instance prefix reuse. Install from the extra-install block above; see the [Mooncake docs](https://kvcache-ai.github.io/Mooncake/).
   - **LMCache** — `LMCacheMPConnector`: a node-local KV pool served by a
-    companion `lmcache server` process, launched before `aphrodite serve`.
+    companion `lmcache server` process, launched before `sonar serve`.
     Single-node strategies only. Install from the extra-install block above; see the [LMCache docs](https://docs.lmcache.ai/).
 
   ## Agentic serving on GB200/GB300 (DSpark)
@@ -1025,7 +1025,7 @@ guide: |
 
   ### Common settings
 
-  Set `APHRODITE_USE_V2_MODEL_RUNNER=1` and use these engine arguments:
+  Set `SONAR_USE_V2_MODEL_RUNNER=1` and use these engine arguments:
 
   ```text
   --tokenizer-mode deepseek_v4 --trust-remote-code
@@ -1040,11 +1040,11 @@ guide: |
   per-user latency and time to first token. Use the same K on both PD roles.
 
   For aggregate TP serving, use
-  `--disable-custom-all-reduce`, `APHRODITE_ALLREDUCE_USE_FLASHINFER=1`,
-  `APHRODITE_FLASHINFER_ALLREDUCE_BACKEND=auto`; do not select an EP MoE backend.
+  `--disable-custom-all-reduce`, `SONAR_ALLREDUCE_USE_FLASHINFER=1`,
+  `SONAR_FLASHINFER_ALLREDUCE_BACKEND=auto`; do not select an EP MoE backend.
   For DEP (TP1 with data and expert parallelism), both pools instead use
   `--enable-expert-parallel --enable-ep-weight-filter --enable-cumem-allocator`,
-  `--moe-backend deep_gemm_amxf4_mega_moe` and `APHRODITE_DSV4_MEGA_FP8_COMBINE=1`.
+  `--moe-backend deep_gemm_amxf4_mega_moe` and `SONAR_DSV4_MEGA_FP8_COMBINE=1`.
   This MoE configuration supports the native mixed FP4/FP8 checkpoint, unlike
   the FP8-only `deep_gemm_mega_moe` setting above.
 
@@ -1082,7 +1082,7 @@ guide: |
   ```
 
   Match the list to the local GPU order and topology on each node, including
-  GB300 deployments. See the [Aphrodite NUMA binding guide](https://docs.vllm.ai/en/latest/configuration/optimization/#numa-binding-for-multi-socket-gpu-nodes)
+  GB300 deployments. See the [Sonar NUMA binding guide](https://docs.vllm.ai/en/latest/configuration/optimization/#numa-binding-for-multi-socket-gpu-nodes)
   for automatic detection and explicit mappings.
 
   **Aggregate streaming:** add `--stream-interval 10` to the aggregate TP8
@@ -1164,7 +1164,7 @@ guide: |
     cover the conversation lifetime.
   - Both DEP roles use `MultiConnector` with `NixlConnector` for PD transfer and
     `MooncakeStoreConnector` for shared prefix storage. Enable store lookup only
-    on prefill, and set `APHRODITE_CONNECTOR_PREFETCH_DEPTH=0` there. Role-specific
+    on prefill, and set `SONAR_CONNECTOR_PREFETCH_DEPTH=0` there. Role-specific
     `--kv-transfer-config` values:
 
   Prefill — save as `prefill-kv.json` in the worker's working directory:
@@ -1192,11 +1192,11 @@ guide: |
   export NODE_IP=10.0.0.11  # Change on each worker node.
   NODE_RANK=0              # Use 1 on the second node of either pool.
   export CUDA_VISIBLE_DEVICES=0,1,2,3
-  export APHRODITE_HOST_IP="$NODE_IP"
-  export APHRODITE_NIXL_SIDE_CHANNEL_HOST="$NODE_IP"
-  export APHRODITE_NIXL_SIDE_CHANNEL_PORT=20096
+  export SONAR_HOST_IP="$NODE_IP"
+  export SONAR_NIXL_SIDE_CHANNEL_HOST="$NODE_IP"
+  export SONAR_NIXL_SIDE_CHANNEL_PORT=20096
   export DYN_SYSTEM_PORT=8081
-  export APHRODITE_USE_V2_MODEL_RUNNER=1 APHRODITE_DSV4_MEGA_FP8_COMBINE=1
+  export SONAR_USE_V2_MODEL_RUNNER=1 SONAR_DSV4_MEGA_FP8_COMBINE=1
   export PYTHONHASHSEED=0
   export MOONCAKE_MASTER="${INFRA_IP}:8700"
   export MOONCAKE_TE_META_DATA_SERVER="http://${INFRA_IP}:8701/metadata"
@@ -1230,7 +1230,7 @@ guide: |
   block, keeping `PREFILL_HEAD_IP` identical across the pool:
 
   ```bash
-  export APHRODITE_CONNECTOR_PREFETCH_DEPTH=0
+  export SONAR_CONNECTOR_PREFETCH_DEPTH=0
   python3 -m dynamo.vllm "${COMMON_ARGS[@]}" --disaggregation-mode prefill \
     --data-parallel-address "$PREFILL_HEAD_IP" \
     --kv-transfer-config "$(cat prefill-kv.json)" \
@@ -1258,7 +1258,7 @@ guide: |
   start ranks are `4 * NODE_RANK` (0, 4, 8, 12). Tune scheduling for the target
   workload and recompute graph sizes when changing K or S. The same port numbers can be
   reused on separate hosts; co-located workers need distinct port allocations.
-  The [official Dynamo Aphrodite examples](https://github.com/ai-dynamo/dynamo/tree/59dd504105db498b11e5715854a2512d57b7a1e0/examples/backends/vllm/launch)
+  The [official Dynamo Sonar examples](https://github.com/ai-dynamo/dynamo/tree/59dd504105db498b11e5715854a2512d57b7a1e0/examples/backends/vllm/launch)
   provide the aggregate and KV-routing launch patterns; apply this section's
   model and aggregate settings when using those patterns.
 
@@ -1324,14 +1324,14 @@ guide: |
   ### STP launch (no speculative decoding)
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
   # Fuses the FP8 shared expert into the MXFP4 routed-expert AITER kernel.
   # See the shared-expert note below for the build and eligibility requirements.
-  export APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve deepseek-ai/DeepSeek-V4-Pro \
+  sonar serve deepseek-ai/DeepSeek-V4-Pro \
     --port "${PORT:-8000}" \
     --tensor-parallel-size 8 \
     --data-parallel-size 1 \
@@ -1381,7 +1381,7 @@ guide: |
   ```bash
   CONC=32
 
-  aphrodite bench serve \
+  sonar bench serve \
     --model deepseek-ai/DeepSeek-V4-Pro \
     --host localhost \
     --port "${PORT:-8000}" \
@@ -1403,8 +1403,8 @@ guide: |
 
   ### Shared-expert fusion requires a recent build
 
-  `APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1` is a request, not a guarantee:
-  Aphrodite gates the fused shared-expert path on its own eligibility check.
+  `SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1` is a request, not a guarantee:
+  Sonar gates the fused shared-expert path on its own eligibility check.
   [vllm-project/vllm#53161](https://github.com/vllm-project/vllm/pull/53161),
   merged as `de69e821`, added the heterogeneous path that fuses the native-FP8
   shared expert into the MXFP4 routed-expert kernel. Current `:nightly` images

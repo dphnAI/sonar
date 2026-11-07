@@ -4,8 +4,8 @@
 // DeepSeek-V4 fused Q RMSNorm+RoPE / KV RoPE+UE8M0-quant+paged-cache-insert
 // kernel for the fp8_ds_mla cache layout. Not a port of upstream's
 // `set_k_and_s_cpu`/`quant_to_nope_fp8_rope_bf16_pack_cpu` -- their
-// pool_kv/pool_score signature doesn't apply to Aphrodite's layout. This is the
-// CPU counterpart to Aphrodite's own CUDA kernel
+// pool_kv/pool_score signature doesn't apply to Sonar's layout. This is the
+// CPU counterpart to Sonar's own CUDA kernel
 // (`fused_deepseek_v4_qnorm_rope_kv_insert_kernel.cu`); see
 // `DeepseekV4Attention._fused_qnorm_rope_kv_insert_cpu` (attention.py) for
 // the eager reference this replaces.
@@ -22,7 +22,7 @@
 #if !defined(CPU_CAPABILITY_AVX512)
 static_assert(false,
               "store_cache.cpp is only ever compiled into the AVX512+AMX-flagged "
-              "_C target (see cmake/cpu_extension.cmake's APHRODITE_EXT_SRC_SGL) and "
+              "_C target (see cmake/cpu_extension.cmake's SONAR_EXT_SRC_SGL) and "
               "relies on that unconditionally -- CPU_CAPABILITY_AVX512 must be "
               "defined here.");
 #endif
@@ -51,7 +51,7 @@ inline void apply_gptj_rope_inplace(float* __restrict__ x, const float* __restri
 // RNE rounding via bit manipulation instead of a per-element scalar
 // `at::Float8_e4m3fn` cast. Subnormal-magnitude fp8 lanes are flushed to
 // zero (matches SGLang's own convention, `cvt_fp32x16_to_fp8x16`) --
-// Aphrodite's own AVX512 dequant of this cache (`flash_mla.cpp`'s
+// Sonar's own AVX512 dequant of this cache (`flash_mla.cpp`'s
 // `CVT_FP8_TO_BF16_EXT`) doesn't reconstruct exact subnormal magnitudes
 // either way, so there is nothing to preserve by rounding them exactly on
 // the write side.
@@ -365,7 +365,7 @@ at::Tensor fused_qnorm_rope_kv_insert_cpu(
   return q_out;
 }
 
-// Aphrodite-native: inverse GPT-J RoPE for `_o_proj`'s output de-rotation (undoes
+// Sonar-native: inverse GPT-J RoPE for `_o_proj`'s output de-rotation (undoes
 // the query's own rotation on the attention output before the low-rank
 // wo_a/wo_b projection -- see the math writeup in cpu_sparse.py's `_o_proj`).
 // Upstream needs this same step (`fused_rope_inplace(..., inverse=True)` in

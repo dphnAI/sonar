@@ -12,7 +12,7 @@ Data parallelism creates additional replicas.
 Use tensor parallelism across GPUs with a fast local interconnect:
 
 ```bash
-aphrodite serve MODEL --tensor-parallel-size 8
+sonar serve MODEL --tensor-parallel-size 8
 ```
 
 Check the visible GPU order before launch. Every worker must see the model files
@@ -23,7 +23,7 @@ and use the same Python environment.
 Sonar can start one multiprocessing executor on each host. You do not need a
 Ray cluster for multi-node tensor or pipeline parallelism.
 
-Each host runs the same `aphrodite serve` command with a different
+Each host runs the same `sonar serve` command with a different
 `--node-rank`. Node 0 starts the API server. The other nodes use `--headless`
 and run model workers only.
 
@@ -58,7 +58,7 @@ the interface that carries traffic between the nodes.
 Start node 0:
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --tensor-parallel-size 8 \
   --pipeline-parallel-size 4 \
   --nnodes 4 \
@@ -71,7 +71,7 @@ aphrodite serve MODEL \
 Start the worker process on node 1:
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --tensor-parallel-size 8 \
   --pipeline-parallel-size 4 \
   --nnodes 4 \
@@ -88,7 +88,7 @@ Run the same command on nodes 2 and 3. Set `--node-rank 2` on node 2 and
 All nodes must use the same model, Sonar commit, command options, and
 environment. A local model path must contain identical files on every node.
 
-`aphrodite run` remains a compatibility alias for `aphrodite serve`. New
+`sonar run` remains a compatibility alias for `sonar serve`. New
 deployment instructions use `serve`.
 
 ### Select the executor
@@ -120,10 +120,10 @@ export GLOO_SOCKET_IFNAME=eth0
 Replace `eth0` with the data-plane interface. Do not select a management
 interface with lower bandwidth.
 
-Set `APHRODITE_HOST_IP` to this node's address on the data-plane network:
+Set `SONAR_HOST_IP` to this node's address on the data-plane network:
 
 ```bash
-export APHRODITE_HOST_IP=10.0.0.11
+export SONAR_HOST_IP=10.0.0.11
 ```
 
 Use a different, reachable address on each node. `--master-addr` selects the
@@ -151,10 +151,10 @@ transport. Test the default NCCL configuration first.
 ## Control pipeline layer placement
 
 Sonar distributes transformer layers across pipeline stages automatically. Use
-`APHRODITE_PP_LAYER_PARTITION` when memory use or compute time is uneven:
+`SONAR_PP_LAYER_PARTITION` when memory use or compute time is uneven:
 
 ```bash
-export APHRODITE_PP_LAYER_PARTITION=18,20,20,20
+export SONAR_PP_LAYER_PARTITION=18,20,20,20
 ```
 
 Provide one integer for each pipeline stage. The values must sum to the model's
@@ -167,7 +167,7 @@ automatic partition.
 ## Data parallel serving
 
 ```bash
-aphrodite serve MODEL \
+sonar serve MODEL \
   --tensor-parallel-size 8 \
   --data-parallel-size 2
 ```
@@ -183,7 +183,7 @@ rank, and local-size fields.
 ## Expert parallelism
 
 ```bash
-aphrodite serve MOE_MODEL \
+sonar serve MOE_MODEL \
   --tensor-parallel-size 8 \
   --enable-expert-parallel
 ```

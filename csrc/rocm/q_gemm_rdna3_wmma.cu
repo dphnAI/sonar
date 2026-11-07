@@ -50,12 +50,12 @@
   #define __HIP__RDNA3__
 #endif
 
-namespace aphrodite {
+namespace sonar {
 namespace gptq_rdna3_wmma {
 
 // Pull dequant types from the sibling namespace.
-using aphrodite::gptq_rdna3::bf162_t;
-using aphrodite::gptq_rdna3::bf16_t;
+using sonar::gptq_rdna3::bf162_t;
+using sonar::gptq_rdna3::bf16_t;
 
 // Device code below uses RDNA3-only __builtin_amdgcn_wmma_* intrinsics;
 // non-RDNA3 device passes fall through to empty __global__ stubs at the
@@ -508,10 +508,10 @@ __global__ void gemm_q4_wmma_kernel_16x16_1w(
       b_frag[i] = bitcast_elem<T, E>(b_lds[i][lane_lo]);
     }
 
-  #ifdef APHRODITE_WMMA_LAYOUT_DEBUG
+  #ifdef SONAR_WMMA_LAYOUT_DEBUG
     // Diagnostic: skip WMMA, force c_acc to encode (lane, slot) so the
     // store pattern reveals the C-output lane→matrix mapping. Compile with
-    // -DAPHRODITE_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane +
+    // -DSONAR_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane +
     // slot/16.
     (void)a_frag;
     (void)b_frag;
@@ -2315,7 +2315,7 @@ void launch_gemm_q4_wmma_64x64_4w(const T* a, const uint32_t* b_q_weight,
 }
 
 }  // namespace gptq_rdna3_wmma
-}  // namespace aphrodite
+}  // namespace sonar
 
 // ---------------------------------------------------------------------------
 // Public entry point.
@@ -2386,20 +2386,20 @@ torch::Tensor gptq_gemm_rdna3_wmma(torch::Tensor a, torch::Tensor b_q_weight,
   //   32 <= M < 64       → 32x16_2w (2 waves)
   //   M < 32             → 16x16_1w (1 wave)
   if (a.scalar_type() == torch::kHalf) {
-    aphrodite::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<half>(
+    sonar::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<half>(
         (const half*)a.data_ptr(), (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(), (const half*)b_scales.data_ptr(),
         (half*)c.data_ptr(), size_m, size_n, size_k, groups, zero_offset,
         stream);
   } else {
-    aphrodite::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<
-        aphrodite::gptq_rdna3_wmma::bf16_t>(
-        (const aphrodite::gptq_rdna3_wmma::bf16_t*)a.data_ptr(),
+    sonar::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<
+        sonar::gptq_rdna3_wmma::bf16_t>(
+        (const sonar::gptq_rdna3_wmma::bf16_t*)a.data_ptr(),
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
-        (const aphrodite::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(),
-        g_idx_ptr, (aphrodite::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m,
-        size_n, size_k, groups, zero_offset, stream);
+        (const sonar::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
+        (sonar::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
+        groups, zero_offset, stream);
   }
 
   return c;

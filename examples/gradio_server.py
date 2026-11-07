@@ -8,7 +8,7 @@ import requests
 
 
 def http_bot(prompt):
-    headers = {"User-Agent": "Aphrodite Client"}
+    headers = {"User-Agent": "Sonar Client"}
     pload = {
         "prompt": prompt,
         "stream": True,
@@ -25,7 +25,7 @@ def http_bot(prompt):
 
 def build_demo():
     with gr.Blocks() as demo:
-        gr.Markdown("# Aphrodite text completion demo\n")
+        gr.Markdown("# Sonar text completion demo\n")
         inputbox = gr.Textbox(label="Input", placeholder="Enter text and press ENTER")
         outputbox = gr.Textbox(label="Output", placeholder="Generated result from the model")
         inputbox.submit(http_bot, [inputbox], [outputbox])

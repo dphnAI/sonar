@@ -5,9 +5,9 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use aphrodite_engine_core_client::protocol::multimodal::PlaceholderRange;
-use aphrodite_engine_core_client::protocol::tensor::WireTensor;
 use llm_multimodal::{Modality, PromptReplacement};
+use sonar_engine_core_client::protocol::multimodal::PlaceholderRange;
+use sonar_engine_core_client::protocol::tensor::WireTensor;
 
 use super::PreparedMedia;
 use super::timing::MM_STAGE_TARGET;
@@ -144,8 +144,8 @@ pub(super) fn expand_prompt_token_ids(
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::tensor::WireArrayData;
     use llm_multimodal::TokenId;
+    use sonar_engine_core_client::protocol::tensor::WireArrayData;
 
     use super::super::tests::{
         LLAMA4_IMAGE_END_ID, LLAMA4_IMAGE_ID, LLAMA4_IMAGE_START_ID, LLAMA4_PATCH_ID,
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn expand_prompt_tokens_marks_only_step3_vl_im_patch_tokens_as_embed() {
-        use aphrodite_text::tokenizer::Tokenizer as _;
+        use sonar_text::tokenizer::Tokenizer as _;
 
         let tokenizer = step3_vl_tokenizer();
         let mut prompt_token_ids = tokenizer.encode("a <im_patch> b", false).unwrap();

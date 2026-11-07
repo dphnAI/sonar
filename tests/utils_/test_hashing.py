@@ -5,7 +5,7 @@ import pickle
 
 import pytest
 
-from aphrodite.utils.hashing import sha256
+from sonar.utils.hashing import sha256
 
 
 @pytest.mark.parametrize("input", [(), ("abc",), (None,), (None, bool, [1, 2, 3])])

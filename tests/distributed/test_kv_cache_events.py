@@ -6,7 +6,7 @@ from typing import Any
 import msgspec
 import pytest
 
-from aphrodite.distributed.kv_events import BlockRemoved, BlockStored
+from sonar.distributed.kv_events import BlockRemoved, BlockStored
 
 # Minimal ExternalBlockHash for testing (bytes are a valid ExternalBlockHash).
 _FAKE_HASH: bytes = b"\xab" * 32

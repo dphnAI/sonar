@@ -7,11 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
+from sonar.tokenizers import get_tokenizer
+from sonar.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,

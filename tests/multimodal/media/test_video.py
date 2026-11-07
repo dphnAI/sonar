@@ -12,21 +12,21 @@ import pytest
 import torch
 from PIL import Image
 
-import aphrodite.envs as envs
-from aphrodite.assets.base import get_aphrodite_public_assets
-from aphrodite.assets.video import (
+import sonar.envs as envs
+from sonar.assets.base import get_sonar_public_assets
+from sonar.assets.video import (
     video_get_metadata,
     video_to_ndarrays,
     video_to_pil_images_list,
 )
-from aphrodite.multimodal.media import ImageMediaIO, VideoMediaIO
-from aphrodite.multimodal.media.base import MediaDecodedBudget
-from aphrodite.multimodal.video import (
+from sonar.multimodal.media import ImageMediaIO, VideoMediaIO
+from sonar.multimodal.media.base import MediaDecodedBudget
+from sonar.multimodal.video import (
     PYNVVIDEOCODEC_VIDEO_BACKEND,
     VIDEO_LOADER_REGISTRY,
     VideoLoader,
 )
-from aphrodite.multimodal.video_decoders.pynvvideocodec import (
+from sonar.multimodal.video_decoders.pynvvideocodec import (
     PyNvVideoCodecVideoBackendMixin,
     _pynvvc_frames_to_nhwc,
 )
@@ -50,19 +50,19 @@ class Assert10Frames1FPSVideoLoader(VideoLoader):
 
 @pytest.mark.skip_global_cleanup
 def test_video_request_budget_counts_torch_frames(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(envs, "APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES", 16)
+    monkeypatch.setattr(envs, "SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES", 16)
     budget = MediaDecodedBudget()
     video_io = VideoMediaIO(ImageMediaIO(decoded_budget=budget))
     frames = torch.zeros((2, 2, 2, 3), dtype=torch.uint8)
     video_io.video_loader = SimpleNamespace(load_bytes=lambda *_args, **_kwargs: frames)
 
-    with pytest.raises(ValueError, match="APHRODITE_MAX_MEDIA_REQUEST_DECODE_BYTES"):
+    with pytest.raises(ValueError, match="SONAR_MAX_MEDIA_REQUEST_DECODE_BYTES"):
         video_io.load_bytes(b"video")
 
 
 def test_video_media_io_kwargs(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "assert_10_frames_1_fps")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "assert_10_frames_1_fps")
         imageio = ImageMediaIO()
 
         # Verify that different args pass/fail assertions as expected.
@@ -91,7 +91,7 @@ def test_opencv_video_io_colorspace(tmp_path, is_color: bool, fourcc: str, ext: 
     """Test all functions that use OpenCV for video I/O return RGB format.
     Both RGB and grayscale videos are tested.
     """
-    image_path = get_aphrodite_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
+    image_path = get_sonar_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
     image = Image.open(image_path)
 
     if not is_color:
@@ -166,7 +166,7 @@ class TestVideoBackendOverride2(VideoLoader):
 
 
 def test_video_media_io_backend_kwarg_override(monkeypatch: pytest.MonkeyPatch):
-    """Test that video_backend kwarg can override the APHRODITE_VIDEO_LOADER_BACKEND
+    """Test that video_backend kwarg can override the SONAR_VIDEO_LOADER_BACKEND
     environment variable.
 
     This allows users to dynamically select a different video backend
@@ -176,7 +176,7 @@ def test_video_media_io_backend_kwarg_override(monkeypatch: pytest.MonkeyPatch):
     """
     with monkeypatch.context() as m:
         # Set the env var to one backend
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "test_video_backend_override_1")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "test_video_backend_override_1")
 
         imageio = ImageMediaIO()
 
@@ -214,7 +214,7 @@ def test_video_media_io_backend_kwarg_not_passed_to_loader(
             return FAKE_OUTPUT_1, {"received_kwargs": list(kwargs.keys())}
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "test_reject_video_backend_kwarg")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "test_reject_video_backend_kwarg")
 
         imageio = ImageMediaIO()
 
@@ -235,10 +235,10 @@ def test_video_media_io_backend_kwarg_not_passed_to_loader(
 
 def test_video_media_io_backend_env_var_fallback(monkeypatch: pytest.MonkeyPatch):
     """Test that when video_backend kwarg is None or not provided,
-    VideoMediaIO falls back to APHRODITE_VIDEO_LOADER_BACKEND env var.
+    VideoMediaIO falls back to SONAR_VIDEO_LOADER_BACKEND env var.
     """
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "test_video_backend_override_2")
+        m.setenv("SONAR_VIDEO_LOADER_BACKEND", "test_video_backend_override_2")
 
         imageio = ImageMediaIO()
 

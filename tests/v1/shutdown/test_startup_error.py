@@ -6,12 +6,12 @@ import inspect
 
 import pytest
 
-from aphrodite import LLM
-from aphrodite.distributed import get_tensor_model_parallel_rank
-from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.model_executor.models.llama import LlamaForCausalLM
-from aphrodite.platforms import current_platform
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar import LLM
+from sonar.distributed import get_tensor_model_parallel_rank
+from sonar.engine.arg_utils import AsyncEngineArgs
+from sonar.model_executor.models.llama import LlamaForCausalLM
+from sonar.platforms import current_platform
+from sonar.v1.engine.async_llm import AsyncLLM
 from tests.utils import wait_for_gpu_memory_to_clear
 from tests.v1.shutdown.utils import (
     SHUTDOWN_TEST_THRESHOLD_BYTES,
@@ -33,8 +33,8 @@ def evil_method(self, *args, **kwargs):
 def evil_method_fixture(spawn_sitecustomize_factory, request):
     failing_method = request.getfixturevalue("failing_method")
     lines = [
-        "from aphrodite.distributed import get_tensor_model_parallel_rank",
-        "from aphrodite.model_executor.models.llama import LlamaForCausalLM",
+        "from sonar.distributed import get_tensor_model_parallel_rank",
+        "from sonar.model_executor.models.llama import LlamaForCausalLM",
         inspect.getsource(evil_method),
         f"LlamaForCausalLM.{failing_method} = {evil_method.__name__}",
     ]
@@ -101,7 +101,7 @@ def test_llm_startup_error(
 
     with monkeypatch.context() as m:
         MP_VALUE = "1" if enable_multiprocessing else "0"
-        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", MP_VALUE)
+        m.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", MP_VALUE)
 
         # Monkeypatch an error in the model.
         monkeypatch.setattr(LlamaForCausalLM, failing_method, evil_method)

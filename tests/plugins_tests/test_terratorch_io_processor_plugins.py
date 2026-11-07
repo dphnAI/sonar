@@ -9,7 +9,7 @@ import pytest
 import requests
 from PIL import Image
 
-from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+from sonar.entrypoints.pooling.pooling.protocol import IOProcessorResponse
 from tests.utils import RemoteOpenAIServer
 
 pytestmark = pytest.mark.skipif(
@@ -115,7 +115,7 @@ async def test_prithvi_mae_plugin_online(
     ],
 )
 def test_prithvi_mae_plugin_offline(
-    aphrodite_runner, model_name: str, image_url: str | dict, plugin: str, expected_hash: str
+    sonar_runner, model_name: str, image_url: str | dict, plugin: str, expected_hash: str
 ):
     img_data = dict(
         data=image_url,
@@ -126,7 +126,7 @@ def test_prithvi_mae_plugin_offline(
 
     prompt = dict(data=img_data)
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="pooling",
         skip_tokenizer_init=True,

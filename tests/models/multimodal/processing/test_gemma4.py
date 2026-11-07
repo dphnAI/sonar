@@ -9,18 +9,18 @@ import pytest
 import torch
 from PIL import Image as PILImage
 
-from aphrodite.model_executor.model_loader import get_model_cls
-from aphrodite.model_executor.models.gemma4_mm import (
+from sonar.model_executor.model_loader import get_model_cls
+from sonar.model_executor.models.gemma4_mm import (
     Gemma4ForConditionalGeneration,
     Gemma4ImagePixelInputs,
     Gemma4ProcessingInfo,
 )
-from aphrodite.model_executor.models.interfaces import supports_multimodal
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.cache import MultiModalProcessorOnlyCache
-from aphrodite.multimodal.inputs import MultiModalFieldConfig
-from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.v1.worker.encoder_cudagraph_defs import ENCODER_CUDAGRAPH_AXIS_KEYS_KWARG
+from sonar.model_executor.models.interfaces import supports_multimodal
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.cache import MultiModalProcessorOnlyCache
+from sonar.multimodal.inputs import MultiModalFieldConfig
+from sonar.utils.mem_constants import GiB_bytes
+from sonar.v1.worker.encoder_cudagraph_defs import ENCODER_CUDAGRAPH_AXIS_KEYS_KWARG
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context

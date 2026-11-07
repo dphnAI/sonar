@@ -9,12 +9,12 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed.parallel_state import (
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.parallel_state import (
     init_distributed_environment,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.platforms import current_platform
+from sonar.utils.system_utils import update_environment_variables
 
 mp.set_start_method("spawn", force=True)
 
@@ -80,9 +80,9 @@ def set_env_vars_and_device(env: dict[str, str]) -> None:
 
     backend = "xccl" if current_platform.is_xpu() else "nccl"
 
-    # Create a minimal aphrodite config for init_distributed_environment
-    aphrodite_config = AphroditeConfig()
-    with set_current_aphrodite_config(aphrodite_config):
+    # Create a minimal sonar config for init_distributed_environment
+    sonar_config = SonarConfig()
+    with set_current_sonar_config(sonar_config):
         init_distributed_environment(backend=backend)
     atexit.register(_destroy_process_group_if_initialized)
     # Ensure each worker process has the same random seed

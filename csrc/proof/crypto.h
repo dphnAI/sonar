@@ -3,7 +3,7 @@
 //
 // Crypto helpers for the DPHN proof envelope. X25519 + HKDF-SHA256 +
 // ChaCha20-Poly1305 (IETF), plus base64url and key parsing. The wire format
-// must match aphrodite.proof.verifier.
+// must match sonar.proof.verifier.
 #pragma once
 
 #include <cstddef>
@@ -53,7 +53,7 @@ std::vector<uint8_t> b64_decode_flexible(const std::string& value);
 
 // Parses an X25519 public key given as PEM (SubjectPublicKeyInfo) or as a
 // base64url/base64 raw 32-byte key. Throws a runtime error on failure,
-// mirroring _load_x25519_public_key in aphrodite.proof.verifier.
+// mirroring _load_x25519_public_key in sonar.proof.verifier.
 std::vector<uint8_t> load_x25519_public_key(const std::string& value);
 
 // --- Randomness ------------------------------------------------------------

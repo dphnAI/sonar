@@ -15,12 +15,12 @@ from transformers.models.llama4.configuration_llama4 import (
 from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.models.qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 
-from aphrodite.config.model import ModelConfig, get_hf_text_config
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.config.model import ModelConfig, get_hf_text_config
+from sonar.transformers_utils.model_arch_config_convertor import (
     MODEL_ARCH_CONFIG_CONVERTORS,
     ModelArchConfigConvertorBase,
 )
-from aphrodite.v1.metrics.perf import (
+from sonar.v1.metrics.perf import (
     _QUANT_WEIGHT_BYTE_SIZE,
     AttentionMetrics,
     BaseConfigParser,
@@ -75,7 +75,7 @@ class MockModelConfig:
         return attr
 
 
-def create_mock_aphrodite_config(
+def create_mock_sonar_config(
     hf_config,
     model_dtype="bfloat16",
     cache_dtype="auto",
@@ -86,24 +86,22 @@ def create_mock_aphrodite_config(
     enable_expert_parallel=False,
     disable_sliding_window=False,
 ) -> SimpleNamespace:
-    """Create a mock AphroditeConfig object for unit tests."""
-    aphrodite_config = SimpleNamespace()
-    aphrodite_config.model_config = MockModelConfig(
-        hf_config, model_dtype, disable_sliding_window=disable_sliding_window
-    )
+    """Create a mock SonarConfig object for unit tests."""
+    sonar_config = SimpleNamespace()
+    sonar_config.model_config = MockModelConfig(hf_config, model_dtype, disable_sliding_window=disable_sliding_window)
 
-    aphrodite_config.cache_config = SimpleNamespace()
-    aphrodite_config.cache_config.cache_dtype = cache_dtype
+    sonar_config.cache_config = SimpleNamespace()
+    sonar_config.cache_config.cache_dtype = cache_dtype
 
-    aphrodite_config.quant_config = quant_config
+    sonar_config.quant_config = quant_config
 
-    aphrodite_config.parallel_config = SimpleNamespace()
-    aphrodite_config.parallel_config.data_parallel_size = data_parallel_size
-    aphrodite_config.parallel_config.tensor_parallel_size = tensor_parallel_size
-    aphrodite_config.parallel_config.pipeline_parallel_size = pipeline_parallel_size
-    aphrodite_config.parallel_config.enable_expert_parallel = enable_expert_parallel
+    sonar_config.parallel_config = SimpleNamespace()
+    sonar_config.parallel_config.data_parallel_size = data_parallel_size
+    sonar_config.parallel_config.tensor_parallel_size = tensor_parallel_size
+    sonar_config.parallel_config.pipeline_parallel_size = pipeline_parallel_size
+    sonar_config.parallel_config.enable_expert_parallel = enable_expert_parallel
 
-    return aphrodite_config
+    return sonar_config
 
 
 #### Parser Tests ####
@@ -117,11 +115,11 @@ def test_base_config_parser():
         num_attention_heads=16,
         num_hidden_layers=24,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, model_dtype="float16")
+    sonar_config = create_mock_sonar_config(hf_config, model_dtype="float16")
 
     parser = BaseConfigParser()
     args = ParsedArgs()
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.vocab_size == 50000
     assert result.hidden_size == 2048
@@ -147,9 +145,9 @@ def test_base_config_parser_activation_byte_size_follows_dtype(model_dtype: str,
         num_attention_heads=16,
         num_hidden_layers=24,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, model_dtype=model_dtype)
+    sonar_config = create_mock_sonar_config(hf_config, model_dtype=model_dtype)
 
-    result = BaseConfigParser().parse(ParsedArgs(), aphrodite_config)
+    result = BaseConfigParser().parse(ParsedArgs(), sonar_config)
 
     assert result.activation_byte_size == expected_byte_size
     assert result.weight_byte_size == expected_byte_size
@@ -165,11 +163,11 @@ def test_attention_read_bytes_scale_with_activation_dtype():
     )
     ctx = ExecutionContext.from_single_request(num_tokens=128, context_len=128, is_prefill=True)
 
-    bf16 = AttentionMetrics.from_aphrodite_config(
-        create_mock_aphrodite_config(hf_config, model_dtype="bfloat16")
+    bf16 = AttentionMetrics.from_sonar_config(
+        create_mock_sonar_config(hf_config, model_dtype="bfloat16")
     ).get_read_bytes_breakdown(ctx)
-    fp32 = AttentionMetrics.from_aphrodite_config(
-        create_mock_aphrodite_config(hf_config, model_dtype="float32")
+    fp32 = AttentionMetrics.from_sonar_config(
+        create_mock_sonar_config(hf_config, model_dtype="float32")
     ).get_read_bytes_breakdown(ctx)
 
     # qkv_input is pure activation traffic, so it doubles exactly.
@@ -184,10 +182,10 @@ def test_base_attention_config_parser_with_gqa():
         num_key_value_heads=8,  # GQA with 4:1 ratio
         head_dim=128,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = AttentionMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     assert result.num_key_value_heads == 8
     assert result.head_dim == 128
@@ -202,10 +200,10 @@ def test_base_attention_config_parser_without_gqa():
         num_attention_heads=32,
         # No num_key_value_heads specified
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = AttentionMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     # Should default to MHA (num_key_value_heads = num_attention_heads)
     assert result.num_key_value_heads == 32
@@ -218,10 +216,10 @@ def test_base_ffn_config_parser_dense():
         intermediate_size=11008,
         num_hidden_layers=32,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     assert result.intermediate_size == 11008
     assert result.num_experts == 0
@@ -240,10 +238,10 @@ def test_base_ffn_config_parser_moe():
         moe_intermediate_size=14336,
         n_shared_experts=2,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     assert result.num_experts == 64
     assert result.num_experts_per_tok == 8
@@ -262,10 +260,10 @@ def test_interleave_moe_layer_step_parser():
         ),
     )
 
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     assert result.num_moe_layers == 8
 
@@ -278,10 +276,10 @@ def test_moe_layer_freq_parser():
         moe_layer_freq=3,  # Every 3rd layer after first_k_dense_replace
         first_k_dense_replace=6,  # First 6 layers are dense
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     # Layers >= 6 and divisible by 3: 6, 9, 12, 15, 18, 21, 24, 27
     expected_moe_layers = len([layer for layer in range(30) if layer >= 6 and layer % 3 == 0])
@@ -302,8 +300,8 @@ def test_attention_metrics_scaling():
         head_dim=128,
     )
 
-    base_aphrodite_config = create_mock_aphrodite_config(base_hf_config)
-    base_metrics = AttentionMetrics.from_aphrodite_config(base_aphrodite_config)
+    base_sonar_config = create_mock_sonar_config(base_hf_config)
+    base_metrics = AttentionMetrics.from_sonar_config(base_sonar_config)
 
     # Test scaling with number of layers
     double_layers_hf_config = Qwen3Config(
@@ -313,8 +311,8 @@ def test_attention_metrics_scaling():
         num_hidden_layers=24,  # Double the layers
         head_dim=128,
     )
-    double_layers_aphrodite_config = create_mock_aphrodite_config(double_layers_hf_config)
-    double_layers_metrics = AttentionMetrics.from_aphrodite_config(double_layers_aphrodite_config)
+    double_layers_sonar_config = create_mock_sonar_config(double_layers_hf_config)
+    double_layers_metrics = AttentionMetrics.from_sonar_config(double_layers_sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -341,7 +339,7 @@ def test_attention_metrics_grouped_query():
         num_key_value_heads=32,  # MHA
         num_hidden_layers=1,
     )
-    mha_config = create_mock_aphrodite_config(mha_hf_config)
+    mha_config = create_mock_sonar_config(mha_hf_config)
 
     gqa_hf_config = Qwen3Config(
         hidden_size=4096,
@@ -349,10 +347,10 @@ def test_attention_metrics_grouped_query():
         num_key_value_heads=8,  # GQA with 4:1 ratio
         num_hidden_layers=1,
     )
-    gqa_config = create_mock_aphrodite_config(gqa_hf_config)
+    gqa_config = create_mock_sonar_config(gqa_hf_config)
 
-    mha_metrics = AttentionMetrics.from_aphrodite_config(mha_config)
-    gqa_metrics = AttentionMetrics.from_aphrodite_config(gqa_config)
+    mha_metrics = AttentionMetrics.from_sonar_config(mha_config)
+    gqa_metrics = AttentionMetrics.from_sonar_config(gqa_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=1024, is_prefill=False)
 
@@ -369,8 +367,8 @@ def test_ffn_metrics_scaling():
         intermediate_size=8192,
         num_hidden_layers=12,
     )
-    base_aphrodite_config = create_mock_aphrodite_config(base_hf_config)
-    base_metrics = FfnMetrics.from_aphrodite_config(base_aphrodite_config)
+    base_sonar_config = create_mock_sonar_config(base_hf_config)
+    base_metrics = FfnMetrics.from_sonar_config(base_sonar_config)
 
     # Test scaling with intermediate size
     larger_ffn_hf_config = Qwen3Config(
@@ -378,8 +376,8 @@ def test_ffn_metrics_scaling():
         intermediate_size=16384,  # Double intermediate size
         num_hidden_layers=12,
     )
-    larger_ffn_aphrodite_config = create_mock_aphrodite_config(larger_ffn_hf_config)
-    larger_ffn_metrics = FfnMetrics.from_aphrodite_config(larger_ffn_aphrodite_config)
+    larger_ffn_sonar_config = create_mock_sonar_config(larger_ffn_hf_config)
+    larger_ffn_metrics = FfnMetrics.from_sonar_config(larger_ffn_sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -396,7 +394,7 @@ def test_moe_metrics_vs_dense():
         intermediate_size=8192,
         num_hidden_layers=12,
     )
-    dense_config = create_mock_aphrodite_config(dense_hf_config)
+    dense_config = create_mock_sonar_config(dense_hf_config)
 
     moe_hf_config = Qwen3MoeConfig(
         hidden_size=2048,
@@ -407,10 +405,10 @@ def test_moe_metrics_vs_dense():
         moe_intermediate_size=8192,
         n_shared_experts=0,
     )
-    moe_config = create_mock_aphrodite_config(moe_hf_config)
+    moe_config = create_mock_sonar_config(moe_hf_config)
 
-    dense_metrics = FfnMetrics.from_aphrodite_config(dense_config)
-    moe_metrics = FfnMetrics.from_aphrodite_config(moe_config)
+    dense_metrics = FfnMetrics.from_sonar_config(dense_config)
+    moe_metrics = FfnMetrics.from_sonar_config(moe_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -428,16 +426,16 @@ def test_unembed_metrics_scaling():
         hidden_size=2048,
         vocab_size=32000,
     )
-    small_vocab_config = create_mock_aphrodite_config(small_vocab_hf_config)
+    small_vocab_config = create_mock_sonar_config(small_vocab_hf_config)
 
     large_vocab_hf_config = Qwen3Config(
         hidden_size=2048,
         vocab_size=64000,  # Double vocab size
     )
-    large_vocab_config = create_mock_aphrodite_config(large_vocab_hf_config)
+    large_vocab_config = create_mock_sonar_config(large_vocab_hf_config)
 
-    small_vocab_metrics = UnembedMetrics.from_aphrodite_config(small_vocab_config)
-    large_vocab_metrics = UnembedMetrics.from_aphrodite_config(large_vocab_config)
+    small_vocab_metrics = UnembedMetrics.from_sonar_config(small_vocab_config)
+    large_vocab_metrics = UnembedMetrics.from_sonar_config(large_vocab_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -455,9 +453,9 @@ def test_prefill_vs_decode_differences():
         num_key_value_heads=16,
         num_hidden_layers=1,
     )
-    config = create_mock_aphrodite_config(hf_config)
+    config = create_mock_sonar_config(hf_config)
 
-    metrics = AttentionMetrics.from_aphrodite_config(config)
+    metrics = AttentionMetrics.from_sonar_config(config)
 
     prefill_ctx = ExecutionContext.from_single_request(num_tokens=512, context_len=512, is_prefill=True)
     decode_ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=512, is_prefill=False)
@@ -477,7 +475,7 @@ def test_model_metrics_aggregation():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    config = create_mock_aphrodite_config(hf_config)
+    config = create_mock_sonar_config(hf_config)
 
     model_metrics = ModelMetrics(config)
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
@@ -522,13 +520,13 @@ def test_moe_expert_activation_proportional_scaling():
         n_shared_experts=2,  # Same shared experts
     )
 
-    base_aphrodite_config = create_mock_aphrodite_config(base_moe_config)
-    double_aphrodite_config = create_mock_aphrodite_config(double_experts_config)
-    triple_aphrodite_config = create_mock_aphrodite_config(triple_experts_config)
+    base_sonar_config = create_mock_sonar_config(base_moe_config)
+    double_sonar_config = create_mock_sonar_config(double_experts_config)
+    triple_sonar_config = create_mock_sonar_config(triple_experts_config)
 
-    base_metrics = FfnMetrics.from_aphrodite_config(base_aphrodite_config)
-    double_metrics = FfnMetrics.from_aphrodite_config(double_aphrodite_config)
-    triple_metrics = FfnMetrics.from_aphrodite_config(triple_aphrodite_config)
+    base_metrics = FfnMetrics.from_sonar_config(base_sonar_config)
+    double_metrics = FfnMetrics.from_sonar_config(double_sonar_config)
+    triple_metrics = FfnMetrics.from_sonar_config(triple_sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -575,12 +573,12 @@ def test_quantization_config_parser_fp8():
             return "fp8"
 
     hf_config = Qwen3Config(hidden_size=2048, num_attention_heads=16, num_hidden_layers=1)
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
+    attn_result = AttentionMetrics.get_parser().parse(sonar_config)
     assert attn_result.weight_byte_size == 1  # fp8
 
-    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
+    ffn_result = FfnMetrics.get_parser().parse(sonar_config)
     assert ffn_result.weight_byte_size == 1  # fp8
 
 
@@ -592,9 +590,9 @@ def test_quantization_config_parser_mxfp4():
             return "mxfp4"
 
     hf_config = Qwen3Config(hidden_size=2048, intermediate_size=8192, num_hidden_layers=1)
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
-    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
+    ffn_result = FfnMetrics.get_parser().parse(sonar_config)
     assert ffn_result.weight_byte_size == 0.5  # mxfp4
 
 
@@ -611,8 +609,8 @@ def test_attention_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=4
-    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
-    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, tensor_parallel_size=4)
+    metrics = AttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=128, context_len=1024, is_prefill=True)
 
@@ -643,8 +641,8 @@ def test_attention_per_gpu_with_pipeline_parallelism():
     )
 
     # Test with PP=4
-    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
-    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, pipeline_parallel_size=4)
+    metrics = AttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=False)
 
@@ -669,12 +667,12 @@ def test_ffn_per_gpu_with_tensor_parallelism():
     )
 
     # Test with DP=2, TP=4 (ffn_tp_size will be 8)
-    aphrodite_config = create_mock_aphrodite_config(
+    sonar_config = create_mock_sonar_config(
         hf_config,
         data_parallel_size=2,
         tensor_parallel_size=4,
     )
-    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
+    metrics = FfnMetrics.from_sonar_config(sonar_config)
 
     # ffn_tp_size should be dp_size * tp_size = 8 (when EP not enabled)
     assert metrics.ffn_tp_size == 8
@@ -698,8 +696,8 @@ def test_ffn_per_gpu_with_pipeline_parallelism():
     )
 
     # Test with PP=6
-    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=6)
-    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, pipeline_parallel_size=6)
+    metrics = FfnMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -724,13 +722,13 @@ def test_moe_per_gpu_with_expert_parallelism():
     )
 
     # Test with DP=2, TP=4, EP enabled (ffn_ep_size will be 8)
-    aphrodite_config = create_mock_aphrodite_config(
+    sonar_config = create_mock_sonar_config(
         hf_config,
         data_parallel_size=2,
         tensor_parallel_size=4,
         enable_expert_parallel=True,
     )
-    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
+    metrics = FfnMetrics.from_sonar_config(sonar_config)
 
     # When EP enabled, ffn_ep_size = dp_size * tp_size = 8
     assert metrics.ffn_ep_size == 8
@@ -778,12 +776,12 @@ def test_moe_per_gpu_expert_activation_accounting():
     )
 
     # Test with EP=8
-    aphrodite_config = create_mock_aphrodite_config(
+    sonar_config = create_mock_sonar_config(
         hf_config,
         data_parallel_size=8,
         enable_expert_parallel=True,
     )
-    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
+    metrics = FfnMetrics.from_sonar_config(sonar_config)
 
     # Small batch: T=10, E_per_gpu=8/8=1
     # Each GPU: T*E = 10*1 = 10 activations
@@ -822,8 +820,8 @@ def test_unembed_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=8
-    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
-    metrics = UnembedMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, tensor_parallel_size=8)
+    metrics = UnembedMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -856,13 +854,13 @@ def test_model_metrics_per_gpu_aggregation():
     )
 
     # Test with mixed parallelism: TP=2, PP=2
-    aphrodite_config = create_mock_aphrodite_config(
+    sonar_config = create_mock_sonar_config(
         hf_config,
         tensor_parallel_size=2,
         pipeline_parallel_size=2,
     )
 
-    model_metrics = ModelMetrics(aphrodite_config)
+    model_metrics = ModelMetrics(sonar_config)
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get breakdowns for both modes
@@ -894,8 +892,8 @@ def test_attention_per_gpu_heads_not_evenly_divisible():
         num_hidden_layers=8,
     )
 
-    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
-    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, tensor_parallel_size=4)
+    metrics = AttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=64, context_len=256, is_prefill=True)
 
@@ -927,12 +925,12 @@ def test_quantization_config_parser_int4_methods(quant_method):
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
+    attn_result = AttentionMetrics.get_parser().parse(sonar_config)
     assert attn_result.weight_byte_size == 0.5, f"Expected 0.5 for {quant_method}, got {attn_result.weight_byte_size}"
 
-    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
+    ffn_result = FfnMetrics.get_parser().parse(sonar_config)
     assert ffn_result.weight_byte_size == 0.5, f"Expected 0.5 for {quant_method}, got {ffn_result.weight_byte_size}"
 
 
@@ -954,12 +952,12 @@ def test_quantization_config_parser_fp8_methods(quant_method):
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
+    attn_result = AttentionMetrics.get_parser().parse(sonar_config)
     assert attn_result.weight_byte_size == 1, f"Expected 1 for {quant_method}, got {attn_result.weight_byte_size}"
 
-    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
+    ffn_result = FfnMetrics.get_parser().parse(sonar_config)
     assert ffn_result.weight_byte_size == 1, f"Expected 1 for {quant_method}, got {ffn_result.weight_byte_size}"
 
 
@@ -976,13 +974,13 @@ def test_quantization_config_parser_unknown_method():
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
     with pytest.raises(InvalidComponent):
-        AttentionMetrics.get_parser().parse(aphrodite_config)
+        AttentionMetrics.get_parser().parse(sonar_config)
 
     with pytest.raises(InvalidComponent):
-        FfnMetrics.get_parser().parse(aphrodite_config)
+        FfnMetrics.get_parser().parse(sonar_config)
 
 
 def test_quantized_model_metrics_aggregation():
@@ -999,9 +997,9 @@ def test_quantized_model_metrics_aggregation():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
+    sonar_config = create_mock_sonar_config(hf_config, quant_config=MockQuantConfig())
 
-    model_metrics = ModelMetrics(aphrodite_config)
+    model_metrics = ModelMetrics(sonar_config)
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Should not crash and should produce valid metrics
@@ -1027,10 +1025,10 @@ def test_mla_config_parser():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
 
     parser_chain = MLAAttentionMetrics.get_parser()
-    result = parser_chain.parse(aphrodite_config)
+    result = parser_chain.parse(sonar_config)
 
     assert result.kv_lora_rank == 512
     assert result.qk_nope_head_dim == 128
@@ -1053,8 +1051,8 @@ def test_mla_attention_metrics_decode():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
-    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config)
+    metrics = MLAAttentionMetrics.from_sonar_config(sonar_config)
 
     # Single decode token with 1024 context
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=1024, is_prefill=False)
@@ -1085,8 +1083,8 @@ def test_mla_attention_metrics_prefill():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
-    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config)
+    metrics = MLAAttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=2048, context_len=2048, is_prefill=True)
 
@@ -1127,8 +1125,8 @@ def test_mla_kv_cache_vs_standard_attention():
         qk_rope_head_dim=64,
         v_head_dim=128,
     )
-    mla_aphrodite_config = create_mock_aphrodite_config(mla_config)
-    mla_metrics = MLAAttentionMetrics.from_aphrodite_config(mla_aphrodite_config)
+    mla_sonar_config = create_mock_sonar_config(mla_config)
+    mla_metrics = MLAAttentionMetrics.from_sonar_config(mla_sonar_config)
 
     # Standard MHA config with same num_heads and head_dim
     standard_config = Qwen3Config(
@@ -1138,8 +1136,8 @@ def test_mla_kv_cache_vs_standard_attention():
         num_hidden_layers=1,
         head_dim=128,
     )
-    standard_aphrodite_config = create_mock_aphrodite_config(standard_config)
-    standard_metrics = AttentionMetrics.from_aphrodite_config(standard_aphrodite_config)
+    standard_sonar_config = create_mock_sonar_config(standard_config)
+    standard_metrics = AttentionMetrics.from_sonar_config(standard_sonar_config)
 
     # Compare KV cache write for 100 tokens
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=100, is_prefill=True)
@@ -1175,8 +1173,8 @@ def test_mla_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=8
-    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
-    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, tensor_parallel_size=8)
+    metrics = MLAAttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=64, context_len=1024, is_prefill=True)
 
@@ -1203,8 +1201,8 @@ def test_mla_per_gpu_with_pipeline_parallelism():
         q_lora_rank=1536,
     )
 
-    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
-    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, pipeline_parallel_size=4)
+    metrics = MLAAttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=512, is_prefill=False)
 
@@ -1228,8 +1226,8 @@ def test_mla_model_metrics_excludes_standard_attention():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
-    model_metrics = ModelMetrics(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config)
+    model_metrics = ModelMetrics(sonar_config)
 
     # Should have MLAAttentionMetrics but NOT standard AttentionMetrics
     component_types = [m.component_type() for m in model_metrics.metrics]
@@ -1261,8 +1259,8 @@ def test_standard_attention_still_works_for_non_mla():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
-    model_metrics = ModelMetrics(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config)
+    model_metrics = ModelMetrics(sonar_config)
 
     component_types = [m.component_type() for m in model_metrics.metrics]
     assert "attn" in component_types
@@ -1296,11 +1294,11 @@ def test_mla_attention_scaling_with_layers():
         q_lora_rank=1536,
     )
 
-    base_aphrodite = create_mock_aphrodite_config(base_config)
-    double_aphrodite = create_mock_aphrodite_config(double_config)
+    base_sonar = create_mock_sonar_config(base_config)
+    double_sonar = create_mock_sonar_config(double_config)
 
-    base_metrics = MLAAttentionMetrics.from_aphrodite_config(base_aphrodite)
-    double_metrics = MLAAttentionMetrics.from_aphrodite_config(double_aphrodite)
+    base_metrics = MLAAttentionMetrics.from_sonar_config(base_sonar)
+    double_metrics = MLAAttentionMetrics.from_sonar_config(double_sonar)
 
     ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
@@ -1320,11 +1318,11 @@ def test_sliding_window_parser_no_swa():
         num_attention_heads=16,
         num_hidden_layers=12,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
     parser = SlidingWindowAttentionParser()
     args = ParsedArgs()
     args.num_hidden_layers = 12
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.sliding_window is None
     assert result.num_swa_layers == 0
@@ -1339,11 +1337,11 @@ def test_sliding_window_parser_uniform_swa():
         num_hidden_layers=32,
         sliding_window=4096,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
     parser = SlidingWindowAttentionParser()
     args = ParsedArgs()
     args.num_hidden_layers = 32
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.sliding_window == 4096
     assert result.num_swa_layers == 32
@@ -1365,11 +1363,11 @@ def test_sliding_window_parser_explicit_layer_types():
         "sliding_attention",
         "full_attention",
     ]
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
     parser = SlidingWindowAttentionParser()
     args = ParsedArgs()
     args.num_hidden_layers = 6
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.sliding_window == 2048
     assert result.num_swa_layers == 3
@@ -1384,11 +1382,11 @@ def test_sliding_window_parser_gemma2():
         num_hidden_layers=26,
         sliding_window=4096,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    sonar_config = create_mock_sonar_config(hf_config)
     parser = SlidingWindowAttentionParser()
     args = ParsedArgs()
     args.num_hidden_layers = 26
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.sliding_window == 4096
     # Gemma 2 alternates: even layers are sliding window (26 layers -> 13 SWA)
@@ -1404,11 +1402,11 @@ def test_sliding_window_parser_disabled():
         num_hidden_layers=32,
         sliding_window=4096,
     )
-    aphrodite_config = create_mock_aphrodite_config(hf_config, disable_sliding_window=True)
+    sonar_config = create_mock_sonar_config(hf_config, disable_sliding_window=True)
     parser = SlidingWindowAttentionParser()
     args = ParsedArgs()
     args.num_hidden_layers = 32
-    result = parser.parse(args, aphrodite_config)
+    result = parser.parse(args, sonar_config)
 
     assert result.sliding_window is None
     assert result.num_swa_layers == 0
@@ -1432,11 +1430,11 @@ def test_attention_metrics_sliding_window_flops_bounds():
         sliding_window=sw,
     )
 
-    dense_aphrodite = create_mock_aphrodite_config(dense_config)
-    swa_aphrodite = create_mock_aphrodite_config(swa_config)
+    dense_sonar = create_mock_sonar_config(dense_config)
+    swa_sonar = create_mock_sonar_config(swa_config)
 
-    dense_metrics = AttentionMetrics.from_aphrodite_config(dense_aphrodite)
-    swa_metrics = AttentionMetrics.from_aphrodite_config(swa_aphrodite)
+    dense_metrics = AttentionMetrics.from_sonar_config(dense_sonar)
+    swa_metrics = AttentionMetrics.from_sonar_config(swa_sonar)
 
     # 1. When context <= sliding_window: FLOPs should be identical
     short_ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=512, is_prefill=False)
@@ -1476,11 +1474,11 @@ def test_attention_metrics_sliding_window_read_bytes():
         sliding_window=sw,
     )
 
-    dense_aphrodite = create_mock_aphrodite_config(dense_config)
-    swa_aphrodite = create_mock_aphrodite_config(swa_config)
+    dense_sonar = create_mock_sonar_config(dense_config)
+    swa_sonar = create_mock_sonar_config(swa_config)
 
-    dense_metrics = AttentionMetrics.from_aphrodite_config(dense_aphrodite)
-    swa_metrics = AttentionMetrics.from_aphrodite_config(swa_aphrodite)
+    dense_metrics = AttentionMetrics.from_sonar_config(dense_sonar)
+    swa_metrics = AttentionMetrics.from_sonar_config(swa_sonar)
 
     # Long decode context: 8192 tokens
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=8192, is_prefill=False)
@@ -1513,8 +1511,8 @@ def test_attention_metrics_hybrid_alternating_layers():
         "full_attention",
     ]
 
-    aphrodite_config = create_mock_aphrodite_config(hybrid_config)
-    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hybrid_config)
+    metrics = AttentionMetrics.from_sonar_config(sonar_config)
 
     assert metrics.num_swa_layers == 2
     assert metrics.sliding_window == sw
@@ -1542,13 +1540,13 @@ def test_attention_metrics_sliding_window_per_gpu():
         num_hidden_layers=16,
         sliding_window=sw,
     )
-    single_aphrodite = create_mock_aphrodite_config(hf_config)
-    tp_aphrodite = create_mock_aphrodite_config(hf_config, tensor_parallel_size=2)
-    pp_aphrodite = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=2)
+    single_sonar = create_mock_sonar_config(hf_config)
+    tp_sonar = create_mock_sonar_config(hf_config, tensor_parallel_size=2)
+    pp_sonar = create_mock_sonar_config(hf_config, pipeline_parallel_size=2)
 
-    single_metrics = AttentionMetrics.from_aphrodite_config(single_aphrodite)
-    tp_metrics = AttentionMetrics.from_aphrodite_config(tp_aphrodite)
-    pp_metrics = AttentionMetrics.from_aphrodite_config(pp_aphrodite)
+    single_metrics = AttentionMetrics.from_sonar_config(single_sonar)
+    tp_metrics = AttentionMetrics.from_sonar_config(tp_sonar)
+    pp_metrics = AttentionMetrics.from_sonar_config(pp_sonar)
 
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=4096, is_prefill=False)
 
@@ -1571,8 +1569,8 @@ def test_attention_metrics_hybrid_sliding_window_per_gpu():
         num_hidden_layers=30,
         sliding_window=sw,
     )
-    pp_aphrodite = create_mock_aphrodite_config(hybrid_config, pipeline_parallel_size=2)
-    pp_metrics = AttentionMetrics.from_aphrodite_config(pp_aphrodite)
+    pp_sonar = create_mock_sonar_config(hybrid_config, pipeline_parallel_size=2)
+    pp_metrics = AttentionMetrics.from_sonar_config(pp_sonar)
 
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=4096, is_prefill=False)
     pp_flops = pp_metrics.get_num_flops_breakdown(ctx, per_gpu=True)
@@ -1609,8 +1607,8 @@ def test_attention_metrics_minority_swa_survives_pipeline_parallelism():
     hf_config.sliding_window = sw
     hf_config.layer_types = ["sliding_attention"] + ["full_attention"] * 5
 
-    pp_aphrodite = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=2)
-    pp_metrics = AttentionMetrics.from_aphrodite_config(pp_aphrodite)
+    pp_sonar = create_mock_sonar_config(hf_config, pipeline_parallel_size=2)
+    pp_metrics = AttentionMetrics.from_sonar_config(pp_sonar)
     assert pp_metrics.num_swa_layers == 1
 
     ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=context_len, is_prefill=False)
@@ -1642,8 +1640,8 @@ def test_attention_metrics_per_gpu_layers_sum_to_whole_model():
         num_hidden_layers=7,
     )
     pp_size = 2
-    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=pp_size)
-    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
+    sonar_config = create_mock_sonar_config(hf_config, pipeline_parallel_size=pp_size)
+    metrics = AttentionMetrics.from_sonar_config(sonar_config)
 
     ctx = ExecutionContext.from_single_request(num_tokens=8, context_len=1024, is_prefill=True)
     per_gpu = metrics.get_num_flops_breakdown(ctx, per_gpu=True)

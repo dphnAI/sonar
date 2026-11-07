@@ -5,11 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config.diffusion import DiffusionConfig
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.utils.diffusion import validate_diffusion_sampling_params
-from aphrodite.v1.engine.input_processor import InputProcessor
+from sonar import SamplingParams
+from sonar.config.diffusion import DiffusionConfig
+from sonar.exceptions import SonarValidationError
+from sonar.utils.diffusion import validate_diffusion_sampling_params
+from sonar.v1.engine.input_processor import InputProcessor
 
 
 @dataclass
@@ -83,7 +83,7 @@ def test_diffusion_extra_args_are_validated_without_a_served_canvas():
     assert params.ignore_eos is True
 
     bad = SamplingParams(extra_args={"diffusion_seed_canvas": [0, 10**9]})
-    with pytest.raises(AphroditeValidationError, match="ids must be in"):
+    with pytest.raises(SonarValidationError, match="ids must be in"):
         _verify_diffusion(bad, canvas_length=None)
 
 
@@ -100,7 +100,7 @@ def test_diffusion_extra_args_are_validated_without_a_served_canvas():
 def test_diffusion_canvas_width_is_accepted_with_either_scheduler(async_scheduling, extra_args):
     processor = SimpleNamespace(
         model_config=MockModelConfig(is_diffusion=True),
-        aphrodite_config=SimpleNamespace(scheduler_config=SimpleNamespace(async_scheduling=async_scheduling)),
+        sonar_config=SimpleNamespace(scheduler_config=SimpleNamespace(async_scheduling=async_scheduling)),
         speculative_config=None,
         structured_outputs_config=None,
         diffusion_config=DiffusionConfig(canvas_length=8),
@@ -131,14 +131,14 @@ def test_diffusion_canvas_width_is_accepted_with_either_scheduler(async_scheduli
     ],
 )
 def test_diffusion_rejects_bad_extra_args(extra_args: dict, match: str):
-    with pytest.raises(AphroditeValidationError, match=match):
+    with pytest.raises(SonarValidationError, match=match):
         _verify_diffusion(SamplingParams(extra_args=extra_args))
 
 
 @pytest.mark.parametrize("flag", [True, 1])
 def test_diffusion_constrained_needs_logprob_token_ids(flag):
     bad = SamplingParams(extra_args={"diffusion_constrained": flag})
-    with pytest.raises(AphroditeValidationError, match="needs logprob_token_ids"):
+    with pytest.raises(SonarValidationError, match="needs logprob_token_ids"):
         _verify_diffusion(bad)
 
     ok = SamplingParams(logprob_token_ids=[3, 5], extra_args={"diffusion_constrained": flag})
@@ -152,13 +152,13 @@ def test_diffusion_constrained_needs_logprob_token_ids(flag):
 @pytest.mark.parametrize("value", ["yes", 2, [1]])
 def test_diffusion_constrained_must_be_a_bool(value):
     params = SamplingParams(extra_args={"diffusion_constrained": value})
-    with pytest.raises(AphroditeValidationError, match="must be a boolean"):
+    with pytest.raises(SonarValidationError, match="must be a boolean"):
         _verify_diffusion(params)
 
 
 def test_diffusion_seed_canvas_must_fill_the_canvas():
     params = SamplingParams(extra_args={"diffusion_seed_canvas": [0] * 7})
-    with pytest.raises(AphroditeValidationError, match="exactly 8 ids, got 7"):
+    with pytest.raises(SonarValidationError, match="exactly 8 ids, got 7"):
         _verify_diffusion(params, canvas_length=8)
     # Without the served diffusion config the canvas length is unknown.
     _verify_diffusion(params)
@@ -183,7 +183,7 @@ def test_diffusion_read_only_ends_after_one_canvas(max_tokens, expected, flag):
     ],
 )
 def test_diffusion_rejects_bad_canvas_length(width, match):
-    with pytest.raises(AphroditeValidationError, match=match):
+    with pytest.raises(SonarValidationError, match=match):
         _verify_diffusion(
             SamplingParams(extra_args={"diffusion_canvas_length": width}),
             canvas_length=8,
@@ -203,21 +203,21 @@ def test_diffusion_canvas_length_sizes_the_seed_and_the_read():
     assert params.max_tokens == 4
 
     params = SamplingParams(extra_args={"diffusion_canvas_length": 4, "diffusion_seed_canvas": [0] * 8})
-    with pytest.raises(AphroditeValidationError, match="exactly 4 ids, got 8"):
+    with pytest.raises(SonarValidationError, match="exactly 4 ids, got 8"):
         _verify_diffusion(params, canvas_length=8)
 
 
 def test_diffusion_pinned_positions_stay_inside_the_canvas():
     seed = [0] * 8
-    with pytest.raises(AphroditeValidationError, match="inside the canvas"):
+    with pytest.raises(SonarValidationError, match="inside the canvas"):
         _verify_diffusion(
             SamplingParams(extra_args={"diffusion_seed_canvas": seed, "diffusion_pinned": [7, 8]}),
             canvas_length=8,
         )
-    with pytest.raises(AphroditeValidationError, match="inside the canvas"):
+    with pytest.raises(SonarValidationError, match="inside the canvas"):
         _verify_diffusion(SamplingParams(extra_args={"diffusion_seed_canvas": seed, "diffusion_pinned": [-1]}))
     # A narrower request canvas bounds the positions.
-    with pytest.raises(AphroditeValidationError, match="inside the canvas"):
+    with pytest.raises(SonarValidationError, match="inside the canvas"):
         _verify_diffusion(
             SamplingParams(
                 extra_args={
@@ -245,7 +245,7 @@ def test_diffusion_accepts_extra_args():
 @pytest.mark.parametrize("value", [-(2**63) - 1, 2**64])
 def test_extra_args_rejects_nested_integer_overflow(value):
     """Reject extension values before they reach the engine transport."""
-    with pytest.raises(AphroditeValidationError, match="extra_args integers"):
+    with pytest.raises(SonarValidationError, match="extra_args integers"):
         SamplingParams(extra_args={"ec_transfer_params": {"nested": [{"x": value}]}})
 
 

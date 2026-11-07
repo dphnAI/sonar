@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.scalar_type import scalar_types
+from sonar.scalar_type import scalar_types
 
 
 @pytest.mark.parametrize(

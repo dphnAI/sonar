@@ -208,7 +208,7 @@ void cutlass_fp4_gemm_dispatch(torch::stable::Tensor& D,
                                torch::stable::Tensor const& B_sf,
                                torch::stable::Tensor const& alpha, int m, int n,
                                int k, cudaStream_t stream) {
-  if (aphrodite::aphrodite_is_batch_invariant()) {
+  if (sonar::sonar_is_batch_invariant()) {
     using BiGemm = Fp4GemmSm120<sm120_fp4_config_default, OutType>;
     static_assert(
         cute::is_same_v<typename BiGemm::TileScheduler,
@@ -302,9 +302,8 @@ void cutlass_scaled_fp4_mm_sm120a(torch::stable::Tensor& D,
                     out_dtype, ")");
   }
 #else
-  STD_TORCH_CHECK(
-      false,
-      "Unsupported CUTLASS version. Set APHRODITE_CUTLASS_SRC_DIR to "
-      "a CUTLASS 3.8 source directory to enable support.");
+  STD_TORCH_CHECK(false,
+                  "Unsupported CUTLASS version. Set SONAR_CUTLASS_SRC_DIR to "
+                  "a CUTLASS 3.8 source directory to enable support.");
 #endif  // defined(CUTLASS_ARCH_MMA_SM120_SUPPORTED)
 }

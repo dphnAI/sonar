@@ -26,9 +26,9 @@
 use std::fmt::Debug;
 use std::ops::Range;
 
-use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
 use auto_impl::auto_impl;
 use educe::Educe;
+use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
 use winnow::Parser;
 use winnow::error::{ContextError, ErrMode, ModalResult};
 use winnow::stream::{
@@ -415,7 +415,7 @@ impl<'i, I: MarkerStream<'i>> Parser<I, &'i str, ErrMode<ContextError>> for &Mar
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
+    use sonar_tokenizer::{DecodedText, TokenAnchor, TokenAttribution};
     use winnow::Parser;
     use winnow::error::ErrMode;
     use winnow::stream::{Partial, Stream};

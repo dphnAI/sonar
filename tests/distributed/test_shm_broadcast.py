@@ -18,21 +18,21 @@ import pytest
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.device_communicators import shm_broadcast, shm_tensor_arena
-from aphrodite.distributed.device_communicators.shm_broadcast import (
+from sonar.distributed.device_communicators import shm_broadcast, shm_tensor_arena
+from sonar.distributed.device_communicators.shm_broadcast import (
     MessageQueue,
     ShmRingBuffer,
     _rebuild_tensor,
     _reduce_tensor,
     check_shm_free_space,
 )
-from aphrodite.distributed.device_communicators.shm_tensor_arena import (
+from sonar.distributed.device_communicators.shm_tensor_arena import (
     ShmTensorArena,
     _ArenaPickler,
 )
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 
 
 def get_arrays(n: int, seed: int = 0) -> list[np.ndarray]:
@@ -214,9 +214,9 @@ def worker_fn_test_shutdown_busy():
     dist.barrier()
 
 
-def test_message_queue_shutdown_busy(caplog_aphrodite):
+def test_message_queue_shutdown_busy(caplog_sonar):
     distributed_run(worker_fn_test_shutdown_busy, 4)
-    print(caplog_aphrodite.text)
+    print(caplog_sonar.text)
 
 
 @worker_fn_wrapper
@@ -381,7 +381,7 @@ def worker_fn_tensor_broadcast():
 
     if rank == writer_rank:
         with mock.patch(
-            "aphrodite.distributed.device_communicators.shm_broadcast._reduce_tensor",
+            "sonar.distributed.device_communicators.shm_broadcast._reduce_tensor",
             wraps=_reduce_tensor,
         ) as wrapped_reduce:
             message_queue.enqueue(payload)
@@ -553,11 +553,11 @@ def test_reduce_tensor_fallback(case: str):
 def test_reader_timeout_caps_indefinite_waits(should_warn):
     with (
         mock.patch(
-            "aphrodite.distributed.device_communicators.shm_broadcast.SHM_READER_RECHECK_INTERVAL_MS",
+            "sonar.distributed.device_communicators.shm_broadcast.SHM_READER_RECHECK_INTERVAL_MS",
             new=7,
         ),
         mock.patch(
-            "aphrodite.distributed.device_communicators.shm_broadcast.APHRODITE_RINGBUFFER_WARNING_INTERVAL",
+            "sonar.distributed.device_communicators.shm_broadcast.SONAR_RINGBUFFER_WARNING_INTERVAL",
             new=60,
         ),
     ):
@@ -598,11 +598,11 @@ def test_reader_rechecks_shm_after_idle_wait_timeout_without_notify():
 
         with (
             mock.patch(
-                "aphrodite.distributed.device_communicators.shm_broadcast.SHM_READER_RECHECK_INTERVAL_MS",
+                "sonar.distributed.device_communicators.shm_broadcast.SHM_READER_RECHECK_INTERVAL_MS",
                 new=50,
             ),
             mock.patch(
-                "aphrodite.distributed.device_communicators.shm_broadcast.APHRODITE_RINGBUFFER_WARNING_INTERVAL",
+                "sonar.distributed.device_communicators.shm_broadcast.SONAR_RINGBUFFER_WARNING_INTERVAL",
                 new=60,
             ),
             mock.patch.object(
@@ -720,13 +720,13 @@ def test_reader_in_reference_cycle_is_collected_without_blocking():
     assert reader_ref() is None
 
 
-def test_warning_logs(caplog_aphrodite):
-    """Test that warning logs are emitted at APHRODITE_RINGBUFFER_WARNING_INTERVAL intervals
+def test_warning_logs(caplog_sonar):
+    """Test that warning logs are emitted at SONAR_RINGBUFFER_WARNING_INTERVAL intervals
     when indefinite=False, and are not emitted when indefinite=True.
     """
     # Patch the warning log interval to every 1 ms during reads
     with mock.patch(
-        "aphrodite.distributed.device_communicators.shm_broadcast.APHRODITE_RINGBUFFER_WARNING_INTERVAL",
+        "sonar.distributed.device_communicators.shm_broadcast.SONAR_RINGBUFFER_WARNING_INTERVAL",
         new=0.001,  # 1 ms
     ):
         writer = MessageQueue(
@@ -745,16 +745,16 @@ def test_warning_logs(caplog_aphrodite):
             reader.dequeue(timeout=0.01, indefinite=False)
         assert any(
             "No available shared memory broadcast block found in 0 seconds" in record.message
-            for record in caplog_aphrodite.records
+            for record in caplog_sonar.records
         )
-        caplog_aphrodite.clear()
+        caplog_sonar.clear()
 
         # We should have no warnings this time
         with pytest.raises(TimeoutError):
             reader.dequeue(timeout=0.01, indefinite=True)
         assert all(
             "No available shared memory broadcast block found in 0 seconds" not in record.message
-            for record in caplog_aphrodite.records
+            for record in caplog_sonar.records
         )
 
         # Clean up when done
@@ -844,7 +844,7 @@ def test_remote_subscribe_addr_unique_concurrent_writers(
     afterwards; pinning the probe to one free port makes every writer
     bind the same port and fail deterministically on that code path,
     while the late-binding implementation never consults the probe."""
-    from aphrodite.distributed.device_communicators import shm_broadcast
+    from sonar.distributed.device_communicators import shm_broadcast
 
     colliding_port = get_open_port()
     monkeypatch.setattr(shm_broadcast, "get_open_port", lambda: colliding_port, raising=False)
@@ -1288,7 +1288,7 @@ def test_create_from_handle_tolerates_arena_attach_failure():
             n_reader,
             slot_bytes,
             n_slots,
-            "aphrodite-arena-does-not-exist",
+            "sonar-arena-does-not-exist",
         ),
     )
 
@@ -1298,7 +1298,7 @@ def test_create_from_handle_tolerates_arena_attach_failure():
     # shared_memory attribute, and was never registered.
     assert reader_mq.tensor_arena is not None
     assert not hasattr(reader_mq.tensor_arena, "shared_memory")
-    assert "aphrodite-arena-does-not-exist" not in shm_tensor_arena._TENSOR_ARENAS
+    assert "sonar-arena-does-not-exist" not in shm_tensor_arena._TENSOR_ARENAS
 
     reader_mq.shutdown()
     writer_mq.shutdown()
@@ -1335,7 +1335,7 @@ def worker_fn_arena_broadcast():
     if rank == writer_rank:
         assert message_queue.tensor_arena is not None
         with mock.patch(
-            "aphrodite.distributed.device_communicators.shm_broadcast._reduce_tensor",
+            "sonar.distributed.device_communicators.shm_broadcast._reduce_tensor",
             wraps=_reduce_tensor,
         ) as wrapped_reduce:
             message_queue.enqueue(payload)

@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer};
 use winnow::ascii::{digit1, multispace0 as ws0};
 use winnow::combinator::{alt, eof, repeat, seq};
 use winnow::prelude::*;

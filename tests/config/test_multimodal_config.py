@@ -8,15 +8,15 @@ import pytest
 import torch
 from transformers import PreTrainedConfig
 
-from aphrodite.config.aphrodite import AphroditeConfig
-from aphrodite.config.ec_transfer import ECRole, ECTransferConfig
-from aphrodite.config.kv_transfer import KVTransferConfig
-from aphrodite.config.model import ModelConfig
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.transformers_utils.model_arch_config_convertor import (
+from sonar.config.ec_transfer import ECRole, ECTransferConfig
+from sonar.config.kv_transfer import KVTransferConfig
+from sonar.config.model import ModelConfig
+from sonar.config.multimodal import MultiModalConfig
+from sonar.config.sonar import SonarConfig
+from sonar.transformers_utils.model_arch_config_convertor import (
     ModelArchConfigConvertorBase,
 )
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 from tests.models.utils import build_model_context
 
 
@@ -483,7 +483,7 @@ def test_bad_mm_processor_device_rejected(ec_role: ECRole | None):
     silently fall through to running the processor somewhere unintended.
     """
     with (
-        patch("aphrodite.platforms.current_platform.device_type", "cpu"),
+        patch("sonar.platforms.current_platform.device_type", "cpu"),
         pytest.raises(ValueError, match='Invalid "device" in mm_processor_kwargs'),
     ):
         _validate_mm_processor_device(device="not-a-device", ec_role=ec_role)
@@ -500,20 +500,20 @@ def test_accelerator_mm_processor_rejected_outside_encoder_instance(
     the memory profiled for the KV cache.
     """
     with (
-        patch("aphrodite.platforms.current_platform.device_type", "cuda"),
+        patch("sonar.platforms.current_platform.device_type", "cuda"),
         pytest.raises(ValueError, match="also runs the language model"),
     ):
         _validate_mm_processor_device(device="cuda", ec_role=ec_role)
 
 
 def test_accelerator_mm_processor_allowed_on_encoder_instance():
-    with patch("aphrodite.platforms.current_platform.device_type", "cuda"):
+    with patch("sonar.platforms.current_platform.device_type", "cuda"):
         _validate_mm_processor_device(device="cuda", ec_role="ec_producer")
 
 
 def test_cpu_mm_processor_needs_no_ec_role():
     """The gate only applies to the accelerator, so CPU stays unrestricted."""
-    with patch("aphrodite.platforms.current_platform.device_type", "cuda"):
+    with patch("sonar.platforms.current_platform.device_type", "cuda"):
         _validate_mm_processor_device(device="cpu", ec_role=None)
 
 
@@ -521,7 +521,7 @@ def test_cpu_mm_processor_needs_no_ec_role():
     ("flag", "kwargs", "expected"),
     [
         # "auto" is only settled once the EC role is known, so it must leave no
-        # device behind for `AphroditeConfig` to mistake for an explicit request.
+        # device behind for `SonarConfig` to mistake for an explicit request.
         ("auto", None, None),
         (None, None, None),
         ("cpu", None, "cpu"),
@@ -535,7 +535,7 @@ def test_cpu_mm_processor_needs_no_ec_role():
     ],
 )
 def test_fold_mm_processor_device(flag: str | None, kwargs: dict | None, expected: str | None):
-    with patch("aphrodite.platforms.current_platform.device_type", "cuda"):
+    with patch("sonar.platforms.current_platform.device_type", "cuda"):
         folded = MultiModalConfig.fold_mm_processor_device(kwargs, flag)
 
     config = MultiModalConfig(mm_processor_kwargs=folded or {})
@@ -555,14 +555,14 @@ def _resolve_mm_processor_device(
     )
     model_config = MagicMock(spec=ModelConfig)
     model_config.multimodal_config = mm_config
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.ec_transfer_config = (
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.ec_transfer_config = (
         None if ec_role is None else ECTransferConfig(ec_connector="ECExampleConnector", ec_role=ec_role)
     )
 
-    with patch("aphrodite.platforms.current_platform.device_type", "cuda"):
-        AphroditeConfig._resolve_mm_processor_device(aphrodite_config)
+    with patch("sonar.platforms.current_platform.device_type", "cuda"):
+        SonarConfig._resolve_mm_processor_device(sonar_config)
     return mm_config.get_mm_processor_device_type()
 
 
@@ -601,13 +601,13 @@ def test_ec_producer_only_enables_mm_encoder_only(ec_role: ECRole | None, expect
     mm_config = MultiModalConfig()
     model_config = MagicMock(spec=ModelConfig)
     model_config.multimodal_config = mm_config
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.ec_transfer_config = (
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.ec_transfer_config = (
         None if ec_role is None else ECTransferConfig(ec_connector="ECExampleConnector", ec_role=ec_role)
     )
 
-    AphroditeConfig._resolve_mm_encoder_only(aphrodite_config)
+    SonarConfig._resolve_mm_encoder_only(sonar_config)
 
     assert mm_config.mm_encoder_only is expected
 
@@ -629,37 +629,37 @@ def test_consumer_resolves_mm_embedding_inputs(
     mm_config = MultiModalConfig(language_model_only=language_model_only, enable_mm_embeds=enable_mm_embeds)
     model_config = MagicMock(spec=ModelConfig)
     model_config.multimodal_config = mm_config
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.ec_transfer_config = (
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.ec_transfer_config = (
         ECTransferConfig(ec_connector="ECExampleConnector", ec_role=role) if role == "ec_consumer" else None
     )
-    aphrodite_config.kv_transfer_config = (
+    sonar_config.kv_transfer_config = (
         KVTransferConfig(kv_connector="ExampleConnector", kv_role=role) if role == "kv_consumer" else None
     )
 
-    AphroditeConfig._resolve_mm_embedding_inputs(aphrodite_config)
+    SonarConfig._resolve_mm_embedding_inputs(sonar_config)
 
     assert mm_config.allow_missing_mm_embeddings is expected
     assert mm_config.enable_mm_embeds is expected
 
 
-def test_aphrodite_config_runs_the_mm_processor_device_check():
+def test_sonar_config_runs_the_mm_processor_device_check():
     """Startup must reach the check; the rule itself is covered above.
 
     Guards the wiring, which no other test would notice going missing.
     """
     model_config = MagicMock(spec=ModelConfig)
     model_config.multimodal_config = MultiModalConfig(mm_processor_kwargs={"device": "cuda"})
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.ec_transfer_config = None
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.ec_transfer_config = None
 
     with (
-        patch("aphrodite.platforms.current_platform.device_type", "cuda"),
+        patch("sonar.platforms.current_platform.device_type", "cuda"),
         pytest.raises(ValueError, match="also runs the language model"),
     ):
-        AphroditeConfig._validate_mm_processor_device(aphrodite_config)
+        SonarConfig._validate_mm_processor_device(sonar_config)
 
 
 def _resolve_mm_video_decode_device(
@@ -679,21 +679,21 @@ def _resolve_mm_video_decode_device(
     )
     model_config = MagicMock(spec=ModelConfig)
     model_config.multimodal_config = mm_config
-    aphrodite_config = MagicMock(spec=AphroditeConfig)
-    aphrodite_config.model_config = model_config
-    aphrodite_config.ec_transfer_config = (
+    sonar_config = MagicMock(spec=SonarConfig)
+    sonar_config.model_config = model_config
+    sonar_config.ec_transfer_config = (
         None if ec_role is None else ECTransferConfig(ec_connector="ECExampleConnector", ec_role=ec_role)
     )
 
     with (
-        patch("aphrodite.platforms.current_platform.device_type", "cuda"),
+        patch("sonar.platforms.current_platform.device_type", "cuda"),
         patch(
-            "aphrodite.utils.import_utils.check_torchcodec_available",
+            "sonar.utils.import_utils.check_torchcodec_available",
             side_effect=None if torchcodec_available else ImportError("torchcodec"),
         ),
     ):
-        AphroditeConfig._resolve_mm_processor_device(aphrodite_config)
-        AphroditeConfig._resolve_mm_video_decode_device(aphrodite_config)
+        SonarConfig._resolve_mm_processor_device(sonar_config)
+        SonarConfig._resolve_mm_video_decode_device(sonar_config)
     return mm_config.media_io_kwargs.get("video", {})
 
 

@@ -5,9 +5,9 @@ import json
 import pytest
 import requests
 
-from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
-from aphrodite.entrypoints.pooling.classify.protocol import ClassificationResponse
-from aphrodite.multimodal.utils import encode_image_url, fetch_image
+from sonar.assets.base import SONAR_S3_BUCKET_URL
+from sonar.entrypoints.pooling.classify.protocol import ClassificationResponse
+from sonar.multimodal.utils import encode_image_url, fetch_image
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "muziyongshixin/Qwen2.5-VL-7B-for-VideoCls"
@@ -15,9 +15,9 @@ MAXIMUM_VIDEOS = 1
 
 HF_OVERRIDES = {"architectures": ["Qwen2_5_VLForSequenceClassification"]}
 input_text = "This product was excellent and exceeded my expectations"
-image_url = f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/cat_snow.jpg"
+image_url = f"{SONAR_S3_BUCKET_URL}/multimodal_asset/cat_snow.jpg"
 image_base64 = {"url": encode_image_url(fetch_image(image_url))}
-video_url = f"{APHRODITE_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4"
+video_url = f"{SONAR_S3_BUCKET_URL}/multimodal_asset/slow_traffic_small.mp4"
 
 
 @pytest.fixture(scope="module")

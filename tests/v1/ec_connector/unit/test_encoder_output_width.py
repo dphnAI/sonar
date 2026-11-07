@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.ec_transfer.ec_connector import encoder_output_width as eow
-from tests.v1.ec_connector.unit.utils import create_ec_aphrodite_config
+from sonar.distributed.ec_transfer.ec_connector import encoder_output_width as eow
+from tests.v1.ec_connector.unit.utils import create_ec_sonar_config
 
 pytestmark = pytest.mark.cpu_test
 
@@ -38,14 +38,14 @@ def _worker(first_pp_rank=True, supports_mm=True):
         device=torch.device("cpu"),
     )
     pp_group = SimpleNamespace(is_first_rank=first_pp_rank)
-    return SimpleNamespace(model_runner=runner, aphrodite_config=None), pp_group
+    return SimpleNamespace(model_runner=runner, sonar_config=None), pp_group
 
 
 @pytest.fixture
 def patched(monkeypatch):
-    import aphrodite.distributed.parallel_state as ps
-    import aphrodite.multimodal.encoder_budget as budget_mod
-    import aphrodite.multimodal.utils as mm_utils
+    import sonar.distributed.parallel_state as ps
+    import sonar.multimodal.encoder_budget as budget_mod
+    import sonar.multimodal.utils as mm_utils
 
     monkeypatch.setattr(budget_mod, "MultiModalBudget", _Budget)
     monkeypatch.setattr(
@@ -71,7 +71,7 @@ def test_ranks_without_an_encoder_report_nothing(patched, first_pp_rank, support
 
 
 def test_producer_records_the_widths_its_encoder_ranks_agree_on():
-    config = create_ec_aphrodite_config(ec_role="ec_producer", encoder_output_widths={})
+    config = create_ec_sonar_config(ec_role="ec_producer", encoder_output_widths={})
     reports = [{"image": 64}, {}, {"image": 64}]
     eow.measure_encoder_output_widths(config, lambda fn: reports)
     assert config.ec_transfer_config.mm_encoder_output_widths == {"image": 64}
@@ -87,6 +87,6 @@ def test_producer_records_the_widths_its_encoder_ranks_agree_on():
     ids=["no-encoder", "disagree"],
 )
 def test_producer_refuses_to_start_without_a_trustworthy_width(reports, match):
-    config = create_ec_aphrodite_config(ec_role="ec_producer", encoder_output_widths={})
+    config = create_ec_sonar_config(ec_role="ec_producer", encoder_output_widths={})
     with pytest.raises(ValueError, match=match):
         eow.measure_encoder_output_widths(config, lambda fn: reports)

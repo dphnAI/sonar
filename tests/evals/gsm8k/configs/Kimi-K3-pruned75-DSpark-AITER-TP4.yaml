@@ -25,4 +25,4 @@ server_args: >-
   "draft_sample_method":"probabilistic",
   "rejection_sample_method":"block"}'
 env:
-  APHRODITE_ROCM_USE_AITER: "1"
+  SONAR_ROCM_USE_AITER: "1"

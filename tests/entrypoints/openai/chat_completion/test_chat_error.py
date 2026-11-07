@@ -9,22 +9,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from aphrodite.config.multimodal import MultiModalConfig
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.config.multimodal import MultiModalConfig
+from sonar.entrypoints.openai.chat_completion.protocol import (
     BatchChatCompletionRequest,
     ChatCompletionRequest,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.scale_out.render.serving import ServingRender
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.exceptions import AphroditeValidationError, GenerationError
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.engine.async_llm import AsyncLLM
+from sonar.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.scale_out.render.serving import ServingRender
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.exceptions import GenerationError, SonarValidationError
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.engine.async_llm import AsyncLLM
 
 MODEL_NAME = "openai-community/gpt2"
 MODEL_NAME_SHORT = "gpt2"
@@ -77,14 +77,14 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -407,7 +407,7 @@ async def test_chat_error_stream_first_chunk(include_usage: bool, monkeypatch: p
 )
 def test_system_message_warns_on_image(image_content):
     """Test that system messages with image content trigger a warning."""
-    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
+    with patch("sonar.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[
@@ -486,7 +486,7 @@ def test_user_message_accepts_image():
 )
 def test_system_message_warns_on_audio(audio_content):
     """Test that system messages with audio content trigger a warning."""
-    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
+    with patch("sonar.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[
@@ -512,7 +512,7 @@ def test_system_message_warns_on_audio(audio_content):
 )
 def test_system_message_warns_on_video(video_content):
     """Test that system messages with video content trigger a warning."""
-    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
+    with patch("sonar.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[
@@ -563,7 +563,7 @@ async def test_online_renderer_rejects_mm_processor_kwargs_by_default():
     )
 
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Per-request mm_processor_kwargs are disabled",
     ):
         await online_renderer.preprocess_chat(
@@ -594,7 +594,7 @@ async def test_online_renderer_rejects_media_io_kwargs_by_default():
     )
 
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Per-request media_io_kwargs are disabled",
     ):
         await online_renderer.preprocess_chat(
@@ -607,7 +607,7 @@ async def test_online_renderer_rejects_media_io_kwargs_by_default():
 
 
 def test_trust_request_mm_kwargs_opt_in_allows_overrides():
-    from aphrodite.entrypoints.generate.base.protocol import validate_request_mm_kwargs
+    from sonar.entrypoints.generate.base.protocol import validate_request_mm_kwargs
 
     validate_request_mm_kwargs(
         mm_processor_kwargs={"use_audio_in_video": True},
@@ -620,7 +620,7 @@ def test_trust_request_mm_kwargs_opt_in_allows_overrides():
 def test_structural_tag_response_format_invalid(format_value):
     """Malformed structural tags should be rejected during request validation."""
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Invalid response_format structural_tag",
     ):
         ChatCompletionRequest(
@@ -634,7 +634,7 @@ def test_structural_tag_response_format_invalid(format_value):
 def test_batch_structural_tag_response_format_invalid(format_value):
     """Batch chat should reject malformed structural tags at request parsing."""
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Invalid response_format structural_tag",
     ):
         BatchChatCompletionRequest(
@@ -656,7 +656,7 @@ def test_batch_structural_tag_response_format_invalid(format_value):
 def test_structured_outputs_structural_tag_invalid(structural_tag):
     """Malformed direct structured_outputs structural tags should be rejected."""
     with pytest.raises(
-        AphroditeValidationError,
+        SonarValidationError,
         match="Invalid structured_outputs structural_tag",
     ):
         ChatCompletionRequest(
@@ -674,7 +674,7 @@ def test_deeply_nested_structural_tag_rejected(field):
     schema = '{"type": "array", "items": ' * 200 + "{}" + "}" * 200
     tag = f'{{"type": "structural_tag", "format": {{"type": "json_schema", "json_schema": {schema}}}}}'
     value = json.loads(tag) if field == "response_format" else {"structural_tag": tag}
-    with pytest.raises(AphroditeValidationError, match="nested too deeply"):
+    with pytest.raises(SonarValidationError, match="nested too deeply"):
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": "hello"}],
@@ -686,7 +686,7 @@ def test_deeply_nested_structural_tag_rejected(field):
 def test_non_numeric_logprobs_rejected(field_name):
     """A non-numeric logprobs value must be a clean 400 validation error, not a
     TypeError from the mode='before' comparison (which surfaces as HTTP 500)."""
-    with pytest.raises(AphroditeValidationError, match=f"`{field_name}` must be an integer"):
+    with pytest.raises(SonarValidationError, match=f"`{field_name}` must be an integer"):
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": "hello"}],

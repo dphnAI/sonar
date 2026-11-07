@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 
-from aphrodite.models.muse_spark.amd.model import MuseSpark1xForCausalLM
+from sonar.models.muse_spark.amd.model import MuseSpark1xForCausalLM
 
 
 def test_compute_logits_local_applies_output_transform() -> None:

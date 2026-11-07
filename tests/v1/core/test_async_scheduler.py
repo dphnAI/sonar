@@ -5,12 +5,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
-from aphrodite.v1.core.sched.output import CachedRequestData, SchedulerOutput
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.request import RequestStatus
-from aphrodite.v1.structured_output import StructuredOutputGrammar
-from aphrodite.v1.utils import ConstantList
+from sonar.v1.core.sched.async_scheduler import AsyncScheduler
+from sonar.v1.core.sched.output import CachedRequestData, SchedulerOutput
+from sonar.v1.outputs import ModelRunnerOutput
+from sonar.v1.request import RequestStatus
+from sonar.v1.structured_output import StructuredOutputGrammar
+from sonar.v1.utils import ConstantList
 
 from .utils import EOS_TOKEN_ID, create_requests, create_scheduler, mock_kv
 
@@ -303,7 +303,7 @@ def test_abort_request_when_structured_output_fsm_cannot_advance():
     scheduler.finished_req_ids_dict = None
     scheduler.grammar_compile_error_reqs = {}
     scheduler.encoder_cache_mismatch_reqs = set()
-    scheduler.aphrodite_config = Mock()
+    scheduler.sonar_config = Mock()
     scheduler.aux_output_connector = None
     scheduler.return_sampling_mask = False
     scheduler.recompute_kv_load_failures = False

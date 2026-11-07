@@ -75,8 +75,8 @@ hardware_overrides:
       - "0.95"
       - "--block-size=64"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
       HSA_NO_SCRATCH_RECLAIM: "1"
       AMDGCN_USE_BUFFER_OPS: "0"
 
@@ -97,15 +97,15 @@ guide: |
   ## Prerequisites
 
   - Hardware: NVIDIA H100/H200/B200, AMD MI300X/MI325X/MI355X, Intel XPU B60/B70, or 4x Xeon 6 CPUs.
-  - Aphrodite >= 0.10.1.
+  - Sonar >= 0.10.1.
   - CUDA >= 12.8 if building from source for NVIDIA GPUs (must match between install and serving).
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install aphrodite-engine --torch-backend=auto
+  uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### pip (Intel Xeon 6 CPUs)
@@ -129,7 +129,7 @@ guide: |
   AMD ROCm wheels:
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   Intel XPU (B60 / B70):
@@ -142,7 +142,7 @@ guide: |
   Single GPU (default — works on any 16GB+ card):
 
   ```bash
-  aphrodite serve openai/gpt-oss-20b
+  sonar serve openai/gpt-oss-20b
   ```
 
   ### Intel Xeon 6
@@ -153,7 +153,7 @@ guide: |
 
   ```bash
 
-  aphrodite serve openai/gpt-oss-20b \
+  sonar serve openai/gpt-oss-20b \
     --max-num-batched-tokens 16384 \
     --gpu-memory-utilization 0.8
   ```
@@ -175,10 +175,10 @@ guide: |
   Blackwell (B200) with FlashInfer MXFP4+MXFP8 MoE:
 
   ```bash
-  aphrodite serve openai/gpt-oss-20b
+  sonar serve openai/gpt-oss-20b
   ```
 
-  On Aphrodite v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
+  On Sonar v0.28.0+ the FlashInfer TRTLLM MXFP4 MoE path is selected automatically on Blackwell; it can be pinned explicitly with `--moe-backend flashinfer_trtllm --quantization-config.moe.activation mxfp8`.
 
   Hopper (H100/H200): same as Blackwell minus `--kv-cache-dtype fp8` and the FlashInfer MoE flags.
 
@@ -187,10 +187,10 @@ guide: |
   ```bash
   export HSA_NO_SCRATCH_RECLAIM=1
   export AMDGCN_USE_BUFFER_OPS=0
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-  aphrodite serve openai/gpt-oss-20b \
+  sonar serve openai/gpt-oss-20b \
     --attention-backend ROCM_AITER_UNIFIED_ATTN \
     -cc.pass_config.fuse_rope_kvcache=True \
     -cc.use_inductor_graph_partition=True \
@@ -216,13 +216,13 @@ guide: |
   The `/v1/responses` endpoint supports built-in tools (browsing, python, MCP). Setup requires `uv pip install gpt-oss` and either Docker (for the Python sandbox) or `PYTHON_EXECUTION_BACKEND=dangerously_use_uv`. For demo tools:
 
   ```bash
-  aphrodite serve openai/gpt-oss-20b --tool-server demo
+  sonar serve openai/gpt-oss-20b --tool-server demo
   ```
 
   For user-defined function calling (toggle the **Tool Calling** feature above, or pass manually):
 
   ```bash
-  aphrodite serve openai/gpt-oss-20b --tool-call-parser openai --enable-auto-tool-choice
+  sonar serve openai/gpt-oss-20b --tool-call-parser openai --enable-auto-tool-choice
   ```
 
   ## Reasoning effort
@@ -246,7 +246,7 @@ guide: |
   ## Troubleshooting
 
   - **Attention sinks dtype error on Blackwell:** pass `--quantization-config.moe.activation mxfp8` and `--kv-cache-dtype fp8`.
-  - **`tl.language not defined`:** make sure no extra Triton (e.g., `pytorch-triton`) is installed alongside Aphrodite's bundled Triton.
+  - **`tl.language not defined`:** make sure no extra Triton (e.g., `pytorch-triton`) is installed alongside Sonar's bundled Triton.
   - **Harmony vocab download failure:** pre-download tiktoken files and set `TIKTOKEN_ENCODINGS_BASE`.
 
   ## References
@@ -255,4 +255,4 @@ guide: |
   - [Sibling — gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b)
   - [OpenAI announcement](https://openai.com/index/introducing-gpt-oss/)
   - [gpt-oss model card paper (arXiv:2508.10925)](https://arxiv.org/abs/2508.10925)
-  - [Aphrodite gpt-oss cookbook](https://cookbook.openai.com/articles/gpt-oss/run-vllm)
+  - [Sonar gpt-oss cookbook](https://cookbook.openai.com/articles/gpt-oss/run-vllm)

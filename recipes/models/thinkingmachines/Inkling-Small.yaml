@@ -30,11 +30,11 @@ model:
     - "--tokenizer-mode"
     - "inkling"
   base_env:
-    APHRODITE_USE_V2_MODEL_RUNNER: "1"
+    SONAR_USE_V2_MODEL_RUNNER: "1"
 
 dependencies:
   - note: "Audio extras — only needed when serving the audio modality"
-    command: 'uv pip install "aphrodite-engine[audio]"'
+    command: 'uv pip install "sonar[audio]" --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130'
     optional: true
 
 features:
@@ -50,7 +50,7 @@ features:
       - "--reasoning-parser"
       - "inkling"
   spec_decoding:
-    description: "Multi-Token Prediction (MTP) speculative decoding. Inkling ships 8 chained MTP heads, but the stable version of Aphrodite only supports 1 speculative token for now. Will support 8 in the next release."
+    description: "Multi-Token Prediction (MTP) speculative decoding. Inkling ships 8 chained MTP heads, but the stable version of Sonar only supports 1 speculative token for now. Will support 8 in the next release."
     args:
       - "--speculative-config"
       - '{"method":"mtp","num_speculative_tokens":1}'
@@ -108,8 +108,8 @@ variants:
           - "--gpu-memory-utilization"
           - "0.85"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
       mi325x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
@@ -121,8 +121,8 @@ variants:
           - "--gpu-memory-utilization"
           - "0.85"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
       mi355x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
@@ -134,8 +134,8 @@ variants:
           - "--gpu-memory-utilization"
           - "0.95"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
           INKLING_GFX950_GLUON: "0"
   bf16:
     model_id: "thinkingmachines/Inkling-Small"
@@ -177,8 +177,8 @@ variants:
           - "0.90"
           - "--enforce-eager"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
       mi325x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
         extra_args:
@@ -190,8 +190,8 @@ variants:
           - "0.90"
           - "--enforce-eager"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
       mi355x:
         docker_image: "vllm/vllm-openai-rocm:nightly"
         extra_args:
@@ -203,8 +203,8 @@ variants:
           - "0.90"
           - "--enforce-eager"
         extra_env:
-          APHRODITE_ROCM_USE_AITER: "1"
-          APHRODITE_ROCM_USE_AITER_MOE: "1"
+          SONAR_ROCM_USE_AITER: "1"
+          SONAR_ROCM_USE_AITER_MOE: "1"
   fp8:
     model_id: "RedHatAI/Inkling-Small-FP8-dynamic"
     precision: fp8
@@ -269,7 +269,7 @@ guide: |
 
   TML Inkling-Small is a natively multimodal 276B-parameter Mixture-of-Experts model
   from Thinking Machines Lab. It activates 12B parameters per token and uses the same
-  Inkling architecture and Aphrodite serving configuration as its larger 975B-parameter
+  Inkling architecture and Sonar serving configuration as its larger 975B-parameter
   sibling, while substantially reducing the deployment footprint.
 
   Inkling-Small accepts text, image, and audio inputs and generates text. It supports
@@ -293,17 +293,17 @@ guide: |
   - **Hardware:** B300/GB300 TP1, B200/GB200/H200 TP2, or H100 TP4 for NVFP4;
     B300/GB200/GB300/MI300X/MI325X/MI355X TP4 or B200/H200 TP8 for BF16;
     MI355X TP1 or MI300X/MI325X TP2 for AMD MXFP4.
-  - **Aphrodite:** A nightly build with Inkling support.
-  - **Audio:** Install the optional `aphrodite[audio]` extra only when serving audio inputs.
+  - **Sonar:** A nightly build with Inkling support.
+  - **Audio:** Install the optional `sonar[audio]` extra only when serving audio inputs.
 
   ## Client Usage
 
   Launch the NVFP4 checkpoint in W4A4 mode on B300:
   ```bash
-  export APHRODITE_USE_V2_MODEL_RUNNER=1
+  export SONAR_USE_V2_MODEL_RUNNER=1
   export FLASH_ATTENTION_CUTE_DSL_CACHE_ENABLED=1
 
-  aphrodite serve thinkingmachines/Inkling-Small-NVFP4 \
+  sonar serve thinkingmachines/Inkling-Small-NVFP4 \
     --tokenizer-mode inkling \
     --reasoning-parser inkling \
     --tool-call-parser inkling \
@@ -314,10 +314,10 @@ guide: |
   ```
 
   Select **GB300** for W4A4 with TP1, or **B200**/**GB200** for W4A4 with TP2.
-  On H100, the builder emits TP4; on H200, it emits TP2. Aphrodite runs W4A16 with on-the-fly
+  On H100, the builder emits TP4; on H200, it emits TP2. Sonar runs W4A16 with on-the-fly
   dequantization. A reported 4×H100 deployment served a plain chat request, but
   JSON-schema structured output returned HTTP 500; see
-  [Aphrodite #51693](https://github.com/vllm-project/vllm/issues/51693). H100 is not
+  [Sonar #51693](https://github.com/vllm-project/vllm/issues/51693). H100 is not
   marked verified for the full recipe.
 
   On AMD, select the **MXFP4** variant. To fit 1M context, MI300X TP2 and MI355X TP1.
@@ -329,12 +329,12 @@ guide: |
 
   Equivalent MI355X launch:
   ```bash
-  export APHRODITE_USE_V2_MODEL_RUNNER=1
-  export APHRODITE_ROCM_USE_AITER=1
-  export APHRODITE_ROCM_USE_AITER_MOE=1
+  export SONAR_USE_V2_MODEL_RUNNER=1
+  export SONAR_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER_MOE=1
   export INKLING_GFX950_GLUON=0
 
-  aphrodite serve EmbeddedLLM/Inkling-Small-MXFP4 \
+  sonar serve EmbeddedLLM/Inkling-Small-MXFP4 \
     --tensor-parallel-size 1 \
     --tokenizer-mode inkling \
     --reasoning-parser inkling \

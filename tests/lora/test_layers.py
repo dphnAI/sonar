@@ -10,8 +10,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.config.lora import LoRAConfig
-from aphrodite.lora.layers import (
+from sonar.config.lora import LoRAConfig
+from sonar.lora.layers import (
     BaseLayerWithLoRA,
     ColumnParallelLinearWithLoRA,
     ColumnParallelLinearWithShardedLoRA,
@@ -29,27 +29,27 @@ from aphrodite.lora.layers import (
     RowParallelLinearWithShardedLoRA,
     VocabParallelEmbeddingWithLoRA,
 )
-from aphrodite.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
-from aphrodite.lora.punica_wrapper import get_punica_wrapper
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
+from sonar.lora.punica_wrapper import get_punica_wrapper
+from sonar.model_executor.layers.fusion.quant_activation import (
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.linear import (
+from sonar.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
-from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.logits_processor import LogitsProcessor
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
     get_masked_input_and_mask,
 )
-from aphrodite.model_executor.models.deepseek_v2 import DeepSeekV2FusedQkvAProjLinear
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.models.deepseek_v2 import DeepSeekV2FusedQkvAProjLinear
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 from .utils import DummyLoRAManager
 
@@ -109,7 +109,7 @@ def test_base_layer_with_lora_delegates_load_weights():
 @pytest.fixture(autouse=True)
 def clean_cache_reset_device(reset_default_device):
     # Release any memory we might be holding on to. CI runs OOMs otherwise.
-    from aphrodite.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
+    from sonar.lora.ops.triton_ops.utils import _LORA_A_PTR_DICT, _LORA_B_PTR_DICT
 
     _LORA_B_PTR_DICT.clear()
     _LORA_A_PTR_DICT.clear()
@@ -255,15 +255,15 @@ def create_random_inputs(
 
 def check_punica_wrapper(punica_wrapper) -> bool:
     if current_platform.is_cuda_alike():
-        from aphrodite.lora.punica_wrapper.punica_gpu import PunicaWrapperGPU
+        from sonar.lora.punica_wrapper.punica_gpu import PunicaWrapperGPU
 
         return type(punica_wrapper) is PunicaWrapperGPU
     elif current_platform.is_cpu():
-        from aphrodite.lora.punica_wrapper.punica_cpu import PunicaWrapperCPU
+        from sonar.lora.punica_wrapper.punica_cpu import PunicaWrapperCPU
 
         return type(punica_wrapper) is PunicaWrapperCPU
     elif current_platform.is_xpu():
-        from aphrodite.lora.punica_wrapper.punica_xpu import PunicaWrapperXPU
+        from sonar.lora.punica_wrapper.punica_xpu import PunicaWrapperXPU
 
         return type(punica_wrapper) is PunicaWrapperXPU
     else:
@@ -275,7 +275,7 @@ def check_punica_wrapper(punica_wrapper) -> bool:
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("vocab_size", [512, 32000, 64000, 128000])
 @pytest.mark.parametrize("stage", STAGES)
-def test_embeddings(default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage) -> None:
+def test_embeddings(default_sonar_config, dist_init, num_loras, device, vocab_size, stage) -> None:
     # For multi-GPU testing of Triton kernel, we must explicitly set the CUDA
     # device, see: https://github.com/triton-lang/triton/issues/2925
     # Same below.
@@ -375,7 +375,7 @@ def test_embeddings(default_aphrodite_config, dist_init, num_loras, device, voca
 @pytest.mark.parametrize("stage", STAGES)
 @pytest.mark.parametrize("head_dtype", [None, torch.float32])
 def test_lm_head_logits_processor(
-    default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage, head_dtype
+    default_sonar_config, dist_init, num_loras, device, vocab_size, stage, head_dtype
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -488,7 +488,7 @@ def test_lm_head_logits_processor(
 @torch.inference_mode()
 @pytest.mark.parametrize("vocab_size", [258049, 300000])
 @pytest.mark.parametrize("device", DEVICES)
-def test_lm_head_logits_processor_invalid_vocab_size(default_aphrodite_config, dist_init, vocab_size, device) -> None:
+def test_lm_head_logits_processor_invalid_vocab_size(default_sonar_config, dist_init, vocab_size, device) -> None:
     """Test that LogitsProcessorWithLoRA raises ValueError for invalid vocab sizes."""
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -506,7 +506,7 @@ def test_lm_head_logits_processor_invalid_vocab_size(default_aphrodite_config, d
 
 @torch.inference_mode()
 @pytest.mark.parametrize("device", DEVICES)
-def test_lm_head_reset_sharded_to_full_mapping(default_aphrodite_config, dist_init, device) -> None:
+def test_lm_head_reset_sharded_to_full_mapping(default_sonar_config, dist_init, device) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 
@@ -537,7 +537,7 @@ def test_lm_head_reset_sharded_to_full_mapping(default_aphrodite_config, dist_in
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_linear_replicated(
-    default_aphrodite_config,
+    default_sonar_config,
     dist_init,
     num_loras,
     device,
@@ -642,9 +642,7 @@ def test_linear_replicated(
 @pytest.mark.parametrize("fully_shard", [True, False])
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
-def test_linear_parallel(
-    default_aphrodite_config, dist_init, num_loras, orientation, fully_shard, device, stage
-) -> None:
+def test_linear_parallel(default_sonar_config, dist_init, num_loras, orientation, fully_shard, device, stage) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 
@@ -767,7 +765,7 @@ def test_linear_parallel(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_column_parallel_packed(
-    default_aphrodite_config, dist_init, num_loras, repeats, fully_shard, device, stage
+    default_sonar_config, dist_init, num_loras, repeats, fully_shard, device, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -920,7 +918,7 @@ def test_column_parallel_packed(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_merged_column_parallel_variable_slice(
-    default_aphrodite_config, dist_init, num_loras, num_slices, device, stage
+    default_sonar_config, dist_init, num_loras, num_slices, device, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -1026,7 +1024,7 @@ def test_merged_column_parallel_variable_slice(
 
 @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
 @pytest.mark.parametrize("seed", list(range(VOCAB_PARALLEL_EMBEDDING_TEST_NUM_RANDOM_SEEDS)))
-def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_config):
+def test_vocab_parallel_embedding_indices(tp_size, seed, default_sonar_config):
     random.seed(seed)
     vocab_size = random.randint(4000, 64000)
     added_vocab_size = random.randint(0, 1024)
@@ -1045,11 +1043,11 @@ def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_confi
     for tp_rank in range(tp_size):
         with (
             patch(
-                "aphrodite.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_rank",
+                "sonar.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_rank",
                 return_value=tp_rank,
             ),
             patch(
-                "aphrodite.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_world_size",
+                "sonar.model_executor.layers.vocab_parallel_embedding.get_tensor_model_parallel_world_size",
                 return_value=tp_size,
             ),
         ):
@@ -1248,7 +1246,7 @@ def test_get_masked_input_and_mask():
     assert torch.equal(modified_x_rank_3, torch.tensor([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 4]))
 
 
-def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init):
+def test_variable_slice_lora_class_selection(default_sonar_config, dist_init):
     """Test that MergedColumnParallelLinearVariableSliceWithLoRA is selected
     only for nemotron-h style models (checkpoint has single weight but layer
     has 3+ output slices).
@@ -1258,7 +1256,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
     before ColumnParallelLinearWithLoRA for layers with 3+ output sizes, since
     ColumnParallelLinearWithLoRA's slice_lora_b assumes exactly 2 slices.
     """
-    from aphrodite.lora.utils import from_layer
+    from sonar.lora.utils import from_layer
 
     lora_config = LoRAConfig(max_loras=8, max_lora_rank=8, lora_dtype=torch.float16)
 
@@ -1511,7 +1509,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
     [ColumnParallelLinearWithLoRA, ColumnParallelLinearWithShardedLoRA],
 )
 def test_get_and_maybe_dequant_weights_accepts_lora_wrappers(dist_init, wrapper_cls):
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         get_and_maybe_dequant_weights,
     )
 
@@ -1528,7 +1526,7 @@ def test_get_and_maybe_dequant_weights_accepts_lora_wrappers(dist_init, wrapper_
 @pytest.mark.parametrize("stage", STAGES)
 @pytest.mark.parametrize("fully_sharded", [False, True])
 def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
-    default_aphrodite_config, dist_init, device, stage, fully_sharded
+    default_sonar_config, dist_init, device, stage, fully_sharded
 ):
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -1604,7 +1602,7 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
 @torch.inference_mode()
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
-def test_replicated_lora_preserves_base_forward_for_subclasses(default_aphrodite_config, dist_init, device, stage):
+def test_replicated_lora_preserves_base_forward_for_subclasses(default_sonar_config, dist_init, device, stage):
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 

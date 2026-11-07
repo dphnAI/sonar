@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 import torch
 
-import aphrodite.models.deepseek_v32.common.kernels as K
-from aphrodite.triton_utils import triton
+import sonar.models.deepseek_v32.common.kernels as K
+from sonar.triton_utils import triton
 
 # GLM-5.2 / DeepSeek-V3.2 DSA dimensions.
 NOPE_DIM = 512
@@ -47,7 +47,7 @@ def make_inputs(num_tokens: int, num_heads: int):
 
 def run(kwargs, *, cutedsl: bool):
     # is_fused_q_cutedsl_supported gates the dispatch inside fused_q.
-    from aphrodite.models.deepseek_v32.nvidia.ops import fused_q_cutedsl as C
+    from sonar.models.deepseek_v32.nvidia.ops import fused_q_cutedsl as C
 
     with patch.object(C, "is_fused_q_cutedsl_supported", lambda *_, **__: cutedsl):
         K.fused_q(**kwargs)
@@ -82,8 +82,8 @@ if __name__ == "__main__":
     parser.add_argument("--save-path", type=str, default=None)
     args = parser.parse_args()
 
-    from aphrodite.platforms import current_platform
-    from aphrodite.utils.import_utils import has_cutedsl
+    from sonar.platforms import current_platform
+    from sonar.utils.import_utils import has_cutedsl
 
     if not (current_platform.has_device_capability(100) and has_cutedsl()):
         raise SystemExit("fused_q CuTeDSL requires an SM100 device and cutlass-dsl")

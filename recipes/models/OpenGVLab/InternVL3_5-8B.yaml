@@ -68,33 +68,33 @@ guide: |
   ## Prerequisites
 
   - Hardware: 1x GPU with >=20 GB VRAM (A100, L40S, H100, etc.)
-  - Aphrodite >= 0.10.0
+  - Sonar >= 0.10.0
 
-  ### Install Aphrodite (CUDA)
+  ### Install Sonar (CUDA)
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
-  ### Install Aphrodite (AMD ROCm MI300X/MI325X/MI355X)
+  ### Install Sonar (AMD ROCm MI300X/MI325X/MI355X)
 
   ```bash
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm/0.14.1/rocm700
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ## Launch command
 
   ```bash
-  aphrodite serve OpenGVLab/InternVL3_5-8B --trust-remote-code
+  sonar serve OpenGVLab/InternVL3_5-8B --trust-remote-code
   ```
 
   On AMD:
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
-  aphrodite serve OpenGVLab/InternVL3_5-8B --trust-remote-code
+  export SONAR_ROCM_USE_AITER=1
+  sonar serve OpenGVLab/InternVL3_5-8B --trust-remote-code
   ```
 
   ## Client Usage

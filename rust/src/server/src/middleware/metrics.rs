@@ -3,11 +3,11 @@
 
 use std::time::Instant;
 
-use aphrodite_metrics::{HttpHandlerLabels, HttpRequestLabels, METRICS};
 use axum::extract::{MatchedPath, Request};
 use axum::http::Method;
 use axum::middleware::Next;
 use axum::response::Response;
+use sonar_metrics::{HttpHandlerLabels, HttpRequestLabels, METRICS};
 
 /// Endpoints that will be excluded from HTTP metrics tracking.
 ///

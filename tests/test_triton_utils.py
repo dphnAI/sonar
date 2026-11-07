@@ -6,16 +6,16 @@ import sys
 import types
 from unittest import mock
 
-from aphrodite.triton_utils import importing as triton_importing
-from aphrodite.triton_utils.importing import TritonLanguagePlaceholder, TritonPlaceholder
+from sonar.triton_utils import importing as triton_importing
+from sonar.triton_utils.importing import TritonLanguagePlaceholder, TritonPlaceholder
 
 
-def _has_triton_for_backends(*, aphrodite_version: str = "0.0.0", **drivers: bool) -> bool:
+def _has_triton_for_backends(*, sonar_version: str = "0.0.0", **drivers: bool) -> bool:
     """Re-evaluate ``HAS_TRITON`` against a synthetic ``triton.backends`` map.
 
     ``drivers`` maps backend name to whether its driver reports itself active.
-    ``aphrodite_version`` selects the build type: importing.py takes its Triton-CPU
-    branch only when "cpu" is in the installed Aphrodite version, so pin it rather
+    ``sonar_version`` selects the build type: importing.py takes its Triton-CPU
+    branch only when "cpu" is in the installed Sonar version, so pin it rather
     than depending on the real install (the CPU CI image is a "+cpu" build).
     """
     backends = {}
@@ -37,7 +37,7 @@ def _has_triton_for_backends(*, aphrodite_version: str = "0.0.0", **drivers: boo
         with (
             mock.patch.dict(sys.modules, patched_modules),
             mock.patch.dict("os.environ", {}, clear=True),
-            mock.patch("importlib.metadata.version", return_value=aphrodite_version),
+            mock.patch("importlib.metadata.version", return_value=sonar_version),
         ):
             return importlib.reload(triton_importing).HAS_TRITON
     finally:
@@ -134,16 +134,16 @@ def test_cpu_backend_alone_disables_triton():
 
 
 def test_cpu_build_with_cpu_backend_keeps_triton():
-    assert _has_triton_for_backends(aphrodite_version="0.0.0+cpu", cpu=True) is True
+    assert _has_triton_for_backends(sonar_version="0.0.0+cpu", cpu=True) is True
 
 
 def test_cpu_build_without_cpu_backend_disables_triton():
-    assert _has_triton_for_backends(aphrodite_version="0.0.0+cpu", amd=True) is False
+    assert _has_triton_for_backends(sonar_version="0.0.0+cpu", amd=True) is False
 
 
 def test_no_triton_fallback():
     # Save the real modules so they can be put back afterward - popping them
-    # (rather than mock.patch.dict alone) is what forces aphrodite.triton_utils to
+    # (rather than mock.patch.dict alone) is what forces sonar.triton_utils to
     # be freshly, unmemoized re-imported under the "triton is absent"
     # condition below.
     saved_modules = {
@@ -151,8 +151,8 @@ def test_no_triton_fallback():
         for name in (
             "triton",
             "triton.language",
-            "aphrodite.triton_utils",
-            "aphrodite.triton_utils.importing",
+            "sonar.triton_utils",
+            "sonar.triton_utils.importing",
         )
     }
     for name in saved_modules:
@@ -161,7 +161,7 @@ def test_no_triton_fallback():
     try:
         # mock triton not being installed
         with mock.patch.dict(sys.modules, {"triton": None}):
-            from aphrodite.triton_utils import HAS_TRITON, tl, triton
+            from sonar.triton_utils import HAS_TRITON, tl, triton
 
             assert HAS_TRITON is False
             assert triton.__class__.__name__ == "TritonPlaceholder"
@@ -172,7 +172,7 @@ def test_no_triton_fallback():
         # The pops above are outside mock.patch.dict's scope, so exiting the
         # `with` restores "triton" to absent, not to the real module - unlike
         # _has_triton_for_backends above, nothing here puts it back. Left
-        # alone, every subsequent import of aphrodite.triton_utils in this process
+        # alone, every subsequent import of sonar.triton_utils in this process
         # (including other test files, and other tests' cleanup fixtures that
         # need real triton) would get this fake, HAS_TRITON=False module.
         for name, module in saved_modules.items():

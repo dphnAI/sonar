@@ -6,8 +6,8 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from aphrodite.entrypoints.pooling.classify.protocol import ClassificationResponse
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.classify.protocol import ClassificationResponse
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"

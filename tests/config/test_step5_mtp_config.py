@@ -4,7 +4,7 @@
 import pytest
 from transformers import PreTrainedConfig
 
-from aphrodite.config.speculative import SpeculativeConfig
+from sonar.config.speculative import SpeculativeConfig
 
 
 @pytest.mark.parametrize("model_type", ["step5", "step5_vl"])

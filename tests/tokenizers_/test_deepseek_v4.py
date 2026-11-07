@@ -8,11 +8,11 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.renderers.chat_utils import parse_chat_messages
-from aphrodite.renderers.registry import RENDERER_REGISTRY
-from aphrodite.tokenizers.deepseek_v4 import get_deepseek_v4_tokenizer
-from aphrodite.tokenizers.registry import TokenizerRegistry
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.renderers.chat_utils import parse_chat_messages
+from sonar.renderers.registry import RENDERER_REGISTRY
+from sonar.tokenizers.deepseek_v4 import get_deepseek_v4_tokenizer
+from sonar.tokenizers.registry import TokenizerRegistry
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "deepseek_v4"
 
@@ -331,7 +331,7 @@ def test_deepseek_v4_maps_compatible_thinking_reasoning_effort_values(
         return "prompt"
 
     monkeypatch.setattr(
-        "aphrodite.tokenizers.deepseek_v4.encode_messages",
+        "sonar.tokenizers.deepseek_v4.encode_messages",
         fake_encode_messages,
     )
 
@@ -421,7 +421,7 @@ def test_deepseek_v4_rejects_empty_developer_content():
     ],
 )
 def test_deepseek_v4_encode_messages_rejects_invalid_arguments(kwargs):
-    from aphrodite.tokenizers.deepseek_v4_encoding import encode_messages
+    from sonar.tokenizers.deepseek_v4_encoding import encode_messages
 
     with pytest.raises(ValueError):
         encode_messages([{"role": "user", "content": "Hello"}], **kwargs)
@@ -450,7 +450,7 @@ def test_deepseek_v4_image_blocks_become_placeholders():
 def test_deepseek_v4_image_sentinel_ids_match_tokenizer():
     """The borrowed sentinel ids must line up with the reserved
     ``<|place_holder_mm_span_XXXX|>`` tokens in the tokenizer."""
-    from aphrodite.models.deepseek_v4.common.mm_preprocess import (
+    from sonar.models.deepseek_v4.common.mm_preprocess import (
         IMAGE_SENTINEL_BASE_ID,
         IMAGE_SENTINEL_TOKEN_NAMES,
         image_sentinel_mask,
@@ -498,7 +498,7 @@ def _request_tools():
 
 
 def _encode_reference(messages):
-    from aphrodite.tokenizers.deepseek_v4_encoding import encode_messages
+    from sonar.tokenizers.deepseek_v4_encoding import encode_messages
 
     return encode_messages(messages, thinking_mode="thinking", reasoning_effort="low")
 

@@ -18,4 +18,4 @@ if ! [ -x "$(command -v shellcheck)" ]; then
     export PATH="$PATH:$(pwd)/shellcheck-${scversion}"
 fi
 
-find . -name "*.sh" ".git" -prune -not -path "./.buildkite/scripts/hardware_ci/run-amd-test.sh" -print0 | xargs -0 -I {} sh -c 'git check-ignore -q "{}" || shellcheck -s bash "{}"'
+find . -name "*.sh" ".git" -prune -print0 | xargs -0 -I {} sh -c 'git check-ignore -q "{}" || shellcheck -s bash "{}"'

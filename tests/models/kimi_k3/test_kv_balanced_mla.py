@@ -8,9 +8,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backend import AttentionType
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from sonar.platforms import current_platform
+from sonar.v1.attention.backend import AttentionType
+from sonar.v1.attention.backends.registry import AttentionBackendEnum
 
 LATENT, ROPE, PAGE = 512, 64, 64
 SCALE = 1.0 / math.sqrt(192)
@@ -24,13 +24,13 @@ requires_sm100 = pytest.mark.skipif(
 def test_kv_balanced_backend_is_registered_and_opt_in():
     """KIMI_K3_KV_BALANCED_MLA resolves to the standalone KV-balanced backend, and
     the platforms never pick it on their own."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
         KimiK3KvBalancedMLABackend,
         KimiK3KvBalancedMLAImpl,
         KimiK3KvBalancedMLAMetadataBuilder,
     )
-    from aphrodite.platforms.cuda import _get_backend_priorities
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.cuda import _get_backend_priorities
+    from sonar.platforms.interface import DeviceCapability
 
     backend = AttentionBackendEnum.KIMI_K3_KV_BALANCED_MLA
     assert backend.get_class() is KimiK3KvBalancedMLABackend
@@ -45,15 +45,15 @@ def test_kv_balanced_backend_is_registered_and_opt_in():
 def test_kv_balanced_backend_rejects_unsupported(monkeypatch):
     """Selection rejects what the kernel can't run: a non-BF16 model, a non-FP8
     KV cache, a GPU outside the SM100 family or other MLA dimensions."""
-    import aphrodite.config
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
+    import sonar.config
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
         KimiK3KvBalancedMLABackend,
     )
-    from aphrodite.platforms.interface import DeviceCapability
+    from sonar.platforms.interface import DeviceCapability
 
     text_config = SimpleNamespace(qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128, kv_lora_rank=512)
     config = SimpleNamespace(model_config=SimpleNamespace(hf_text_config=text_config))
-    monkeypatch.setattr(aphrodite.config, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(sonar.config, "get_current_sonar_config", lambda: config)
 
     def reasons(dtype=torch.bfloat16, kv_cache_dtype="fp8", major=10):
         return KimiK3KvBalancedMLABackend.validate_configuration(
@@ -80,7 +80,7 @@ def test_kv_balanced_backend_rejects_unsupported(monkeypatch):
 
 def test_kv_balanced_impl_runs_the_kernel():
     """forward_mqa is the KV-balanced decode."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla.backend import (
         KimiK3KvBalancedMLAImpl,
     )
 
@@ -147,7 +147,7 @@ def _reference(query, cache, block_table, local, lengths, causal, cp=(1, 0, 1)):
 
 
 def _run(query, cache, block_table, local, totals, causal, cp=(1, 0, 1)):
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.core import KvBalancedMla
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla.core import KvBalancedMla
 
     requests, q, heads, _ = query.shape
     device = query.device
@@ -248,7 +248,7 @@ def test_kv_balanced_decode_keeps_small_probabilities():
 @requires_sm100
 def test_kv_balanced_plan_replays_in_cuda_graph():
     """A captured plan and decode follow KV lengths changed in place."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.core import KvBalancedMla
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla.core import KvBalancedMla
 
     torch.manual_seed(0)
     device = torch.device("cuda")
@@ -290,7 +290,7 @@ def test_kv_balanced_plan_replays_in_cuda_graph():
 def _layer(monkeypatch, lengths, cp, lse):
     """The KV-balanced decode of an MLA layer over random shards of ``lengths`` on
     rank ``cp[1]``."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla import decode
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla import decode
 
     device = torch.device("cuda")
     heads, q = 96, 5
@@ -299,7 +299,7 @@ def _layer(monkeypatch, lengths, cp, lse):
         parallel_config=SimpleNamespace(decode_context_parallel_size=world, cp_kv_cache_interleave_size=interleave),
         scheduler_config=SimpleNamespace(max_num_seqs=4),
     )
-    monkeypatch.setattr(decode, "get_current_aphrodite_config", lambda: config)
+    monkeypatch.setattr(decode, "get_current_sonar_config", lambda: config)
     monkeypatch.setattr(decode, "max_decode_query_len", lambda _: q)
     monkeypatch.setattr(decode, "_SHAPES", {})
     monkeypatch.setattr(decode, "_PLANNED", {})
@@ -349,7 +349,7 @@ def _layer(monkeypatch, lengths, cp, lse):
 def test_kv_balanced_mqa_plans_once_per_forward_and_rejects_unsupported(monkeypatch, workspace_init):
     """The per-layer dispatch: the first layer of a forward plans and later layers
     reuse it; a step the kernel can't run raises."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla import core, decode
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla import core, decode
 
     torch.manual_seed(0)
     q = 5
@@ -396,7 +396,7 @@ def test_kv_balanced_mqa_plans_once_per_forward_and_rejects_unsupported(monkeypa
 def test_kv_balanced_mqa_dcp_shard(monkeypatch, workspace_init):
     """Under DCP the decode passes this rank's shard, the global lengths and the
     interleave to the kernel and returns the log2 LSE for the DCP combine."""
-    from aphrodite.models.kimi_k3.nvidia.kv_balanced_mla import decode
+    from sonar.models.kimi_k3.nvidia.kv_balanced_mla import decode
 
     torch.manual_seed(0)
     monkeypatch.setattr(decode, "get_forward_context", lambda: object())

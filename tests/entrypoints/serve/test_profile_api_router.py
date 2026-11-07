@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from aphrodite.entrypoints.serve.profile.api_router import router
+from sonar.entrypoints.serve.profile.api_router import router
 
 
 @pytest.fixture

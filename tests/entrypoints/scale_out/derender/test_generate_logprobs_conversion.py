@@ -7,17 +7,17 @@ byte-fallback correction path; a real SentencePiece tokenizer covers the
 leading-space restoration.
 """
 
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateLogProb,
     GenerateLogProbs,
     GenerateLogProbsContent,
 )
-from aphrodite.renderers.online_derenderer import (
+from sonar.renderers.online_derenderer import (
     _convert_chat_logprobs_to_completion_logprobs,
     _resolve_logprobs,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.tokenizers import get_tokenizer
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
 
 # A two-byte character split across two byte-fallback tokens: neither decodes
 # to anything printable on its own, but the pair decodes to "é".

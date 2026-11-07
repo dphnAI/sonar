@@ -4,11 +4,11 @@
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aphrodite_engine_core_client::protocol::output::{
+use sonar_engine_core_client::protocol::output::{
     EngineCoreEvent, EngineCoreEventType, EngineCoreOutput,
 };
-use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_metrics::{
+use sonar_engine_core_client::protocol::stats::PrefillStats;
+use sonar_metrics::{
     EngineLabels, FinishedReasonLabels, HistogramMetric, METRICS, PromptTokenSourceLabels,
     U64Counter,
 };
@@ -20,15 +20,15 @@ const PROMPT_TOKEN_SOURCE_LOCAL_COMPUTE: &str = "local_compute";
 const PROMPT_TOKEN_SOURCE_LOCAL_CACHE_HIT: &str = "local_cache_hit";
 const PROMPT_TOKEN_SOURCE_EXTERNAL_KV_TRANSFER: &str = "external_kv_transfer";
 
-/// Env var mirroring Python's `APHRODITE_REQUEST_LEVEL_METRICS`.
+/// Env var mirroring Python's `SONAR_REQUEST_LEVEL_METRICS`.
 /// When truthy (the default), the frontend logs one line per finished request
 /// and suppresses the periodic aggregate log. When falsy, it emits only the
 /// aggregate log.
-const REQUEST_LEVEL_METRICS_ENV: &str = "APHRODITE_REQUEST_LEVEL_METRICS";
+const REQUEST_LEVEL_METRICS_ENV: &str = "SONAR_REQUEST_LEVEL_METRICS";
 
 /// Returns true when per-request metrics logging is enabled.
 ///
-/// Matches Python's `envs.APHRODITE_REQUEST_LEVEL_METRICS` parsing: the env var
+/// Matches Python's `envs.SONAR_REQUEST_LEVEL_METRICS` parsing: the env var
 /// is interpreted as an integer and any non-zero value enables the feature.
 /// Unset or unparsable values fall back to the Python default of `1` (enabled).
 pub(crate) fn request_level_metrics_enabled() -> bool {
@@ -114,7 +114,7 @@ pub(crate) struct RequestMetricHandles {
     events: Option<EventMetricHandles>,
 }
 
-/// `aphrodite:request_success` counters, one per finish reason.
+/// `sonar:request_success` counters, one per finish reason.
 struct RequestSuccessCounters {
     stop: U64Counter,
     length: U64Counter,
@@ -499,9 +499,9 @@ pub fn current_unix_timestamp_secs() -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::output::{EngineCoreEvent, EngineCoreEventType};
-    use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-    use aphrodite_metrics::METRICS;
+    use sonar_engine_core_client::protocol::output::{EngineCoreEvent, EngineCoreEventType};
+    use sonar_engine_core_client::protocol::stats::PrefillStats;
+    use sonar_metrics::METRICS;
 
     use std::sync::Arc;
 
@@ -518,7 +518,7 @@ mod tests {
         tracker.observe_output(
             10.0,
             100.2,
-            &aphrodite_engine_core_client::protocol::output::EngineCoreOutput {
+            &sonar_engine_core_client::protocol::output::EngineCoreOutput {
                 request_id: "req-1".to_string(),
                 new_token_ids: vec![1],
                 finish_reason: None,
@@ -546,7 +546,7 @@ mod tests {
         tracker.observe_output(
             11.5,
             100.4,
-            &aphrodite_engine_core_client::protocol::output::EngineCoreOutput {
+            &sonar_engine_core_client::protocol::output::EngineCoreOutput {
                 request_id: "req-1".to_string(),
                 new_token_ids: vec![2, 3],
                 finish_reason: None,

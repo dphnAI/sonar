@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-import aphrodite.models.muse_spark.common.ops.fused_qk_norm_rope_kv as fused_ops
-from aphrodite.platforms import current_platform
+import sonar._custom_ops as ops
+import sonar.models.muse_spark.common.ops.fused_qk_norm_rope_kv as fused_ops
+from sonar.platforms import current_platform
 
 HEAD_DIM = 64
 
@@ -317,7 +317,7 @@ def test_fused_query_quant_matches_separate_quant(head_dim, num_tokens, rotary_f
 def test_fused_kv_insert_requires_backend_bypass_support(monkeypatch):
     monkeypatch.setattr(
         fused_ops,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(parallel_config=SimpleNamespace(decode_context_parallel_size=1)),
     )
     backend = SimpleNamespace(
@@ -337,12 +337,12 @@ def test_fused_kv_insert_requires_backend_bypass_support(monkeypatch):
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm backend gate")
 def test_rocm_aiter_fa_takes_the_fused_kv_insert(monkeypatch):
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
 
     monkeypatch.setattr(
         fused_ops,
-        "get_current_aphrodite_config",
+        "get_current_sonar_config",
         lambda: SimpleNamespace(parallel_config=SimpleNamespace(decode_context_parallel_size=1)),
     )
     attn_layer = SimpleNamespace(
@@ -359,7 +359,7 @@ def test_rocm_aiter_fa_takes_the_fused_kv_insert(monkeypatch):
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm compile boundary")
 def test_rocm_compiled_caller_keeps_the_kv_insert(monkeypatch):
-    from aphrodite.models.muse_spark.amd import model as amd_model
+    from sonar.models.muse_spark.amd import model as amd_model
 
     kv_cache = torch.zeros(4, 1, 16, 128, device="cuda", dtype=torch.bfloat16)
     attn_layer = SimpleNamespace(
@@ -413,7 +413,7 @@ def test_query_fusion_respects_attention_metadata(
     decode_dtype,
     expected_fp8,
 ):
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadata
+    from sonar.v1.attention.backends.flashinfer import FlashInferMetadata
 
     metadata = FlashInferMetadata(
         kv_cache_layout=None,
@@ -465,7 +465,7 @@ def test_query_fusion_respects_attention_metadata(
 
 def test_attention_accepts_fused_fp8_query_without_requantizing(monkeypatch):
     """The model's FP8 Q must reach attention unchanged with BF16 output."""
-    from aphrodite.model_executor.layers.attention import attention as attention_module
+    from sonar.model_executor.layers.attention import attention as attention_module
 
     layer = attention_module.Attention.__new__(attention_module.Attention)
     torch.nn.Module.__init__(layer)

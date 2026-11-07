@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Launch a Ray cluster inside Docker for Aphrodite inference.
+# Launch a Ray cluster inside Docker for Sonar inference.
 #
 # This script can start either a head node or a worker node, depending on the
 # --head or --worker flag provided as the third positional argument.
@@ -21,12 +21,12 @@
 #         /abs/path/to/huggingface/cache
 # 
 # The script automatically detects and sets:
-#   - APHRODITE_HOST_IP (detected from network interface)
+#   - SONAR_HOST_IP (detected from network interface)
 #   - GLOO_SOCKET_IFNAME (detected network interface name)
 #   - NCCL_SOCKET_IFNAME (detected network interface name)
 #
 # You can override these by passing -e flags, e.g.:
-#   -e APHRODITE_HOST_IP=<your_node_ip> -e GLOO_SOCKET_IFNAME=eth0
+#   -e SONAR_HOST_IP=<your_node_ip> -e GLOO_SOCKET_IFNAME=eth0
 # Keep each terminal session open. Closing a session stops the associated Ray
 # node and thereby shuts down the entire cluster.
 # Every machine must be reachable at the supplied IP address.
@@ -35,8 +35,8 @@
 # a container after launch, use:
 #       docker exec -it node-<random_suffix> /bin/bash
 #
-# Then, you can execute Aphrodite commands on the Ray cluster as if it were a
-# single machine, e.g. aphrodite run ...
+# Then, you can execute Sonar commands on the Ray cluster as if it were a
+# single machine, e.g. sonar run ...
 #
 # To stop the container, use:
 #       docker stop node-<random_suffix>
@@ -121,7 +121,7 @@ else
 fi
 
 # Use detected values or allow override via environment variables
-NODE_IP="${APHRODITE_HOST_IP:-${DETECTED_IP}}"
+NODE_IP="${SONAR_HOST_IP:-${DETECTED_IP}}"
 SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-${DETECTED_INTERFACE}}"
 
 # Warn if we couldn't detect properly
@@ -132,18 +132,18 @@ fi
 
 if [ -z "${NODE_IP}" ] || [[ "${NODE_IP}" =~ ^127\. ]]; then
     echo "Warning: Detected IP appears to be loopback: ${NODE_IP}"
-    echo "  Set APHRODITE_HOST_IP environment variable to override"
+    echo "  Set SONAR_HOST_IP environment variable to override"
 fi
 
 # Prepare environment variables to pass to Docker
 AUTO_ENV_VARS=(
-    "-e" "APHRODITE_HOST_IP=${NODE_IP}"
+    "-e" "SONAR_HOST_IP=${NODE_IP}"
     "-e" "GLOO_SOCKET_IFNAME=${SOCKET_IFNAME}"
     "-e" "NCCL_SOCKET_IFNAME=${SOCKET_IFNAME}"
 )
 
 echo "Auto-detected network configuration:"
-echo "  APHRODITE_HOST_IP=${NODE_IP}"
+echo "  SONAR_HOST_IP=${NODE_IP}"
 echo "  GLOO_SOCKET_IFNAME=${SOCKET_IFNAME}"
 echo "  NCCL_SOCKET_IFNAME=${SOCKET_IFNAME}"
 echo ""

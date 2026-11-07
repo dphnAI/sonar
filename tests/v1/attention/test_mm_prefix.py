@@ -19,17 +19,17 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import (
     fill_mm_prefix_query_ranges,
 )
-from aphrodite.v1.kv_cache_interface import KVCacheLayout
+from sonar.v1.kv_cache_interface import KVCacheLayout
 
 
 def _fa4_available() -> bool:
     if not current_platform.is_cuda():
         return False
-    from aphrodite.v1.attention.backends.fa_utils import is_fa_version_supported
+    from sonar.v1.attention.backends.fa_utils import is_fa_version_supported
 
     return is_fa_version_supported(4)
 
@@ -41,23 +41,23 @@ requires_fa4 = pytest.mark.skipif(not _fa4_available(), reason="FA4 mm_prefix ma
 if _fa4_available():
     from types import MethodType
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
-    from aphrodite.v1.attention.backends.flash_attn import (
+    from sonar.config import set_current_sonar_config
+    from sonar.v1.attention.backends.fa_utils import get_flash_attn_version
+    from sonar.v1.attention.backends.flash_attn import (
         FlashAttentionImpl,
         FlashAttentionMetadataBuilder,
         _make_mm_prefix_mask_mod,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
-    from aphrodite.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
+    from sonar.vllm_flash_attn.flash_attn_interface import flash_attn_varlen_func
     from tests.v1.attention.test_attention_backends import (
         MockAttentionLayer,
         create_and_prepopulate_kv_cache,
     )
     from tests.v1.attention.utils import (
         BatchSpec,
-        create_aphrodite_config,
         create_common_attn_metadata,
+        create_sonar_config,
         create_standard_kv_cache_spec,
     )
 
@@ -426,7 +426,7 @@ PAGED_MM_RANGES = {
 }
 
 
-def _enable_mm_prefix(aphrodite_config):
+def _enable_mm_prefix(sonar_config):
     """Flip stock Gemma4's null use_bidirectional_attention to "vision".
 
     ``ModelConfig.__init__`` derives ``model_arch_config`` once from
@@ -434,11 +434,11 @@ def _enable_mm_prefix(aphrodite_config):
     may already hold False from that first derivation, so re-derive and drop
     the cache.
     """
-    model_config = aphrodite_config.model_config
+    model_config = sonar_config.model_config
     model_config.hf_text_config.use_bidirectional_attention = "vision"
     model_config.model_arch_config = model_config.get_model_arch_config()
     model_config.__dict__.pop("is_mm_prefix_lm", None)
-    return aphrodite_config
+    return sonar_config
 
 
 @requires_fa4
@@ -455,8 +455,8 @@ def test_decode_only_batch_reports_no_ranges():
     The range-id scheme keyed off the request having ranges at all, so it
     attached a mask_mod to decode steps and did not have this property.
     """
-    aphrodite_config = _enable_mm_prefix(
-        create_aphrodite_config(
+    sonar_config = _enable_mm_prefix(
+        create_sonar_config(
             model_name=MODEL,
             max_model_len=1024,
             block_size=BLOCK_SIZE,
@@ -468,9 +468,9 @@ def test_decode_only_batch_reports_no_ranges():
     common.mm_req_doc_ranges = {0: [(4, 259)], 1: [(0, 63)], 2: [(1, 64)]}
 
     builder = FlashAttentionMetadataBuilder(
-        create_standard_kv_cache_spec(aphrodite_config),
+        create_standard_kv_cache_spec(sonar_config),
         ["model.layers.0.self_attn.attn"],
-        aphrodite_config,
+        sonar_config,
         DEVICE,
     )
     md = builder.build(common_prefix_len=0, common_attn_metadata=common)
@@ -505,28 +505,28 @@ def test_mm_prefix_kv_cache_path(head_size: int):
     mask_mod and clears FA's built-in window at forward time.
     """
     torch.manual_seed(0)
-    aphrodite_config = _enable_mm_prefix(
-        create_aphrodite_config(
+    sonar_config = _enable_mm_prefix(
+        create_sonar_config(
             model_name=MODEL,
             max_model_len=max(PAGED_SEQ_LENS),
             block_size=BLOCK_SIZE,
             num_gpu_blocks=2048,
         )
     )
-    assert aphrodite_config.model_config.is_mm_prefix_lm
+    assert sonar_config.model_config.is_mm_prefix_lm
 
-    mc = aphrodite_config.model_config
+    mc = sonar_config.model_config
     # Keep every get_head_size() reader (builder helpers, etc.) on the same dim.
     mc.get_head_size = MethodType(lambda self: head_size, mc)
 
     # Skip under the same config Gemma4 forces (flash_attn_version=4), so the
     # check matches FlashAttentionImpl's get_flash_attn_version call.
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         if get_flash_attn_version(head_size=head_size) != 4:
             pytest.skip(f"FA4 does not support head_size={head_size} on this device")
 
-    num_heads = mc.get_num_attention_heads(aphrodite_config.parallel_config)
-    num_kv_heads = mc.get_num_kv_heads(aphrodite_config.parallel_config)
+    num_heads = mc.get_num_attention_heads(sonar_config.parallel_config)
+    num_kv_heads = mc.get_num_kv_heads(sonar_config.parallel_config)
     scale = head_size**-0.5
 
     batch = BatchSpec(seq_lens=PAGED_SEQ_LENS, query_lens=PAGED_QUERY_LENS, name="mm_prefix_mixed")
@@ -536,7 +536,7 @@ def test_mm_prefix_kv_cache_path(head_size: int):
         head_size=head_size,
         dtype=mc.dtype,
         sliding_window=SLIDING_WINDOW,
-        kv_quant_mode=get_kv_quant_mode(aphrodite_config.cache_config.cache_dtype),
+        kv_quant_mode=get_kv_quant_mode(sonar_config.cache_config.cache_dtype),
     )
     common = create_common_attn_metadata(batch, BLOCK_SIZE, DEVICE)
     common.mm_req_doc_ranges = PAGED_MM_RANGES
@@ -576,8 +576,8 @@ def test_mm_prefix_kv_cache_path(head_size: int):
     assert kv_cache.shape[-1] == 2 * head_size
 
     layer_names = ["model.layers.0.self_attn.attn"]
-    with set_current_aphrodite_config(aphrodite_config):
-        builder = FlashAttentionMetadataBuilder(kv_cache_spec, layer_names, aphrodite_config, DEVICE)
+    with set_current_sonar_config(sonar_config):
+        builder = FlashAttentionMetadataBuilder(kv_cache_spec, layer_names, sonar_config, DEVICE)
         attn_metadata = builder.build(common_prefix_len=0, common_attn_metadata=common)
         # head_size=128 keeps FA4 under local attention on Blackwell (the
         # FA4→FA2 demotion is only for local+256). Window is still encoded in
@@ -630,7 +630,7 @@ def test_composite_routes_queries_that_need_image_masking(query_len, seq_len, sp
     """Historical images and single-query steps must use the causal graph path."""
     from types import SimpleNamespace
 
-    from aphrodite.v1.attention.backends.composite import requires_mm_prefix
+    from sonar.v1.attention.backends.composite import requires_mm_prefix
 
     common = SimpleNamespace(
         max_query_len=query_len,
@@ -662,35 +662,35 @@ def test_composite_shared_cache_across_image_and_causal_steps(
         if reverse_children or cache_dtype != "auto":
             pytest.skip("Reverse-child and FP8 coverage is backend-independent")
 
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.engine.arg_utils import EngineArgs
-    from aphrodite.model_executor.layers.attention import Attention
-    from aphrodite.utils.torch_utils import set_default_torch_dtype
-    from aphrodite.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
-    from aphrodite.v1.attention.backends.composite import (
+    from sonar.config import set_current_sonar_config
+    from sonar.engine.arg_utils import EngineArgs
+    from sonar.model_executor.layers.attention import Attention
+    from sonar.utils.torch_utils import set_default_torch_dtype
+    from sonar.v1.attention.backend import AttentionCGSupport, CommonAttentionMetadata
+    from sonar.v1.attention.backends.composite import (
         MMPrefixAttentionRouting,
         create_composite_attention_backend,
     )
-    from aphrodite.v1.attention.backends.flash_attn import (
+    from sonar.v1.attention.backends.flash_attn import (
         FlashAttentionMetadata,
     )
-    from aphrodite.v1.attention.backends.flashinfer import (
+    from sonar.v1.attention.backends.flashinfer import (
         FlashInferBackend,
         FlashInferMetadata,
         FlashInferTrtllmAPIDecode,
         TRTLLMPrefill,
     )
-    from aphrodite.v1.attention.backends.triton_attn import (
+    from sonar.v1.attention.backends.triton_attn import (
         TritonAttentionBackend,
         TritonAttentionMetadata,
     )
-    from aphrodite.v1.attention.backends.triton_flash_attn import (
+    from sonar.v1.attention.backends.triton_flash_attn import (
         TritonFlashAttentionBackend,
     )
-    from aphrodite.v1.attention.backends.triton_flashinfer import (
+    from sonar.v1.attention.backends.triton_flashinfer import (
         TritonFlashInferBackend,
     )
-    from aphrodite.v1.kv_cache_interface import FullAttentionSpec, SlidingWindowSpec
+    from sonar.v1.kv_cache_interface import FullAttentionSpec, SlidingWindowSpec
 
     if causal_backend_name == "FLASHINFER":
         backend = TritonFlashInferBackend
@@ -749,7 +749,7 @@ def test_composite_shared_cache_across_image_and_causal_steps(
             module=__name__,
             routing_policy=ReversedRouting,
         )
-    with set_current_aphrodite_config(cfg), set_default_torch_dtype(DTYPE):
+    with set_current_sonar_config(cfg), set_default_torch_dtype(DTYPE):
         layer = Attention(
             32,
             head_size,

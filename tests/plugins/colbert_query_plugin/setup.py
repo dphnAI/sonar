@@ -8,7 +8,7 @@ setup(
     version="0.1",
     packages=["colbert_query_processor"],
     entry_points={
-        "aphrodite.io_processor_plugins": [
+        "sonar.io_processor_plugins": [
             "colbert_query_plugin = colbert_query_processor:register_colbert_query_embedding_processor",  # noqa: E501
         ]
     },

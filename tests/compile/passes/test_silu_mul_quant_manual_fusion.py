@@ -11,35 +11,35 @@ Tests all fusion paths in _FUSED_ACT_QUANT:
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.config import (
-    AphroditeConfig,
+import sonar.envs as envs
+from sonar.config import (
     CompilationConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     CutlassFP8ScaledMMLinearKernel,
     FlashInferFP8ScaledMMLinearKernel,
     FP8ScaledMMLinearKernel,
     PerTensorTorchFP8ScaledMMLinearKernel,
     ROCmFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.fusion.fused_act_quant import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.fusion.fused_act_quant import (
     _FUSED_ACT_QUANT,
     maybe_fused_act_quant,
 )
-from aphrodite.model_executor.layers.fusion.quant_activation import (
+from sonar.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
     expose_input_quant_key,
     get_input_quant_key,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import TestFP8Layer
 
 
@@ -77,7 +77,7 @@ TEST_KERNELS = ROCM_KERNELS if current_platform.is_rocm() else CUDA_KERNELS
 @pytest.mark.parametrize("hidden_size", [128, 256])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.parametrize("force_kernel", TEST_KERNELS)
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_manual_fusion_fp8_static_with_linear(
     num_tokens: int,
     hidden_size: int,
@@ -94,11 +94,11 @@ def test_manual_fusion_fp8_static_with_linear(
 
     x = torch.rand(num_tokens, hidden_size * 2)
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         silu_and_mul = SiluAndMul()
         fp8_linear = TestFP8Layer(
             weight_shape=(hidden_size, hidden_size),
@@ -140,7 +140,7 @@ def test_manual_fusion_fp8_static_with_linear(
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Dynamic block quant CUDA only")
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_manual_fusion_fp8_dynamic_128(dtype: torch.dtype):
     """Test kFp8Dynamic128Sym fusion path (group_size=128).
 
@@ -158,11 +158,11 @@ def test_manual_fusion_fp8_dynamic_128(dtype: torch.dtype):
     group_size = 128
     x = torch.rand(num_tokens, hidden_size * 2)
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         silu_and_mul = SiluAndMul()
 
         # Unfused path: just apply silu_and_mul
@@ -206,7 +206,7 @@ def test_manual_fusion_fp8_dynamic_128(dtype: torch.dtype):
 @pytest.mark.parametrize("hidden_size", [256, 14336])
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="NVFP4 CUDA only")
 @pytest.mark.skipif(not current_platform.has_device_capability(100), reason="NVFP4 requires SM100+")
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_manual_fusion_nvfp4_dynamic(dtype: torch.dtype, num_tokens: int, hidden_size: int):
     """Test kNvfp4Dynamic fusion path.
 
@@ -229,11 +229,11 @@ def test_manual_fusion_nvfp4_dynamic(dtype: torch.dtype, num_tokens: int, hidden
     input_global_scale = torch.tensor([0.5], dtype=torch.float32, device="cuda")
     input_global_scale_inv = 1.0 / input_global_scale
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         silu_and_mul = SiluAndMul()
 
         # Unfused path: just apply silu_and_mul
@@ -261,7 +261,7 @@ def test_manual_fusion_nvfp4_dynamic(dtype: torch.dtype, num_tokens: int, hidden
         # The scale tensor must use the padded 128x4-tile swizzled layout,
         # same as scaled_fp4_quant's allocator; the kernel writes a full
         # 128-row tile even when M is smaller.
-        from aphrodite.utils.math_utils import round_up
+        from sonar.utils.math_utils import round_up
 
         assert result_fused.scale.dtype == current_platform.fp8_dtype()
         assert result_fused.scale.shape == (
@@ -291,7 +291,7 @@ def test_manual_fusion_nvfp4_dynamic(dtype: torch.dtype, num_tokens: int, hidden
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_manual_fusion_fallback_no_key(dtype: torch.dtype):
     """Test that maybe_fused_act_quant falls back without an input key."""
     torch.set_default_device("cuda")
@@ -299,11 +299,11 @@ def test_manual_fusion_fallback_no_key(dtype: torch.dtype):
 
     x = torch.rand(32, 256)
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         silu_and_mul = SiluAndMul()
         # Linear without an input quantization key
         mock_linear = torch.nn.Linear(128, 128)
@@ -317,10 +317,10 @@ def test_manual_fusion_fallback_no_key(dtype: torch.dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_manual_fusion_fallback_unsupported_key(dtype: torch.dtype):
     """Test that maybe_fused_act_quant falls back for unsupported quant keys."""
-    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    from sonar.model_executor.layers.quantization.utils.quant_utils import (
         GroupShape,
         QuantKey,
         ScaleDesc,
@@ -331,11 +331,11 @@ def test_manual_fusion_fallback_unsupported_key(dtype: torch.dtype):
 
     x = torch.rand(32, 256)
 
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(custom_ops=["none"]),
     )
 
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         # Create an unsupported quant key
         unsupported_key = QuantKey(
             dtype=torch.int8,

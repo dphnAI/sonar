@@ -26,7 +26,7 @@
 
 #include <cuda_runtime.h>
 
-namespace aphrodite::cutlass_w4a8 {
+namespace sonar::cutlass_w4a8 {
 
 using namespace cute;
 
@@ -118,8 +118,8 @@ struct W4A8GemmKernel {
 
   // Epilogue per-tok, per-chan scales
   using ChTokScalesEpilogue =
-      typename aphrodite::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
-                                              TileShape>;
+      typename sonar::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
+                                          TileShape>;
   using EVTCompute = typename ChTokScalesEpilogue::EVTCompute;
   using CollectiveEpilogue =
       typename cutlass::epilogue::collective::CollectiveBuilder<
@@ -414,8 +414,8 @@ torch::stable::Tensor encode_and_reorder_int4b(torch::stable::Tensor const& B) {
   LayoutB_Reordered layout_B_reordered =
       cute::tile_to_shape(LayoutAtomQuant{}, shape_B);
 
-  bool ok = aphrodite::cutlass_w4a8_utils::unified_encode_int4b(
-      B_ptr, B_packed_ptr, n * k);
+  bool ok = sonar::cutlass_w4a8_utils::unified_encode_int4b(B_ptr, B_packed_ptr,
+                                                            n * k);
   STD_TORCH_CHECK(ok, "unified_encode_int4b failed");
   cutlass::reorder_tensor(B_packed_ptr, layout_B, layout_B_reordered);
 
@@ -429,4 +429,4 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, m) {
          TORCH_BOX(&encode_and_reorder_int4b));
 }
 
-}  // namespace aphrodite::cutlass_w4a8
+}  // namespace sonar::cutlass_w4a8

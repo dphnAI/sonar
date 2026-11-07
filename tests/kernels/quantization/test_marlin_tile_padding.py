@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.linear import LinearBase
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.linear import LinearBase
+from sonar.model_executor.layers.quantization.utils.marlin_utils import (
     GPTQ_MARLIN_TILE,
     apply_gptq_marlin_linear,
     get_marlin_workspace,
@@ -26,25 +26,25 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_repacked_nk,
     marlin_zero_points,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     apply_fp4_marlin_linear,
     is_fp4_marlin_supported,
     prepare_fp4_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
     apply_fp8_marlin_linear,
     apply_mxfp8_marlin_linear,
     is_fp8_marlin_supported,
     prepare_fp8_layer_for_marlin,
     prepare_mxfp8_layer_for_marlin,
 )
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     gptq_pack,
     gptq_quantize_weights,
     quantize_weights,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 
 # (size_n, size_k) rank-local shapes that violate Marlin tile alignment,
 # e.g. produced by TP-sharding dims that are valid at TP=1.
@@ -148,7 +148,7 @@ def test_marlin_moe_padded_intermediate(intermediate, group_size):
 
 
 def test_marlin_moe_pad_helpers_shapes():
-    from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+    from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
         _pad_rows,
         _pad_w13_bias,
         _pad_w13_shard_cols,
@@ -484,7 +484,7 @@ class _FakeLinear:
 
 
 def test_check_marlin_supports_layer_allow_tile_padding():
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils import (
         check_marlin_supports_layer,
     )
 
@@ -511,16 +511,16 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
     dequantized reference. Symmetric int4's quantized zero decodes to -8, so the
     padded region only stays out of the output via the zero-padded scales.
     """
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe import fused_topk
-    from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe import fused_topk
+    from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
     )
-    from aphrodite.model_executor.layers.fused_moe.oracle.int_wna16 import (
+    from sonar.model_executor.layers.fused_moe.oracle.int_wna16 import (
         _pad_rows,
         _pad_w13_shard_cols,
     )
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils import (
         marlin_moe_padded_intermediate,
         marlin_moe_permute_scales,
     )
@@ -599,7 +599,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
         quant_type_id=quant_type.id,
         global_num_experts=e,
     )
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         ref = torch_experts(
             a,
             w1_ref,
@@ -617,7 +617,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
     reason="MoE Marlin is not selected on ROCm.",
 )
 def test_check_moe_marlin_supports_layer_padding():
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils import (
         check_moe_marlin_supports_layer,
     )
 
@@ -653,16 +653,16 @@ def test_check_moe_marlin_supports_layer_padding():
 def test_fp8_marlin_moe_padded_round_trip(shape, quant):
     """FP8 weight-only MoE: pad a tile-misaligned intermediate and check the
     real prepare + fused_marlin_moe against the dequantized reference."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe import fused_topk
-    from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe import fused_topk
+    from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
     )
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils import (
         marlin_moe_intermediate_size,
         marlin_moe_padded_intermediate,
     )
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
         prepare_fp8_moe_layer_for_marlin,
     )
     from tests.kernels.utils import torch_experts
@@ -718,7 +718,7 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
         global_num_experts=e,
         workspace=get_marlin_workspace(device),
     )
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         ref = torch_experts(
             a,
             torch.stack(w1_ref),
@@ -738,16 +738,16 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
 def test_mxfp8_marlin_moe_padded_round_trip(shape):
     """MXFP8 weight-only MoE round-trip at a tile-misaligned intermediate, with
     unit e8m0 scales so the reference is the exact fp8 dequant."""
-    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-    from aphrodite.model_executor.layers.fused_moe import fused_topk
-    from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
+    from sonar.config import SonarConfig, set_current_sonar_config
+    from sonar.model_executor.layers.fused_moe import fused_topk
+    from sonar.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
     )
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils import (
         marlin_moe_intermediate_size,
         marlin_moe_padded_intermediate,
     )
-    from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
+    from sonar.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
         prepare_mxfp8_moe_layer_for_marlin,
     )
     from tests.kernels.utils import torch_experts
@@ -769,7 +769,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
     w2_scale = torch.full((e, k, n // gs), e8m0_one, dtype=torch.uint8, device=device)
 
     layer = SimpleNamespace(num_experts=e, hidden_size=k, intermediate_size_per_partition=n)
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         pw13, pw2, ps13, ps2 = prepare_mxfp8_moe_layer_for_marlin(layer, w13_weight, w2_weight, w13_scale, w2_scale)
     assert marlin_moe_intermediate_size(pw13, pw2) == padded_n
 
@@ -789,7 +789,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
         global_num_experts=e,
         workspace=get_marlin_workspace(device),
     )
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         ref = torch_experts(
             a,
             w13_weight.to(dtype),

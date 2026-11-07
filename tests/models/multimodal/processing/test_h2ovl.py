@@ -9,12 +9,12 @@ import torch
 from PIL import Image
 from transformers import PreTrainedConfig
 
-from aphrodite.config import ModelConfig
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.processing import BaseMultiModalProcessor
-from aphrodite.multimodal.processing.context import TimingContext
-from aphrodite.multimodal.processing.inputs import ProcessorInputs
+from sonar.config import ModelConfig
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.image import rescale_image_size
+from sonar.multimodal.processing import BaseMultiModalProcessor
+from sonar.multimodal.processing.context import TimingContext
+from sonar.multimodal.processing.inputs import ProcessorInputs
 
 from ....conftest import ImageTestAssets
 from ...registry import HF_EXAMPLE_MODELS
@@ -28,7 +28,7 @@ def _get_expected_num_patches(
     min_num: int,
     max_num: int,
 ):
-    from aphrodite.transformers_utils.processors.h2ovl import (
+    from sonar.transformers_utils.processors.h2ovl import (
         calculate_h2ovl_targets,
         get_h2ovl_target_ratios,
     )

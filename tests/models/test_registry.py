@@ -6,23 +6,23 @@ import warnings
 import pytest
 import torch.cuda
 
-from aphrodite.model_executor.models import (
+from sonar.model_executor.models import (
     is_pooling_model,
     is_text_generation_model,
     supports_multimodal,
 )
-from aphrodite.model_executor.models.adapters import (
+from sonar.model_executor.models.adapters import (
     as_embedding_model,
     as_seq_cls_model,
 )
-from aphrodite.model_executor.models.registry import (
+from sonar.model_executor.models.registry import (
     _MULTIMODAL_MODELS,
     _SPECULATIVE_DECODING_MODELS,
     _TEXT_GENERATION_MODELS,
     ModelRegistry,
     _LazyRegisteredModel,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..utils import create_new_process_for_each_test
 from .registry import HF_EXAMPLE_MODELS
@@ -35,7 +35,7 @@ def test_registry_imports(model_arch):
     model_info.check_transformers_version(
         on_fail="skip",
         check_max_version=False,
-        check_version_reason="aphrodite",
+        check_version_reason="sonar",
     )
 
     if model_arch == "Terratorch":
@@ -71,7 +71,7 @@ def test_registry_imports(model_arch):
     if model_arch in _TEXT_GENERATION_MODELS or model_arch in _MULTIMODAL_MODELS:
         assert is_text_generation_model(model_cls)
 
-    # All Aphrodite models should be convertible to a pooling model
+    # All Sonar models should be convertible to a pooling model
     assert is_pooling_model(as_seq_cls_model(model_cls))
     assert is_pooling_model(as_embedding_model(model_cls))
 
@@ -205,12 +205,12 @@ def test_lazy_modelinfo_package_attempts_cache_load(monkeypatch):
         fake_load_cache,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.models.registry._run_in_subprocess",
+        "sonar.model_executor.models.registry._run_in_subprocess",
         lambda _: pytest.fail("Package-backed model should use the cache path"),
     )
 
     registered_model = _LazyRegisteredModel(
-        module_name="aphrodite.model_executor.models.transformers",
+        module_name="sonar.model_executor.models.transformers",
         class_name="TransformersForCausalLM",
     )
 

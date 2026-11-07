@@ -21,8 +21,8 @@ model:
   base_env: {}
 
 dependencies:
-  - note: "GLM-OCR requires the nightly aphrodite wheel"
-    command: "uv pip install -U aphrodite-engine --pre --extra-index-url https://wheels.vllm.ai/nightly"
+  - note: "GLM-OCR requires the nightly sonar wheel"
+    command: "uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple"
   - note: "transformers from source for GLM-OCR tokenizer support"
     command: "uv pip install git+https://github.com/huggingface/transformers.git"
 
@@ -75,21 +75,21 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** nightly recommended (or latest stable with MTP support)
+  - **Sonar version:** nightly recommended (or latest stable with MTP support)
   - **Transformers:** >= 5.0.0 (install from source for latest)
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   Or nightly:
 
   ```bash
-  uv pip install -U aphrodite-engine --pre --extra-index-url https://wheels.vllm.ai/nightly
+  uv pip install -U sonar --index-strategy first-index --torch-backend cu130 --pre --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple
   uv pip install git+https://github.com/huggingface/transformers.git
   ```
 
@@ -98,7 +98,7 @@ guide: |
   ### With MTP Speculative Decoding
 
   ```bash
-  aphrodite serve zai-org/GLM-OCR \
+  sonar serve zai-org/GLM-OCR \
        --speculative-config.method mtp \
        --speculative-config.num_speculative_tokens 1
   ```

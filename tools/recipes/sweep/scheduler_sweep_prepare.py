@@ -122,9 +122,9 @@ def _build_serve_params(config: dict[str, Any]) -> list[dict[str, Any]]:
     add("smaller_batch_budget", initial_seqs, smaller_batch)
     add("lower_batch_budget", initial_seqs, lower_batch)
     add("higher_batch_budget", initial_seqs, higher_batch)
-    add("aphrodite_default_max_num_seqs", None, initial_batch)
-    add("aphrodite_default_max_num_batched_tokens", initial_seqs, None)
-    add("aphrodite_defaults", None, None)
+    add("sonar_default_max_num_seqs", None, initial_batch)
+    add("sonar_default_max_num_batched_tokens", initial_seqs, None)
+    add("sonar_defaults", None, None)
     return candidates
 
 

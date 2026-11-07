@@ -22,8 +22,8 @@
 namespace nb = nanobind;
 using namespace mlx::core;
 
-#ifndef APHRODITE_METAL_PARTITION_SIZE
-  #define APHRODITE_METAL_PARTITION_SIZE 512
+#ifndef SONAR_METAL_PARTITION_SIZE
+  #define SONAR_METAL_PARTITION_SIZE 512
 #endif
 
 // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ using namespace mlx::core;
 static std::string reshape_cache_source_;
 static std::string paged_attention_source_;
 static std::string v2_paged_attention_source_;
-constexpr int kPartitionSize = APHRODITE_METAL_PARTITION_SIZE;
+constexpr int kPartitionSize = SONAR_METAL_PARTITION_SIZE;
 
 // MLX 0.31.2 moved stream-scoped encoder/temporary management from
 // ``metal::Device`` onto ``metal::CommandEncoder`` plus a free

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Tests for aphrodite.compilation.codegen — execution code generation.
+"""Tests for sonar.compilation.codegen — execution code generation.
 
-Each test runs a real Python function through the same pipeline Aphrodite uses
+Each test runs a real Python function through the same pipeline Sonar uses
 in production: ``make_fx`` to obtain an aten-level fx graph, ``split_graph``
 to split it into the stitching layer + submodules, and then
 ``generate_execution_code``/``compile_execution_fn`` for codegen.
@@ -16,14 +16,14 @@ import torch
 import torch.fx as fx
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from aphrodite.compilation.backends import split_graph
-from aphrodite.compilation.codegen import (
+from sonar.compilation.backends import split_graph
+from sonar.compilation.codegen import (
     _node_ref,
     compile_execution_fn,
     generate_execution_code,
     generate_execution_code_with_name,
 )
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from sonar.utils.torch_utils import is_torch_equal_or_newer
 
 
 def _trace_and_split(
@@ -75,7 +75,7 @@ def test_non_primitive_kwargs_lifted_to_consts(
 
     which fails at call time — only ``torch`` and ``operator`` are imported
     into the namespace, so ``device`` is unbound. The fix collects such
-    objects into ``__aphrodite_consts__`` and references them by index. The
+    objects into ``__sonar_consts__`` and references them by index. The
     unqualified ``device(type=...)`` form must never appear in the
     generated source."""
     split_gm = _trace_and_split(model_fn, (x,), split_ops)
@@ -83,7 +83,7 @@ def test_non_primitive_kwargs_lifted_to_consts(
 
     assert "device(type=" not in code, (
         "Generated code contains unqualified `device(type=...)` from repr(); "
-        "torch.device should be lifted into __aphrodite_consts__"
+        "torch.device should be lifted into __sonar_consts__"
     )
     assert torch.device("cpu") in consts, "torch.device kwarg not lifted to consts"
     assert torch.float16 in consts, "torch.dtype kwarg not lifted to consts"
@@ -118,9 +118,7 @@ def test_dtype_singleton_deduped(x: torch.Tensor) -> None:
     assert n_to_copy >= 2, f"Test setup failed: expected ≥2 _to_copy nodes, got {n_to_copy}"
 
     assert consts.count(torch.float16) == 1, f"torch.float16 should occupy exactly one slot, got consts={consts}"
-    assert code.count("__aphrodite_consts__[0]") >= 2, (
-        "Deduped const slot should be referenced from both _to_copy nodes"
-    )
+    assert code.count("__sonar_consts__[0]") >= 2, "Deduped const slot should be referenced from both _to_copy nodes"
 
     fn = compile_execution_fn(code, {}, submod_names, consts)
     assert torch.equal(fn(x), model_fn(x))
@@ -199,9 +197,9 @@ def test_consts_shared_across_split_submods(x: torch.Tensor) -> None:
     # inlined submods reference it. This rules out the false-positive where
     # one submod references it twice and the other not at all.
     fp16_idx = consts.index(torch.float16)
-    submod_bodies = re.findall(r"def __aphrodite_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code)
+    submod_bodies = re.findall(r"def __sonar_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code)
     assert len(submod_bodies) >= 2
-    referencing_submods = [name for name, body in submod_bodies if f"__aphrodite_consts__[{fp16_idx}]" in body]
+    referencing_submods = [name for name, body in submod_bodies if f"__sonar_consts__[{fp16_idx}]" in body]
     assert len(referencing_submods) >= 2, (
         f"fp16 slot should be referenced from ≥2 inlined submods, got {referencing_submods}"
     )
@@ -213,7 +211,7 @@ def test_consts_shared_across_split_submods(x: torch.Tensor) -> None:
 def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
     """When a child of split_gm is *not* a ``torch.fx.GraphModule`` — as
     happens in production once ``PiecewiseBackend`` replaces submods —
-    codegen emits ``__aphrodite_submods__[idx](...)`` instead of inlining, and
+    codegen emits ``__sonar_submods__[idx](...)`` instead of inlining, and
     the runtime callable is bound from ``submod_callables``."""
 
     def model_fn(x: torch.Tensor) -> torch.Tensor:
@@ -222,7 +220,7 @@ def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
     split_gm = _trace_and_split(model_fn, (x,), ["aten::relu.default"])
 
     # Find a GraphModule child and wrap it in a non-GraphModule nn.Module
-    # that delegates to the original — this is the structural shape Aphrodite
+    # that delegates to the original — this is the structural shape Sonar
     # produces after PiecewiseBackend takes over a submod.
     child_names = [name for name, _ in split_gm.named_children()]
     target_name = child_names[0]
@@ -241,7 +239,7 @@ def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
 
     code, submod_names, consts = generate_execution_code(split_gm)
 
-    assert "__aphrodite_submods__[" in code, "Non-GraphModule submod should produce an indexed callable reference"
+    assert "__sonar_submods__[" in code, "Non-GraphModule submod should produce an indexed callable reference"
     assert target_name in submod_names
 
     submod_callables = {
@@ -318,29 +316,27 @@ def test_node_ref_recurses_through_containers() -> None:
     cpu = torch.device("cpu")
 
     # Non-primitive in a list, primitive alongside.
-    assert _node_ref([cpu, 1], consts, const_index) == "[__aphrodite_consts__[0], 1]"
+    assert _node_ref([cpu, 1], consts, const_index) == "[__sonar_consts__[0], 1]"
     assert consts == [cpu]
 
     # Same object in a tuple — id-based dedup reuses the existing slot.
-    assert _node_ref((cpu, 2), consts, const_index) == "(__aphrodite_consts__[0], 2)"
+    assert _node_ref((cpu, 2), consts, const_index) == "(__sonar_consts__[0], 2)"
     assert consts == [cpu]
 
     # Single-element tuple uses the trailing-comma form.
-    assert _node_ref((cpu,), consts, const_index) == "(__aphrodite_consts__[0],)"
+    assert _node_ref((cpu,), consts, const_index) == "(__sonar_consts__[0],)"
 
     # Dict value lifts the same way.
     ref = _node_ref({"k": cpu}, consts, const_index)
-    assert ref == "{'k': __aphrodite_consts__[0]}"
+    assert ref == "{'k': __sonar_consts__[0]}"
 
 
 def test_legacy_code_without_consts() -> None:
     """``compile_execution_fn(consts=None)`` must still load code that has
-    no ``__aphrodite_consts__`` reference, so older serialized cache artifacts
+    no ``__sonar_consts__`` reference, so older serialized cache artifacts
     keep working."""
-    # Pre-consts codegen: no __aphrodite_consts__ reference, only torch/operator.
-    legacy_code = (
-        "import torch\ndef execution_fn(x, *, __aphrodite_submods__):\n    return __aphrodite_submods__[0](x) + 1\n"
-    )
+    # Pre-consts codegen: no __sonar_consts__ reference, only torch/operator.
+    legacy_code = "import torch\ndef execution_fn(x, *, __sonar_submods__):\n    return __sonar_submods__[0](x) + 1\n"
 
     class AddOne(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:

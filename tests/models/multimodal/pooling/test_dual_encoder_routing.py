@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.models.clip import (
+from sonar.model_executor.models.clip import (
     dual_encoder_has_text_tokens,
     merge_dual_encoder_text_and_vision,
 )

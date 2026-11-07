@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.v1.attention.backend import AttentionCGSupport, AttentionMetadataBuilder
-from aphrodite.v1.worker.gpu.async_utils import StepTimingSample
-from aphrodite.v1.worker.gpu.spec_decode import adaptive_verification as adaptive_module
-from aphrodite.v1.worker.gpu.spec_decode.adaptive_verification import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.v1.attention.backend import AttentionCGSupport, AttentionMetadataBuilder
+from sonar.v1.worker.gpu.async_utils import StepTimingSample
+from sonar.v1.worker.gpu.spec_decode import adaptive_verification as adaptive_module
+from sonar.v1.worker.gpu.spec_decode.adaptive_verification import (
     AdaptiveVerificationManager,
     assign_draft_token_budget,
     maybe_create_adaptive_verification_manager,
@@ -150,7 +150,7 @@ def test_manager_checks_target_varlen_cudagraph_bound(
             query_start_loc=object(),
             num_bonus_tokens=1,
             max_total_logits=1,
-            aphrodite_config=None,
+            sonar_config=None,
             target_layer_names={"target"},
             additional_attn_cg_support=additional,
         )

@@ -10,7 +10,7 @@ from packaging.version import Version
 from transformers import PreTrainedConfig
 from transformers import __version__ as TRANSFORMERS_VERSION
 
-from aphrodite.config.model import ModelDType, TokenizerMode
+from sonar.config.model import ModelDType, TokenizerMode
 
 
 @dataclass(frozen=True)
@@ -48,10 +48,10 @@ class _HfExamplesInfo:
     The maximum version of HF Transformers that this model runs on.
     """
 
-    transformers_version_reason: dict[Literal["aphrodite", "hf"], str] | None = None
+    transformers_version_reason: dict[Literal["sonar", "hf"], str] | None = None
     """
     The type and reason to skip test for the minimum/maximum version requirement.
-    aphrodite: skip all Aphrodite tests if the version requirement is not met.
+    sonar: skip all Sonar tests if the version requirement is not met.
     hf: only skip tests that uses HF runner if the version requirement is not met.
     """
 
@@ -123,7 +123,7 @@ class _HfExamplesInfo:
         self,
         *,
         on_fail: Literal["error", "skip", "return"],
-        check_version_reason: Literal["aphrodite", "hf"] = "hf",
+        check_version_reason: Literal["sonar", "hf"] = "hf",
         check_min_version: bool = True,
         check_max_version: bool = True,
     ) -> str | None:
@@ -497,7 +497,7 @@ _TEXT_GENERATION_EXAMPLE_MODELS = {
         transformers_version_reason={
             "hf": (
                 "Transformers v5.4 removed the ignore_keys param from "
-                "validate_rope(); Aphrodite patches validate_rope() and is unaffected"
+                "validate_rope(); Sonar patches validate_rope() and is unaffected"
             )
         },
     ),
@@ -1043,7 +1043,7 @@ _MULTIMODAL_EXAMPLE_MODELS = {
     "MolmoForCausalLM": _HfExamplesInfo(
         "allenai/Molmo-7B-D-0924",
         max_transformers_version="4.48",
-        transformers_version_reason={"aphrodite": "Incorrectly-detected `tensorflow` import from processor."},
+        transformers_version_reason={"sonar": "Incorrectly-detected `tensorflow` import from processor."},
         extras={"olmo": "allenai/Molmo-7B-O-0924"},
         trust_remote_code=True,
     ),
@@ -1152,7 +1152,7 @@ _MULTIMODAL_EXAMPLE_MODELS = {
         enforce_eager=True,
         max_transformers_version="4.57",
         transformers_version_reason={
-            "aphrodite": (
+            "sonar": (
                 "OpenPanguVLVideoProcessorInitKwargs does not specify total=False, "
                 "making all kwargs required. See https://huggingface.co/FreedomIntelligence/openPangu-VL-7B/discussions/2"
             )
@@ -1297,7 +1297,7 @@ _MULTIMODAL_EXAMPLE_MODELS = {
         transformers_version_reason={
             "hf": (
                 "Transformers v5.4 removed the ignore_keys param from "
-                "validate_rope(); Aphrodite has vendored the config and is unaffected"
+                "validate_rope(); Sonar has vendored the config and is unaffected"
             )
         },
     ),

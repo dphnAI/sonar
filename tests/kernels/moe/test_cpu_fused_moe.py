@@ -5,15 +5,15 @@
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite._custom_ops import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+from sonar._custom_ops import (
     cpu_fused_moe,
     cpu_fused_moe_int8,
     cpu_prepack_moe_weight,
     cpu_prepack_moe_weight_int8,
 )
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
@@ -21,20 +21,20 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     biased_moe_quant_config,
     int8_w8a8_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
+from sonar.model_executor.layers.fused_moe.experts.cpu_moe import (
     ArmCPUUnquantizedExperts,
     CPUExpertsInt8,
     CPUUnquantizedExperts,
     PowerCPUUnquantizedExperts,
     X86CPUUnquantizedExperts,
 )
-from aphrodite.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.fused_moe.router.cpu_router import _softmax_topk
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kInt8DynamicTokenSym,
     kInt8StaticChannelSym,
 )
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 
 if not current_platform.is_cpu():
@@ -227,7 +227,7 @@ def ref_fused_moe_int8(
 @pytest.mark.parametrize("act", ACT)
 @pytest.mark.parametrize("isa", ISA)
 def test_cpu_fused_moe(
-    default_aphrodite_config,
+    default_sonar_config,
     batch_size: int,
     expert_num: int,
     hidden_size: int,
@@ -476,7 +476,7 @@ def test_cpu_vec_fused_moe_shape_support(
     [MoEActivation.SILU, MoEActivation.GELU, MoEActivation.GELU_TANH],
 )
 def test_cpu_fused_moe_unaligned_intermediate_size(
-    default_aphrodite_config,
+    default_sonar_config,
     expert_num: int,
     hidden_size: int,
     use_bias: bool,
@@ -567,7 +567,7 @@ def test_cpu_fused_moe_unaligned_intermediate_size(
     reason="CPUExpertsInt8 requires x86 AMX",
 )
 @pytest.mark.parametrize("act", [MoEActivation.SILU, MoEActivation.GELU_TANH])
-def test_cpu_experts_int8_unaligned_intermediate_size(default_aphrodite_config, act: MoEActivation):
+def test_cpu_experts_int8_unaligned_intermediate_size(default_sonar_config, act: MoEActivation):
     """INT8 experts zero-pad the intermediate dim (weights and w13 scale)
     before prepacking."""
     set_random_seed(0)

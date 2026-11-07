@@ -8,7 +8,7 @@
 #include <type_traits>
 #include "../../core/vec_dtypes/vec_dtypes.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace int8 {
 // float32 to int8
 inline __device__ int8_t quant(float a, const float scale, const float zp) {
@@ -270,4 +270,4 @@ vec_conversion<bf16_8_t, Float8_>(const Float8_& a) {
 }
 
 }  // namespace int8
-}  // namespace aphrodite
+}  // namespace sonar

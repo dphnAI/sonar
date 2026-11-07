@@ -17,11 +17,11 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
-from aphrodite.transformers_utils.config import maybe_override_with_speculators
-from aphrodite.v1.worker.gpu.spec_decode import speculator_config as speculator_config_module
-from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
-from aphrodite.v1.worker.gpu.spec_decode.eagle.config import Eagle3SpeculatorConfig
+from sonar.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from sonar.transformers_utils.config import maybe_override_with_speculators
+from sonar.v1.worker.gpu.spec_decode import speculator_config as speculator_config_module
+from sonar.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
+from sonar.v1.worker.gpu.spec_decode.eagle.config import Eagle3SpeculatorConfig
 
 _SPECULATORS_CONFIG_DICT: dict[str, Any] = {
     "architectures": ["DFlashDraftModel"],
@@ -49,7 +49,7 @@ _SPECULATORS_CONFIG_DICT: dict[str, Any] = {
 def _patched_get_config_dict(config_dict):
     """Return a patch context that bypasses HF Hub for get_config_dict."""
     return patch(
-        "aphrodite.transformers_utils.config.PreTrainedConfig.get_config_dict",
+        "sonar.transformers_utils.config.PreTrainedConfig.get_config_dict",
         return_value=(config_dict, {}),
     )
 
@@ -61,7 +61,7 @@ def test_speculators_extracts_baseline_config():
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=None,
+            sonar_speculative_config=None,
         )
 
     assert model == "fake-org/fake-verifier"
@@ -75,7 +75,7 @@ def test_speculators_extracts_baseline_config():
 def test_speculators_preserves_user_attention_backend_override():
     """User-supplied attention_backend must survive the speculators path.
 
-    Regression for the case where aphrodite_speculative_config was silently
+    Regression for the case where sonar_speculative_config was silently
     discarded for speculators-format models.
     """
     user_overrides = {"attention_backend": "FLASH_ATTN"}
@@ -84,7 +84,7 @@ def test_speculators_preserves_user_attention_backend_override():
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=user_overrides,
+            sonar_speculative_config=user_overrides,
         )
 
     assert spec is not None
@@ -108,7 +108,7 @@ def test_speculators_user_cannot_override_model_field():
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=user_overrides,
+            sonar_speculative_config=user_overrides,
         )
 
     assert spec is not None
@@ -122,7 +122,7 @@ def test_speculators_user_cannot_override_method_field():
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=user_overrides,
+            sonar_speculative_config=user_overrides,
         )
 
     assert spec is not None
@@ -139,7 +139,7 @@ def test_speculators_keeps_custom_method_based_on_checkpoint_method(monkeypatch)
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config={"method": "my_dflash"},
+            sonar_speculative_config={"method": "my_dflash"},
         )
         assert spec is not None
         assert spec["method"] == "my_dflash"
@@ -149,7 +149,7 @@ def test_speculators_keeps_custom_method_based_on_checkpoint_method(monkeypatch)
                 model="fake-org/fake-dflash-spec",
                 tokenizer=None,
                 trust_remote_code=False,
-                aphrodite_speculative_config={"method": "my_eagle3"},
+                sonar_speculative_config={"method": "my_eagle3"},
             )
 
 
@@ -164,7 +164,7 @@ def test_speculators_user_can_override_num_speculative_tokens():
             model="fake-org/fake-dflash-spec",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=user_overrides,
+            sonar_speculative_config=user_overrides,
         )
 
     assert spec is not None
@@ -181,7 +181,7 @@ def test_non_speculators_model_passes_user_config_through_unchanged():
             model="fake-org/plain-llama",
             tokenizer=None,
             trust_remote_code=False,
-            aphrodite_speculative_config=user_overrides,
+            sonar_speculative_config=user_overrides,
         )
 
     assert model == "fake-org/plain-llama"
@@ -241,7 +241,7 @@ def test_non_speculators_local_model_remains_operator_selected(tmp_path):
             str(tmp_path),
             str(tmp_path),
             False,
-            aphrodite_speculative_config={"model": "fake-org/draft", "method": "eagle3"},
+            sonar_speculative_config={"model": "fake-org/draft", "method": "eagle3"},
         )
     assert model == tokenizer == str(tmp_path)
 

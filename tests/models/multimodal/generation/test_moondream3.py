@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.models.registry import HF_EXAMPLE_MODELS
 
 from ....conftest import IMAGE_ASSETS, ImageTestAssets
@@ -36,8 +36,8 @@ def make_caption_prompt(length: str = "normal") -> str:
 def test_tensor_parallel(image_assets: ImageTestAssets):
     import gc
 
-    from aphrodite import LLM, SamplingParams
-    from aphrodite.distributed.parallel_state import destroy_model_parallel
+    from sonar import LLM, SamplingParams
+    from sonar.distributed.parallel_state import destroy_model_parallel
 
     destroy_model_parallel()
     gc.collect()
@@ -77,7 +77,7 @@ def llm():
     model_info = HF_EXAMPLE_MODELS.get_hf_info("Moondream3ForCausalLM")
     model_info.check_transformers_version(on_fail="skip")
 
-    from aphrodite import LLM
+    from sonar import LLM
 
     try:
         return LLM(
@@ -101,7 +101,7 @@ def test_model_loading(llm):
 
 @large_gpu_mark(min_gb=48)
 def test_query_skill(llm, image_assets: ImageTestAssets):
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     image = image_assets[0].pil_image
     prompt = make_query_prompt("What color is the stop sign?")
@@ -118,7 +118,7 @@ def test_query_skill(llm, image_assets: ImageTestAssets):
 
 @large_gpu_mark(min_gb=48)
 def test_caption_skill(llm, image_assets: ImageTestAssets):
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     image = image_assets[1].pil_image
     prompt = make_caption_prompt()
@@ -135,7 +135,7 @@ def test_caption_skill(llm, image_assets: ImageTestAssets):
 
 @large_gpu_mark(min_gb=48)
 def test_batched_inference(llm, image_assets: ImageTestAssets):
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     images = [asset.pil_image for asset in image_assets]
     prompts = [{"prompt": prompt, "multi_modal_data": {"image": img}} for img, prompt in zip(images, HF_IMAGE_PROMPTS)]
@@ -151,7 +151,7 @@ def test_batched_inference(llm, image_assets: ImageTestAssets):
 @pytest.mark.parametrize("asset_name", ["stop_sign", "cherry_blossom"])
 @large_gpu_mark(min_gb=48)
 def test_image_assets(llm, image_assets: ImageTestAssets, asset_name: str):
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     asset_idx = 0 if asset_name == "stop_sign" else 1
     image = image_assets[asset_idx].pil_image

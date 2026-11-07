@@ -4,9 +4,9 @@ import pytest
 import torch
 
 # This registers op implementations
-import aphrodite.kernels  # noqa: F401
-from aphrodite import ir
-from aphrodite.platforms import current_platform
+import sonar.kernels  # noqa: F401
+from sonar import ir
+from sonar.platforms import current_platform
 from tests.ir.ir_test_utils import (
     COMMON_HIDDEN_SIZES,
     NUM_TOKENS,
@@ -30,7 +30,7 @@ IS_GPGPU_DEVICE = current_platform.is_cuda_alike() or current_platform.is_xpu()
 def test_rms_norm_registration():
     expected = {
         "native": True,
-        "aphrodite_c": IS_GPGPU_DEVICE,
+        "sonar_c": IS_GPGPU_DEVICE,
         "aiter": current_platform.is_rocm(),
         "oink": current_platform.has_device_capability(100)
         and hasattr(torch.ops, "oink")
@@ -121,7 +121,7 @@ class TestRMSNorm:
         out_unit_weight = impl.impl_fn(x, torch.ones_like(weight), eps)
         assert_close(ir.ops.rms_norm, out_no_weight, out_unit_weight)
 
-    @pytest.mark.parametrize("provider", ["aphrodite_c", "aiter", "native"])
+    @pytest.mark.parametrize("provider", ["sonar_c", "aiter", "native"])
     def test_torch_opcheck(self, dtype, n_tokens, hidden_size, epsilon, provider):
         if not ir.ops.rms_norm.impls[provider].supported:
             pytest.skip(f"{provider} impl not supported on this platform")
@@ -136,7 +136,7 @@ class TestRMSNorm:
 
         # When checking the torch op, we have to set priority and use dispatch
         with ir.ops.rms_norm.set_priority([provider, "native"]):
-            torch.library.opcheck(torch.ops.aphrodite_ir.rms_norm, args)
+            torch.library.opcheck(torch.ops.sonar_ir.rms_norm, args)
 
 
 @pytest.mark.skipif(
@@ -158,12 +158,12 @@ def test_aiter_rejects_unsupported_dtypes():
 
 @pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="ROCm aphrodite_c RMSNorm needs explicit ND input handling",
+    reason="ROCm sonar_c RMSNorm needs explicit ND input handling",
 )
-def test_aphrodite_c_rms_norm_accepts_nd_input():
-    impl = ir.ops.rms_norm.impls["aphrodite_c"]
+def test_sonar_c_rms_norm_accepts_nd_input():
+    impl = ir.ops.rms_norm.impls["sonar_c"]
     if not impl.supported:
-        pytest.skip("aphrodite_c impl not supported on this platform")
+        pytest.skip("sonar_c impl not supported on this platform")
 
     base = torch.randn(3, 8, 192, dtype=torch.float16, device=current_platform.device_type)
     x = base.split(64, dim=-1)[0].view(3, 8, 4, 16)
@@ -180,12 +180,12 @@ def test_aphrodite_c_rms_norm_accepts_nd_input():
 
 @pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="ROCm aphrodite_c RMSNorm needs a contiguous output for strided inputs",
+    reason="ROCm sonar_c RMSNorm needs a contiguous output for strided inputs",
 )
-def test_aphrodite_c_rms_norm_accepts_transposed_input():
-    impl = ir.ops.rms_norm.impls["aphrodite_c"]
+def test_sonar_c_rms_norm_accepts_transposed_input():
+    impl = ir.ops.rms_norm.impls["sonar_c"]
     if not impl.supported:
-        pytest.skip("aphrodite_c impl not supported on this platform")
+        pytest.skip("sonar_c impl not supported on this platform")
 
     x = torch.randn(1, 320, 120, dtype=torch.float16, device=current_platform.device_type).transpose(1, 2)
     assert x.reshape(-1, x.shape[-1]).stride(-1) != 1
@@ -209,7 +209,7 @@ fused_add_rms_norm_native = ir.ops.fused_add_rms_norm.impls["native"].impl_fn
 def test_fused_add_rms_norm_registration():
     expected = {
         "native": True,
-        "aphrodite_c": IS_GPGPU_DEVICE,
+        "sonar_c": IS_GPGPU_DEVICE,
         "aiter": current_platform.is_rocm(),
         "oink": current_platform.has_device_capability(100)
         and hasattr(torch.ops, "oink")
@@ -223,12 +223,12 @@ def test_fused_add_rms_norm_registration():
 
 @pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="ROCm aphrodite_c fused_add_rms_norm needs explicit ND input handling",
+    reason="ROCm sonar_c fused_add_rms_norm needs explicit ND input handling",
 )
-def test_aphrodite_c_fused_add_rms_norm_accepts_nd_input():
-    impl = ir.ops.fused_add_rms_norm.impls["aphrodite_c"]
+def test_sonar_c_fused_add_rms_norm_accepts_nd_input():
+    impl = ir.ops.fused_add_rms_norm.impls["sonar_c"]
     if not impl.supported:
-        pytest.skip("aphrodite_c impl not supported on this platform")
+        pytest.skip("sonar_c impl not supported on this platform")
 
     base = torch.randn(3, 8, 192, dtype=torch.float16, device=current_platform.device_type)
     residual_base = torch.randn(3, 8, 192, dtype=torch.float16, device=current_platform.device_type)
@@ -338,7 +338,7 @@ class TestFusedAddRMSNorm:
         assert_close(ir.ops.fused_add_rms_norm, out_no_weight, out_unit_weight)
         assert_close(ir.ops.fused_add_rms_norm, residual_no_weight, residual_unit_weight)
 
-    @pytest.mark.parametrize("provider", ["aphrodite_c"])
+    @pytest.mark.parametrize("provider", ["sonar_c"])
     def test_inplace_semantics(self, dtype, n_tokens, hidden_size, epsilon, provider):
         """Test that inplace implementations reuse inputs,
         for maybe_inplace overload but not for default overload."""
@@ -401,11 +401,11 @@ class TestFusedAddRMSNorm:
 
         # When checking the torch op, we have to set priority and use dispatch
         with ir.ops.fused_add_rms_norm.set_priority([provider, "native"]):
-            torch.library.opcheck(torch.ops.aphrodite_ir.fused_add_rms_norm.default, args)
+            torch.library.opcheck(torch.ops.sonar_ir.fused_add_rms_norm.default, args)
 
             # Only test maybe_inplace with non-inplace implementations
             # Inplace implementations return aliases of inputs which is not allowed.
             # We break this invariant, but we also convert maybe_inplace to the default
             # overload during compilation, so maybe_inplace never reaches Inductor.
             if not ir.ops.fused_add_rms_norm.impls[provider].inplace:
-                torch.library.opcheck(torch.ops.aphrodite_ir.fused_add_rms_norm.maybe_inplace, args)
+                torch.library.opcheck(torch.ops.sonar_ir.fused_add_rms_norm.maybe_inplace, args)

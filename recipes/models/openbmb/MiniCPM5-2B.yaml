@@ -29,7 +29,7 @@ features:
       - "--default-chat-template-kwargs"
       - '{"enable_thinking": true}'
   tool_calling:
-    description: "Enable native tool calling with the MiniCPM5 XML parser (merged in Aphrodite PR #43175)."
+    description: "Enable native tool calling with the MiniCPM5 XML parser (merged in Sonar PR #43175)."
     args:
       - "--enable-auto-tool-choice"
       - "--tool-call-parser"
@@ -58,7 +58,7 @@ guide: |
   **MiniCPM5-2B** is the 2B checkpoint in OpenBMB's MiniCPM5 series — a dense
   model built for on-device and resource-constrained deployment, with strong
   performance on agentic tool use, code generation, and reasoning tasks.
-  It uses the **standard `LlamaForCausalLM` architecture**, so Aphrodite loads it
+  It uses the **standard `LlamaForCausalLM` architecture**, so Sonar loads it
   natively with no custom kernels or model-code fork.
 
   Its headline feature is **hybrid reasoning**: a single checkpoint serves as
@@ -67,7 +67,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite ≥ 0.21.0** — MiniCPM5-2B is supported natively as of the v0.21.0
+  - **Sonar ≥ 0.21.0** — MiniCPM5-2B is supported natively as of the v0.21.0
     release.
 
   ## Launch command
@@ -75,7 +75,7 @@ guide: |
   Use the command builder above. The baseline is simply:
 
   ```bash
-  aphrodite serve openbmb/MiniCPM5-2B --port 8000
+  sonar serve openbmb/MiniCPM5-2B --port 8000
   ```
 
   At ~2B params the model fits on a single GPU (TP=1). It supports the full
@@ -108,10 +108,10 @@ guide: |
 
   MiniCPM5-2B emits **XML-style** tool calls. The `minicpm5` parser
   ([PR #43175](https://github.com/vllm-project/vllm/pull/43175)) is natively
-  supported in Aphrodite. Enable it with:
+  supported in Sonar. Enable it with:
 
   ```bash
-  aphrodite serve openbmb/MiniCPM5-2B --port 8000 \
+  sonar serve openbmb/MiniCPM5-2B --port 8000 \
     --enable-auto-tool-choice \
     --tool-call-parser minicpm5
   ```
@@ -119,5 +119,5 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/openbmb/MiniCPM5-2B)
-  - [Aphrodite deployment cookbook](https://github.com/OpenBMB/MiniCPM/blob/main/docs/deployment/vllm.md)
+  - [Sonar deployment cookbook](https://github.com/OpenBMB/MiniCPM/blob/main/docs/deployment/vllm.md)
   - [MiniCPM Tech Report](https://arxiv.org/pdf/2506.07900)

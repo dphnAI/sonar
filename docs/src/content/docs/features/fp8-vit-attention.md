@@ -29,12 +29,12 @@ Select the backend for your platform.
 
 ```sh
 # NVIDIA
-aphrodite run "$MODEL" \
+sonar run "$MODEL" \
   --mm-encoder-attn-backend FLASHINFER \
   --mm-encoder-attn-dtype fp8
 
 # AMD ROCm
-aphrodite run "$MODEL" \
+sonar run "$MODEL" \
   --mm-encoder-attn-backend ROCM_AITER_FA \
   --mm-encoder-attn-dtype fp8
 ```
@@ -49,7 +49,7 @@ Static scales remove the dynamic scaling work from production requests. Create
 the scales with representative images.
 
 ```sh
-aphrodite bench mm-processor \
+sonar bench mm-processor \
   --model "$MODEL" \
   --mm-encoder-attn-backend "$MM_ATTN_BACKEND" \
   --mm-encoder-attn-dtype fp8 \
@@ -67,7 +67,7 @@ calibration data.
 Load the saved scales when you start the server.
 
 ```sh
-aphrodite run "$MODEL" \
+sonar run "$MODEL" \
   --mm-encoder-attn-backend "$MM_ATTN_BACKEND" \
   --mm-encoder-attn-dtype fp8 \
   --mm-encoder-fp8-scale-path /path/to/scales.json

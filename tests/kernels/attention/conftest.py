@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.utils.torch_utils import (
+from sonar.utils.torch_utils import (
     create_kv_caches_with_random,
     create_kv_caches_with_random_flash,
 )

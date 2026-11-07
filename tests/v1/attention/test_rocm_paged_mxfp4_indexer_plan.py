@@ -10,21 +10,21 @@ block-table rows.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_rocm():
     pytest.skip("ROCm-only", allow_module_level=True)
 
-from aphrodite.v1.attention.backends.mla.indexer import (
+from sonar.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerPrefillChunkMetadata,
 )
-from aphrodite.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
+from sonar.v1.attention.backends.mla.rocm_paged_mxfp4_indexer import (
     native_decode,
     plan_gather_launches,
     plan_prefill_chunks,
     split_prefill_chunks,
 )
-from aphrodite.v1.attention.ops.rocm_paged_mxfp4_indexer import rocm_mxfp4_consumer_rows
+from sonar.v1.attention.ops.rocm_paged_mxfp4_indexer import rocm_mxfp4_consumer_rows
 
 
 def _chunk(block_table, token_start, token_end, row_ends):
@@ -95,7 +95,7 @@ def test_chunks_split_into_requests():
 
 
 def test_launches_follow_the_logits_budget(monkeypatch):
-    """Each launch's fp32 logits fit in APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB. A dense
+    """Each launch's fp32 logits fit in SONAR_SPARSE_INDEXER_MAX_LOGITS_MB. A dense
     chunk's logits are [rows, longest context in the chunk]: K is read in place,
     not gathered, so requests share a launch until their rows no longer fit, and
     a request that does not fit alone is split on its query rows. A consumer's
@@ -117,7 +117,7 @@ def test_launches_follow_the_logits_budget(monkeypatch):
         (slice(0, 1), slice(0, 128)),
         (slice(0, 1), slice(128, 200)),
     ]
-    monkeypatch.setenv("APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB", "512")
+    monkeypatch.setenv("SONAR_SPARSE_INDEXER_MAX_LOGITS_MB", "512")
     assert rocm_mxfp4_consumer_rows(16384) == 8192
 
 

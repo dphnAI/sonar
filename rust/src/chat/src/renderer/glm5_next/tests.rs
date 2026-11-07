@@ -4,10 +4,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aphrodite_text::Prompt;
-use aphrodite_tokenizer::{DynTokenizer, HuggingFaceTokenizer};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sonar_text::Prompt;
+use sonar_tokenizer::{DynTokenizer, HuggingFaceTokenizer};
 
 use super::writer::{ControlTokenizer, Glm5PromptWriter};
 use super::{Glm5NextChatRenderer, encoding};
@@ -368,9 +368,9 @@ fn tokenizer_fixture() -> Value {
     })
 }
 
-/// Load `APHRODITE_GLM_TOKENIZER_JSON`, or the fixture, with both tokenizer backends.
+/// Load `SONAR_GLM_TOKENIZER_JSON`, or the fixture, with both tokenizer backends.
 fn tokenizers(dir: &std::path::Path) -> [DynTokenizer; 2] {
-    let path = std::env::var_os("APHRODITE_GLM_TOKENIZER_JSON")
+    let path = std::env::var_os("SONAR_GLM_TOKENIZER_JSON")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             let path = dir.join("tokenizer.json");

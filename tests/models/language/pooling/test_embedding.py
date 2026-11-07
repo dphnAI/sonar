@@ -5,8 +5,8 @@ import pytest
 import torch
 from transformers import AutoModel
 
-from aphrodite import PoolingParams
-from aphrodite.config import PoolerConfig
+from sonar import PoolingParams
+from sonar.config import PoolerConfig
 
 from ...utils import check_embeddings_close
 
@@ -18,7 +18,7 @@ from ...utils import check_embeddings_close
 @pytest.mark.parametrize("num_padding_tokens", [0, 3])
 def test_lfm2_bidirectional_conv_respects_sequence_boundaries(dtype, kernel_size, num_padding_tokens):
     """Packed short sequences must match independent noncausal convolutions."""
-    from aphrodite.model_executor.models.lfm2 import _bidirectional_conv1d
+    from sonar.model_executor.models.lfm2 import _bidirectional_conv1d
 
     generator = torch.Generator().manual_seed(0)
     lengths = [1, 1, 7, 2]
@@ -56,14 +56,14 @@ def test_lfm2_bidirectional_conv_respects_sequence_boundaries(dtype, kernel_size
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("enforce_eager", [True, False])
-def test_lfm2_bidirectional_embeddings_are_batch_independent(aphrodite_runner, enforce_eager):
+def test_lfm2_bidirectional_embeddings_are_batch_independent(sonar_runner, enforce_eager):
     """Neighboring requests must not change the embedding through ShortConv."""
     prompts = [
         "query: capital of France?",
         "document: Paris is the capital of France. " * 20,
         "document: Tokyo.",
     ]
-    with aphrodite_runner(
+    with sonar_runner(
         "LiquidAI/LFM2.5-Embedding-350M",
         runner="pooling",
         max_model_len=512,
@@ -128,13 +128,13 @@ def test_lfm2_bidirectional_embeddings_are_batch_independent(aphrodite_runner, e
 )
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model,
 ) -> None:
-    aphrodite_extra_kwargs = {}
+    sonar_extra_kwargs = {}
     if model == "ssmits/Qwen2-7B-Instruct-embed-base":
-        aphrodite_extra_kwargs["pooler_config"] = PoolerConfig(seq_pooling_type="MEAN", use_activation=False)
+        sonar_extra_kwargs["pooler_config"] = PoolerConfig(seq_pooling_type="MEAN", use_activation=False)
 
     max_model_len: int | None = 512
     if model in [
@@ -147,7 +147,7 @@ def test_models(
     # "Write a short story about a robot that dreams for the first time.\n"
     # sentence_transformers will strip the input texts, see:
     # https://github.com/UKPLab/sentence-transformers/blob/v3.1.1/sentence_transformers/models/Transformer.py#L159
-    # This makes the input_ids different between hf_model and aphrodite_model.
+    # This makes the input_ids different between hf_model and sonar_model.
     # So we need to strip the input texts to avoid test failing.
     example_prompts = [str(s).strip() for s in example_prompts]
 
@@ -156,7 +156,7 @@ def test_models(
             # This checkpoint has no sentence-transformers config. Since
             # sentence-transformers 5.6, a causal LM then gets its chat
             # template applied and last-token pooling. Keep the plain text and
-            # the MEAN pooling that Aphrodite uses above.
+            # the MEAN pooling that Sonar uses above.
             from sentence_transformers.models import Pooling
 
             st_model = hf_model.model
@@ -165,16 +165,14 @@ def test_models(
             del st_model
         hf_outputs = hf_model.encode(example_prompts)
 
-    with aphrodite_runner(
-        model, runner="pooling", max_model_len=max_model_len, **aphrodite_extra_kwargs
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.embed(example_prompts)
+    with sonar_runner(model, runner="pooling", max_model_len=max_model_len, **sonar_extra_kwargs) as sonar_model:
+        sonar_outputs = sonar_model.embed(example_prompts)
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
         tol=1e-2,
     )
 
@@ -189,7 +187,7 @@ def test_models(
 @torch.inference_mode()
 def test_encoder_only_model_runner_v2_attention(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     monkeypatch,
     model: str,
 ) -> None:
@@ -206,8 +204,8 @@ def test_encoder_only_model_runner_v2_attention(
             embedding = torch.nn.functional.normalize(output.last_hidden_state[0, -1].float(), dim=0)
             hf_outputs.append(embedding.cpu().tolist())
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         model,
         runner="pooling",
         dtype="float",
@@ -215,21 +213,21 @@ def test_encoder_only_model_runner_v2_attention(
         max_num_seqs=2,
         gpu_memory_utilization=0.25,
         pooler_config=PoolerConfig(task="embed", seq_pooling_type="LAST", use_activation=True),
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.embed(prompts)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = sonar_model.embed(prompts)
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
         tol=1e-2,
     )
 
 
 @pytest.mark.core_model
-def test_encoder_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch) -> None:
+def test_encoder_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
     model = "sentence-transformers/all-MiniLM-L6-v2"
     prompt_batches = [
         ["short input"],
@@ -242,27 +240,27 @@ def test_encoder_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch) -> No
     with hf_runner(model, is_sentence_transformer=True) as hf_model:
         hf_outputs = [hf_model.encode(prompts) for prompts in prompt_batches]
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         model,
         runner="pooling",
         max_model_len=64,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = [aphrodite_model.embed(prompts) for prompts in prompt_batches]
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = [sonar_model.embed(prompts) for prompts in prompt_batches]
 
-    for hf_batch, aphrodite_batch in zip(hf_outputs, aphrodite_outputs):
+    for hf_batch, sonar_batch in zip(hf_outputs, sonar_outputs):
         check_embeddings_close(
             embeddings_0_lst=hf_batch,
-            embeddings_1_lst=aphrodite_batch,
+            embeddings_1_lst=sonar_batch,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
             tol=1e-2,
         )
 
 
 @pytest.mark.core_model
-def test_matryoshka_dimensions_model_runner_v2(hf_runner, aphrodite_runner, monkeypatch) -> None:
+def test_matryoshka_dimensions_model_runner_v2(hf_runner, sonar_runner, monkeypatch) -> None:
     model = "Snowflake/snowflake-arctic-embed-m-v1.5"
     prompts = ["short input", "a longer input for a different output width"]
     dimensions = [None, 256]
@@ -270,15 +268,15 @@ def test_matryoshka_dimensions_model_runner_v2(hf_runner, aphrodite_runner, monk
     with hf_runner(model, is_sentence_transformer=True) as hf_model:
         hf_outputs = hf_model.encode(prompts)
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    with sonar_runner(
         model,
         runner="pooling",
         max_model_len=64,
         gpu_memory_utilization=0.25,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner
-        aphrodite_outputs = aphrodite_model.embed(
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner
+        sonar_outputs = sonar_model.embed(
             prompts,
             pooling_params=[PoolingParams(dimensions=d) for d in dimensions],
         )
@@ -290,11 +288,11 @@ def test_matryoshka_dimensions_model_runner_v2(hf_runner, aphrodite_runner, monk
             output = torch.nn.functional.normalize(output[:dimension], dim=0)
         expected_outputs.append(output.tolist())
 
-    assert [len(output) for output in aphrodite_outputs] == [768, 256]
+    assert [len(output) for output in sonar_outputs] == [768, 256]
     check_embeddings_close(
         embeddings_0_lst=expected_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
         tol=1e-2,
     )

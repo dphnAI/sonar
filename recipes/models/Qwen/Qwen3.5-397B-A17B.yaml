@@ -31,8 +31,8 @@ model:
   base_args:
     - "--trust-remote-code"
   base_env:
-    APHRODITE_DEEP_GEMM_WARMUP: "skip"
-    APHRODITE_USE_DEEP_GEMM: "0"
+    SONAR_DEEP_GEMM_WARMUP: "skip"
+    SONAR_USE_DEEP_GEMM: "0"
 
 features:
   tool_calling:
@@ -66,7 +66,7 @@ features:
           - '{"model": "RedHatAI/Qwen3.5-397B-A17B-speculator.dflash", "num_speculative_tokens": 7, "method": "dflash"}'
       qwen3_5_mtp:
         label: "MTP (Ascend)"
-        description: "MTP mode documented for Aphrodite Ascend."
+        description: "MTP mode documented for Sonar Ascend."
         variants: [ascend_w8a8_mtp, ascend_w4a4_mxfp4]
         args:
           - "--speculative-config"
@@ -88,7 +88,7 @@ features:
       - "--max-model-len"
       - "1010000"
     env:
-      APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      SONAR_ALLOW_LONG_MAX_MODEL_LEN: "1"
 
 opt_in_features:
   - spec_decoding
@@ -136,7 +136,7 @@ variants:
     # flat with context (the auto-selected ROCM_ATTN slows ~6x by 30k tokens here); and a sequence cap,
     # because the default max_num_seqs (1024) exceeds the ~296 Mamba cache blocks one GPU leaves.
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
     extra_args:
       - "--attention-backend"
       - "ROCM_AITER_FA"
@@ -176,7 +176,7 @@ variants:
       - "--additional-config"
       - '{"enable_cpu_binding":true}'
     extra_env:
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
       HCCL_OP_EXPANSION_MODE: "AIV"
       HCCL_BUFFSIZE: "400"
@@ -223,7 +223,7 @@ variants:
       - "--additional-config"
       - '{"enable_cpu_binding":true}'
     extra_env:
-      APHRODITE_USE_MODELSCOPE: "True"
+      SONAR_USE_MODELSCOPE: "True"
       PYTORCH_NPU_ALLOC_CONF: "expandable_segments:True"
       HCCL_OP_EXPANSION_MODE: "AIV"
       HCCL_BUFFSIZE: "400"
@@ -260,10 +260,10 @@ strategy_overrides:
   pd_cluster:
     prefill:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
     decode:
       env:
-        APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
+        SONAR_SSM_CONV_STATE_LAYOUT: "DS"
 
 presets:
   b200_tp2_kv_offload:
@@ -273,7 +273,7 @@ presets:
     variants: [nvfp4]
     workload: "Multi-turn agentic coding, ~64k input, KV-reuse-bound (mean ITL under 20 ms)"
     description: "One TP2 engine with expert parallelism on two of the node's eight B200 GPUs: MTP with three draft tokens, FP8 KV cache, float16 Mamba SSM cache, async scheduling, and a 160 GiB host KV tier so prefixes survive across turns; admission is capped at 48 sequences to hold mean ITL under 20 ms."
-    source: { label: "Aphrodite #64607", href: "https://github.com/vllm-project/vllm/pull/64607" }
+    source: { label: "Sonar #64607", href: "https://github.com/vllm-project/vllm/pull/64607" }
     image: "vllm/vllm-openai:v0.32.0"
     tp: 2
     select:
@@ -293,13 +293,13 @@ presets:
       - "48"
       # Qwen3.5 mixes Gated DeltaNet and attention layers; the hybrid manager keeps prefix caching across both.
       - "--no-disable-hybrid-kv-cache-manager"
-      # Aphrodite sums --kv-offloading-size over the TP ranks: 80 GiB of host KV per rank.
+      # Sonar sums --kv-offloading-size over the TP ranks: 80 GiB of host KV per rank.
       - "--kv-offloading-backend"
       - "native"
       - "--kv-offloading-size"
       - "160"
     runbook: |
-      Measured by NVIDIA on Aphrodite v0.32.0 (`vllm/vllm-openai:v0.32.0`) on two B200 SXM 180 GB with a
+      Measured by NVIDIA on Sonar v0.32.0 (`vllm/vllm-openai:v0.32.0`) on two B200 SXM 180 GB with a
       942-request multi-turn agentic coding trace (about 64k mean input tokens, most prefix tokens
       reused across turns, outputs capped at 12k tokens), replayed at fixed concurrency with real
       MTP acceptance (mean acceptance length 3.2 to 3.3). Host: 512 GiB RAM and 200 GiB /dev/shm per
@@ -319,7 +319,7 @@ presets:
 guide: |
   ## Overview
 
-  [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-397B-A17B) is a multimodal mixture-of-experts model featuring a gated delta networks architecture with 397B total parameters and 17B active parameters. This guide covers how to efficiently deploy and serve the model across different hardware configurations and workload profiles using Aphrodite.
+  [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-397B-A17B) is a multimodal mixture-of-experts model featuring a gated delta networks architecture with 397B total parameters and 17B active parameters. This guide covers how to efficiently deploy and serve the model across different hardware configurations and workload profiles using Sonar.
 
   ## Prerequisites
 
@@ -329,15 +329,15 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   #### AMD
-  > Note: The Aphrodite wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. If your environment does not meet these requirements, please use the Docker-based setup. Supported GPUs: MI300X, MI325X, MI355X.
+  > Note: The Sonar wheel for ROCm requires Python 3.12, ROCm 7.0, and glibc >= 2.35. If your environment does not meet these requirements, please use the Docker-based setup. Supported GPUs: MI300X, MI325X, MI355X.
   ```bash
   uv venv --python 3.12
   source .venv/bin/activate
-  uv pip install aphrodite-engine --extra-index-url https://wheels.vllm.ai/rocm
+  uv pip install sonar --index-strategy first-index --extra-index-url https://sonar.dphn.ai/whl/release/rocm/x86_64/simple
   ```
 
   ### Docker
@@ -379,7 +379,7 @@ guide: |
   For maximum text throughput under high concurrency, use `--language-model-only` to skip loading the vision encoder and free up memory for KV cache, and enable Expert Parallelism.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-397B-A17B-FP8 \
+  sonar serve Qwen/Qwen3.5-397B-A17B-FP8 \
     -dp 8 \
     --enable-expert-parallel \
     --language-model-only \
@@ -392,7 +392,7 @@ guide: |
   For multimodal workloads, use `--mm-encoder-tp-mode data` for data-parallel vision encoding and `--mm-processor-cache-type shm` for shared-memory caching of preprocessed multimodal inputs.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-397B-A17B-FP8 \
+  sonar serve Qwen/Qwen3.5-397B-A17B-FP8 \
     -dp 8 \
     --enable-expert-parallel \
     --mm-encoder-tp-mode data \
@@ -407,11 +407,11 @@ guide: |
 
   For latency-sensitive workloads at low concurrency, enable MTP-1 speculative decoding and disable prefix caching. MTP-1 reduces time-per-output-token (TPOT) with a high acceptance rate, at the cost of lower throughput under load.
 
-  > Note (AMD): MTP runs on ROCm with Aphrodite 0.31.0 (verified with the single-GPU MXFP4 setup below). On ROCm,
+  > Note (AMD): MTP runs on ROCm with Sonar 0.31.0 (verified with the single-GPU MXFP4 setup below). On ROCm,
   > pair it with `--kv-cache-dtype fp8`: with the default KV cache its speedup fades as the prompt grows.
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-397B-A17B-FP8 \
+  sonar serve Qwen/Qwen3.5-397B-A17B-FP8 \
     --tensor-parallel-size 8 \
     --speculative-config '{"method": "mtp", "num_speculative_tokens": 1}' \
     --reasoning-parser qwen3
@@ -422,7 +422,7 @@ guide: |
   We recommend using the NVFP4 checkpoint [nvidia/Qwen3.5-397B-A17B-NVFP4](https://huggingface.co/nvidia/Qwen3.5-397B-A17B-NVFP4) for optimal serving efficiency on GB200 nodes.
 
   ```bash
-  aphrodite serve nvidia/Qwen3.5-397B-A17B-NVFP4 \
+  sonar serve nvidia/Qwen3.5-397B-A17B-NVFP4 \
     -dp 4 \
     --enable-expert-parallel \
     --language-model-only \
@@ -433,7 +433,7 @@ guide: |
   ### MI355X Deployment
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-397B-A17B-FP8 \
+  sonar serve Qwen/Qwen3.5-397B-A17B-FP8 \
     -tp 2 \
     --enable-expert-parallel \
     --language-model-only \
@@ -444,14 +444,14 @@ guide: |
   ### Single MI350X / MI355X (MXFP4)
 
   AMD's MXFP4 checkpoint [amd/Qwen3.5-397B-A17B-MXFP4](https://huggingface.co/amd/Qwen3.5-397B-A17B-MXFP4) (239 GB)
-  fits one 288 GB MI350X or MI355X: pick the **MXFP4 (W4A4)** variant above. It sets three things Aphrodite does not
-  pick on its own: `APHRODITE_ROCM_USE_AITER=1` turns on the AITER kernels; `--attention-backend ROCM_AITER_FA` replaces
+  fits one 288 GB MI350X or MI355X: pick the **MXFP4 (W4A4)** variant above. It sets three things Sonar does not
+  pick on its own: `SONAR_ROCM_USE_AITER=1` turns on the AITER kernels; `--attention-backend ROCM_AITER_FA` replaces
   the auto-selected `ROCM_ATTN`, whose decode slows down as the context grows on this hybrid model; and
   `--max-num-seqs 64`, because the default (1024) is more than the ~296 Mamba cache blocks a single GPU leaves,
   and the server would refuse to start.
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 aphrodite serve amd/Qwen3.5-397B-A17B-MXFP4 \
+  SONAR_ROCM_USE_AITER=1 sonar serve amd/Qwen3.5-397B-A17B-MXFP4 \
     --tensor-parallel-size 1 \
     --attention-backend ROCM_AITER_FA \
     --max-num-seqs 64 \
@@ -471,7 +471,7 @@ guide: |
   | GPTQ-Int4, AITER + `ROCM_AITER_FA` (MI350X) | 75 | 74 | 74 | 74 |
 
   With MTP, add `--kv-cache-dtype fp8`: on ROCm, MTP's gain otherwise fades as the prompt grows. The MXFP4
-  checkpoint quantizes activations as well as weights (W4A4): on the same wikitext-2 tokens Aphrodite scored PPL 3.43
+  checkpoint quantizes activations as well as weights (W4A4): on the same wikitext-2 tokens Sonar scored PPL 3.43
   with it and 3.39 with GPTQ-Int4 (W4A16), so GPTQ-Int4 is the higher-fidelity option at about two thirds of the speed.
 
   ## Processing Ultra-Long Texts
@@ -550,5 +550,5 @@ guide: |
   - AMD MXFP4 checkpoint: https://huggingface.co/amd/Qwen3.5-397B-A17B-MXFP4
   - Ascend W8A8 checkpoint: https://www.modelscope.cn/models/Eco-Tech/Qwen3.5-397B-A17B-w8a8-mtp
   - Ascend W4A4 checkpoint: https://www.modelscope.cn/models/Eco-Tech/Qwen3.5-397B-A17B-w4a4-mxfp4
-  - Aphrodite Ascend tutorial: https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/Qwen3.5-397B-A17B.html
-  - Aphrodite documentation: https://docs.vllm.ai/
+  - Sonar Ascend tutorial: https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/Qwen3.5-397B-A17B.html
+  - Sonar documentation: https://docs.vllm.ai/

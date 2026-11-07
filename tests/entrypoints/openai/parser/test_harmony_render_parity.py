@@ -22,13 +22,13 @@ Each test:
 from openai.types.responses import ResponseFunctionToolCall
 from openai_harmony import Message, Role
 
-from aphrodite.entrypoints.openai.parser.harmony_utils import (
+from sonar.entrypoints.openai.parser.harmony_utils import (
     get_encoding,
     get_system_message,
     parse_chat_input_to_harmony_message,
     render_for_completion,
 )
-from aphrodite.entrypoints.openai.responses.harmony import (
+from sonar.entrypoints.openai.responses.harmony import (
     response_input_to_harmony,
     response_previous_input_to_harmony,
 )

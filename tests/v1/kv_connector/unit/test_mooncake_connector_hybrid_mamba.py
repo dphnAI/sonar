@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for MooncakeConnector hybrid FA + GDN support.
 
-GDN is represented as a MambaSpec in Aphrodite, so these tests exercise the
+GDN is represented as a MambaSpec in Sonar, so these tests exercise the
 Mooncake MambaSpec path with mamba_type=GDN_ATTN. Mamba2 is intentionally not
 validated by this test module.
 """
@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
+from sonar.config import set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     KVConnectorRole,
     MooncakeConnector,
     MooncakeConnectorScheduler,
@@ -26,9 +26,9 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connect
     SendBlockMeta,
     TransferRegion,
 )
-from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.attention.backends.registry import MambaAttentionBackendEnum
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -38,7 +38,7 @@ from aphrodite.v1.kv_cache_interface import (
 from tests.v1.attention.utils import dense_kv_cache_views
 
 from .test_mooncake_connector import patch_worker_dependencies
-from .utils import create_aphrodite_config, create_request, maybe_update_block_size
+from .utils import create_request, create_sonar_config, maybe_update_block_size
 
 
 def noop_shutdown():
@@ -75,15 +75,15 @@ def make_hybrid_gdn_kv_cache_config(block_size: int) -> KVCacheConfig:
 
 
 def make_hybrid_gdn_scheduler(kv_role: str) -> MooncakeConnectorScheduler:
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role=kv_role,
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     return MooncakeConnectorScheduler(
-        aphrodite_config=aphrodite_config,
+        sonar_config=sonar_config,
         engine_id="test-engine",
-        kv_cache_config=make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size),
+        kv_cache_config=make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size),
     )
 
 
@@ -100,15 +100,15 @@ def test_hybrid_gdn_remote_prefill_uses_mamba_n_minus_one():
 
 @pytest.mark.cpu_test
 def test_hybrid_gdn_remote_decode_truncates_prefill_before_cache_lookup():
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
     )
-    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    sonar_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     connector = MooncakeConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
-        make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size),
+        make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size),
     )
     scheduler = connector.connector_scheduler
     assert scheduler is not None
@@ -139,17 +139,17 @@ def test_hybrid_gdn_remote_decode_truncates_prefill_before_cache_lookup():
 
 
 def test_register_kv_caches_emits_fa_and_gdn_regions(monkeypatch):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
         block_size=maybe_update_block_size(16),
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -192,17 +192,17 @@ def test_register_kv_caches_emits_fa_and_gdn_regions(monkeypatch):
 
 
 def test_register_kv_caches_scales_attention_len_to_kernel_block(monkeypatch):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
         block_size=maybe_update_block_size(16),
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -341,7 +341,7 @@ async def test_build_transfer_params_uses_non_overlapping_physical_pages(block_o
         return np.arange(len(src_ids)), np.ones(len(src_ids), dtype=np.int64)
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector._contiguous_runs",
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector._contiguous_runs",
         side_effect=split_contiguous_blocks,
     ):
         (
@@ -375,17 +375,17 @@ async def test_build_transfer_params_uses_non_overlapping_physical_pages(block_o
 
 
 def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
         block_size=maybe_update_block_size(16),
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -420,17 +420,17 @@ def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
 
 
 def test_hybrid_gdn_transfer_params_preserve_group_identity(monkeypatch):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
         block_size=maybe_update_block_size(16),
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -546,17 +546,17 @@ def test_logical_to_kernel_block_ids_expands_fa_not_gdn():
 def test_hybrid_gdn_keeps_packed_fa_and_gdn_regions_whole(
     monkeypatch,
 ):
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
         block_size=maybe_update_block_size(16),
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(sonar_config.cache_config.block_size)
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )

@@ -7,12 +7,12 @@ import pytest
 import ray
 import torch
 
-import aphrodite.envs as envs
-from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
-from aphrodite.distributed.utils import StatelessProcessGroup
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+import sonar.envs as envs
+from sonar.distributed.device_communicators.pynccl import PyNcclCommunicator
+from sonar.distributed.utils import StatelessProcessGroup
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 
 from ..utils import multi_gpu_test
 

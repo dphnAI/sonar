@@ -19,6 +19,6 @@ server_args: >-
   --attention-config '{"backend":"ROCM_AITER_MLA","mla_prefill_backend":"ROCM_AITER_FA"}'
   --kv-cache-dtype auto
 env:
-  APHRODITE_USE_V2_MODEL_RUNNER: "1"
-  APHRODITE_ROCM_USE_AITER: "1"
-  APHRODITE_WORKER_MULTIPROC_METHOD: "spawn"
+  SONAR_USE_V2_MODEL_RUNNER: "1"
+  SONAR_ROCM_USE_AITER: "1"
+  SONAR_WORKER_MULTIPROC_METHOD: "spawn"

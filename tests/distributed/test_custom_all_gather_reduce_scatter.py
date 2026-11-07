@@ -22,9 +22,9 @@ import ray
 import torch
 import torch.distributed as dist
 
-from aphrodite.distributed.parallel_state import get_tp_group
-from aphrodite.models.common.ops.sequence_parallel import sp_reduce_scatter
-from aphrodite.platforms import current_platform
+from sonar.distributed.parallel_state import get_tp_group
+from sonar.models.common.ops.sequence_parallel import sp_reduce_scatter
+from sonar.platforms import current_platform
 
 from ..utils import (
     ensure_model_parallel_initialized,
@@ -291,7 +291,7 @@ def _run_stage_cleanup_test(
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
         m.delenv("HIP_VISIBLE_DEVICES", raising=False)
-        m.setenv("APHRODITE_ALLREDUCE_USE_SYMM_MEM", "1")
+        m.setenv("SONAR_ALLREDUCE_USE_SYMM_MEM", "1")
         device = torch.device(f"cuda:{rank}")
         torch.accelerator.set_device_index(device)
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)

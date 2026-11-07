@@ -7,7 +7,7 @@ import openai
 import pytest
 import pytest_asyncio
 
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.multimodal.utils import encode_image_url
 from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 from tests.utils import RemoteOpenAIServer
 
@@ -34,7 +34,7 @@ def image_server(default_image_server_args):
     with RemoteOpenAIServer(
         MODEL_NAME,
         default_image_server_args,
-        env_dict={"APHRODITE_ENABLE_RESPONSES_API_STORE": "1"},
+        env_dict={"SONAR_ENABLE_RESPONSES_API_STORE": "1"},
     ) as remote_server:
         yield remote_server
 

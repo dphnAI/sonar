@@ -276,23 +276,22 @@ mod tests {
         detect_chat_template_content_format(template)
     }
 
-    fn aphrodite_examples_dir() -> PathBuf {
+    fn sonar_examples_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/templates/vllm_examples")
             .canonicalize()
-            .expect("Aphrodite example template directory should exist locally")
+            .expect("Sonar example template directory should exist locally")
     }
 
-    fn read_aphrodite_example(relative_path: &str) -> String {
-        fs::read_to_string(aphrodite_examples_dir().join(relative_path)).unwrap_or_else(|_| {
-            panic!("failed to read Aphrodite example template: {relative_path}")
-        })
+    fn read_sonar_example(relative_path: &str) -> String {
+        fs::read_to_string(sonar_examples_dir().join(relative_path))
+            .unwrap_or_else(|_| panic!("failed to read Sonar example template: {relative_path}"))
     }
 
-    fn iter_aphrodite_example_template_paths() -> impl Iterator<Item = PathBuf> {
-        let mut paths = fs::read_dir(aphrodite_examples_dir())
-            .expect("failed to read Aphrodite example template directory")
-            .map(|entry| entry.expect("failed to read Aphrodite example template dir entry").path())
+    fn iter_sonar_example_template_paths() -> impl Iterator<Item = PathBuf> {
+        let mut paths = fs::read_dir(sonar_examples_dir())
+            .expect("failed to read Sonar example template directory")
+            .map(|entry| entry.expect("failed to read Sonar example template dir entry").path())
             .filter(|path| path.extension().is_some_and(|ext| ext == "jinja"))
             .collect::<Vec<_>>();
         paths.sort();
@@ -360,14 +359,14 @@ mod tests {
     }
 
     #[test]
-    fn matches_aphrodite_example_template_formats() {
-        let snapshot = iter_aphrodite_example_template_paths()
+    fn matches_sonar_example_template_formats() {
+        let snapshot = iter_sonar_example_template_paths()
             .map(|path| {
                 let file_name = path
                     .file_name()
                     .and_then(|name| name.to_str())
                     .expect("template file name should be valid UTF-8");
-                let template = read_aphrodite_example(file_name);
+                let template = read_sonar_example(file_name);
                 let format = detect(&template);
                 format!("{file_name:50} => {format:?}")
             })

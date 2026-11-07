@@ -6,42 +6,42 @@ from functools import partial
 import pytest
 import torch
 
-import aphrodite.envs as envs
-from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
-from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
-from aphrodite.compilation.passes.fusion.act_quant_fusion import (
+import sonar.envs as envs
+from sonar._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
+from sonar._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
+from sonar.compilation.passes.fusion.act_quant_fusion import (
     FUSED_OPS,
     SILU_MUL_OP,
     ActivationQuantFusionPass,
 )
-from aphrodite.compilation.passes.fusion.rms_quant_fusion import QUANT_OPS
-from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
-from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.compilation.passes.fusion.rms_quant_fusion import QUANT_OPS
+from sonar.compilation.passes.utility.noop_elimination import NoOpEliminationPass
+from sonar.compilation.passes.utility.post_cleanup import PostCleanupPass
+from sonar.config import (
     CompilationConfig,
     CompilationMode,
     PassConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     CutlassFP8ScaledMMLinearKernel,
     FlashInferFP8ScaledMMLinearKernel,
     FP8ScaledMMLinearKernel,
     PerTensorTorchFP8ScaledMMLinearKernel,
     ROCmFP8ScaledMMLinearKernel,
 )
-from aphrodite.model_executor.layers.activation import SiluAndMul
-from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.activation import SiluAndMul
+from sonar.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     create_fp8_quant_key,
     kFp8Dynamic128Sym,
     kFp8StaticTensorSym,
     kNvfp4Dynamic,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+from sonar.platforms import current_platform
+from sonar.utils.deep_gemm import is_deep_gemm_supported
 from tests.compile.backend import TestBackend
 from tests.kernels.quantization.nvfp4_utils import quant_nvfp4_tensor
 from tests.utils import TestFP8Layer
@@ -96,7 +96,7 @@ class TestSiluMulFp8QuantModel(torch.nn.Module):
 class TestSiluMulNvfp4QuantModel(torch.nn.Module):
     def __init__(self, hidden_size: int, x: torch.Tensor, **kwargs):
         super().__init__()
-        from aphrodite.compilation.passes.fusion.act_quant_fusion import (
+        from sonar.compilation.passes.fusion.act_quant_fusion import (
             silu_and_mul_nvfp4_quant_supported,
         )
 
@@ -166,7 +166,7 @@ class TestSiluMulGroupFp8QuantModel(torch.nn.Module):
         ]
 
     def ops_in_model_after(self):
-        return [torch.ops.aphrodite.rocm_aiter_act_mul_and_fp8_group_quant]
+        return [torch.ops.sonar.rocm_aiter_act_mul_and_fp8_group_quant]
 
 
 class TestSiluMulBlockQuantModel(torch.nn.Module):
@@ -251,7 +251,7 @@ TEST_KERNELS = ROCM_KERNELS if current_platform.is_rocm() else CUDA_KERNELS
         ],
     ],
 )
-@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(envs.SONAR_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_fusion_silu_and_mul_quant(
     num_tokens: int,
     hidden_size: int,
@@ -285,23 +285,23 @@ def test_fusion_silu_and_mul_quant(
         custom_ops.append("+silu_and_mul")
     if enable_quant_fp8_custom_op:
         custom_ops.append("+quant_fp8")
-    config = AphroditeConfig(
+    config = SonarConfig(
         compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE,
+            mode=CompilationMode.SONAR_COMPILE,
             custom_ops=custom_ops,
             backend="eager",  # avoid compilation for SiluAndMul and QuantFP8
             pass_config=PassConfig(fuse_act_quant=True, eliminate_noops=True),
         ),
     )
 
-    with set_current_aphrodite_config(config), monkeypatch.context() as m:
+    with set_current_sonar_config(config), monkeypatch.context() as m:
         fusion_passes = [ActivationQuantFusionPass(config)]
         if IS_AITER_FOUND and model_class is TestSiluMulGroupFp8QuantModel:
-            from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
+            from sonar.compilation.passes.fusion.rocm_aiter_fusion import (
                 RocmAiterSiluMulFp8GroupQuantFusionPass,
             )
 
-            m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+            m.setenv("SONAR_ROCM_USE_AITER", "1")
             rocm_aiter_ops.refresh_env_variables()
             fusion_passes += [RocmAiterSiluMulFp8GroupQuantFusionPass(config)]
 

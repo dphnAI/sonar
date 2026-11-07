@@ -5,16 +5,16 @@ import numpy as np
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.sparse_attn_indexer as sparse_indexer
-from aphrodite.distributed.parallel_state import GroupCoordinator
-from aphrodite.platforms import current_platform
-from aphrodite.utils.import_utils import has_cutedsl
-from aphrodite.v1.attention.backends.mla.indexer import build_prefill_chunk_metadata
-from aphrodite.v1.attention.backends.mla.sparse_utils import (
+import sonar.model_executor.layers.sparse_attn_indexer as sparse_indexer
+from sonar.distributed.parallel_state import GroupCoordinator
+from sonar.platforms import current_platform
+from sonar.utils.import_utils import has_cutedsl
+from sonar.v1.attention.backends.mla.indexer import build_prefill_chunk_metadata
+from sonar.v1.attention.backends.mla.sparse_utils import (
     triton_filter_and_convert_dcp_index,
 )
-from aphrodite.v1.attention.backends.utils import get_dcp_local_seq_lens
-from aphrodite.v1.attention.ops.dcp import CPTritonContext, correct_attn_out
+from sonar.v1.attention.backends.utils import get_dcp_local_seq_lens
+from sonar.v1.attention.ops.dcp import CPTritonContext, correct_attn_out
 
 
 def _local_count(length: int, rank: int, world: int, interleave: int) -> int:
@@ -464,7 +464,7 @@ def test_sparse_decode_dcp_persistent_topk_matches_non_dcp():
 def test_cutedsl_dcp_candidate_pack_and_select_matches_reference(
     use_row_starts: bool,
 ):
-    from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+    from sonar.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
         pack_dcp_topk_candidates_cutedsl,
         stable_topk_from_gathered_candidates_cutedsl,
     )
@@ -890,11 +890,11 @@ def test_sparse_decode_dcp_short_context_matches_non_dcp():
 @pytest.mark.parametrize("req_lens", [[7], [8, 8], [1, 9], [63, 64, 65], [255, 256, 257], [256, 1, 2730]])
 def test_pcp_plan_deinterleave_restores_global_order(monkeypatch, dcp_world_size, interleave, rows_per_req, req_lens):
     """Gathering block-interleaved shards must restore each request's token order."""
-    from aphrodite.v1.attention.backends.mla.indexer import build_pcp_global_chunk_plan
+    from sonar.v1.attention.backends.mla.indexer import build_pcp_global_chunk_plan
 
-    monkeypatch.setattr("aphrodite.v1.attention.backends.mla.indexer.PIN_MEMORY", False)
+    monkeypatch.setattr("sonar.v1.attention.backends.mla.indexer.PIN_MEMORY", False)
     monkeypatch.setattr(
-        "aphrodite.v1.attention.backends.mla.indexer.async_tensor_h2d",
+        "sonar.v1.attention.backends.mla.indexer.async_tensor_h2d",
         lambda x, device: x.to(device),
     )
     scheduled = np.array(req_lens, dtype=np.int64)

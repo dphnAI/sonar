@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from aphrodite.multimodal.inputs import PlaceholderRange
+from sonar.multimodal.inputs import PlaceholderRange
 
 
 @pytest.mark.parametrize(

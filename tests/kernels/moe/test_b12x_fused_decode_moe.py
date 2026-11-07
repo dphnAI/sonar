@@ -5,9 +5,9 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode
-from aphrodite.platforms import current_platform
-from aphrodite.utils.b12x import get_b12x_fused_moe
+from sonar.model_executor.layers.fused_moe import b12x_fused_decode
+from sonar.platforms import current_platform
+from sonar.utils.b12x import get_b12x_fused_moe
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_device_capability(120)

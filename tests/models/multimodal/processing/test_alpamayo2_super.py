@@ -4,11 +4,11 @@
 import pytest
 from PIL import Image
 
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.model_executor.models.alpamayo2_super import (
+from sonar.exceptions import SonarValidationError
+from sonar.model_executor.models.alpamayo2_super import (
     Alpamayo2SuperForConditionalGeneration,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal import MULTIMODAL_REGISTRY
 
 from ...utils import build_model_context
 
@@ -59,12 +59,12 @@ def test_images_use_the_config_pixel_budget(processor) -> None:
 
 def test_video_input_is_rejected(processor) -> None:
     assert set(processor.info.supported_mm_limits) == {"image"}
-    with pytest.raises(AphroditeValidationError, match="At most 0 video"):
+    with pytest.raises(SonarValidationError, match="At most 0 video"):
         processor.info.validate_num_items("video", 1)
 
 
 def test_weights_mapper_unwraps_vlm_and_drops_expert() -> None:
-    mapper = Alpamayo2SuperForConditionalGeneration.hf_to_aphrodite_mapper
+    mapper = Alpamayo2SuperForConditionalGeneration.hf_to_sonar_mapper
     names = [
         "vlm.model.language_model.layers.0.mlp.up_proj.weight",
         "vlm.model.visual.blocks.0.attn.qkv.weight",

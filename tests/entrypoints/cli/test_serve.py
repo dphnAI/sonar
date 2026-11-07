@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for the ``aphrodite serve`` CLI subcommand."""
+"""Unit tests for the ``sonar serve`` CLI subcommand."""
 
 import argparse
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aphrodite.entrypoints.cli.serve import run_headless
+from sonar.entrypoints.cli.serve import run_headless
 
 
 class _StopAfterEngineConfig(Exception):
@@ -24,10 +24,10 @@ def test_headless_imports_reasoning_parser_plugin_before_engine_config():
 
     with (
         patch(
-            "aphrodite.entrypoints.cli.serve.aphrodite.AsyncEngineArgs.from_cli_args",
+            "sonar.entrypoints.cli.serve.sonar.AsyncEngineArgs.from_cli_args",
             return_value=engine_args,
         ),
-        patch("aphrodite.reasoning.ReasoningParserManager.import_reasoning_parser") as import_plugin,
+        patch("sonar.reasoning.ReasoningParserManager.import_reasoning_parser") as import_plugin,
     ):
 
         def create_engine_config(**kwargs):

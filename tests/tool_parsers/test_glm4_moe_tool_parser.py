@@ -5,13 +5,13 @@
 import json
 from typing import Any, TypedDict
 
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tool_parsers import ToolParserManager
-from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
+from sonar.tool_parsers import ToolParserManager
+from sonar.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
 from tests.parser.engine.replay_harness import MockTokenizer
 
 MODEL = "zai-org/GLM-4.5"

@@ -100,11 +100,11 @@ variants:
     hardware_overrides:
       mi355x:
         extra_env:
-          APHRODITE_USE_V2_MODEL_RUNNER: "1"
-          APHRODITE_ROCM_USE_AITER_FP8BMM: "0"
-          APHRODITE_ROCM_USE_AITER_FP4BMM: "0"
-          APHRODITE_ROCM_USE_AITER_RMSNORM: "0"
-          APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+          SONAR_USE_V2_MODEL_RUNNER: "1"
+          SONAR_ROCM_USE_AITER_FP8BMM: "0"
+          SONAR_ROCM_USE_AITER_FP4BMM: "0"
+          SONAR_ROCM_USE_AITER_RMSNORM: "0"
+          SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 
 compatible_strategies:
   - single_node_tp
@@ -133,11 +133,11 @@ hardware_overrides:
       - "--moe-backend"
       - "aiter"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
       # Loading the FP8 checkpoint on 8x MI325X can outlast the Rust
       # frontend's 600 s default wait for the engine.
-      APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+      SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 strategy_overrides: {}
 
@@ -154,12 +154,12 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.24.0 for the `glm47` reasoning parser.
+  - **Sonar version:** >= 0.24.0 for the `glm47` reasoning parser.
     Use the latest main branch if you need tool calling + MTP simultaneously.
   - **Hardware (FP8):** 8xH200 or 8xH20 (141GB × 8)
-  - **DeepGEMM (FP8, NVIDIA):** install via `install_deepgemm.sh` from Aphrodite repo
+  - **DeepGEMM (FP8, NVIDIA):** install via `install_deepgemm.sh` from Sonar repo
   - **Hardware (FP8, AMD):** 8x MI325X (256GB × 8) or 8x MI350X (288GB × 8), `vllm/vllm-openai-rocm:nightly-92044241a02f05de51420d654daf669de20b4691`; uses AITER, not DeepGEMM
-  - **Hardware (MXFP4):** 8x MI355X (gfx950), Aphrodite >= 0.24.0, `vllm/vllm-openai-rocm:latest`
+  - **Hardware (MXFP4):** 8x MI355X (gfx950), Sonar >= 0.24.0, `vllm/vllm-openai-rocm:latest`
 
   ### Using Docker
 
@@ -179,12 +179,12 @@ guide: |
 
   Use `vllm/vllm-openai:latest-cu129` for CUDA 12.x.
 
-  ### Install Aphrodite from Source
+  ### Install Sonar from Source
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install "aphrodite-engine==0.24.0" --torch-backend=auto
+  uv pip install "sonar==0.24.0" --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   uv pip install "transformers>=5.4.0"
   ```
 
@@ -193,7 +193,7 @@ guide: |
   ### FP8 on 8xH200 with MTP
 
   ```bash
-  aphrodite serve zai-org/GLM-5.1-FP8 \
+  sonar serve zai-org/GLM-5.1-FP8 \
        --tensor-parallel-size 8 \
        --speculative-config.method mtp \
        --speculative-config.num_speculative_tokens 3 \
@@ -207,8 +207,8 @@ guide: |
   ### FP8 on AMD MI325X and MI350X
 
   Select **MI325X** or **MI350X** and the **FP8** variant in the command builder above. The
-  generated command adds `APHRODITE_ROCM_USE_AITER=1`, `APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`,
-  `--linear-backend aiter` and `--moe-backend aiter`, and raises `APHRODITE_ENGINE_READY_TIMEOUT_S`
+  generated command adds `SONAR_ROCM_USE_AITER=1`, `SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1`,
+  `--linear-backend aiter` and `--moe-backend aiter`, and raises `SONAR_ENGINE_READY_TIMEOUT_S`
   because loading the weights can take longer than the Rust frontend's 600 s default. The
   Docker command uses the nightly build
   `vllm/vllm-openai-rocm:nightly-92044241a02f05de51420d654daf669de20b4691`.
@@ -265,7 +265,7 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/GLM-5.1-FP8 \
     --dataset-name random \
     --random-input 8000 \
@@ -278,7 +278,7 @@ guide: |
   ## Troubleshooting
 
   - **Accuracy drift:** Prefer the 0.19.0 stable release for best accuracy.
-  - **Tool calling + MTP:** If both are needed, use the latest Aphrodite main branch.
+  - **Tool calling + MTP:** If both are needed, use the latest Sonar main branch.
   - **FP8 installation (NVIDIA):** DeepGEMM required for FP8 performance.
   - **MXFP4 (MI355X):** MTP speculative decoding isn't yet supported on this checkpoint/kernel path. Mooncake and LMCache KV-store offload are still untested on MI355X — worth a check before leaning on them in production.
 

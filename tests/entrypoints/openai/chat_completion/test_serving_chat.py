@@ -13,46 +13,46 @@ import pytest_asyncio
 from openai import OpenAI
 from starlette.requests import Request
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported
-from aphrodite.config import MultiModalConfig
-from aphrodite.entrypoints.generate.base.protocol import (
+from sonar._aiter_ops import is_aiter_found_and_supported
+from sonar.config import MultiModalConfig
+from sonar.entrypoints.generate.base.protocol import (
     DeltaMessage,
     RequestResponseMetadata,
 )
-from aphrodite.entrypoints.generate.base.serving import build_per_request_timing_metrics
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.generate.base.serving import build_per_request_timing_metrics
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ChatCompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.chat_completion.serving import (
+from sonar.entrypoints.openai.chat_completion.serving import (
     OpenAIServingChat,
     _get_mm_token_counts,
     _make_completion_tokens_details,
     _make_prompt_tokens_details,
 )
-from aphrodite.entrypoints.openai.models.serving import (
+from sonar.entrypoints.openai.models.serving import (
     BaseModelPath,
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.openai.parser.harmony_utils import get_encoding
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.utils.tool_calls_utils import resolve_finish_reason
-from aphrodite.exceptions import AphroditeValidationError, GenerationError, QueueOverflowError
-from aphrodite.inputs import TokensPrompt
-from aphrodite.logprobs import Logprob
-from aphrodite.multimodal.inputs import PlaceholderRange
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.parser import HarmonyParser
-from aphrodite.renderers.hf import HfRenderer
-from aphrodite.renderers.mistral import MistralRenderer
-from aphrodite.renderers.online_renderer import OnlineRenderer
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tokenizers.mistral import MistralTokenizer
-from aphrodite.tokenizers.registry import cached_tokenizer_from_config
-from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.stats import RequestStateStats
+from sonar.entrypoints.openai.parser.harmony_utils import get_encoding
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.utils.tool_calls_utils import resolve_finish_reason
+from sonar.exceptions import GenerationError, QueueOverflowError, SonarValidationError
+from sonar.inputs import TokensPrompt
+from sonar.logprobs import Logprob
+from sonar.multimodal.inputs import PlaceholderRange
+from sonar.outputs import CompletionOutput, RequestOutput
+from sonar.parser import HarmonyParser
+from sonar.renderers.hf import HfRenderer
+from sonar.renderers.mistral import MistralRenderer
+from sonar.renderers.online_renderer import OnlineRenderer
+from sonar.tokenizers import get_tokenizer
+from sonar.tokenizers.mistral import MistralTokenizer
+from sonar.tokenizers.registry import cached_tokenizer_from_config
+from sonar.v1.engine.async_llm import AsyncLLM
+from sonar.v1.metrics.stats import RequestStateStats
 from tests.entrypoints.openai.utils import (
     accumulate_streaming_response,
     verify_chat_response,
@@ -146,7 +146,7 @@ def gptoss_speculative_server(default_server_args: list[str]):
     # https://github.com/vllm-project/vllm/issues/32434
     env_dict = None
     if is_aiter_found_and_supported():
-        env_dict = {"APHRODITE_ROCM_USE_AITER": "1"}
+        env_dict = {"SONAR_ROCM_USE_AITER": "1"}
     with RemoteOpenAIServer(GPT_OSS_MODEL_NAME, server_args, env_dict=env_dict, max_wait_seconds=480) as remote_server:
         yield remote_server
 
@@ -557,14 +557,14 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockAphroditeConfig:
+class MockSonarConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -1755,7 +1755,7 @@ def test_serving_chat_starts_without_tokenizer():
     mock_engine = _build_mock_engine()
     mock_engine.model_config = MockModelConfig(skip_tokenizer_init=True)
     mock_engine.renderer = HfRenderer(
-        MockAphroditeConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
         None,
     )
 
@@ -1788,7 +1788,7 @@ async def test_serving_chat_mistral_token_ids_prompt_is_validated(
 
     mock_tokenizer = MagicMock(spec=MistralTokenizer)
     mock_renderer = MistralRenderer(
-        MockAphroditeConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
     # Exercise the renderer path that returns token IDs directly.
@@ -1835,7 +1835,7 @@ async def test_serving_chat_mistral_token_ids_prompt_too_long_is_rejected(
 
     mock_tokenizer = MagicMock(spec=MistralTokenizer)
     mock_renderer = MistralRenderer(
-        MockAphroditeConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
+        MockSonarConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
     # prompt_token_ids length == max_model_len should be rejected for
@@ -1860,7 +1860,7 @@ async def test_serving_chat_mistral_token_ids_prompt_too_long_is_rejected(
         max_tokens=1,
     )
 
-    with pytest.raises(AphroditeValidationError):
+    with pytest.raises(SonarValidationError):
         await serving_chat.create_chat_completion(req)
 
 
@@ -1977,7 +1977,7 @@ async def test_serving_chat_data_parallel_rank_extraction():
     # Mock the generate method to return an async generator
     async def mock_generate(*args, **kwargs):
         # Yield a fake RequestOutput
-        from aphrodite.outputs import CompletionOutput, RequestOutput
+        from sonar.outputs import CompletionOutput, RequestOutput
 
         yield RequestOutput(
             request_id="test-request",
@@ -2064,7 +2064,7 @@ async def test_beam_search_preserves_request_priority(header):
         watermarking=False,
         priority=-9,
     )
-    headers = [] if header is None else [(b"x-aphrodite-priority", header.encode())]
+    headers = [] if header is None else [(b"x-sonar-priority", header.encode())]
     response = await serving.create_chat_completion(request, Request({"type": "http", "headers": headers}))
 
     assert isinstance(response, ChatCompletionResponse)
@@ -3004,7 +3004,7 @@ def test_make_request_with_harmony_rejects_invalid_kv_transfer_prompt_token_ids(
         messages=[{"role": "user", "content": "hi"}],
         kv_transfer_params={"prompt_token_ids": ids},
     )
-    with pytest.raises(AphroditeValidationError, match="non-negative integers"):
+    with pytest.raises(SonarValidationError, match="non-negative integers"):
         online_renderer._make_request_with_harmony(request)
 
 
@@ -3019,7 +3019,7 @@ async def test_chat_kv_transfer_prompt_token_ids_rejects_invalid_ids(ids):
         messages=[{"role": "user", "content": "hi"}],
         kv_transfer_params={"prompt_token_ids": ids},
     )
-    with pytest.raises(AphroditeValidationError, match="non-negative integers"):
+    with pytest.raises(SonarValidationError, match="non-negative integers"):
         await serving_chat.render_chat_request(request)
 
 
@@ -3044,7 +3044,7 @@ async def test_chat_kv_transfer_prompt_token_ids_rejection_notifies_kv_connector
         stream=stream,
         kv_transfer_params={"prompt_token_ids": ids, "do_remote_prefill": True},
     )
-    with pytest.raises(AphroditeValidationError, match=match):
+    with pytest.raises(SonarValidationError, match=match):
         await serving_chat.create_chat_completion(request)
 
     mock_engine.notify_kv_transfer_request_rejected.assert_awaited_once_with(
@@ -3216,7 +3216,7 @@ async def test_non_streaming_finish_reason_matches_tool_calls(
     serving_chat = _build_serving_chat(_build_mock_engine(), tool_parser="hermes", enable_auto_tools=True)
     assert serving_chat.parser_cls is not None
     # Parse required/named calls from the native <tool_call> format regardless
-    # of APHRODITE_ENFORCE_STRICT_TOOL_CALLING, so one text serves every case.
+    # of SONAR_ENFORCE_STRICT_TOOL_CALLING, so one text serves every case.
     monkeypatch.setattr(serving_chat.parser_cls.tool_parser_cls, "supports_required_and_named", False)
 
     tokenizer = get_tokenizer(MODEL_NAME)

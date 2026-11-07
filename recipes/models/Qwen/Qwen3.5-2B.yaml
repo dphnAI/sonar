@@ -80,15 +80,15 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite version:** >= 0.17.0
+  - **Sonar version:** >= 0.17.0
   - **Hardware:** single 8 GB GPU or Intel Arc Pro B60/B70
 
-  ### Install Aphrodite
+  ### Install Sonar
 
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --torch-backend=auto
+  uv pip install -U sonar --extra-index-url https://sonar.dphn.ai/whl/release/cuda/x86_64/simple --index-strategy first-index --torch-backend cu130
   ```
 
   ### Docker
@@ -99,7 +99,7 @@ guide: |
   ## Launching the Server
 
   ```bash
-  aphrodite serve Qwen/Qwen3.5-2B \
+  sonar serve Qwen/Qwen3.5-2B \
     --max-model-len 262144 \
     --reasoning-parser qwen3
   ```
@@ -107,7 +107,7 @@ guide: |
   ### Docker (Intel XPU B60 / B70)
 
   Validated on 1× Intel Arc Pro B60 / B70 (B60 24 GB, B70 32 GB per card) with the
-  official Aphrodite XPU image `vllm/vllm-openai-xpu:latest`.
+  official Sonar XPU image `vllm/vllm-openai-xpu:latest`.
 
   ```bash
   docker run --device /dev/dri \

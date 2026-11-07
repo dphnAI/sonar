@@ -6,15 +6,15 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.v1.worker.cpu.sampler import CPUSampler
-from aphrodite.v1.worker.cpu.states import CPURequestState
+from sonar.config import SonarConfig
+from sonar.platforms import CpuArchEnum, current_platform
+from sonar.sampling_params import SamplingParams
+from sonar.triton_utils import HAS_TRITON
+from sonar.v1.worker.cpu.sampler import CPUSampler
+from sonar.v1.worker.cpu.states import CPURequestState
 
 if current_platform.is_cpu():
-    import aphrodite._C  # noqa: F401
+    import sonar._C  # noqa: F401
 
 pytestmark = pytest.mark.skipif(
     not current_platform.is_cpu() or HAS_TRITON or current_platform.get_cpu_architecture() == CpuArchEnum.X86,
@@ -34,7 +34,7 @@ def _make_sampler(params: SamplingParams, tokens: list[int], prompt_len: int) ->
         device=torch.device("cpu"),
     )
     sampler = CPUSampler(
-        aphrodite_config=AphroditeConfig(),
+        sonar_config=SonarConfig(),
         max_num_reqs=4,
         vocab_size=VOCAB_SIZE,
         device=torch.device("cpu"),

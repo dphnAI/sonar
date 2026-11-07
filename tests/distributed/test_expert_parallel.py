@@ -6,8 +6,8 @@ from typing import Literal, NamedTuple
 
 import pytest
 
-from aphrodite.config.model import RunnerOption
-from aphrodite.logger import init_logger
+from sonar.config.model import RunnerOption
+from sonar.logger import init_logger
 
 from ..utils import compare_two_settings, create_new_process_for_each_test
 
@@ -161,7 +161,7 @@ def _compare_tp(
         common_args.extend(["--hf-overrides", hf_overrides])
 
     ep_env = {
-        "APHRODITE_TEST_ENABLE_EP": "1",
+        "SONAR_TEST_ENABLE_EP": "1",
     }
 
     ep_args = [
@@ -174,7 +174,7 @@ def _compare_tp(
 
     # compare without expert parallelism
     tp_env = {
-        "APHRODITE_TEST_ENABLE_EP": "0",
+        "SONAR_TEST_ENABLE_EP": "0",
     }
 
     tp_args = [

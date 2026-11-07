@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
-from aphrodite.platforms import current_platform
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
+from sonar.platforms import current_platform
 
 from ..utils import (
     _skip_if_insufficient_gpus_for_tp,
@@ -26,7 +26,7 @@ def _run_eagle_correctness(
     enable_chunked_prefill: bool,
     model_impl: str,
     attn_backend: str,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Compare the outputs of an original LLM and a speculative LLM
     which should be the same when using eagle speculative decoding.
@@ -55,20 +55,20 @@ def _run_eagle_correctness(
         pytest.skip("TRITON_ATTN does not support multi-token eagle spec decode on current platform")
 
     with monkeypatch.context() as m:
-        m.setenv("APHRODITE_MLA_DISABLE", "1")
+        m.setenv("SONAR_MLA_DISABLE", "1")
 
         if attn_backend == "ROCM_AITER_FA" and current_platform.is_rocm():
             if "deepseek" in model_name.lower():
-                m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-                m.delenv("APHRODITE_MLA_DISABLE", raising=False)
+                m.setenv("SONAR_ROCM_USE_AITER", "1")
+                m.delenv("SONAR_MLA_DISABLE", raising=False)
                 attention_config = {"backend": "ROCM_AITER_MLA"}
             else:
-                m.setenv("APHRODITE_ROCM_USE_AITER", "1")
+                m.setenv("SONAR_ROCM_USE_AITER", "1")
 
         max_model_len = 2048
         max_num_batched_tokens = 128 if enable_chunked_prefill else max_model_len
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             trust_remote_code=False,
@@ -85,7 +85,7 @@ def _run_eagle_correctness(
             )
             ref_outputs = ref_runner.llm.chat(test_prompts, sampling_config)
 
-        with aphrodite_runner(
+        with sonar_runner(
             model_name,
             block_size=None,
             trust_remote_code=True,
@@ -105,7 +105,7 @@ def _run_eagle_correctness(
             **extra_kwargs,
         ) as spec_runner:
             # EAGLE/EAGLE3 supports async scheduling by default.
-            has_async = spec_runner.llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
+            has_async = spec_runner.llm.llm_engine.sonar_config.scheduler_config.async_scheduling
             assert has_async, (
                 f"Expected async scheduling for {method}: target={model_name}, "
                 f"draft={spec_model_name}, backend={attn_backend}; got {has_async}"

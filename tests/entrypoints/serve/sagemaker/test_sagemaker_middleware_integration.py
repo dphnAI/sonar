@@ -3,7 +3,7 @@
 
 """Integration test for middleware loader functionality.
 
-Tests that customer middlewares get called correctly with a Aphrodite server.
+Tests that customer middlewares get called correctly with a Sonar server.
 """
 
 import os
@@ -20,7 +20,7 @@ from .conftest import (
 
 
 class TestMiddlewareIntegration:
-    """Integration test for middleware with Aphrodite server."""
+    """Integration test for middleware with Sonar server."""
 
     def setup_method(self):
         """Setup for each test - simulate fresh server startup."""
@@ -46,8 +46,8 @@ class TestMiddlewareIntegration:
             pytest.skip("model-hosting-container-standards not available")
 
     @pytest.mark.asyncio
-    async def test_customer_middleware_with_aphrodite_server(self):
-        """Test that customer middlewares work with actual Aphrodite server.
+    async def test_customer_middleware_with_sonar_server(self):
+        """Test that customer middlewares work with actual Sonar server.
 
         Tests decorator-based middlewares (@custom_middleware, @input_formatter,
         @output_formatter)

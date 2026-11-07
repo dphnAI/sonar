@@ -11,7 +11,7 @@ use clap::builder::{TypedValueParser, ValueParserFactory};
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Marker type for frontend-owned `serve` arguments that `aphrodite-rs` recognizes
+/// Marker type for frontend-owned `serve` arguments that `sonar-rs` recognizes
 /// but does not support yet.
 ///
 /// When passed as JSON args, it can be deserialized from any value, and
@@ -83,7 +83,7 @@ impl TypedValueParser for NoopValueParser {
     }
 }
 
-/// Frontend-owned Python `serve` arguments that `aphrodite-rs` recognizes but does
+/// Frontend-owned Python `serve` arguments that `sonar-rs` recognizes but does
 /// not support yet.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Default, Args, Serialize, Deserialize)]
@@ -133,12 +133,12 @@ Remove these arguments to continue."
     }
 }
 
-/// Frontend-owned Python `aphrodite serve` top-level arguments that `aphrodite-rs`
+/// Frontend-owned Python `sonar serve` top-level arguments that `sonar-rs`
 /// recognizes but does not support yet.
 ///
-/// Source of truth in Python Aphrodite:
-/// - `aphrodite.entrypoints.common.cli_args.make_arg_parser(...)`
-/// - `aphrodite.entrypoints.cli.serve.ServeSubcommand.subparser_init(...)`
+/// Source of truth in Python Sonar:
+/// - `sonar.entrypoints.common.cli_args.make_arg_parser(...)`
+/// - `sonar.entrypoints.cli.serve.ServeSubcommand.subparser_init(...)`
 ///
 /// These are not part of `EngineArgs`, `AsyncEngineArgs`, `BaseFrontendArgs`,
 /// or `FrontendArgs`. They live on the `serve` command itself and control
@@ -158,17 +158,17 @@ pub struct TopLevelUnsupportedArgs {
     pub config: Option<Unsupported>,
 
     /// Launch a gRPC server instead of the HTTP OpenAI-compatible server.
-    /// Requires: pip install aphrodite[grpc].
+    /// Requires sonar[grpc] from the Sonar wheel index.
     #[arg(long, default_missing_value = "true", num_args = 0..=1)]
     pub grpc: Option<Unsupported>,
 }
 
-/// Frontend-owned Python engine arguments that `aphrodite-rs` recognizes but does
+/// Frontend-owned Python engine arguments that `sonar-rs` recognizes but does
 /// not support yet.
 ///
-/// Source of truth in Python Aphrodite:
-/// - `aphrodite.engine.arg_utils.EngineArgs.add_cli_args(...)`
-/// - `aphrodite.engine.arg_utils.AsyncEngineArgs.add_cli_args(...)`
+/// Source of truth in Python Sonar:
+/// - `sonar.engine.arg_utils.EngineArgs.add_cli_args(...)`
+/// - `sonar.engine.arg_utils.AsyncEngineArgs.add_cli_args(...)`
 ///
 /// These arguments are declared through the Python engine-args surface, but
 /// they are still frontend-owned: the API server / AsyncLLM layer reads them
@@ -203,7 +203,7 @@ pub struct EngineUnsupportedArgs {
     /// If `True`, enables passing text embeddings as inputs via the
     /// `prompt_embeds` key.
     ///
-    /// WARNING: The Aphrodite engine may crash if incorrect shape of embeddings is
+    /// WARNING: The Sonar engine may crash if incorrect shape of embeddings is
     /// passed. Only enable this flag for trusted users!
     #[arg(
         long,
@@ -222,7 +222,7 @@ pub struct EngineUnsupportedArgs {
     /// Overrides or sets generation config. e.g. `{"temperature": 0.5}`. If
     /// used with `--generation-config auto`, the override parameters will be
     /// merged with the default config from the model. If used with
-    /// `--generation-config aphrodite`, only the override parameters are used.
+    /// `--generation-config sonar`, only the override parameters are used.
     #[arg(long)]
     pub override_generation_config: Option<Unsupported>,
 
@@ -350,12 +350,12 @@ pub struct EngineUnsupportedArgs {
     pub aggregate_engine_logging: Option<Unsupported>,
 }
 
-/// Frontend-owned Python OpenAI server arguments that `aphrodite-rs` recognizes but
+/// Frontend-owned Python OpenAI server arguments that `sonar-rs` recognizes but
 /// does not support yet.
 ///
-/// Source of truth in Python Aphrodite:
-/// - `aphrodite.entrypoints.common.cli_args.BaseFrontendArgs`
-/// - `aphrodite.entrypoints.common.cli_args.FrontendArgs`
+/// Source of truth in Python Sonar:
+/// - `sonar.entrypoints.common.cli_args.BaseFrontendArgs`
+/// - `sonar.entrypoints.common.cli_args.FrontendArgs`
 ///
 /// These are not engine args. They belong to the Python OpenAI-compatible
 /// frontend / API-server layer itself, for example chat-template configuration,
@@ -405,8 +405,8 @@ pub struct ServerUnsupportedArgs {
     #[arg(long)]
     pub tool_server: Option<Unsupported>,
 
-    /// Path to logging config JSON file for both aphrodite and uvicorn
-    #[arg(long, /* env = "APHRODITE_LOGGING_CONFIG_PATH" */)]
+    /// Path to logging config JSON file for both sonar and uvicorn
+    #[arg(long, /* env = "SONAR_LOGGING_CONFIG_PATH" */)]
     pub log_config_file: Option<Unsupported>,
 
     /// If set to True, enable tracking server_load_metrics in the app state.
@@ -430,7 +430,7 @@ pub struct ServerUnsupportedArgs {
     /// If set to True, log the stack trace of error responses
     #[arg(
         long,
-        // env = "APHRODITE_SERVER_DEV_MODE",
+        // env = "SONAR_SERVER_DEV_MODE",
         visible_alias = "no-log-error-stack",
         default_missing_value = "true",
         num_args = 0..=1
@@ -471,8 +471,8 @@ pub struct ServerUnsupportedArgs {
 
     /// Additional ASGI middleware to apply to the app. We accept multiple
     /// --middleware arguments. The value should be an import path. If a
-    /// function is provided, Aphrodite will add it to the server using
-    /// `@app.middleware('http')`. If a class is provided, Aphrodite will
+    /// function is provided, Sonar will add it to the server using
+    /// `@app.middleware('http')`. If a class is provided, Sonar will
     /// add it to the server using `app.add_middleware()`.
     #[arg(long)]
     pub middleware: Option<Unsupported>,
@@ -501,7 +501,7 @@ pub struct ServerUnsupportedArgs {
     pub h11_max_header_count: Option<Unsupported>,
 
     /// Enable offline FastAPI documentation for air-gapped environments.
-    /// Uses vendored static assets bundled with Aphrodite.
+    /// Uses vendored static assets bundled with Sonar.
     #[arg(
         long,
         visible_alias = "no-enable-offline-docs",

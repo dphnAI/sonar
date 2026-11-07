@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from aphrodite.v1.attention.backends.utils import reorder_batch_to_split_decodes_and_prefills
+from sonar.v1.attention.backends.utils import reorder_batch_to_split_decodes_and_prefills
 
 
 class MockInputBatch:

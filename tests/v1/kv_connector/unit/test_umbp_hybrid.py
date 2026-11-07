@@ -9,14 +9,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp import (
+from sonar.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp import (
     scheduler as umbp_scheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.connector import (
     UMBPStoreConnector,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockIdentityCodec,
     BlockTransferPlan,
     KVLayoutPlanner,
@@ -29,24 +29,24 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     UMBPConnectorWorkerMetadata,
     UMBPNamespace,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime import (
     EmbeddedRuntime,
     UMBPRuntimeConfig,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
     UMBPRuntimeFactory,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.scheduler import (
     UMBPStoreConnectorScheduler,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.worker import (
     UMBPStoreConnectorWorker,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_utils import make_block_hash_with_group_id
-from aphrodite.v1.kv_cache_interface import (
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.utils import NULL_BLOCK_ID
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_utils import make_block_hash_with_group_id
+from sonar.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
     KVCacheGroupSpec,
     KVCacheTensor,
@@ -54,14 +54,14 @@ from aphrodite.v1.kv_cache_interface import (
     SlidingWindowSpec,
     SparseCacheRole,
 )
-from aphrodite.v1.kv_cache_spec_registry import KVCacheSpecRegistry
+from sonar.v1.kv_cache_spec_registry import KVCacheSpecRegistry
 from tests.v1.kv_connector.umbp_test_utils import (
     MemoryRuntime,
-    _aphrodite_config,
     _EmbeddedRuntime,
     _hybrid_kv_cache_config,
     _kv_cache_config,
     _SchedulerHandle,
+    _sonar_config,
     _WorkerHandle,
     make_request,
     make_scheduler_output,
@@ -80,7 +80,7 @@ def test_mamba_align_states_store_only_from_boundary_handoffs():
     """Positional Mamba blocks may be live or speculative; only core's
     boundary hand-offs name a committed state block."""
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _hybrid_kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("mamba-align")),
@@ -120,7 +120,7 @@ def test_restored_hybrid_prefix_rechecks_only_positional_groups():
     """A restored request's residency check must skip boundary-only groups."""
     handle = _SchedulerHandle([])
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         _hybrid_kv_cache_config(),
         handle,
         BlockIdentityCodec(UMBPNamespace("mamba-restore")),
@@ -146,7 +146,7 @@ def test_store_plans_store_each_groups_complete_blocks():
         KVCacheGroupSpec(["other"], replace(config.kv_cache_groups[0].kv_cache_spec, block_size=32))
     )
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         config,
         _SchedulerHandle({}),
         BlockIdentityCodec(UMBPNamespace("group-blocks")),
@@ -202,7 +202,7 @@ def test_store_plans_apply_core_reachable_block_mask(monkeypatch):
         return SparseStoreManager if isinstance(spec, SlidingWindowSpec) else original(spec, role)
 
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}),
+        _sonar_config({"mode": "embedded"}),
         config,
         _SchedulerHandle({}),
         BlockIdentityCodec(UMBPNamespace("store-mask")),
@@ -234,11 +234,11 @@ def test_single_sliding_window_stores_a_replayable_tail(use_eagle):
         sliding_window=32,
     )
     config.prefix_cache_retention_interval = 0
-    aphrodite_config = _aphrodite_config({})
-    aphrodite_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: use_eagle)
+    sonar_config = _sonar_config({})
+    sonar_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: use_eagle)
     codec = BlockIdentityCodec(UMBPNamespace("swa-replay"))
     handle = _SchedulerHandle({})
-    scheduler = UMBPStoreConnectorScheduler(aphrodite_config, config, handle, codec)
+    scheduler = UMBPStoreConnectorScheduler(sonar_config, config, handle, codec)
     request = make_request(
         "swa",
         num_tokens=65,
@@ -294,7 +294,7 @@ def test_external_chunked_local_hit_preserves_absolute_positions(chunk_object_re
     if not chunk_object_resident:
         del hits[codec.key(b"e", 1)]
     handle = _SchedulerHandle(hits)
-    scheduler = UMBPStoreConnectorScheduler(_aphrodite_config({"lookup_async": lookup_async}), config, handle, codec)
+    scheduler = UMBPStoreConnectorScheduler(_sonar_config({"lookup_async": lookup_async}), config, handle, codec)
     pool = BlockPool(8, True, 16)
     for group_id in (0, 1):
         identity = make_block_hash_with_group_id(hashes[0], group_id)
@@ -347,11 +347,11 @@ def test_eagle_lookup_includes_the_aligned_prompt_proof_block():
         )
     )
     config.prefix_cache_retention_interval = 0
-    aphrodite_config = _aphrodite_config({})
-    aphrodite_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: True)
+    sonar_config = _sonar_config({})
+    sonar_config.speculative_config = SimpleNamespace(use_eagle_block_drop=lambda: True)
     codec = BlockIdentityCodec(UMBPNamespace("eagle-proof"))
     handle = _SchedulerHandle({})
-    scheduler = UMBPStoreConnectorScheduler(aphrodite_config, config, handle, codec)
+    scheduler = UMBPStoreConnectorScheduler(sonar_config, config, handle, codec)
     request = make_request(
         "eagle",
         num_tokens=64,
@@ -396,7 +396,7 @@ def test_chunk_boundary_hit_without_transfers_is_synchronous():
         attention_chunk_size=64,
     )
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({}),
+        _sonar_config({}),
         config,
         _SchedulerHandle({}),
         BlockIdentityCodec(UMBPNamespace("empty-chunk")),
@@ -442,7 +442,7 @@ def test_hybrid_external_hit_keeps_local_sparse_checkpoint(
         }
     )
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"lookup_async": lookup_async}),
+        _sonar_config({"lookup_async": lookup_async}),
         config,
         handle,
         codec,
@@ -500,7 +500,7 @@ def test_draft_groups_must_be_restorable(monkeypatch):
         )
     )
     with pytest.raises(NotImplementedError, match="draft-model KV"):
-        UMBPStoreConnector(_aphrodite_config({"mode": "embedded"}), KVConnectorRole.SCHEDULER, config)
+        UMBPStoreConnector(_sonar_config({"mode": "embedded"}), KVConnectorRole.SCHEDULER, config)
 
 
 def test_hybrid_model_loads_asynchronously_even_when_sync_is_requested():
@@ -512,7 +512,7 @@ def test_hybrid_model_loads_asynchronously_even_when_sync_is_requested():
         codec.key(block_hashes[1], 1): True,
     }
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         _hybrid_kv_cache_config(),
         _SchedulerHandle(hits),
         codec,
@@ -535,7 +535,7 @@ def test_hybrid_lookup_uses_latest_mamba_checkpoint(lookup_async, monkeypatch):
         codec.key(block_hashes[1], 1): True,
     }
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "lookup_async": lookup_async}),
+        _sonar_config({"mode": "embedded", "lookup_async": lookup_async}),
         _hybrid_kv_cache_config(),
         _SchedulerHandle(hits),
         codec,
@@ -590,7 +590,7 @@ def test_hybrid_shadow_lookup_cleans_up_after_failure(monkeypatch, failure_stage
     """A failed query cannot leak shadow hits or consume pool capacity."""
     handle = _SchedulerHandle({})
     codec = BlockIdentityCodec(UMBPNamespace("shadow-cleanup"))
-    scheduler = UMBPStoreConnectorScheduler(_aphrodite_config({}), _hybrid_kv_cache_config(), handle, codec)
+    scheduler = UMBPStoreConnectorScheduler(_sonar_config({}), _hybrid_kv_cache_config(), handle, codec)
     request = make_request("r", num_tokens=33)
     handle.hits = {codec.key(h, g): True for h in request.block_hashes for g in (0, 1)}
     coordinator = scheduler._lookup_coordinator
@@ -643,7 +643,7 @@ def test_sparse_attention_indexer_forces_async_load(indexer):
         kv_cache_groups=[KVCacheGroupSpec(["layer1", "layer2"], spec)],
     )
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         config,
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("indexer")),
@@ -661,7 +661,7 @@ def test_scheduler_accepts_only_computed_hash_aligned_tail(boundary, monkeypatch
     # Core hashes requests in 4-token units.
     monkeypatch.setattr(umbp_scheduler, "resolve_kv_cache_block_sizes", lambda *args: (16, 4))
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         _kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("partial")),
@@ -693,7 +693,7 @@ def test_scheduler_accepts_only_computed_hash_aligned_tail(boundary, monkeypatch
 
 def test_scheduler_stores_exact_hybrid_boundary_state():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         _hybrid_kv_cache_config(),
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("hybrid")),
@@ -734,7 +734,7 @@ def test_scheduler_partial_prefix_loads_full_page_at_absolute_index(local_tokens
     monkeypatch.setattr(umbp_scheduler, "resolve_kv_cache_block_sizes", lambda *args: (16, 4))
     config = _kv_cache_config()
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {
                 "mode": "embedded",
                 "load_async": False,
@@ -765,7 +765,7 @@ def test_scheduler_partial_prefix_loads_full_page_at_absolute_index(local_tokens
 
 def test_hybrid_fine_hash_lookup_is_not_limited_by_gpu_page_count():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {"load_async": False, "enable_partial_hash_hits": True},
             prefix_match_unit=4,
         ),
@@ -788,7 +788,7 @@ def test_hybrid_fine_hash_lookup_is_not_limited_by_gpu_page_count():
 
 def test_finished_hybrid_tail_pins_full_pages_until_all_workers_finish():
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {"mode": "embedded", "load_async": False},
             prefix_match_unit=4,
             world_size=2,
@@ -879,7 +879,7 @@ def test_finished_hybrid_tail_restores_every_byte(socket_dir, device):
     layout = KVLayoutPlanner.from_kv_cache_config(config)
     descriptor = layout.describe(topology)
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config(
+        _sonar_config(
             {"enable_partial_hash_hits": True, "load_async": True},
             prefix_match_unit=4,
         ),
@@ -975,7 +975,7 @@ def test_eager_restored_prefix_rechecks_residency_per_group_and_rank(failure, re
     topology = RankTopology(tp_size=2)
     handle = _SchedulerHandle({})
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded"}, tensor_parallel_size=2, world_size=2),
+        _sonar_config({"mode": "embedded"}, tensor_parallel_size=2, world_size=2),
         config,
         handle,
         codec,
@@ -1020,7 +1020,7 @@ def test_eager_restored_prefix_rechecks_residency_per_group_and_rank(failure, re
         return plan
 
     monkeypatch.setattr(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.scheduler.BlockTransferPlan",
+        "sonar.distributed.kv_transfer.kv_connector.v1.umbp.scheduler.BlockTransferPlan",
         record_plan,
     )
     try:
@@ -1045,7 +1045,7 @@ def test_several_cache_groups_load_asynchronously():
     config = _kv_cache_config()
     config.kv_cache_groups.append(KVCacheGroupSpec(["other"], config.kv_cache_groups[0].kv_cache_spec))
     scheduler = UMBPStoreConnectorScheduler(
-        _aphrodite_config({"mode": "embedded", "load_async": False}),
+        _sonar_config({"mode": "embedded", "load_async": False}),
         config,
         _SchedulerHandle([]),
         BlockIdentityCodec(UMBPNamespace("groups-async")),

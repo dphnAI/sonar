@@ -12,13 +12,13 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-import aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 as mori_epv2
-import aphrodite.utils.import_utils as import_utils
-from aphrodite.config.parallel import resolve_mori_all2all
-from aphrodite.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
+import sonar.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 as mori_epv2
+import sonar.utils.import_utils as import_utils
+from sonar.config.parallel import resolve_mori_all2all
+from sonar.model_executor.layers.fused_moe.prepare_finalize.mori_epv2 import (
     MoriEPv2PrepareAndFinalize,
 )
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.network_utils import get_open_port
 
 
 class FakeOp:
@@ -138,8 +138,8 @@ def test_padding_tokens_are_routed_to_local_experts(monkeypatch):
 
 @pytest.mark.parametrize("world_size,lsa_size", [(8, 8), (8, 4)])
 def test_manager_requires_one_lsa_team(monkeypatch, world_size, lsa_size):
-    from aphrodite.distributed.device_communicators import all2all
-    from aphrodite.distributed.device_communicators.base_device_communicator import (
+    from sonar.distributed.device_communicators import all2all
+    from sonar.distributed.device_communicators.base_device_communicator import (
         All2AllManagerBase,
     )
 
@@ -201,8 +201,8 @@ def test_manager_requires_one_lsa_team(monkeypatch, world_size, lsa_size):
 
 
 def _unique_id_worker(rank, init_method):
-    from aphrodite.distributed.device_communicators import all2all
-    from aphrodite.distributed.device_communicators.base_device_communicator import (
+    from sonar.distributed.device_communicators import all2all
+    from sonar.distributed.device_communicators.base_device_communicator import (
         All2AllManagerBase,
     )
 
@@ -241,7 +241,7 @@ def test_unique_id_comes_from_the_ep_groups_first_rank():
 
 
 def test_experts_write_into_combine_staging_only_when_it_fits():
-    from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
+    from sonar.model_executor.layers.fused_moe.topk_weight_and_reduce import (
         TopKWeightAndReduceContiguous,
         TopKWeightAndReduceNoOP,
     )
@@ -284,7 +284,7 @@ def test_experts_it_cannot_feed_are_rejected(in_dtype, quant_dtype, quantizes_it
     if ok:
         prepare_finalize.post_init_setup(experts)
     else:
-        with pytest.raises(ValueError, match="APHRODITE_MORI_EP_V2=0"):
+        with pytest.raises(ValueError, match="SONAR_MORI_EP_V2=0"):
             prepare_finalize.post_init_setup(experts)
 
 
@@ -346,9 +346,9 @@ def _quark(qscheme):
         ({"sdma_picks_epv1": False}, {}, "aiter", {"MORI_ENABLE_SDMA": "1"}, True),
         ({}, {}, "aiter_mega_moe", {}, False),
         ({}, {"dtype": torch.float16}, "aiter", {}, False),
-        # An explicit APHRODITE_MORI_EP_V2 wins over the deployment checks.
-        ({}, {"dtype": torch.float16}, "aiter", {"APHRODITE_MORI_EP_V2": "1"}, True),
-        ({}, {}, "aiter", {"APHRODITE_MORI_EP_V2": "0"}, False),
+        # An explicit SONAR_MORI_EP_V2 wins over the deployment checks.
+        ({}, {"dtype": torch.float16}, "aiter", {"SONAR_MORI_EP_V2": "1"}, True),
+        ({}, {}, "aiter", {"SONAR_MORI_EP_V2": "0"}, False),
         # Already resolved: kept as is.
         ({"mori_ep_v2": True}, {"dtype": torch.float16}, "aiter", {}, True),
         # Other MoRI backends always run EPv1.
@@ -367,7 +367,7 @@ def _quark(qscheme):
     ],
 )
 def test_mori_picks_epv2_where_supported(monkeypatch, parallel, model, moe_backend, env, ep_v2):
-    monkeypatch.delenv("APHRODITE_MORI_EP_V2", raising=False)
+    monkeypatch.delenv("SONAR_MORI_EP_V2", raising=False)
     monkeypatch.delenv("MORI_ENABLE_SDMA", raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
@@ -418,17 +418,17 @@ def test_mori_epv2_needs_a_recent_mori(monkeypatch, modules, version, usable):
     ],
 )
 def test_mori_epv1_kernel_choice(monkeypatch, backend, internode, max_tokens, kernel):
-    from aphrodite.distributed.device_communicators import all2all
+    from sonar.distributed.device_communicators import all2all
 
     kernel_types = SimpleNamespace(IntraNode="IntraNode", InterNodeV1="InterNodeV1", InterNodeV1LL="InterNodeV1LL")
     fake_mori = SimpleNamespace(ops=SimpleNamespace(EpDispatchCombineKernelType=kernel_types))
     monkeypatch.setitem(sys.modules, "mori", fake_mori)
     monkeypatch.setitem(
         sys.modules,
-        "aphrodite.platforms.rocm",
+        "sonar.platforms.rocm",
         SimpleNamespace(on_gfx942=lambda: False, on_gfx950=lambda: True),
     )
-    monkeypatch.delenv("APHRODITE_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD", raising=False)
+    monkeypatch.delenv("SONAR_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD", raising=False)
     manager = object.__new__(all2all.MoriAll2AllManager)
     manager.internode = internode
     manager._all2all_backend = backend

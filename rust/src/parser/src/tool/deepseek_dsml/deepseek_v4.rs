@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
+use sonar_tokenizer::{DecodedText, DynTokenizer, Tokenizer};
 
 use super::{DeepSeekDsmlToolParser, DsmlTokens};
 use crate::tool::{Result, StructuralTagBuilder, Tool, ToolParser, ToolParserOutput};
@@ -83,8 +83,8 @@ mod tests {
 
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::Tokenizer as _;
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::Tokenizer as _;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::super::test_utils::{
         DsmlParserTestExt as _, collect_stream, decode, dedicated, ordinary, tokenizer,

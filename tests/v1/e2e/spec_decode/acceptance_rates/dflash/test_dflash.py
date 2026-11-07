@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from aphrodite.config import CompilationConfig
+from sonar.config import CompilationConfig
 from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k_offline
 from tests.utils import single_gpu_only
 
@@ -68,11 +68,11 @@ LAGUNA_DFLASH_NVFP4 = DFlashCorrectnessConfig(
 def test_dflash_reference_acceptance_lengths(
     monkeypatch: pytest.MonkeyPatch,
     use_mrv2: bool,
-    aphrodite_runner,
+    sonar_runner,
 ):
     run_acceptance_length_eval(
         monkeypatch,
-        aphrodite_runner,
+        sonar_runner,
         spec_config={
             "model": QWEN3_DFLASH.model,
             "trust_remote_code": True,
@@ -129,14 +129,14 @@ def test_dflash_correctness(
     monkeypatch: pytest.MonkeyPatch,
     config: DFlashCorrectnessConfig,
     use_mrv2: bool,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Guard GSM8K accuracy and batched acceptance length for DFlash models."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_mrv2 else "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_mrv2 else "0")
     if config.disable_flashinfer_sampler:
-        monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "0")
+        monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "0")
 
-    with aphrodite_runner(
+    with sonar_runner(
         config.model,
         block_size=None,
         trust_remote_code=True,

@@ -14,10 +14,10 @@ import logging
 import pytest
 import regex as re
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.renderers.params import ChatParams
-from aphrodite.v1.metrics import loggers as stat_loggers
-from aphrodite.v1.metrics.reader import Counter, Metric
+from sonar import LLM, SamplingParams
+from sonar.renderers.params import ChatParams
+from sonar.v1.metrics import loggers as stat_loggers
+from sonar.v1.metrics.reader import Counter, Metric
 from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 
 
@@ -42,18 +42,18 @@ def _get_counter_value(metrics: list[Metric], name: str):
 
 
 def _get_mm_cache_stats(metrics: list[Metric]):
-    mm_cache_queries = _get_counter_value(metrics, "aphrodite:mm_cache_queries")
-    mm_cache_hits = _get_counter_value(metrics, "aphrodite:mm_cache_hits")
+    mm_cache_queries = _get_counter_value(metrics, "sonar:mm_cache_queries")
+    mm_cache_hits = _get_counter_value(metrics, "sonar:mm_cache_hits")
     return mm_cache_queries, mm_cache_hits
 
 
-def _get_mm_cache_log(llm: LLM, caplog_aphrodite: pytest.LogCaptureFixture) -> float:
-    caplog_aphrodite.clear()
-    with caplog_aphrodite.at_level(logging.INFO, logger=stat_loggers.__name__):
+def _get_mm_cache_log(llm: LLM, caplog_sonar: pytest.LogCaptureFixture) -> float:
+    caplog_sonar.clear()
+    with caplog_sonar.at_level(logging.INFO, logger=stat_loggers.__name__):
         llm.llm_engine.do_log_stats()
 
-    assert len(caplog_aphrodite.records) == 1
-    msg = caplog_aphrodite.records[0].getMessage()
+    assert len(caplog_sonar.records) == 1
+    msg = caplog_sonar.records[0].getMessage()
 
     assert "MM cache hit rate" in msg
     match = re.search(r"MM cache hit rate: ([0-9.]+)%", msg)
@@ -67,8 +67,8 @@ def test_inject_into_mm_cache(
     num_gpus_available,
     image_urls,
     mm_processor_cache_type,
-    caplog_aphrodite,
-    aphrodite_runner,
+    caplog_sonar,
+    sonar_runner,
 ):
     """Test that inject_into_mm_cache() injects pre-processed mm_kwargs into
     the processor cache and MM cache hit metrics are updated correctly.
@@ -78,7 +78,7 @@ def test_inject_into_mm_cache(
     2. Extract cached kwargs, call inject_into_mm_cache with a new hash,
        then generate with a pre-rendered input -> verifies injection works
     """
-    with aphrodite_runner(
+    with sonar_runner(
         "llava-hf/llava-1.5-7b-hf",
         max_model_len=4096,
         max_num_seqs=5,
@@ -93,7 +93,7 @@ def test_inject_into_mm_cache(
 
         runner.llm.chat(_make_messages(image_urls[0]))
         assert _get_mm_cache_stats(runner.llm.get_metrics()) == (2, 1)
-        assert _get_mm_cache_log(runner.llm, caplog_aphrodite) == pytest.approx(50.0)
+        assert _get_mm_cache_log(runner.llm, caplog_sonar) == pytest.approx(50.0)
 
         # Step 2: Use a second image to get valid expanded tokens and
         # placeholder positions via the renderer.
@@ -134,7 +134,7 @@ def test_inject_into_mm_cache(
         # Verify cache was queried and injection happened
         queries_after = _get_mm_cache_stats(runner.llm.get_metrics())[0]
         assert queries_after > queries_before, "Cache should have been queried for the injected item"
-        mm_rate = _get_mm_cache_log(runner.llm, caplog_aphrodite)
+        mm_rate = _get_mm_cache_log(runner.llm, caplog_sonar)
         assert mm_rate >= 0.0, "MM cache hit rate should be reported"
 
 
@@ -142,12 +142,12 @@ def test_inject_into_mm_cache(
 def test_inject_into_mm_cache_without_cache(
     num_gpus_available,
     image_urls,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Test that inject_into_mm_cache works gracefully when processor cache
     is disabled (mm_processor_cache_gb=0). Should not crash.
     """
-    with aphrodite_runner(
+    with sonar_runner(
         "llava-hf/llava-1.5-7b-hf",
         max_model_len=4096,
         max_num_seqs=5,

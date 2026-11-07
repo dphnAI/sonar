@@ -16,7 +16,7 @@ import psutil
 import pytest
 from prometheus_client.parser import text_string_to_metric_families
 
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
@@ -128,12 +128,12 @@ async def _concurrent_request_loop(
 
 
 def _num_running_requests(metrics_text: str) -> float:
-    """Sum ``aphrodite:num_requests_running`` across the server's label sets."""
+    """Sum ``sonar:num_requests_running`` across the server's label sets."""
     total = 0.0
     for family in text_string_to_metric_families(metrics_text):
-        if family.name == "aphrodite:num_requests_running":
+        if family.name == "sonar:num_requests_running":
             for sample in family.samples:
-                if sample.name == "aphrodite:num_requests_running":
+                if sample.name == "sonar:num_requests_running":
                     total += sample.value
     return total
 
@@ -165,7 +165,7 @@ async def _wait_for_running_request(
 async def test_shutdown_on_engine_failure(tmp_path: Path):
     """Verify that API returns connection error when server process is killed.
 
-    Starts a Aphrodite server, kills it to simulate a crash, then verifies that
+    Starts a Sonar server, kills it to simulate a crash, then verifies that
     subsequent API calls fail appropriately.
     """
     port = get_open_port()
@@ -180,7 +180,7 @@ async def test_shutdown_on_engine_failure(tmp_path: Path):
                 # dtype, max-len etc set so that this can run in CI
                 sys.executable,
                 "-m",
-                "aphrodite.entrypoints.launchers.api_server.entry",
+                "sonar.entrypoints.launchers.api_server.entry",
                 "--model",
                 MODEL_NAME,
                 "--dtype",

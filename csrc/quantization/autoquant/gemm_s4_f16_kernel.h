@@ -23,7 +23,7 @@
 #include "gemm_template.h"
 #include "metric.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 template <typename T_BC, typename T_Q>
@@ -237,4 +237,4 @@ struct GemmKernel : public IGemmKernel<T_BC, T_Q> {
 };
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

@@ -49,7 +49,7 @@ guide: |
   ## Prerequisites
 
   - Hardware: Intel Xeon 6/Xeon 5 CPUs
-  - Aphrodite >= 0.4.2
+  - Sonar >= 0.4.2
 
   ### Docker (Intel Xeon 6 CPUs)
 
@@ -60,11 +60,11 @@ guide: |
   ## Intel Xeon 6
 
   ```bash
-  aphrodite serve microsoft/Phi-4-reasoning \
+  sonar serve microsoft/Phi-4-reasoning \
     --tensor-parallel-size 1
   ```
 
-  Docker (the image entrypoint is `aphrodite serve`):
+  Docker (the image entrypoint is `sonar serve`):
 
   ```bash
   docker run \
@@ -86,7 +86,7 @@ guide: |
   - `--max-num-seqs`: concurrency and scheduler-capacity tuning.
   - `--gpu-memory-utilization`: platform memory-budget tuning.
   - `--no-enable-prefix-caching`: workload/benchmark cache-policy tuning.
-  - `APHRODITE_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
+  - `SONAR_ENGINE_ITERATION_TIMEOUT_S`: operational runtime timeout.
 
   These settings may still appear in validated hardware-specific overrides. Tune
   them at deployment time based on platform resources, workload shape, and
@@ -95,4 +95,4 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/microsoft/Phi-4-reasoning)
-  - [Aphrodite CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)
+  - [Sonar CPU installation](https://docs.vllm.ai/en/latest/getting_started/installation/cpu/)

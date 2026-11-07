@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.platform_utils import is_uva_available
-from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
-from aphrodite.v1.worker.gpu import buffer_utils
-from aphrodite.v1.worker.gpu.buffer_utils import StagedWriteTensor
+from sonar.platforms import current_platform
+from sonar.utils.platform_utils import is_uva_available
+from sonar.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+from sonar.v1.worker.gpu import buffer_utils
+from sonar.v1.worker.gpu.buffer_utils import StagedWriteTensor
 
 DEVICE_TYPE = current_platform.device_type
 DEVICES = [f"{DEVICE_TYPE}:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]

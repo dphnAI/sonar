@@ -8,9 +8,9 @@ from itertools import product
 import torch
 from tqdm import tqdm
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
+from sonar.utils.torch_utils import set_random_seed
 
 from .common import (
     Config,
@@ -35,7 +35,7 @@ class Result(Enum):
 
 def rank_worker(
     pgi: ProcessGroupInfo,
-    aphrodite_config: AphroditeConfig,
+    sonar_config: SonarConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -61,9 +61,9 @@ def rank_worker(
         rank_tensors = RankTensors.make(cfgx, pgi)
 
         # modular kernel out
-        mk_out = run_modular_kernel(pgi, aphrodite_config, cfgx, weights, rank_tensors)
+        mk_out = run_modular_kernel(pgi, sonar_config, cfgx, weights, rank_tensors)
 
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             ref_out = reference_moe_impl(cfgx, weights, rank_tensors)
 
         torch.testing.assert_close(ref_out, mk_out, atol=3e-2, rtol=3e-2)
@@ -128,11 +128,11 @@ def make_feature_matrix(csv_file_path: str):
             print(f"Running config : {config.describe()} ...")
             try:
                 weights: WeightTensors = WeightTensors.make(config)
-                aphrodite_config, env_dict = config.make_env_data()
+                sonar_config, env_dict = config.make_env_data()
                 parallel_launch_with_config(
                     config.world_size,
                     rank_worker,
-                    aphrodite_config,
+                    sonar_config,
                     env_dict,
                     config,
                     weights,

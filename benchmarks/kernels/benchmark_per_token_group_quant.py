@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import torch
 
-from aphrodite.model_executor.layers.quantization.utils import fp8_utils, int8_utils
-from aphrodite.platforms import current_platform
+from sonar.model_executor.layers.quantization.utils import fp8_utils, int8_utils
+from sonar.platforms import current_platform
 
 
 @contextmanager
 def _triton_mode():
     """Temporarily force the Triton fallback path."""
-    with patch("aphrodite.platforms.current_platform.is_cuda", return_value=False):
+    with patch("sonar.platforms.current_platform.is_cuda", return_value=False):
         yield
 
 

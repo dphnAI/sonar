@@ -6,9 +6,9 @@ from unittest.mock import Mock
 
 import torch
 
-from aphrodite.model_executor.models.interfaces import supports_eagle3
-from aphrodite.models.kimi_k3.nvidia import model as kimi_model
-from aphrodite.models.kimi_k3.nvidia.model import (
+from sonar.model_executor.models.interfaces import supports_eagle3
+from sonar.models.kimi_k3.nvidia import model as kimi_model
+from sonar.models.kimi_k3.nvidia.model import (
     KimiK3ForConditionalGeneration,
     KimiLinearForCausalLM,
     KimiLinearModel,
@@ -187,7 +187,7 @@ def test_attn_res_stream_capture_receives_the_layer_outputs_in_order(monkeypatch
         lambda: SimpleNamespace(is_first_rank=True, is_last_rank=True),
     )
     monkeypatch.setattr(kimi_model, "attn_res", Mock(return_value=torch.zeros(1, 2)))
-    monkeypatch.setenv("APHRODITE_KIMI_K3_AUX_ATTN_RES_STREAM", "1")
+    monkeypatch.setenv("SONAR_KIMI_K3_AUX_ATTN_RES_STREAM", "1")
 
     capture = Mock(return_value=captured)
     monkeypatch.setattr(KimiLinearModel, "_capture_aux_hidden_stream", capture)

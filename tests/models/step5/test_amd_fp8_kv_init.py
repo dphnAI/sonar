@@ -4,7 +4,7 @@
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 from ..registry import HF_EXAMPLE_MODELS
 from ..utils import dummy_hf_overrides
@@ -14,15 +14,15 @@ pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm Ste
 ARCH = "Step5ForConditionalGeneration"
 
 
-def test_fp8_kv_block_size_32_initializes(aphrodite_runner, monkeypatch):
-    from aphrodite.platforms.rocm import on_mi3xx
+def test_fp8_kv_block_size_32_initializes(sonar_runner, monkeypatch):
+    from sonar.platforms.rocm import on_mi3xx
 
     if not on_mi3xx():
         pytest.skip("Step5 on ROCm requires MI300 or MI350")
     info = HF_EXAMPLE_MODELS.get_hf_info(ARCH)
     info.check_available_online(on_fail="skip")
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    with aphrodite_runner(
+    monkeypatch.setenv("SONAR_ENABLE_V1_MULTIPROCESSING", "0")
+    with sonar_runner(
         info.default,
         load_format="dummy",
         max_model_len=info.max_model_len,
@@ -39,7 +39,7 @@ def test_fp8_kv_block_size_32_initializes(aphrodite_runner, monkeypatch):
         max_num_seqs=4,
         limit_mm_per_prompt={"image": 0, "video": 0},
     ) as llm:
-        cache = llm.llm.llm_engine.aphrodite_config.cache_config
+        cache = llm.llm.llm_engine.sonar_config.cache_config
         assert cache.cache_dtype == "fp8"
         assert cache.block_size == 32
         out = llm.generate_greedy(["Hello"], max_tokens=4)

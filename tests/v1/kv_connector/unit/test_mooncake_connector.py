@@ -17,13 +17,13 @@ import pytest
 import torch
 import zmq.asyncio
 
-from aphrodite import envs
-from aphrodite.config import KVTransferConfig, set_current_aphrodite_config
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake import (
+from sonar import envs
+from sonar.config import KVTransferConfig, set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake import (
     mooncake_connector,
     mooncake_utils,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     _SHARED_REGION_GROUP_ID,
     KVConnectorRole,
     LeaseHeartbeat,
@@ -49,25 +49,25 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connect
     get_mooncake_bootstrap_addr,
     should_launch_bootstrap_server,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_utils import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_utils import (
     MooncakeBootstrapServer,
     RegisterWorkerPayload,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheLayout,
     MLAAttentionSpec,
 )
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.request import RequestStatus
 from tests.v1.attention.utils import dense_kv_cache_views
 
 from .utils import (
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
     maybe_update_block_size,
 )
 
@@ -181,8 +181,8 @@ def _make_test_kv_cache_config() -> KVCacheConfig:
     )
 
 
-def _make_worker_aphrodite_config(kv_role: str, kv_connector_extra_config: dict | None = None):
-    return create_aphrodite_config(
+def _make_worker_sonar_config(kv_role: str, kv_connector_extra_config: dict | None = None):
+    return create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role=kv_role,
         block_size=maybe_update_block_size(16),
@@ -446,12 +446,12 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
     monkeypatch,
 ):
     """Producer sends its PP layer shard to the matching consumer layer address."""
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer")
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = _make_worker_sonar_config("kv_producer")
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -524,11 +524,11 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
 
 def test_basic_interface():
     """Unit test for basic MooncakeConnector interface functionality."""
-    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
+    scheduler = create_scheduler(sonar_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -569,11 +569,11 @@ def test_basic_interface():
 
 def test_prompt_less_than_block_size():
     """Test that we can handle case where prompt is < block."""
-    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
+    scheduler = create_scheduler(sonar_config)
 
     # Half of a block.
-    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    BLOCK_SIZE = sonar_config.cache_config.block_size
     NUM_TOKENS = int(BLOCK_SIZE * 0.5)
 
     # Request will have 1 partial remote block.
@@ -714,19 +714,17 @@ async def test_register_worker_recovers_from_slow_bootstrap_server(monkeypatch, 
 
     monkeypatch.setattr(MooncakeBootstrapServer, "register_worker", slow_register)
 
-    monkeypatch.setenv("APHRODITE_MOONCAKE_CONNECTOR_TIMEOUT", "0.5")
+    monkeypatch.setenv("SONAR_MOONCAKE_CONNECTOR_TIMEOUT", "0.5")
     monkeypatch.setattr(mooncake_connector, "_BOOTSTRAP_MAX_ATTEMPTS", 5)
 
     server = MooncakeBootstrapServer("127.0.0.1", 0)
     server.start()
     try:
-        monkeypatch.setenv("APHRODITE_MOONCAKE_BOOTSTRAP_PORT", str(server.port))
+        monkeypatch.setenv("SONAR_MOONCAKE_BOOTSTRAP_PORT", str(server.port))
         worker = _make_local_register_worker_stub()
         if external:
-            worker.aphrodite_config = _make_bootstrap_aphrodite_config(
-                bootstrap_server_address=f"127.0.0.1:{server.port}"
-            )
-            assert not should_launch_bootstrap_server(worker.aphrodite_config)
+            worker.sonar_config = _make_bootstrap_sonar_config(bootstrap_server_address=f"127.0.0.1:{server.port}")
+            assert not should_launch_bootstrap_server(worker.sonar_config)
         await MooncakeConnectorWorker.register_worker_with_bootstrap(worker)
         assert state["calls"] == 2
 
@@ -816,7 +814,7 @@ async def test_bootstrap_server(bootstrap_server: MooncakeBootstrapServer):
         assert "Engine ID mismatch" in response.text
 
 
-def _make_bootstrap_aphrodite_config(
+def _make_bootstrap_sonar_config(
     *,
     local_engines_only: bool = False,
     data_parallel_rank_local: int = 0,
@@ -843,7 +841,7 @@ def _make_bootstrap_aphrodite_config(
 
 def _make_local_register_worker_stub():
     return SimpleNamespace(
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             kv_transfer_config=None,
             parallel_config=SimpleNamespace(
                 local_engines_only=False,
@@ -865,7 +863,7 @@ def _make_local_register_worker_stub():
 
 def _make_register_worker_stub():
     return SimpleNamespace(
-        aphrodite_config=_make_bootstrap_aphrodite_config(),
+        sonar_config=_make_bootstrap_sonar_config(),
         hostname="127.0.0.1",
         side_channel_port=1234,
         engine_id="eng-1",
@@ -940,7 +938,7 @@ async def test_register_worker_raises_after_max_attempts(monkeypatch):
 async def test_sender_listener_failure_propagates_to_caller(monkeypatch):
     """A terminal registration failure must surface via the Future rather than
     leaving register_kv_caches blocked on its ready event."""
-    monkeypatch.setenv("APHRODITE_MOONCAKE_CONNECTOR_TIMEOUT", "0.1")
+    monkeypatch.setenv("SONAR_MOONCAKE_CONNECTOR_TIMEOUT", "0.1")
     monkeypatch.setattr(mooncake_connector, "_BOOTSTRAP_MAX_ATTEMPTS", 1)
 
     loop = asyncio.new_event_loop()
@@ -1007,23 +1005,22 @@ def test_should_launch_bootstrap_server_selects_single_owner(
     data_parallel_index: int,
     expected: bool,
 ):
-    aphrodite_config = _make_bootstrap_aphrodite_config(
+    sonar_config = _make_bootstrap_sonar_config(
         local_engines_only=local_engines_only,
         data_parallel_rank_local=data_parallel_rank_local,
         data_parallel_index=data_parallel_index,
     )
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake."
-            "mooncake_connector.get_tensor_model_parallel_rank",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_rank",
             return_value=tp_rank,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group"
         ) as mock_pp_group,
     ):
         mock_pp_group.return_value.rank_in_group = pp_rank
-        assert should_launch_bootstrap_server(aphrodite_config) is expected
+        assert should_launch_bootstrap_server(sonar_config) is expected
 
 
 @pytest.mark.parametrize(
@@ -1040,14 +1037,14 @@ def test_get_mooncake_bootstrap_addr_selects_expected_host(
     nnodes_within_dp: int,
     expected_host: str,
 ):
-    aphrodite_config = _make_bootstrap_aphrodite_config(
+    sonar_config = _make_bootstrap_sonar_config(
         local_engines_only=local_engines_only,
         nnodes_within_dp=nnodes_within_dp,
     )
 
-    assert get_mooncake_bootstrap_addr(aphrodite_config) == (
+    assert get_mooncake_bootstrap_addr(sonar_config) == (
         expected_host,
-        envs.APHRODITE_MOONCAKE_BOOTSTRAP_PORT,
+        envs.SONAR_MOONCAKE_BOOTSTRAP_PORT,
     )
 
 
@@ -1056,13 +1053,13 @@ def test_get_mooncake_bootstrap_addr_selects_expected_host(
     [("external:12345", ("external", 12345)), ("[::1]:12345", ("::1", 12345))],
 )
 def test_get_mooncake_bootstrap_addr_uses_external_endpoint(address, expected):
-    config = _make_bootstrap_aphrodite_config(bootstrap_server_address=address)
+    config = _make_bootstrap_sonar_config(bootstrap_server_address=address)
     assert get_mooncake_bootstrap_addr(config) == expected
 
 
 @pytest.mark.parametrize("address", [":12345", "host:0", "host:65536"])
 def test_get_mooncake_bootstrap_addr_rejects_invalid_external_address(address):
-    config = _make_bootstrap_aphrodite_config(bootstrap_server_address=address)
+    config = _make_bootstrap_sonar_config(bootstrap_server_address=address)
     with pytest.raises(ValueError, match="bootstrap_server_address"):
         get_mooncake_bootstrap_addr(config)
 
@@ -1073,8 +1070,8 @@ def test_scheduler_request_finished():
     Differentiates between 'Finished' (requires transfer)
     and 'Aborted' (immediate free).
     """
-    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
-    scheduler = create_scheduler(aphrodite_config)
+    sonar_config = create_sonar_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
+    scheduler = create_scheduler(sonar_config)
     scheduler_connector = scheduler.get_kv_connector().connector_scheduler
 
     request = create_request(request_id=1, do_remote_decode=True)
@@ -1101,28 +1098,28 @@ def patch_worker_dependencies():
     """Helper to mock all distributed and network dependencies for Worker tests."""
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
             FakeMooncakeWrapper,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_ip",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_ip",
             return_value="127.0.0.1",
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_rank",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_rank",
             return_value=0,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_world_size",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_world_size",
             return_value=1,
         ),
-        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group") as mock_pp,
+        patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group") as mock_pp,
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.should_launch_bootstrap_server",
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.should_launch_bootstrap_server",
             return_value=False,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.make_zmq_socket"
+            "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.make_zmq_socket"
         ) as mock_make_zmq,
         patch("httpx.AsyncClient") as mock_async_client,
     ):
@@ -1202,15 +1199,15 @@ def _xfer_meta(
 @contextlib.contextmanager
 def mooncake_register_worker(kv_cache_config, *, kv_role: str = "kv_consumer"):
     """Build a worker whose engine registration and sender thread are patched."""
-    aphrodite_config = _make_worker_aphrodite_config(kv_role)
-    connector_mod = "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector"
+    sonar_config = _make_worker_sonar_config(kv_role)
+    connector_mod = "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector"
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch_worker_dependencies(),
         patch(f"{connector_mod}.threading.Event"),
         patch(f"{connector_mod}.threading.Thread") as mock_thread,
     ):
-        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = MooncakeConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
         worker = connector.connector_worker
         mock_thread.return_value.is_alive.return_value = False
         with patch.object(worker.engine, "batch_register_memory", return_value=0) as reg:
@@ -1232,11 +1229,11 @@ async def test_receive_kv_selects_remote_pp_workers(
     expected_addrs: list[str],
 ):
     """Decode workers should not hard-code producer pp_rank 0."""
-    aphrodite_config = _make_worker_aphrodite_config("kv_consumer")
+    sonar_config = _make_worker_sonar_config("kv_consumer")
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         decode_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1303,12 +1300,12 @@ def test_resolve_need_send_accounts_for_remote_tp_fanout():
 @pytest.mark.parametrize("kernel_block_size,raises", [(384, False), (64, True)])
 def test_mooncake_compressed_kernel_split(kernel_block_size, raises):
     """Mooncake keeps compressed pages whole or rejects a layer-outer split."""
-    config = _make_worker_aphrodite_config("kv_both")
+    config = _make_worker_sonar_config("kv_both")
     config.cache_config.block_size = 384
     config.cache_config.kv_cache_layout = "LBHNC"
     ctx = pytest.raises(NotImplementedError) if raises else contextlib.nullcontext()
     with (
-        set_current_aphrodite_config(config),
+        set_current_sonar_config(config),
         patch_worker_dependencies(),
         patch.object(
             mooncake_connector,
@@ -1324,9 +1321,9 @@ def test_mooncake_compressed_kernel_split(kernel_block_size, raises):
 @pytest.mark.asyncio
 async def test_heterogeneous_pp_waits_for_consumer_without_shared_layers():
     """P4/D2 must retain KV until both D stages finish, including a no-op pull."""
-    config = _make_worker_aphrodite_config("kv_producer")
+    config = _make_worker_sonar_config("kv_producer")
     with (
-        set_current_aphrodite_config(config),
+        set_current_sonar_config(config),
         patch_worker_dependencies(),
         patch.object(MooncakeConnectorWorker, "_sync_block_size_with_kernel"),
     ):
@@ -1380,7 +1377,7 @@ async def test_heterogeneous_pp_waits_for_consumer_without_shared_layers():
 
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 async def test_kv_producer(monkeypatch):
@@ -1389,12 +1386,12 @@ async def test_kv_producer(monkeypatch):
 
     Verifies memory offset calculation: ptr = base_addr + block_id * block_len.
     """
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer")
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = _make_worker_sonar_config("kv_producer")
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1725,11 +1722,11 @@ async def test_kv_consumuer(monkeypatch):
 
     Verifies that MooncakeXferMetadata is correctly serialized and sent via ZMQ.
     """
-    aphrodite_config = _make_worker_aphrodite_config("kv_consumer")
+    sonar_config = _make_worker_sonar_config("kv_consumer")
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies() as mocks:
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies() as mocks:
         decode_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1793,10 +1790,10 @@ async def test_kv_consumuer(monkeypatch):
 @pytest.mark.asyncio
 async def test_worker_get_finished_timeout(monkeypatch):
     """Tests the cleanup mechanism for requests."""
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer")
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    sonar_config = _make_worker_sonar_config("kv_producer")
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1851,12 +1848,12 @@ class _BootstrapClientStub:
 
 def _lease_decode_scheduler(kv_lease_duration: float | None):
     extra_config = {} if kv_lease_duration is None else {"kv_lease_duration": kv_lease_duration}
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
         kv_connector_extra_config=extra_config,
     )
-    return create_scheduler(aphrodite_config), aphrodite_config.cache_config.block_size
+    return create_scheduler(sonar_config), sonar_config.cache_config.block_size
 
 
 def _remote_prefill_request(request_id: int, block_size: int):
@@ -1937,7 +1934,7 @@ def test_decode_renews_lease_until_pull_settles(settled_by):
 @pytest.mark.asyncio
 async def test_decode_heartbeat_reaches_every_paired_prefill_worker():
     """A renewal for a request still queued on D queries P's bootstrap first."""
-    aphrodite_config = _make_worker_aphrodite_config("kv_consumer", kv_connector_extra_config={"kv_lease_duration": 30})
+    sonar_config = _make_worker_sonar_config("kv_consumer", kv_connector_extra_config={"kv_lease_duration": 30})
     # P TP=2 serves this D TP=1 worker from both of its ranks.
     workers = {
         "0": {
@@ -1949,7 +1946,7 @@ async def test_decode_heartbeat_reaches_every_paired_prefill_worker():
         }
     }
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch_worker_dependencies() as mocks,
         patch.object(
             mooncake_connector.httpx,
@@ -1957,9 +1954,7 @@ async def test_decode_heartbeat_reaches_every_paired_prefill_worker():
             lambda **kwargs: _BootstrapClientStub(workers),
         ),
     ):
-        worker = MooncakeConnector(
-            aphrodite_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()
-        ).connector_worker
+        worker = MooncakeConnector(sonar_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()).connector_worker
         sock = mocks["mock_socket_object"]
         sock.recv.return_value = msgspec.msgpack.encode(MooncakeXferResponse(status=MooncakeXferResponseStatus.FINISH))
         metadata = MooncakeConnectorMetadata()
@@ -1986,14 +1981,14 @@ async def test_decode_heartbeat_reaches_every_paired_prefill_worker():
 @pytest.mark.parametrize("kv_lease_duration", [30, None])
 async def test_prefill_side_channel_renews_leases(kv_lease_duration):
     extra_config = {} if kv_lease_duration is None else {"kv_lease_duration": kv_lease_duration}
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer", kv_connector_extra_config=extra_config)
+    sonar_config = _make_worker_sonar_config("kv_producer", kv_connector_extra_config=extra_config)
     with (
-        set_current_aphrodite_config(aphrodite_config),
+        set_current_sonar_config(sonar_config),
         patch_worker_dependencies(),
         patch.object(mooncake_connector.httpx, "AsyncClient", _BootstrapClientStub),
     ):
         producer = MooncakeConnector(
-            aphrodite_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()
+            sonar_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()
         ).connector_worker
 
         # Allocation, then prefill end, as the scheduler reports them.
@@ -2002,7 +1997,7 @@ async def test_prefill_side_channel_renews_leases(kv_lease_duration):
             meta.reqs_to_send = {f"p-req-{i}": (f"xfer-{i}", block_ids) for i in (1, 2)}
             before = time.perf_counter()
             await producer.record_send_reqs(meta)
-        initial = kv_lease_duration or envs.APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT
+        initial = kv_lease_duration or envs.SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT
         for send_meta in producer.reqs_need_send.values():
             assert before + initial <= send_meta.expire_time
             assert send_meta.expire_time <= time.perf_counter() + initial
@@ -2059,10 +2054,10 @@ async def test_prefill_side_channel_renews_leases(kv_lease_duration):
 @pytest.mark.parametrize("with_live_req", [False, True])
 async def test_pull_after_expiry_fails_without_waiting(with_live_req):
     """A pull for KV that P already freed must not wait for a prefill."""
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer")
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    sonar_config = _make_worker_sonar_config("kv_producer")
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         producer = MooncakeConnector(
-            aphrodite_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()
+            sonar_config, KVConnectorRole.WORKER, _make_test_kv_cache_config()
         ).connector_worker
         producer.kv_caches_base_addr = [0x1000]
         producer.block_len_per_layer = [256]
@@ -2859,7 +2854,7 @@ async def _pull_once(worker, addr: str, responses: list[MooncakeXferResponse]):
     sent: list[bytes] = []
     encoded = [worker._encoder.encode(response) for response in responses]
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.make_zmq_socket",
+        "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.make_zmq_socket",
         return_value=_ScriptedSock(encoded, sent),
     ):
         await worker.receive_kv_from_single_worker(addr, _single_pull())
@@ -3106,7 +3101,7 @@ async def test_packed_matching_layers_coalesce_to_one_copy():
 
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
+    "sonar.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 @pytest.mark.parametrize("d_tp_size", [1, 4], ids=["p_tp2_d_tp1", "p_tp2_d_tp4"])
@@ -3127,12 +3122,12 @@ async def test_kv_producer_heterogeneous_tp(monkeypatch, d_tp_size):
     local_block_len = LOCAL_BLOCK_LEN
     remote_block_len = LOCAL_BLOCK_LEN * P_TP_SIZE // d_tp_size
 
-    monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = _make_worker_aphrodite_config("kv_producer")
+    monkeypatch.setenv("SONAR_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
+    sonar_config = _make_worker_sonar_config("kv_producer")
 
-    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
+    with set_current_sonar_config(sonar_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )

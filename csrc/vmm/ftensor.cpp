@@ -6,7 +6,7 @@
 #include "ftensor.hpp"
 #include "page.hpp"
 
-namespace aphrodite {
+namespace sonar {
 namespace vmm {
 
 static std::atomic<size_t> g_vaddr_allocated_offset = 0;
@@ -142,4 +142,4 @@ bool FTensor::init_with_zero_() {
 }
 
 }  // namespace vmm
-}  // namespace aphrodite
+}  // namespace sonar

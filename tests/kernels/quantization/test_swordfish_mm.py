@@ -9,14 +9,14 @@ weight (from swordfish_quantize). Tolerances mirror test_machete_mm.
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
     swordfish_quantize_act_order,
     swordfish_quantize_awq,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import scalar_types
+from sonar.platforms import current_platform
+from sonar.scalar_type import scalar_types
 from tests.kernels.utils import opcheck
 
 if not current_platform.is_cuda():
@@ -184,7 +184,7 @@ def test_swordfish_mm_act_order(mnk, bits):
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_swordfish_mm_dense_tier(bits, dtype, monkeypatch):
     # Force the dequant + cuBLAS tier regardless of device size.
-    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    monkeypatch.setenv("SONAR_SWORDFISH_DENSE_M", "64")
     m, k, n = 128, 1024, 512
     qt = scalar_types.uint4b8 if bits == 4 else scalar_types.uint8b128
     torch.manual_seed(bits + m)
@@ -197,7 +197,7 @@ def test_swordfish_mm_dense_tier(bits, dtype, monkeypatch):
 
 
 def test_swordfish_mm_dense_tier_awq(monkeypatch):
-    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    monkeypatch.setenv("SONAR_SWORDFISH_DENSE_M", "64")
     m, k, n = 128, 1024, 512
     torch.manual_seed(2)
     w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
@@ -211,7 +211,7 @@ def test_swordfish_mm_dense_tier_awq(monkeypatch):
 def test_swordfish_mm_dense_tier_act_order(monkeypatch):
     # The dense tier scatters weight rows through the sort instead of
     # permuting the activations.
-    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    monkeypatch.setenv("SONAR_SWORDFISH_DENSE_M", "64")
     m, k, n = 128, 1024, 512
     torch.manual_seed(7)
     w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)

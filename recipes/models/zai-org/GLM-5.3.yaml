@@ -29,7 +29,7 @@ meta:
 
 model:
   model_id: "zai-org/GLM-5.3"
-  # Opt in to SMG gRPC PD; parsing runs on the router, not Aphrodite.
+  # Opt in to SMG gRPC PD; parsing runs on the router, not Sonar.
   smg_grpc:
     reasoning_parser: glm45
     tool_call_parser: glm47_moe
@@ -112,7 +112,7 @@ variants:
     description: "Native FP8 checkpoint (zai-org/GLM-5.3) — 8xH200/H20 (141GB × 8) single-node serving"
     hardware_overrides:
       # 8x H200 (1128 GB) leaves ~23 GiB/GPU for KV after the 704 GB FP8
-      # weights — Aphrodite estimates ~450K max tokens, so the 1M default fails
+      # weights — Sonar estimates ~450K max tokens, so the 1M default fails
       # at startup ("KV cache is needed"). Cap at 256K.
       h200:
         extra_args:
@@ -138,8 +138,8 @@ variants:
         docker_image: "vllm/vllm-openai:v0.30.0-ubuntu2404"
         vram_minimum_gb: 252
         extra_env:
-          APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY: "1"
-          APHRODITE_ENGINE_READY_TIMEOUT_S: "900"
+          SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY: "1"
+          SONAR_ENGINE_READY_TIMEOUT_S: "900"
         extra_args:
           - "--trust-remote-code"
           - "--gpu-memory-utilization"
@@ -223,8 +223,8 @@ hardware_overrides:
       - "--moe-backend"
       - "aiter"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
   # Shared by 950PR 8x (8×128 GB). last-wins shadows --kv-cache-dtype fp8_e4m3
   # from base_args; SFA on 950 needs --block-size 512.
   npu:
@@ -252,11 +252,11 @@ strategy_overrides: {}
 
 hardware_notes:
   ascend_950pr_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Single-node TP8 on 8×950PR. Pin quay.io/ascend/vllm-ascend:nightly-main-a5 and overlay vllm-ascend#15346 for native FP8. EP is not available on this interconnect. Set HCCL_BUFFSIZE=1024 before launch."
   dgx_station_gb300:
     title: "CPU weight offload (NVFP4)"
-    body: "1× GB300 (252 GB HBM) plus unified host RAM. NVFP4 offloads MoE expert weights (w13_weight, w2_weight) with --offload-backend uva and --cpu-offload-gb 222. Set APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY=1. Context is capped at 262K / 8 seqs. FP8/BF16 still do not fit this box."
+    body: "1× GB300 (252 GB HBM) plus unified host RAM. NVFP4 offloads MoE expert weights (w13_weight, w2_weight) with --offload-backend uva and --cpu-offload-gb 222. Set SONAR_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY=1. Context is capped at 262K / 8 seqs. FP8/BF16 still do not fit this box."
 
 guide: |
   ## Overview
@@ -269,7 +269,7 @@ guide: |
 
   ## Prerequisites
 
-  - **Aphrodite:** a build containing [native GLM5Next support (#62424)](https://github.com/vllm-project/vllm/pull/62424), including the matching Rust frontend binary.
+  - **Sonar:** a build containing [native GLM5Next support (#62424)](https://github.com/vllm-project/vllm/pull/62424), including the matching Rust frontend binary.
   - **Transformers:** 5.15.0 or newer.
   - **GPU:** 8xH200 or 8xH20 (141 GB each) for single-node FP8; 8xB200 (180 GB each) for the full 1M context.
 
@@ -282,10 +282,10 @@ guide: |
   ## Frontends
 
   The command builder defaults to **Rust** and adds `--tokenizer-mode glm5_next`.
-  With `APHRODITE_USE_RUST_FRONTEND=1`, this selects native GLM5Next chat rendering for
+  With `SONAR_USE_RUST_FRONTEND=1`, this selects native GLM5Next chat rendering for
   GLM-5.3, including tool calls and reasoning options.
 
-  Select **Python** in the command builder, or set `APHRODITE_USE_RUST_FRONTEND=0`,
+  Select **Python** in the command builder, or set `SONAR_USE_RUST_FRONTEND=0`,
   to use the Hugging Face renderer on the same build. On older builds that do not
   recognize `glm5_next`, also replace `--tokenizer-mode glm5_next` with
   `--tokenizer-mode auto`.
@@ -295,7 +295,7 @@ guide: |
   ### FP8 on 8xH200 (standard)
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3 \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3 \
     --tokenizer-mode glm5_next \
     --kv-cache-dtype fp8 \
     --tensor-parallel-size 8 \
@@ -310,10 +310,10 @@ guide: |
   ### FP8 on AMD MI300X/MI325X/MI350X/MI355X
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
-  APHRODITE_USE_RUST_FRONTEND=1 \
-  aphrodite serve zai-org/GLM-5.3 \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 \
+  SONAR_USE_RUST_FRONTEND=1 \
+  sonar serve zai-org/GLM-5.3 \
     --tokenizer-mode glm5_next \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
@@ -346,7 +346,7 @@ guide: |
   (`--kv-cache-dtype fp8_e4m3`, already in the base flags) roughly halves that budget.
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3 \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3 \
     --tokenizer-mode glm5_next \
     --kv-cache-dtype fp8_e4m3 \
     --tensor-parallel-size 8 \
@@ -370,7 +370,7 @@ guide: |
   Select the **NVFP4** variant above (Blackwell-only) or run:
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve Inferact/GLM-5.3-NVFP4 \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve Inferact/GLM-5.3-NVFP4 \
     --tokenizer-mode glm5_next \
     --tensor-parallel-size 8 \
     --enable-expert-parallel \
@@ -388,7 +388,7 @@ guide: |
   with eight speculative tokens:
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3 \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3 \
     --tokenizer-mode glm5_next \
     --tensor-parallel-size 8 \
     --speculative-config '{"method":"dspark","model":"RedHatAI/GLM-5.3-speculator.dspark","num_speculative_tokens":8}'
@@ -461,7 +461,7 @@ guide: |
   Add `--no-enable-prefix-caching` to the server command for a clean measurement.
 
   ```bash
-  aphrodite bench serve \
+  sonar bench serve \
     --model zai-org/GLM-5.3 \
     --dataset-name random \
     --random-input-len 8000 \

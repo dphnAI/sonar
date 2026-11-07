@@ -6,10 +6,10 @@ import os
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.inputs import TokensPrompt
-from aphrodite.outputs import RequestOutput
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.inputs import TokensPrompt
+from sonar.outputs import RequestOutput
+from sonar.platforms import current_platform
 from tests.models.utils import TokensTextLogprobs, check_logprobs_close
 
 pytestmark = pytest.mark.cpu_model
@@ -19,7 +19,7 @@ if not current_platform.is_cpu():
 
 # Bound the KV cache so the run does not scale with host memory; these engines
 # only need a few thousand tokens.
-os.environ.setdefault("APHRODITE_CPU_KVCACHE_SPACE", "1")
+os.environ.setdefault("SONAR_CPU_KVCACHE_SPACE", "1")
 
 MODEL = "Qwen/Qwen3.5-0.8B"
 CHUNK_TOKENS = 128  # max_num_batched_tokens for the chunked engine
@@ -122,7 +122,7 @@ def test_prefix_cache_hit_reaches_last_full_block():
     boundaries and nothing is reused. One chunk holds the whole prompt.
     """
     llm = _make_llm(enable_prefix_caching=True, max_num_batched_tokens=2048)
-    block_size = llm.llm_engine.aphrodite_config.cache_config.block_size
+    block_size = llm.llm_engine.sonar_config.cache_config.block_size
     # Ends mid-block: only the last full block's state can be reused.
     num_tokens = block_size + block_size // 2
     assert num_tokens <= 2048

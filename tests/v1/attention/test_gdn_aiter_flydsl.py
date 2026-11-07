@@ -7,13 +7,13 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn
-from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
+from sonar._aiter_ops import rocm_aiter_ops
+from sonar.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn
+from sonar.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
     ChunkGatedDeltaRule,
     _resolve_gdn_prefill_backend,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _make_config(
@@ -43,7 +43,7 @@ def _resolve_on_rocm(config, *, kernels_available: bool = True, mi3xx: bool = Tr
             "is_gdn_flydsl_prefill_available",
             return_value=kernels_available,
         ),
-        patch("aphrodite.platforms.rocm.on_mi3xx", return_value=mi3xx),
+        patch("sonar.platforms.rocm.on_mi3xx", return_value=mi3xx),
     ):
         return _resolve_gdn_prefill_backend(config)
 
@@ -124,7 +124,7 @@ def test_explicit_aiter_flydsl_fails_closed(on_rocm: bool):
 def _flydsl_prefill_unavailable() -> bool:
     if not current_platform.is_rocm():
         return True
-    from aphrodite.platforms.rocm import on_mi3xx
+    from sonar.platforms.rocm import on_mi3xx
 
     return not on_mi3xx() or not rocm_aiter_ops.is_gdn_flydsl_prefill_available()
 

@@ -3,8 +3,8 @@
 
 import pytest
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.platforms import current_platform
+from sonar.assets.image import ImageAsset
+from sonar.platforms import current_platform
 
 from ....conftest import VIDEO_ASSETS
 from .vlm_utils.builders import sample_frames_with_video_metadata
@@ -59,7 +59,7 @@ def _encoder_cudagraph_config(*, max_vision_items: int) -> dict:
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_evs_functionality(
-    aphrodite_runner,
+    sonar_runner,
     video_assets,
     model,
     video_pruning_rate: float,
@@ -73,7 +73,7 @@ def test_qwen2_5_vl_evs_functionality(
     pruning rates.
     """
     # Set the environment variable for this test
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
     # Sample frames from video assets
     sampled_vids = [
@@ -84,16 +84,16 @@ def test_qwen2_5_vl_evs_functionality(
     videos = [sampled_vids[0]]
 
     # Initialize model with EVS configuration
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=4000,
         dtype=dtype,
         limit_mm_per_prompt={"video": 1},
         video_pruning_rate=video_pruning_rate,
-    ) as aphrodite_model:
+    ) as sonar_model:
         # Generate output - this should not crash
-        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, videos=videos)
+        outputs = sonar_model.generate_greedy(prompts, max_tokens, videos=videos)
 
         # Basic validation that we got a response
         assert len(outputs) == 1
@@ -115,7 +115,7 @@ def test_qwen2_5_vl_evs_functionality(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_evs_batched_videos(
-    aphrodite_runner,
+    sonar_runner,
     video_assets,
     model,
     video_pruning_rate: float,
@@ -133,7 +133,7 @@ def test_qwen2_5_vl_evs_batched_videos(
     3. The model doesn't crash when processing multiple videos simultaneously
     """
     # Set the environment variable for this test
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
     # Sample frames from video assets
     sampled_vids = [
         sample_frames_with_video_metadata((asset.np_ndarrays, asset.metadata), num_frames) for asset in video_assets
@@ -144,7 +144,7 @@ def test_qwen2_5_vl_evs_batched_videos(
     videos = [sampled_vids[0], sampled_vids[0]]  # Use same video twice for testing
 
     # Initialize model with EVS configuration
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=4000,
@@ -153,9 +153,9 @@ def test_qwen2_5_vl_evs_batched_videos(
         limit_mm_per_prompt={"video": 2},
         tensor_parallel_size=1,
         video_pruning_rate=video_pruning_rate,
-    ) as aphrodite_model:
+    ) as sonar_model:
         # Generate output - this should not crash
-        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, videos=videos)
+        outputs = sonar_model.generate_greedy(prompts, max_tokens, videos=videos)
 
         # Basic validation that we got responses for both videos
         assert len(outputs) == 2
@@ -175,7 +175,7 @@ def test_qwen2_5_vl_evs_batched_videos(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_window_attention_image(
-    aphrodite_runner,
+    sonar_runner,
     model,
     dtype: str,
     max_tokens: int,
@@ -183,20 +183,20 @@ def test_qwen2_5_vl_window_attention_image(
     monkeypatch,
 ) -> None:
     """Regression test for Qwen2.5 window-attention image path."""
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
     prompt = [WINDOW_ATTN_IMAGE_PROMPT]
     images = [[_window_attention_regression_image()]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=4096,
         dtype=dtype,
         limit_mm_per_prompt=IMAGE_ONLY_LIMIT_MM_PER_PROMPT,
         compilation_config=_encoder_cudagraph_config(max_vision_items=1),
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(prompt, max_tokens, images=images)
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(prompt, max_tokens, images=images)
 
         assert len(outputs) == 1
         output_ids, output_text = outputs[0]
@@ -211,7 +211,7 @@ def test_qwen2_5_vl_window_attention_image(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_window_attention_image_batch(
-    aphrodite_runner,
+    sonar_runner,
     model,
     dtype: str,
     max_tokens: int,
@@ -219,13 +219,13 @@ def test_qwen2_5_vl_window_attention_image_batch(
     monkeypatch,
 ) -> None:
     """Regression test window-attention with a small image batch."""
-    monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
+    monkeypatch.setenv("SONAR_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
     image = _window_attention_regression_image()
     prompts = [WINDOW_ATTN_IMAGE_PROMPT, WINDOW_ATTN_IMAGE_PROMPT]
     images = [[image], [image]]
 
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="generate",
         max_model_len=4096,
@@ -233,8 +233,8 @@ def test_qwen2_5_vl_window_attention_image_batch(
         dtype=dtype,
         limit_mm_per_prompt=IMAGE_ONLY_LIMIT_MM_PER_PROMPT,
         compilation_config=_encoder_cudagraph_config(max_vision_items=2),
-    ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, images=images)
+    ) as sonar_model:
+        outputs = sonar_model.generate_greedy(prompts, max_tokens, images=images)
 
         assert len(outputs) == 2
         for output_ids, output_text in outputs:

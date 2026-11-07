@@ -5,11 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.v1.core.kv_cache_metrics import (
+from sonar.v1.core.kv_cache_metrics import (
     BlockMetricsState,
     KVCacheMetricsCollector,
 )
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
+from sonar.v1.core.kv_cache_utils import KVCacheBlock
 
 
 class TestBlockMetricsState:

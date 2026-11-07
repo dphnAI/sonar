@@ -5,12 +5,12 @@ from typing import NamedTuple
 import pytest
 from PIL import Image
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.assets.image import ImageAsset
-from aphrodite.config import AttentionConfig, KVTransferConfig
-from aphrodite.inputs import TextPrompt
-from aphrodite.multimodal.utils import encode_image_url
-from aphrodite.platforms import current_platform
+from sonar import LLM, SamplingParams
+from sonar.assets.image import ImageAsset
+from sonar.config import AttentionConfig, KVTransferConfig
+from sonar.inputs import TextPrompt
+from sonar.multimodal.utils import encode_image_url
+from sonar.platforms import current_platform
 
 MODEL_NAME = "RedHatAI/Qwen2.5-VL-3B-Instruct-quantized.w8a8"
 

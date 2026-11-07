@@ -8,31 +8,31 @@ from unittest.mock import Mock
 import pytest
 import torch
 
-from aphrodite.config.compilation import CUDAGraphMode
-from aphrodite.model_executor.models import supports_multimodal_embeddings
-from aphrodite.model_executor.models.exaone4_5_mtp import Exaone4_5_MTP
-from aphrodite.model_executor.models.llama4_eagle import EagleLlama4ForCausalLM
-from aphrodite.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
-from aphrodite.model_executor.models.mistral_eagle import EagleMistralForCausalLM
-from aphrodite.model_executor.models.mistral_large_3_eagle import (
+from sonar.config.compilation import CUDAGraphMode
+from sonar.model_executor.models import supports_multimodal_embeddings
+from sonar.model_executor.models.exaone4_5_mtp import Exaone4_5_MTP
+from sonar.model_executor.models.llama4_eagle import EagleLlama4ForCausalLM
+from sonar.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
+from sonar.model_executor.models.mistral_eagle import EagleMistralForCausalLM
+from sonar.model_executor.models.mistral_large_3_eagle import (
     EagleMistralLarge3ForCausalLM,
 )
-from aphrodite.v1.attention.backends import flash_attn as flash_attn_module
-from aphrodite.v1.attention.backends.flash_attn import FlashAttentionMetadata
-from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
-from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
-from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
-from aphrodite.v1.worker.gpu.spec_decode import speculator as base_spec_module
-from aphrodite.v1.worker.gpu.spec_decode.multi_module_mtp.speculator import (
+from sonar.v1.attention.backends import flash_attn as flash_attn_module
+from sonar.v1.attention.backends.flash_attn import FlashAttentionMetadata
+from sonar.v1.attention.backends.utils import split_decodes_and_prefills
+from sonar.v1.kv_cache_interface import MLAAttentionSpec
+from sonar.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
+from sonar.v1.worker.gpu.pcp_manager import PCPManager
+from sonar.v1.worker.gpu.spec_decode import speculator as base_spec_module
+from sonar.v1.worker.gpu.spec_decode.multi_module_mtp.speculator import (
     MultiModuleMTPSpeculator,
 )
-from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar import speculator as spec_module
-from aphrodite.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
+from sonar.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar import speculator as spec_module
+from sonar.v1.worker.gpu.spec_decode.target_dependent_ar.speculator import (
     TargetDependentARSpeculator,
 )
-from aphrodite.v1.worker.utils import AttentionGroup
+from sonar.v1.worker.utils import AttentionGroup
 
 
 class _TestSpeculator(TargetDependentARSpeculator):
@@ -88,7 +88,7 @@ def test_pcp_draft_metadata_keeps_graph_padding_in_decode(cg_mode):
 
     speculator = object.__new__(_TestSpeculator)
     speculator.arange_np = torch.arange(5, dtype=torch.int32).numpy()
-    speculator.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(max_model_len=32))
+    speculator.sonar_config = SimpleNamespace(model_config=SimpleNamespace(max_model_len=32))
     speculator.draft_max_seq_len = 32
     speculator.draft_is_prefilling = torch.zeros(4, dtype=torch.bool)
     speculator.input_buffers = SimpleNamespace(
@@ -128,7 +128,7 @@ def test_pcp_draft_metadata_keeps_graph_padding_in_decode(cg_mode):
 def _mock_base_model_load(monkeypatch):
     monkeypatch.setattr(
         base_spec_module,
-        "get_layers_from_aphrodite_config",
+        "get_layers_from_sonar_config",
         lambda *args, **kwargs: {},
     )
     monkeypatch.setattr(
@@ -151,7 +151,7 @@ def _make_speculator(
     speculator = object.__new__(_TestSpeculator)
     speculator.supports_mm_inputs = False
     speculator.pcp_manager = None
-    speculator.aphrodite_config = None
+    speculator.sonar_config = None
     speculator.input_buffers = SimpleNamespace(
         input_ids=torch.arange(4),
         positions=torch.arange(4),
@@ -181,7 +181,7 @@ def test_speculator_uses_draft_model_hidden_size(monkeypatch, hc_mult, expected)
         draft_sample_method="greedy",
         enable_adaptive_verification=False,
     )
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         speculative_config=speculative_config,
         scheduler_config=SimpleNamespace(
             max_num_seqs=2,
@@ -200,7 +200,7 @@ def test_speculator_uses_draft_model_hidden_size(monkeypatch, hc_mult, expected)
         ),
     )
 
-    speculator = _TestSpeculator(aphrodite_config, torch.device("cpu"))
+    speculator = _TestSpeculator(sonar_config, torch.device("cpu"))
 
     assert speculator.hidden_size == expected
 
@@ -216,11 +216,11 @@ def test_mm_support_configured_after_model_load(monkeypatch):
 
     target_model_config = _ModelConfig()
     draft_model_config = _ModelConfig()
-    aphrodite_config = SimpleNamespace(model_config=target_model_config)
+    sonar_config = SimpleNamespace(model_config=target_model_config)
     draft_model = _MultimodalDraftModel()
 
-    def init_base(speculator, aphrodite_config, device):
-        speculator.aphrodite_config = aphrodite_config
+    def init_base(speculator, sonar_config, device):
+        speculator.sonar_config = sonar_config
         speculator.device = device
         speculator.max_num_tokens = 4
         speculator.max_num_reqs = 2
@@ -234,7 +234,7 @@ def test_mm_support_configured_after_model_load(monkeypatch):
     monkeypatch.setattr(DraftModelSpeculator, "__init__", init_base)
     _mock_base_model_load(monkeypatch)
 
-    speculator = _TestSpeculator(aphrodite_config, torch.device("cpu"))
+    speculator = _TestSpeculator(sonar_config, torch.device("cpu"))
 
     assert checked_configs == []
     assert not speculator.supports_mm_inputs
@@ -255,7 +255,7 @@ def test_load_model_keeps_mm_support_for_capable_drafter(monkeypatch):
     speculator.inputs_embeds = None
     speculator.use_acceptance_estimator = False
     speculator.use_draft_logits = False
-    speculator.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
+    speculator.sonar_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
     speculator.max_num_tokens = 4
     speculator.hidden_size = 3
     speculator.dtype = torch.float32
@@ -276,7 +276,7 @@ def test_load_model_disables_mm_support_for_text_only_drafter(monkeypatch):
     speculator.inputs_embeds = None
     speculator.use_acceptance_estimator = False
     speculator.use_draft_logits = False
-    speculator.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
+    speculator.sonar_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
     draft_model = _TextOnlyDraftModel()
     speculator.test_draft_model = draft_model
     warning_messages = []
@@ -306,7 +306,7 @@ def test_multi_module_mm_support_configured_after_model_load(monkeypatch):
     speculator.use_acceptance_estimator = False
     speculator.use_draft_logits = False
     speculator.cached_draft_input_embeds = None
-    speculator.aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
+    speculator.sonar_config = SimpleNamespace(model_config=SimpleNamespace(supports_multimodal_inputs=True))
     speculator.max_num_tokens = 4
     speculator.max_num_reqs = 2
     speculator.num_speculative_steps = 3

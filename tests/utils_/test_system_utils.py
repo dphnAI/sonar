@@ -13,8 +13,8 @@ from pathlib import Path
 import psutil
 import pytest
 
-from aphrodite.utils import system_utils
-from aphrodite.utils.system_utils import (
+from sonar.utils import system_utils
+from sonar.utils.system_utils import (
     _maybe_force_spawn,
     suppress_stdout,
     unique_filepath,
@@ -51,10 +51,10 @@ def test_unique_filepath():
 )
 def test_numa_bind_cli_start_method(monkeypatch, start_method, numa_args, force_spawn):
     if start_method is None:
-        monkeypatch.delenv("APHRODITE_WORKER_MULTIPROC_METHOD", raising=False)
+        monkeypatch.delenv("SONAR_WORKER_MULTIPROC_METHOD", raising=False)
     else:
-        monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", start_method)
-    monkeypatch.setattr(sys, "argv", ["aphrodite", "serve", *numa_args])
+        monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", start_method)
+    monkeypatch.setattr(sys, "argv", ["sonar", "serve", *numa_args])
     for check in (
         "is_in_ray_actor",
         "cuda_is_initialized",
@@ -65,7 +65,7 @@ def test_numa_bind_cli_start_method(monkeypatch, start_method, numa_args, force_
 
     _maybe_force_spawn()
     expected_method = "spawn" if force_spawn else start_method
-    assert os.environ.get("APHRODITE_WORKER_MULTIPROC_METHOD") == expected_method
+    assert os.environ.get("SONAR_WORKER_MULTIPROC_METHOD") == expected_method
 
 
 def test_suppress_stdout_when_sys_stdout_has_no_fd(capfd):
@@ -112,7 +112,7 @@ def test_forked_child_can_use_openmp_after_parent_did():
     region, unless get_mp_context() releases the parent's OpenMP workers."""
     script = """
 import torch
-from aphrodite.utils.system_utils import get_mp_context
+from sonar.utils.system_utils import get_mp_context
 
 torch.set_num_threads(4)
 x = torch.randn(1024, 1024)
@@ -124,6 +124,6 @@ hung = proc.is_alive()
 proc.kill()
 raise SystemExit(1 if hung else proc.exitcode)
 """
-    env = os.environ | {"APHRODITE_WORKER_MULTIPROC_METHOD": "fork"}
+    env = os.environ | {"SONAR_WORKER_MULTIPROC_METHOD": "fork"}
     result = subprocess.run([sys.executable, "-c", script], env=env, timeout=120)
     assert result.returncode == 0

@@ -20,7 +20,7 @@ import sys
 import depyf.explain.enable_debugging as enable_debugging
 import torch._inductor.codecache as codecache
 
-from aphrodite.compilation import depyf_compat
+from sonar.compilation import depyf_compat
 
 # Captured at import, which pytest does before any test can install the patch.
 PRISTINE_HOOK = enable_debugging.patched_load_by_key_path
@@ -64,7 +64,7 @@ class TestPatchApplication:
     def test_patch_is_still_needed(self):
         assert not depyf_compat._hook_accepts_inductor_keywords(PRISTINE_HOOK), (
             "depyf's load_by_key_path now accepts everything Inductor passes; "
-            "drop aphrodite/compilation/depyf_compat.py and this test"
+            "drop sonar/compilation/depyf_compat.py and this test"
         )
 
     def test_patch_is_skipped_when_unnecessary(self):

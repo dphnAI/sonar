@@ -22,7 +22,7 @@ def test_concat_and_cache_mla_into_unified_slot_view():
     """concat_and_cache_mla must write correctly into a per-layer view whose
     block stride is the full unified slot (block-major), with zero bleed into
     the other layers' segments of the same slot."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     torch.manual_seed(0)
     dev = "cuda"
@@ -82,7 +82,7 @@ def test_flashmla_dense_decode_unified_slot_view():
     """FlashMLA dense decode (FLASHMLA backend, e.g. Kimi-K2-style dense MLA
     on Hopper) must read a unified-slot block-major view bit-identically to a
     contiguous per-layer cache."""
-    import aphrodite.v1.attention.ops.flashmla as fm
+    import sonar.v1.attention.ops.flashmla as fm
 
     ok, reason = fm.is_flashmla_dense_supported()
     if not ok:
@@ -147,7 +147,7 @@ def test_flashinfer_mla_dense_decode_unified_slot_view():
         from flashinfer.decode import trtllm_batch_decode_with_kv_cache_mla
     except ImportError:
         pytest.skip("flashinfer is not available")
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("FlashInfer trtllm-gen MLA requires sm100")
@@ -212,7 +212,7 @@ def test_flashmla_fp8_sparse_decode_unified_slot_view(next_n: int):
     """FlashMLA fp8 sparse decode (DeepSeek V3.2/V4 DSA path) must read a
     unified-slot block-major view bit-identically to a contiguous fp8_ds_mla
     cache, with finite nonzero output."""
-    import aphrodite.v1.attention.ops.flashmla as fm
+    import sonar.v1.attention.ops.flashmla as fm
 
     ok, reason = fm.is_flashmla_sparse_supported()
     if not ok:
@@ -294,7 +294,7 @@ def test_indexer_k_quant_and_cache_into_unified_slot_view():
     """indexer_k_quant_and_cache (DeepSeek V3.2/V4 DSA indexer K write) must
     write correctly into a per-layer view whose block stride is the full
     unified slot, with zero bleed into the other layers' segments."""
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     torch.manual_seed(0)
     dev = "cuda"
@@ -336,10 +336,10 @@ def test_flashattn_mla_dense_decode_unified_slot_view():
     """FA3 decode (FLASH_ATTN_MLA backend) must read a unified-slot
     block-major view bit-identically to a contiguous per-layer cache."""
     try:
-        from aphrodite.vllm_flash_attn import flash_attn_varlen_func
+        from sonar.vllm_flash_attn import flash_attn_varlen_func
     except ImportError:
         pytest.skip("vllm_flash_attn is not available")
-    from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
+    from sonar.v1.attention.backends.fa_utils import flash_attn_supports_mla
 
     if not flash_attn_supports_mla():
         pytest.skip("FA3 MLA requires a Hopper device")
@@ -406,7 +406,7 @@ def test_flashmla_dense_fp8_decode_unified_slot_view():
     """FlashMLA dense fp8 decode (FLASHMLA backend with quantized KV cache)
     must read a unified-slot block-major view bit-identically to a contiguous
     per-layer fp8 cache."""
-    import aphrodite.v1.attention.ops.flashmla as fm
+    import sonar.v1.attention.ops.flashmla as fm
 
     ok, reason = fm.is_flashmla_dense_supported()
     if not ok:
@@ -475,7 +475,7 @@ def test_flashinfer_mla_dense_fp8_decode_unified_slot_view():
         from flashinfer.decode import trtllm_batch_decode_with_kv_cache_mla
     except ImportError:
         pytest.skip("flashinfer is not available")
-    from aphrodite.platforms import current_platform
+    from sonar.platforms import current_platform
 
     if not current_platform.is_device_capability_family(100):
         pytest.skip("FlashInfer trtllm-gen MLA requires sm100")

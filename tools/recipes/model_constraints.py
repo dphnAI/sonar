@@ -91,8 +91,8 @@ def extract_head_constraints(hf_config: Any, *, include_vision: bool = True) -> 
 
 
 def load_head_constraints(config: dict[str, Any]) -> tuple[HeadConstraint, ...]:
-    """Load the effective serving configuration through Aphrodite's config loader."""
-    from aphrodite.transformers_utils.config import get_config
+    """Load the effective serving configuration through Sonar's config loader."""
+    from sonar.transformers_utils.config import get_config
 
     hf_overrides = config.get("hf-overrides")
     if isinstance(hf_overrides, str):

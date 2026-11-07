@@ -5,13 +5,13 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     FlashInferTrtllmMxfp8LinearKernel,
     Mxfp8LinearLayerConfig,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils import flashinfer as aphrodite_flashinfer
-from aphrodite.utils.flashinfer import has_flashinfer
+from sonar.platforms import current_platform
+from sonar.utils import flashinfer as sonar_flashinfer
+from sonar.utils.flashinfer import has_flashinfer
 
 if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100) and has_flashinfer()):
     pytest.skip(
@@ -67,14 +67,14 @@ def test_flashinfer_trtllm_mxfp8_custom_ops() -> None:
     kernel.process_weights_after_loading(layer)
 
     torch.library.opcheck(
-        torch.ops.aphrodite.flashinfer_mxfp8_quantize_8x4.default,
+        torch.ops.sonar.flashinfer_mxfp8_quantize_8x4.default,
         (x,),
     )
-    x_mxfp8, x_scale = aphrodite_flashinfer.flashinfer_mxfp8_quantize_8x4(x)
+    x_mxfp8, x_scale = sonar_flashinfer.flashinfer_mxfp8_quantize_8x4(x)
     # SchemaCheckMode compares inputs with allclose, which CUDA does not
     # implement for float8. The numerical tests above guard input mutation.
     torch.library.opcheck(
-        torch.ops.aphrodite.mm_mxfp8.default,
+        torch.ops.sonar.mm_mxfp8.default,
         (
             x_mxfp8,
             layer.weight.t(),

@@ -3,16 +3,16 @@
 
 # NOTE: if your PR has broken one of the tests here (sorry),
 # kindly patch the corresponding integration in
-# /aphrodite/distributed/kv_transfer/kv_connector/v1/lmcache_integration/aphrodite_v1_adapter.py
+# /sonar/distributed/kv_transfer/kv_connector/v1/lmcache_integration/sonar_v1_adapter.py
 # or reach out to @aposataC for assistance
 
 # Assumption vs. Correctness Tests:
-# these unit tests do *not* test correctness of LMCache-side or Aphrodite-side logic
-# it is to ensure that assumptions LMCache makes about Aphrodite's interface are stable
+# these unit tests do *not* test correctness of LMCache-side or Sonar-side logic
+# it is to ensure that assumptions LMCache makes about Sonar's interface are stable
 
 import pytest
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def assumes(obj, attr, is_callable=False, is_instance_of=None):
@@ -53,7 +53,7 @@ def assumes(obj, attr, is_callable=False, is_instance_of=None):
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm")
 def test_multimodal_interface():
     # protect against interface changes
-    from aphrodite.multimodal.inputs import PlaceholderRange
+    from sonar.multimodal.inputs import PlaceholderRange
 
     assumes(PlaceholderRange, "offset")
     assumes(PlaceholderRange, "length")
@@ -62,16 +62,16 @@ def test_multimodal_interface():
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm")
 def test_config_interface():
     # protect against interface changes
-    from aphrodite.config import AphroditeConfig
-    from aphrodite.config.cache import CacheConfig
-    from aphrodite.config.kv_transfer import KVTransferConfig
-    from aphrodite.config.model import ModelConfig
-    from aphrodite.config.parallel import ParallelConfig
+    from sonar.config import SonarConfig
+    from sonar.config.cache import CacheConfig
+    from sonar.config.kv_transfer import KVTransferConfig
+    from sonar.config.model import ModelConfig
+    from sonar.config.parallel import ParallelConfig
 
-    assumes(AphroditeConfig, "model_config")
-    assumes(AphroditeConfig, "cache_config")
-    assumes(AphroditeConfig, "parallel_config")
-    assumes(AphroditeConfig, "kv_transfer_config")
+    assumes(SonarConfig, "model_config")
+    assumes(SonarConfig, "cache_config")
+    assumes(SonarConfig, "parallel_config")
+    assumes(SonarConfig, "kv_transfer_config")
 
     assumes(KVTransferConfig, "kv_role")
     assumes(KVTransferConfig, "kv_connector_extra_config")
@@ -99,7 +99,7 @@ def test_config_interface():
     assumes(CacheConfig, "gpu_memory_utilization")
 
     # kv metadata minimal case
-    from aphrodite.utils.torch_utils import get_kv_cache_torch_dtype
+    from sonar.utils.torch_utils import get_kv_cache_torch_dtype
 
     model_config = ModelConfig(dtype="bfloat16")
     parallel_config = ParallelConfig()
@@ -117,7 +117,7 @@ def test_config_interface():
         model_config.model,
         parallel_config.world_size,
         parallel_config.rank,
-        "aphrodite",
+        "sonar",
         kv_dtype,
         kv_shape,
         use_mla,
@@ -129,8 +129,8 @@ def test_request_interface():
     # protect against interface changes
     from types import NoneType
 
-    from aphrodite.sampling_params import SamplingParams
-    from aphrodite.v1.request import Request
+    from sonar.sampling_params import SamplingParams
+    from sonar.v1.request import Request
 
     sampling_params = SamplingParams(max_tokens=10)
     sampling_params.update_from_generation_config({}, eos_token_id=100)
@@ -150,7 +150,7 @@ def test_request_interface():
     assumes(req, "num_tokens")
     assumes(req, "kv_transfer_params", is_instance_of=(dict, NoneType))
 
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec
+    from sonar.multimodal.inputs import MultiModalFeatureSpec
 
     assumes(MultiModalFeatureSpec, "identifier")
     assumes(MultiModalFeatureSpec, "mm_position")
@@ -158,7 +158,7 @@ def test_request_interface():
 
 def test_new_request_interface():
     # protect against interface changes
-    from aphrodite.v1.core.sched.output import NewRequestData
+    from sonar.v1.core.sched.output import NewRequestData
 
     assumes(NewRequestData, "req_id")
     assumes(NewRequestData, "block_ids")
@@ -168,7 +168,7 @@ def test_new_request_interface():
 
 def test_sampling_params_interface():
     # protect against interface changes
-    from aphrodite.sampling_params import SamplingParams
+    from sonar.sampling_params import SamplingParams
 
     assumes(SamplingParams, "extra_args")
 
@@ -186,7 +186,7 @@ def test_tp_interface():
     # protect against interface changes
     import inspect
 
-    from aphrodite.distributed.parallel_state import get_tp_group
+    from sonar.distributed.parallel_state import get_tp_group
 
     sig = inspect.signature(get_tp_group)
     GroupCoordinator = sig.return_annotation
@@ -197,7 +197,7 @@ def test_tp_interface():
 
 def test_forward_context_interface():
     # protect against interface changes
-    from aphrodite.forward_context import ForwardContext
+    from sonar.forward_context import ForwardContext
 
     assumes(ForwardContext, "no_compile_layers", is_instance_of=dict)
     assumes(ForwardContext, "attn_metadata")
@@ -205,14 +205,14 @@ def test_forward_context_interface():
 
 def test_scheduler_output_interface():
     # protect against interface changes
-    from aphrodite.v1.core.sched.output import SchedulerOutput
+    from sonar.v1.core.sched.output import SchedulerOutput
 
     assumes(SchedulerOutput, "finished_req_ids")
     assumes(SchedulerOutput, "scheduled_new_reqs", is_instance_of=list)
     assumes(SchedulerOutput, "num_scheduled_tokens", is_instance_of=dict)
     assumes(SchedulerOutput, "scheduled_cached_reqs")
 
-    from aphrodite.v1.core.sched.output import CachedRequestData
+    from sonar.v1.core.sched.output import CachedRequestData
 
     assumes(CachedRequestData, "req_ids", is_instance_of=list)
     assumes(CachedRequestData, "new_block_ids", is_instance_of=list)

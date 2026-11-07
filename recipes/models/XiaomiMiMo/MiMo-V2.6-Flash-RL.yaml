@@ -23,7 +23,7 @@ model:
   min_vllm_version: "0.31.0"
   docker_image:
     nvidia: "vllm/vllm-openai:v0.31.0"
-    # AMD stays on the ROCm nightly: the gfx942 MXFP4 routing gate (aphrodite#58262)
+    # AMD stays on the ROCm nightly: the gfx942 MXFP4 routing gate (sonar#58262)
     # merged after the v0.31.0 branch cut, so MI300X/MI325X need it.
     amd: "vllm/vllm-openai-rocm:nightly"
   architecture: moe
@@ -35,7 +35,7 @@ model:
     - "--max-model-len"
     - "auto"
     - "--generation-config"
-    - "aphrodite"
+    - "sonar"
   base_env: {}
 
 features:
@@ -123,8 +123,8 @@ hardware_overrides:
       - "--kv-cache-dtype"
       - "fp8"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
-      APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
+      SONAR_ROCM_USE_AITER: "1"
+      SONAR_ROCM_QUICK_REDUCE_QUANTIZATION: "INT4"
 strategy_overrides: {}
 
 guide: |
@@ -160,7 +160,7 @@ guide: |
 
   Weights are stored as mxfp4 and computed as FP8 (block-wise e4m3, 128x128),
   so the checkpoint is only 173 GB on disk. Loading this mixed storage format
-  requires Aphrodite with the MiMo V2 mxfp4/bf16-router support
+  requires Sonar with the MiMo V2 mxfp4/bf16-router support
   ([vllm-project/vllm#57784](https://github.com/vllm-project/vllm/pull/57784)),
   first shipped in the v0.31.0 stable release.
 
@@ -168,9 +168,9 @@ guide: |
 
   - Hardware: 4x H200 (TP4), 4x MI355X/MI325X/MI300X (TP4), or equivalent aggregate VRAM (>= 208 GB)
 
-  ### Pull the Aphrodite docker image
+  ### Pull the Sonar docker image
 
-  Aphrodite 0.31.0 is the first stable release that can load the mxfp4-stored
+  Sonar 0.31.0 is the first stable release that can load the mxfp4-stored
   weights ([vllm-project/vllm#57784](https://github.com/vllm-project/vllm/pull/57784));
   earlier stable releases cannot:
 
@@ -180,9 +180,9 @@ guide: |
 
   MI300X / MI325X (gfx942) additionally need the MiMo MXFP4 routing gate
   ([vllm-project/vllm#58262](https://github.com/vllm-project/vllm/pull/58262)),
-  which merged after the v0.31.0 branch cut — on those GPUs use a nightly wheel
-  built after 2026-09-30 (`uv pip install -U aphrodite-engine --extra-index-url
-  https://wheels.vllm.ai/nightly/cu130`) or the ROCm nightly image.
+  which merged after the upstream v0.31.0 branch cut. For Sonar on those GPUs,
+  use `uv pip install -U sonar --extra-index-url
+  https://sonar.dphn.ai/whl/nightly/rocm/x86_64/simple --index-strategy first-index`.
 
   This release also registers the `mimo` tool-call and reasoning parsers with
   the Rust frontend
@@ -199,7 +199,7 @@ guide: |
   else is identical:
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
@@ -207,15 +207,15 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   ### AMD (MI355X, gfx950)
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
@@ -223,14 +223,14 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   MI355X also runs TP2 just fine.
 
   ### AMD (MI300X / MI325X, gfx942)
 
-  gfx942 has no native MXFP4 MoE path: without an explicit backend Aphrodite's
+  gfx942 has no native MXFP4 MoE path: without an explicit backend Sonar's
   oracle falls back to OCP emulation — correct, but about 6.5x lower output
   throughput. Select AITER's Triton W4A16 kernel instead with
   `--moe-backend aiter_triton_mxfp4_bf16`; supported since
@@ -238,13 +238,13 @@ guide: |
   (merged 2026-09-30, after the v0.31.0 branch cut — not in any stable release
   yet, so this flag needs a nightly wheel; it also needs aiter >= 0.1.20, which
   the ROCm nightly image ships). Verified end-to-end on MI300X in that PR — see
-  it for the gsm8k and `aphrodite bench serve` numbers against the emulation
+  it for the gsm8k and `sonar bench serve` numbers against the emulation
   baseline:
 
   ```bash
-  APHRODITE_ROCM_USE_AITER=1 \
-  APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  SONAR_ROCM_USE_AITER=1 \
+  SONAR_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 2 \
     --trust-remote-code \
     --max-model-len auto \
@@ -252,10 +252,10 @@ guide: |
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
     --moe-backend aiter_triton_mxfp4_bf16 \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
   With DFlash speculative decoding (drafter ships inside the checkpoint).
-  Aphrodite does not resolve a `<repo>/dflash` Hub subfolder as the draft model —
+  Sonar does not resolve a `<repo>/dflash` Hub subfolder as the draft model —
   `model` must be a concrete local path to the `dflash/` directory inside the
   downloaded snapshot. Resolve it per checkpoint (run `hf download
   <checkpoint>` first if it is not cached yet):
@@ -269,7 +269,7 @@ guide: |
   ```
 
   ```bash
-  aphrodite serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
+  sonar serve XiaomiMiMo/MiMo-V2.6-Flash-MOPD \
     --tensor-parallel-size 4 \
     --trust-remote-code \
     --gpu-memory-utilization 0.95 \
@@ -279,7 +279,7 @@ guide: |
     --reasoning-parser mimo \
     --tool-call-parser mimo \
     --enable-auto-tool-choice \
-    --generation-config aphrodite
+    --generation-config sonar
   ```
 
   The drafter inherits the target's tensor-parallel size by default. To pin it
@@ -311,8 +311,8 @@ guide: |
   - [MiMo-V2.6 technical report](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Pro-RL/blob/main/MiMo_V2_6_technical_report.pdf) (§5.6 covers MOPD2)
   - [Diagnosing and Mitigating Tool-Call Repetition in MiMo-V2.6](https://mimo.xiaomi.com/blog/mimo-v2-6-tool-call-repetition)
   - [MiMo-V2.6 blog post](https://mimo.xiaomi.com/mimo-v2-6)
-  - [Aphrodite PR #57784 — mxfp4 MoE / bf16 router / DFlash for MiMo V2](https://github.com/vllm-project/vllm/pull/57784)
-  - [Aphrodite PR #57933 — MiMo tool-call/reasoning parsers for the Rust frontend](https://github.com/vllm-project/vllm/pull/57933)
-  - [Aphrodite PR #58262 — MiMo-V2.6 MXFP4 on gfx942 (`--moe-backend aiter_triton_mxfp4_bf16`)](https://github.com/vllm-project/vllm/pull/58262)
+  - [Sonar PR #57784 — mxfp4 MoE / bf16 router / DFlash for MiMo V2](https://github.com/vllm-project/vllm/pull/57784)
+  - [Sonar PR #57933 — MiMo tool-call/reasoning parsers for the Rust frontend](https://github.com/vllm-project/vllm/pull/57933)
+  - [Sonar PR #58262 — MiMo-V2.6 MXFP4 on gfx942 (`--moe-backend aiter_triton_mxfp4_bf16`)](https://github.com/vllm-project/vllm/pull/58262)
   - [SGLang MiMo cookbook](https://docs.sglang.io/cookbook/autoregressive/Xiaomi/MiMo-V2.5)
-  - [Aphrodite ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)
+  - [Sonar ROCm GPU install docs](https://docs.vllm.ai/en/latest/getting_started/installation/gpu/?device=rocm)

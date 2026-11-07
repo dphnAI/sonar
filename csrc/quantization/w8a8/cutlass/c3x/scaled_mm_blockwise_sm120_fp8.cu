@@ -2,7 +2,7 @@
 #include "scaled_mm_blockwise_sm120_fp8_dispatch.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 
-namespace aphrodite {
+namespace sonar {
 
 namespace {
 
@@ -46,4 +46,4 @@ void cutlass_scaled_mm_blockwise_sm120_fp8(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

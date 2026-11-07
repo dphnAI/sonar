@@ -212,7 +212,7 @@ __global__ void bgmv_shrink_kernel(out_T* __restrict__ Y,
     }
   #pragma unroll
     for (size_t offset = tx / 2; offset > 0; offset /= 2) {
-      sum += APHRODITE_SHFL_DOWN_SYNC(sum, offset);
+      sum += SONAR_SHFL_DOWN_SYNC(sum, offset);
     }
 
     __syncthreads();
@@ -238,8 +238,7 @@ __global__ void bgmv_shrink_kernel(out_T* __restrict__ Y,
   // write Y;
   if (threadIdx.x == 0 && threadIdx.y == 0) {
     size_t y_idx = batch_idx * full_y_size + y_offset + j;
-    Y[y_idx] =
-        aphrodite_add<out_T>(Y[y_idx], convert_type<float, out_T>(y_write));
+    Y[y_idx] = sonar_add<out_T>(Y[y_idx], convert_type<float, out_T>(y_write));
   }
 }
 
@@ -299,7 +298,7 @@ __global__ void bgmv_expand_kernel(out_T* __restrict__ Y,
 #else
     size_t y_idx = batch_idx * full_y_size + y_offset + tile_idx * (tz * ty) +
                    threadIdx.z * ty + threadIdx.y;
-    Y[y_idx] = aphrodite_add<out_T>(Y[y_idx], convert_type<float, out_T>(sum));
+    Y[y_idx] = sonar_add<out_T>(Y[y_idx], convert_type<float, out_T>(sum));
 #endif
   }
 }

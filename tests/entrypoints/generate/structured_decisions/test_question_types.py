@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from aphrodite.entrypoints.openai.decisions.question_types import (
+from sonar.entrypoints.openai.decisions.question_types import (
     QUESTION_TYPES,
     Option,
     Question,

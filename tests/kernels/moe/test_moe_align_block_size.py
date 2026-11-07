@@ -8,12 +8,12 @@ Run `pytest tests/kernels/moe/test_moe_align_block_size.py`.
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
+from sonar.model_executor.layers.fused_moe.moe_align_block_size import (
     batched_moe_align_block_size,
     moe_align_block_size,
 )
-from aphrodite.utils.math_utils import cdiv, round_up
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.utils.math_utils import cdiv, round_up
+from sonar.utils.torch_utils import set_random_seed
 
 NUM_TOKENS = [1, 3, 256, 2256, 4096]
 NUM_EXPERTS = [32, 160, 256, 257]

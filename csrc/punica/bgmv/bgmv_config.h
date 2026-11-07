@@ -98,7 +98,7 @@ void bgmv_kernel(out_T* __restrict__ Y, const in_T* __restrict__ X,
     f(in_T, out_T, W_T, narrow, 128256) \
     f(in_T, out_T, W_T, narrow, 128512) \
     f(in_T, out_T, W_T, narrow, 131072) \
-// Keep above in sync with aphrodite/lora/layers::SamplerWithLoRA
+// Keep above in sync with sonar/lora/layers::SamplerWithLoRA
 
 // Used for defining kernels going from the variety of 
 // dim in to the narrow dim out
@@ -192,9 +192,9 @@ void bgmv_kernel(out_T* __restrict__ Y, const in_T* __restrict__ X,
     f(in_T, out_T, W_T, 128256, narrow) \
     f(in_T, out_T, W_T, 128512, narrow) \
     f(in_T, out_T, W_T, 131072, narrow) \
-// Keep above in sync with aphrodite/lora/layers::SamplerWithLoRA
+// Keep above in sync with sonar/lora/layers::SamplerWithLoRA
 
-// Keep this in sync with aphrodite/common/config::LoRAConfig
+// Keep this in sync with sonar/common/config::LoRAConfig
 #define FOR_BGMV_WIDE_NARROW(f, in_T, out_T, W_T) \
     FOR_BGMV_WIDE(f, in_T, out_T, W_T, 8)  \
     FOR_BGMV_WIDE(f, in_T, out_T, W_T, 16) \

@@ -6,7 +6,7 @@ Two fused paths fold the packed causal conv1d update, the gated delta-rule
 recurrence and the gated output RMSNorm into one launch, updating the conv
 state and the recurrent state in place:
 
-* the Aphrodite HIP kernel ``ops.fused_kda_decode`` (gfx942 / gfx950), and
+* the Sonar HIP kernel ``ops.fused_kda_decode`` (gfx942 / gfx950), and
 * AITER's Gluon kernels behind ``rocm_aiter_ops`` (CDNA4+): the packed
   non-spec decode and the speculative-decode ``fused_recurrent_kda``.
 
@@ -19,13 +19,13 @@ from functools import partial
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 
 def _hip_kernel_arch() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite.platforms.rocm import on_gfx942, on_gfx950
+    from sonar.platforms.rocm import on_gfx942, on_gfx950
 
     return on_gfx950() or on_gfx942()
 
@@ -33,8 +33,8 @@ def _hip_kernel_arch() -> bool:
 def _aiter_gluon_kda_available() -> bool:
     if not current_platform.is_rocm():
         return False
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.platforms.rocm import get_cdna_version
 
     return get_cdna_version() >= 4 and rocm_aiter_ops._kda_gluon_decode_importable()
 
@@ -59,7 +59,7 @@ DTYPE = torch.bfloat16
 
 def _requires_kernel() -> None:
     if not hasattr(torch.ops._C, "fused_kda_decode"):
-        pytest.skip("Aphrodite was built without the fused KDA decode kernel")
+        pytest.skip("Sonar was built without the fused KDA decode kernel")
 
 
 class KdaDecodeInputs:
@@ -144,10 +144,10 @@ def _run_triton_chain(
     inp: KdaDecodeInputs,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """conv1d update -> recurrent decode -> gated norm, as the layer runs it."""
-    from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
         causal_conv1d_update,
     )
-    from aphrodite.models.kimi_k3.amd.ops.third_party.kda import (
+    from sonar.models.kimi_k3.amd.ops.third_party.kda import (
         fused_recurrent_kda_packed_decode,
     )
 
@@ -181,7 +181,7 @@ def _run_triton_chain(
 def _run_fused(
     inp: KdaDecodeInputs,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     conv_state = inp.conv_state.clone()
     recurrent_state = inp.recurrent_state.clone()
@@ -255,7 +255,7 @@ def test_fused_kda_decode_leaves_untouched_slots_alone() -> None:
 def test_fused_kda_decode_without_output_norm() -> None:
     """Omitting the gate/norm pair returns the raw recurrent output."""
     _requires_kernel()
-    from aphrodite import _custom_ops as ops
+    from sonar import _custom_ops as ops
 
     inp = KdaDecodeInputs(5, 12, num_slots=8, seed=7)
     _, _, expected_state = _run_triton_chain(inp)
@@ -320,15 +320,15 @@ def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype
     on, so the copies must also stay out of autograd.
     """
     _requires_kernel()
-    from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import set_current_aphrodite_config
-    from aphrodite.model_executor.model_loader.utils import process_weights_after_loading
-    from aphrodite.models.kimi_k3.amd.kda import KimiK3DeltaAttention
-    from aphrodite.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
-    from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-    from tests.v1.attention.utils import create_aphrodite_config
+    from sonar._aiter_ops import rocm_aiter_ops
+    from sonar.config import set_current_sonar_config
+    from sonar.model_executor.model_loader.utils import process_weights_after_loading
+    from sonar.models.kimi_k3.amd.kda import KimiK3DeltaAttention
+    from sonar.models.kimi_k3.amd.ops.kda_chunk import is_fused_kda_chunk_supported
+    from sonar.transformers_utils.configs.kimi_linear import KimiLinearConfig
+    from tests.v1.attention.utils import create_sonar_config
 
-    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "SD")
+    monkeypatch.setenv("SONAR_SSM_CONV_STATE_LAYOUT", "SD")
     monkeypatch.setattr(rocm_aiter_ops, "is_kda_gluon_decode_available", lambda: aiter_available)
     monkeypatch.setattr(rocm_aiter_ops, "is_kda_gluon_prefill_available", lambda: aiter_available)
     config = KimiLinearConfig(
@@ -343,10 +343,10 @@ def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype
             "gate_lower_bound": GATE_LOWER_BOUND,
         },
     )
-    aphrodite_config = create_aphrodite_config(model_name="Qwen/Qwen3.5-0.8B", dtype=DTYPE)
-    aphrodite_config.cache_config.mamba_ssm_cache_dtype = state_dtype
-    with set_current_aphrodite_config(aphrodite_config), torch.device("cuda"):
-        layer = KimiK3DeltaAttention(config, aphrodite_config, prefix="model.layers.0.self_attn")
+    sonar_config = create_sonar_config(model_name="Qwen/Qwen3.5-0.8B", dtype=DTYPE)
+    sonar_config.cache_config.mamba_ssm_cache_dtype = state_dtype
+    with set_current_sonar_config(sonar_config), torch.device("cuda"):
+        layer = KimiK3DeltaAttention(config, sonar_config, prefix="model.layers.0.self_attn")
     use_aiter = aiter_available and state_dtype == "float32"
     assert layer.use_aiter_decode == use_aiter
     expected_prefill = "gluon" if use_aiter else "fused" if is_fused_kda_chunk_supported() else "triton"
@@ -367,7 +367,7 @@ def test_decode_weights_staged_after_loading(dist_init, monkeypatch, state_dtype
         if layer.decode_norm_weight is not None:
             layer.decode_norm_weight.fill_(float("nan"))
 
-    process_weights_after_loading(torch.nn.ModuleList([layer]), aphrodite_config.model_config, torch.device("cuda"))
+    process_weights_after_loading(torch.nn.ModuleList([layer]), sonar_config.model_config, torch.device("cuda"))
 
     dim = layer.local_projection_size
     conv_weights = layer.conv1d.weight.squeeze(1)
@@ -388,7 +388,7 @@ def _run_aiter_packed_decode(
     inp: KdaDecodeInputs,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Exactly the call KimiK3DeltaAttention._forward makes for decode batches."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     conv_state = inp.conv_state.clone()
     recurrent_state = inp.recurrent_state.clone()
@@ -515,10 +515,10 @@ def _run_spec_triton_chain(
     sb: SpecBatch,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """The layer's unfused spec path: conv update -> recurrent KDA -> norm."""
-    from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
+    from sonar.model_executor.layers.mamba.ops.causal_conv1d import (
         causal_conv1d_update,
     )
-    from aphrodite.models.kimi_k3.amd.ops.third_party.kda import fused_recurrent_kda
+    from sonar.models.kimi_k3.amd.ops.third_party.kda import fused_recurrent_kda
 
     inp = sb.inp
     conv_state = inp.conv_state.clone()
@@ -559,7 +559,7 @@ def _run_aiter_spec(
     sb: SpecBatch,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Exactly the call KimiK3DeltaAttention._forward makes for spec-only batches."""
-    from aphrodite._aiter_ops import rocm_aiter_ops
+    from sonar._aiter_ops import rocm_aiter_ops
 
     inp = sb.inp
     conv_state = inp.conv_state.clone()

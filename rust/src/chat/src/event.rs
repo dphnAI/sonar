@@ -4,10 +4,10 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
-use aphrodite_llm::{RequestTimestamps, TokenUsage, WeightVersionSpan};
-use aphrodite_text::{DecodedLogprobs, DecodedPromptLogprobs};
 use serde::{Deserialize, Serialize};
+use sonar_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use sonar_llm::{RequestTimestamps, TokenUsage, WeightVersionSpan};
+use sonar_text::{DecodedLogprobs, DecodedPromptLogprobs};
 
 use crate::FinishReason;
 

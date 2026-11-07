@@ -8,26 +8,26 @@ import pytest
 import torch
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.anthropic.protocol import AnthropicMessagesRequest
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_features import (
+from sonar.entrypoints.anthropic.protocol import AnthropicMessagesRequest
+from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.openai.responses.protocol import ResponsesRequest
+from sonar.entrypoints.scale_out.token_in_token_out.mm_features import (
     extract_mm_features,
     merge_mm_kwargs_items,
     mm_kwargs_from_features,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_serde import (
+from sonar.entrypoints.scale_out.token_in_token_out.mm_serde import (
     decode_mm_kwargs_item,
     encode_mm_kwargs_item,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     MultiModalFeatures,
     PlaceholderRangeInfo,
 )
-from aphrodite.inputs import MultiModalInput, mm_input
-from aphrodite.multimodal.inputs import (
+from sonar.inputs import MultiModalInput, mm_input
+from sonar.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFieldElem,
     MultiModalFlatField,

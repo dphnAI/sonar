@@ -5,7 +5,7 @@ import os
 import pybase64 as base64
 import torch
 
-from aphrodite import LLM
+from sonar import LLM
 
 # This example shows how to perform an offline inference that generates
 # multimodal data. In this specific case this example will take a geotiff

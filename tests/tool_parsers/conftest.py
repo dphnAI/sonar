@@ -4,7 +4,7 @@
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.tokenizers import TokenizerLike
+from sonar.tokenizers import TokenizerLike
 
 
 @pytest.fixture(scope="module")

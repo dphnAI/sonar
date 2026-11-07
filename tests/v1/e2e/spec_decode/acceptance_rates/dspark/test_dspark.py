@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from aphrodite.config import CompilationConfig
-from aphrodite.platforms import current_platform
+from sonar.config import CompilationConfig
+from sonar.platforms import current_platform
 from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k_offline
 
 from ...utils import compute_acceptance_len, compute_acceptance_rate
@@ -91,11 +91,11 @@ QWEN3_6_DSPARK_SPECULATORS = DSparkCorrectnessConfig(
 def test_dspark_correctness_and_acceptance_rate(
     monkeypatch: pytest.MonkeyPatch,
     config: DSparkCorrectnessConfig,
-    aphrodite_runner,
+    sonar_runner,
 ):
     """Guard GSM8K accuracy and acceptance metrics for DSpark models."""
     if config.disable_flashinfer_sampler:
-        monkeypatch.setenv("APHRODITE_USE_FLASHINFER_SAMPLER", "0")
+        monkeypatch.setenv("SONAR_USE_FLASHINFER_SAMPLER", "0")
 
     speculative_config = {
         "method": "dspark",
@@ -123,7 +123,7 @@ def test_dspark_correctness_and_acceptance_rate(
     if config.language_model_only:
         runner_config["language_model_only"] = True
 
-    with aphrodite_runner(config.model, **runner_config) as spec_runner:
+    with sonar_runner(config.model, **runner_config) as spec_runner:
         spec_llm = spec_runner.llm
         results = evaluate_gsm8k_offline(
             spec_llm,

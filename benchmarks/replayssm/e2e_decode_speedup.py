@@ -87,11 +87,11 @@ def run_worker(args):
     # override_ssm_config is a module global; it only reaches the model if the
     # engine runs in-process (default V1 spawns a separate EngineCore). Force it.
     if args.worker == "standard" and args.baseline_ssm_config:
-        os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
+        os.environ["SONAR_ENABLE_V1_MULTIPROCESSING"] = "0"
 
     import torch
 
-    from aphrodite import LLM, SamplingParams
+    from sonar import LLM, SamplingParams
 
     mode = args.worker
     max_model_len = resolve_max_model_len(args)
@@ -121,7 +121,7 @@ def run_worker(args):
 
     _ssm_cm = None
     if mode == "standard" and args.baseline_ssm_config:
-        from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import override_ssm_config
+        from sonar.model_executor.layers.mamba.ops.mamba_ssm import override_ssm_config
 
         _bsm, _nw = (int(x) for x in args.baseline_ssm_config.split(","))
         _ssm_cm = override_ssm_config((_bsm, _nw))

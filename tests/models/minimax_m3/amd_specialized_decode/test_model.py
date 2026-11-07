@@ -3,7 +3,7 @@
 """Layer- and model-level precision of --monokernel on a mini MiniMax M3 at
 the real per-layer shapes, TP4, with random weights (no checkpoint): layers
 0-2 dense and stock, 3-4 sparse and fused, the last one ending in the step-end
-handshake. Engines load dummy weights, so Aphrodite's real MXFP4 / AITER post-load
+handshake. Engines load dummy weights, so Sonar's real MXFP4 / AITER post-load
 path runs; every rank then overwrites them in place at sensible scales,
 distinct per layer and per TP shard, the experts generated in the checkpoint's
 MXFP4 format and converted by that same path.
@@ -22,8 +22,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 LAYERS = 5
 SPARSE = (3, 4)
@@ -32,23 +32,23 @@ STEPS = 8
 BATCHES = (1, 3, 16)
 SEED = 0
 ENV = {
-    "APHRODITE_ALLOW_INSECURE_SERIALIZATION": "1",
-    "APHRODITE_USE_BREAKABLE_CUDAGRAPH": "0",
-    "APHRODITE_ROCM_USE_AITER": "1",
-    "APHRODITE_ROCM_USE_AITER_MOE": "1",
-    "APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": "1",
-    "APHRODITE_ROCM_SHUFFLE_KV_CACHE_LAYOUT": "1",
+    "SONAR_ALLOW_INSECURE_SERIALIZATION": "1",
+    "SONAR_USE_BREAKABLE_CUDAGRAPH": "0",
+    "SONAR_ROCM_USE_AITER": "1",
+    "SONAR_ROCM_USE_AITER_MOE": "1",
+    "SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS": "1",
+    "SONAR_ROCM_SHUFFLE_KV_CACHE_LAYOUT": "1",
     # deterministic BF16 GEMMs (hipBLASLt) for the stock layers: the split-K
     # skinny and AITER tuned GEMMs reduce in a run-dependent order
-    "APHRODITE_ROCM_USE_SKINNY_GEMM": "0",
-    "APHRODITE_ROCM_USE_AITER_LINEAR": "0",
+    "SONAR_ROCM_USE_SKINNY_GEMM": "0",
+    "SONAR_ROCM_USE_AITER_LINEAR": "0",
 }
 
 
 def _supported() -> bool:
     if not current_platform.is_rocm() or torch.accelerator.device_count() < 4:
         return False
-    from aphrodite.platforms.rocm import on_gfx950
+    from sonar.platforms.rocm import on_gfx950
 
     return on_gfx950()
 
@@ -61,7 +61,7 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def model_dir(tmp_path_factory):
-    from aphrodite.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
+    from sonar.transformers_utils.configs.minimax_m3 import MiniMaxM3Config
 
     layers = [0] * 3 + [1] * (LAYERS - 3)
     mx = dict(
@@ -122,12 +122,12 @@ def model_dir(tmp_path_factory):
 def _randomize(worker):
     """Weights at unit-activation scales; TP shards seeded per rank, replicated
     tensors (norms, router, bias) alike on every rank."""
-    from aphrodite.distributed import get_tensor_model_parallel_rank
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+    from sonar.distributed import get_tensor_model_parallel_rank
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
         convert_gpt_oss_weight_to_mxfp4_moe_kernel_format,
     )
-    from aphrodite.model_executor.layers.fused_moe.router import bf16x3_router_gemm_rocm
+    from sonar.model_executor.layers.fused_moe.router import bf16x3_router_gemm_rocm
 
     rank = get_tensor_model_parallel_rank()
     model = worker.model_runner.get_model()
@@ -200,7 +200,7 @@ def _decode(llm, capture=False):
     """Full-vocabulary logprobs of every decode step (the first output token
     comes from prefill, which runs stock), every token forced; ``capture``:
     also each sparse layer's inputs at the first decode step of each batch."""
-    from aphrodite import SamplingParams
+    from sonar import SamplingParams
 
     rows = []
     for n, prompts, traces in _requests():
@@ -279,14 +279,14 @@ def _stash(worker, s):
 
 def _replay(worker):
     """Each captured sparse layer's FFN half, native and fused, on every rank."""
-    from aphrodite.forward_context import set_forward_context
-    from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+    from sonar.forward_context import set_forward_context
+    from sonar.model_executor.layers.fused_allreduce_gemma_rms_norm import (
         fused_allreduce_gemma_rms_norm,
     )
-    from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.executor import (
+    from sonar.models.minimax_m3.amd.specialized_decode.runtime.executor import (
         FfnExecutor,
     )
-    from aphrodite.models.minimax_m3.amd.specialized_decode.runtime.weights import (
+    from sonar.models.minimax_m3.amd.specialized_decode.runtime.weights import (
         MonoLayerWeights,
     )
 
@@ -294,7 +294,7 @@ def _replay(worker):
     weights = {i: MonoLayerWeights.from_layer(layer) for i, layer in layers.items()}
     executor = FfnExecutor(list(layers.values()), weights, BATCHES, 4)
     results = {}
-    with torch.no_grad(), set_forward_context(None, worker.aphrodite_config):
+    with torch.no_grad(), set_forward_context(None, worker.sonar_config):
         for s, caps in worker._ffn_caps.items():
             for i, (hidden, residual, part) in caps.items():
                 layer = layers[i]
@@ -309,8 +309,8 @@ def _replay(worker):
     return results, failed
 
 
-def _engine(aphrodite_runner, model_dir, mono, graphs=False, **extra):
-    return aphrodite_runner(
+def _engine(sonar_runner, model_dir, mono, graphs=False, **extra):
+    return sonar_runner(
         model_dir,
         load_format="dummy",
         skip_tokenizer_init=True,
@@ -344,9 +344,9 @@ def _env():
 
 
 @pytest.fixture(scope="module")
-def native(aphrodite_runner, model_dir):
+def native(sonar_runner, model_dir):
     """Native eager: the reference logprobs and the layer replays."""
-    with _engine(aphrodite_runner, model_dir, mono=False) as runner:
+    with _engine(sonar_runner, model_dir, mono=False) as runner:
         runner.llm.collective_rpc(_randomize)
         logprobs = _decode(runner.llm, capture=True)
         layers = runner.llm.collective_rpc(_replay)
@@ -380,12 +380,12 @@ def _reset_state(worker):
 
 
 @pytest.mark.parametrize("graphs", [False, True], ids=["eager", "full_graphs"])
-def test_model_matches_native(aphrodite_runner, model_dir, native, graphs):
+def test_model_matches_native(sonar_runner, model_dir, native, graphs):
     """Teacher-forced decode with --monokernel against native eager. Under
     FULL graphs (async scheduling) the epoch resets every 3 sampled steps,
     on every rank at the same steps, and no wait times out."""
     with _engine(
-        aphrodite_runner,
+        sonar_runner,
         model_dir,
         mono=True,
         graphs=graphs,
@@ -413,16 +413,16 @@ def _arm_late_fault(worker, rank, ticks):
     _executor(worker).runner.inject.copy_(torch.tensor([rank + 1, ticks], dtype=torch.int32))
 
 
-def test_late_rank_fault_returns_no_tokens_from_full_graphs(aphrodite_runner, model_dir, capfd):
+def test_late_rank_fault_returns_no_tokens_from_full_graphs(sonar_runner, model_dir, capfd):
     """During a replayed step, rank 2 fails 5 ms after the rest of the step's
     last launch, so the output rank is ahead of it; that step returns no
     token."""
-    from aphrodite import SamplingParams
-    from aphrodite.v1.engine.exceptions import EngineDeadError
+    from sonar import SamplingParams
+    from sonar.v1.engine.exceptions import EngineDeadError
 
     prompt = {"prompt_token_ids": list(range(1, 33))}
     params = SamplingParams(max_tokens=8, temperature=0, detokenize=False)
-    with _engine(aphrodite_runner, model_dir, mono=True, graphs=True) as runner:
+    with _engine(sonar_runner, model_dir, mono=True, graphs=True) as runner:
         llm = runner.llm
         assert len(llm.generate(prompt, params)[0].outputs[0].token_ids) == 8
         capfd.readouterr()
@@ -487,19 +487,19 @@ def _spec_requests():
     ]
 
 
-def test_eagle3_verify_steps_match_native(aphrodite_runner, model_dir, draft_dir, capfd):
+def test_eagle3_verify_steps_match_native(sonar_runner, model_dir, draft_dir, capfd):
     """EAGLE3 (random draft) with --monokernel under FULL graphs: the verify
     steps of 1-4 requests (4, 8, 12 padded to 16, and 16 rows) run the fused
     launches (the device epoch moves on); the target's full-vocabulary
     logprobs along the generated tokens match native eager teacher-forced on
     them. A late rank fault during a verify step then returns no token."""
-    from aphrodite import SamplingParams
-    from aphrodite.v1.engine.exceptions import EngineDeadError
+    from sonar import SamplingParams
+    from sonar.v1.engine.exceptions import EngineDeadError
 
     greedy = SamplingParams(max_tokens=STEPS, temperature=0, logprobs=-1, detokenize=False, ignore_eos=True)
     tokens, mono_rows = [], []
     with _engine(
-        aphrodite_runner,
+        sonar_runner,
         model_dir,
         mono=True,
         graphs=True,
@@ -529,7 +529,7 @@ def test_eagle3_verify_steps_match_native(aphrodite_runner, model_dir, draft_dir
         assert outputs is None
 
     native_rows = []
-    with _engine(aphrodite_runner, model_dir, mono=False) as runner:
+    with _engine(sonar_runner, model_dir, mono=False) as runner:
         llm = runner.llm
         llm.collective_rpc(_randomize)
         for prompts, traces in zip(_spec_requests(), tokens):

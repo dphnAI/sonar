@@ -3,7 +3,7 @@
 import pytest
 from transformers import GraniteConfig
 
-from aphrodite.model_executor.models.granite import granite_layer_attn_params
+from sonar.model_executor.models.granite import granite_layer_attn_params
 
 from ...utils import check_logprobs_close
 
@@ -23,7 +23,7 @@ MODELS = [
 @pytest.mark.cpu_model
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -33,13 +33,13 @@ def test_models(
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
-    with aphrodite_runner(model, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with sonar_runner(model, dtype=dtype) as sonar_model:
+        sonar_outputs = sonar_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=sonar_outputs,
         name_0="hf",
-        name_1="aphrodite",
+        name_1="sonar",
     )
 
 

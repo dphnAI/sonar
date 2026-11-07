@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aphrodite_text::backend::hf::{HfOverrides, ModelSource};
-use aphrodite_text::{DynTextBackend, GenerationConfigMode, TextBackend};
 use serde_json::Value;
+use sonar_text::backend::hf::{HfOverrides, ModelSource};
+use sonar_text::{DynTextBackend, GenerationConfigMode, TextBackend};
 
 use crate::error::Result;
 use crate::multimodal::{MmLimitPerPrompt, MultimodalModelInfo};
@@ -26,7 +26,7 @@ pub struct NewChatOutputProcessorOptions<'a> {
     pub tool_strict_level: Option<ToolStrictLevel>,
 }
 
-/// Minimal prompt-processing backend needed by `aphrodite-chat`.
+/// Minimal prompt-processing backend needed by `sonar-chat`.
 pub trait ChatBackend: Send + Sync {
     /// Return the renderer used for chat-prompt construction.
     fn chat_renderer(&self) -> DynChatRenderer;

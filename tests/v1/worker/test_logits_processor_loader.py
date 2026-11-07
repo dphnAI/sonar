@@ -15,13 +15,13 @@ from typing import Any
 import pytest
 import torch
 
-import aphrodite.v1.worker.gpu.sample.logits_processor.loader as loader
-from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.sample.logits_processor import (
+import sonar.v1.worker.gpu.sample.logits_processor.loader as loader
+from sonar.exceptions import SonarValidationError
+from sonar.sampling_params import SamplingParams
+from sonar.v1.sample.logits_processor import (
     LogitsProcessor as V1LogitsProcessor,
 )
-from aphrodite.v1.worker.gpu.sample.logits_processor import (
+from sonar.v1.worker.gpu.sample.logits_processor import (
     LogitsContext,
     LogitsProcessor,
 )
@@ -30,8 +30,8 @@ from aphrodite.v1.worker.gpu.sample.logits_processor import (
 class DummyV2Processor(LogitsProcessor):
     """Records its constructor args so tests can assert how it was built."""
 
-    def __init__(self, aphrodite_config: Any, req_state: Any):
-        self.ctor_args = (aphrodite_config, req_state)
+    def __init__(self, sonar_config: Any, req_state: Any):
+        self.ctor_args = (sonar_config, req_state)
 
     def apply(self, logits: torch.Tensor, ctx: LogitsContext) -> torch.Tensor:
         return logits
@@ -99,8 +99,8 @@ def test_loads_v2_processors(monkeypatch: pytest.MonkeyPatch, source: ProcSource
     else:
         assert [type(p) for p in procs] == [DummyV2Processor]
     assert isinstance(procs[0], DummyV2Processor)
-    aphrodite_config, req_state = procs[0].ctor_args
-    assert aphrodite_config is None
+    sonar_config, req_state = procs[0].ctor_args
+    assert sonar_config is None
     assert isinstance(req_state, loader.LogitsProcRequestState)
     assert req_state.max_num_reqs == 4
 
@@ -193,11 +193,11 @@ class ValidatingProcessor(DummyV2Processor):
 
 def test_validate_params_runs_at_admission():
     """The factory loads classes up front; the returned validator runs
-    validate_params per request and wraps rejections as AphroditeValidationError."""
+    validate_params per request and wraps rejections as SonarValidationError."""
     loader._cached_load_v2_logitsprocs.cache_clear()
     validate = loader.build_custom_logits_processors_params_validator([ValidatingProcessor])
     validate(SamplingParams(extra_args={"target_token": 1}))
-    with pytest.raises(AphroditeValidationError, match="target_token"):
+    with pytest.raises(SonarValidationError, match="target_token"):
         validate(SamplingParams(extra_args={"target_token": -1}))
 
 
@@ -214,10 +214,10 @@ def test_loader_import_stays_frontend_safe():
     it must not pull in model-runner side modules."""
     code = (
         "import sys\n"
-        "import aphrodite.v1.worker.gpu.sample.logits_processor.loader\n"
-        "assert 'aphrodite.sampling_params' not in sys.modules\n"
-        "assert 'aphrodite.v1.sample.logits_processor' not in sys.modules\n"
-        "assert 'aphrodite.v1.worker.gpu.states' not in sys.modules\n"
-        "assert 'aphrodite.v1.worker.gpu.buffer_utils' not in sys.modules\n"
+        "import sonar.v1.worker.gpu.sample.logits_processor.loader\n"
+        "assert 'sonar.sampling_params' not in sys.modules\n"
+        "assert 'sonar.v1.sample.logits_processor' not in sys.modules\n"
+        "assert 'sonar.v1.worker.gpu.states' not in sys.modules\n"
+        "assert 'sonar.v1.worker.gpu.buffer_utils' not in sys.modules\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)

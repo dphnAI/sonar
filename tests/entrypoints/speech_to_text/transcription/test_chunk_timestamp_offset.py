@@ -9,11 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 import pytest
 
-from aphrodite.config.speech_to_text import SpeechToTextConfig
-from aphrodite.entrypoints.speech_to_text.base.serving import SpeechToTextBaseServing
+from sonar.config.speech_to_text import SpeechToTextConfig
+from sonar.entrypoints.speech_to_text.base.serving import SpeechToTextBaseServing
 
 SR = 16_000
-_PATCH = "aphrodite.entrypoints.speech_to_text.base.serving"
+_PATCH = "sonar.entrypoints.speech_to_text.base.serving"
 
 
 @pytest.mark.asyncio

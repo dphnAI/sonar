@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     CompilationConfig,
-    set_current_aphrodite_config,
+    SonarConfig,
+    set_current_sonar_config,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.mamba.short_conv import ShortConv
-from aphrodite.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
-from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadata
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.mamba.short_conv import ShortConv
+from sonar.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
+from sonar.platforms import current_platform
+from sonar.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadata
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -26,19 +26,19 @@ if not current_platform.is_cpu():
 def mock_dist():
     with (
         patch(
-            "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_rank",
+            "sonar.model_executor.layers.linear.get_tensor_model_parallel_rank",
             return_value=0,
         ),
         patch(
-            "aphrodite.model_executor.layers.linear.get_tensor_model_parallel_world_size",
+            "sonar.model_executor.layers.linear.get_tensor_model_parallel_world_size",
             return_value=1,
         ),
         patch(
-            "aphrodite.distributed.parallel_state.model_parallel_is_initialized",
+            "sonar.distributed.parallel_state.model_parallel_is_initialized",
             return_value=True,
         ),
         patch(
-            "aphrodite.distributed.parallel_state.get_tp_group",
+            "sonar.distributed.parallel_state.get_tp_group",
             return_value=MagicMock(rank_in_group=0),
         ),
     ):
@@ -46,23 +46,23 @@ def mock_dist():
 
 
 @pytest.fixture
-def aphrodite_config():
-    # ShortConv only needs compilation_config from the current Aphrodite config,
+def sonar_config():
+    # ShortConv only needs compilation_config from the current Sonar config,
     # so a minimal config (model_config=None) avoids mocking ModelConfig and the
-    # associated AphroditeConfig validation churn.
-    return AphroditeConfig(compilation_config=CompilationConfig())
+    # associated SonarConfig validation churn.
+    return SonarConfig(compilation_config=CompilationConfig())
 
 
-def test_short_conv_forward_native_prefill(aphrodite_config):
+def test_short_conv_forward_native_prefill(sonar_config):
     prefix = "test_layer"
     config = SimpleNamespace(conv_L_cache=4, conv_bias=True)
     dim = 16
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer = ShortConv(config=config, dim=dim, layer_idx=0, prefix=prefix)
 
     layer.to("cpu")
-    # Aphrodite Linear layers allocate weights with torch.empty (uninitialized).
+    # Sonar Linear layers allocate weights with torch.empty (uninitialized).
     # On ARM these come back as zero-filled pages, so in_proj output is zero and
     # the prefill state stays zero. Seed + init to make the test platform-safe.
     torch.manual_seed(0)
@@ -98,18 +98,18 @@ def test_short_conv_forward_native_prefill(aphrodite_config):
     output = torch.zeros_like(hidden_states)
 
     attn_metadata_dict = {prefix: attn_metadata}
-    with set_forward_context(attn_metadata=attn_metadata_dict, aphrodite_config=aphrodite_config):
+    with set_forward_context(attn_metadata=attn_metadata_dict, sonar_config=sonar_config):
         layer.forward_native(hidden_states, output)
 
     assert not torch.allclose(conv_state, torch.zeros_like(conv_state))
 
 
-def test_short_conv_forward_native_decode(aphrodite_config):
+def test_short_conv_forward_native_decode(sonar_config):
     prefix = "test_layer_decode"
     config = SimpleNamespace(conv_L_cache=4, conv_bias=True)
     dim = 16
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         layer = ShortConv(config=config, dim=dim, layer_idx=0, prefix=prefix)
 
     layer.to("cpu")
@@ -146,7 +146,7 @@ def test_short_conv_forward_native_decode(aphrodite_config):
     old_conv_state = conv_state.clone()
 
     attn_metadata_dict = {prefix: attn_metadata}
-    with set_forward_context(attn_metadata=attn_metadata_dict, aphrodite_config=aphrodite_config):
+    with set_forward_context(attn_metadata=attn_metadata_dict, sonar_config=sonar_config):
         layer.forward_native(hidden_states, output)
 
     assert not torch.allclose(conv_state, old_conv_state)

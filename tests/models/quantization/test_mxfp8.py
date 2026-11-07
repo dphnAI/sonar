@@ -19,7 +19,7 @@ diverse prompts from ``tests/prompts/example.txt``.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.quantization.utils import is_quant_method_supported
 
 from ..utils import check_logprobs_close
@@ -47,7 +47,7 @@ NUM_LOG_PROBS = 8
     ids=["dense", "moe", "moe_transformers"],
 )
 def test_mxfp8_logprobs(
-    aphrodite_runner,
+    sonar_runner,
     quant_baseline_logprobs,
     example_prompts,
     model: str,
@@ -71,13 +71,13 @@ def test_mxfp8_logprobs(
             num_logprobs=NUM_LOG_PROBS,
         )
 
-        with aphrodite_runner(
+        with sonar_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
             quantization="mxfp8",
-        ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
+        ) as sonar_model:
+            test_outputs = sonar_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,
@@ -99,14 +99,14 @@ def test_mxfp8_logprobs(
 def test_mxfp8_aiter_accepts_silu_activation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+    from sonar.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
         select_mxfp8_moe_backend,
     )
 
@@ -131,7 +131,7 @@ def test_mxfp8_aiter_accepts_silu_activation(
         moe_backend="aiter",
     )
 
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
 
     backend, experts_cls = select_mxfp8_moe_backend(config)
 
@@ -151,14 +151,14 @@ def test_mxfp8_aiter_accepts_silu_activation(
 def test_mxfp8_aiter_requires_swigluoai_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+    from sonar.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
         select_mxfp8_moe_backend,
     )
 
@@ -199,15 +199,15 @@ def test_mxfp8_aiter_requires_swigluoai_params(
 def test_mxfp8_aiter_accepts_swigluoai_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+    from sonar.model_executor.layers.fused_moe.config import (
         FusedMoEConfig,
         FusedMoEParallelConfig,
         RoutingMethodType,
     )
-    from aphrodite.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
-    from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
-    from aphrodite.model_executor.layers.fused_moe.oracle.mxfp8 import (
+    from sonar.model_executor.layers.fused_moe.experts import aiter_mxfp8_moe
+    from sonar.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
+    from sonar.model_executor.layers.fused_moe.oracle.mxfp8 import (
         select_mxfp8_moe_backend,
     )
 
@@ -250,16 +250,16 @@ def test_mxfp8_aiter_accepts_swigluoai_params(
     [DENSE_MODEL, MOE_MODEL, TRANSFORMERS_MOE_MODEL],
     ids=["dense", "moe", "moe_transformers"],
 )
-def test_mxfp8_generation(aphrodite_runner, model: str) -> None:
+def test_mxfp8_generation(sonar_runner, model: str) -> None:
     """Smoke test: verify online MXFP8 model generates coherent text."""
     prompt = "1 2 3 4 5"
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         enforce_eager=True,
         quantization="mxfp8",
         max_model_len=MAX_MODEL_LEN,
-    ) as aphrodite_model:
-        output = aphrodite_model.generate_greedy([prompt], max_tokens=5)
+    ) as sonar_model:
+        output = sonar_model.generate_greedy([prompt], max_tokens=5)
 
     generated = output[0][1]
     assert len(generated) > len(prompt), f"MXFP8 model produced no new tokens. Output: {generated!r}"

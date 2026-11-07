@@ -19,12 +19,12 @@ import os
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig
-from aphrodite.model_executor.model_loader import register_model_loader
-from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.model_executor.model_loader.reload.layerwise import get_layerwise_info
-from aphrodite.model_executor.model_loader.reload.utils import get_layer_tensors
-from aphrodite.model_executor.model_loader.weight_utils import (
+from sonar.config import ModelConfig
+from sonar.model_executor.model_loader import register_model_loader
+from sonar.model_executor.model_loader.dummy_loader import DummyModelLoader
+from sonar.model_executor.model_loader.reload.layerwise import get_layerwise_info
+from sonar.model_executor.model_loader.reload.utils import get_layer_tensors
+from sonar.model_executor.model_loader.weight_utils import (
     initialize_single_dummy_weight,
 )
 

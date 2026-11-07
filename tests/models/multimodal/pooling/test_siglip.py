@@ -7,7 +7,7 @@ import pytest
 import torch
 from transformers import SiglipModel
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, SonarRunner
 from ...utils import check_embeddings_close
 
 HF_TEXT_PROMPTS = [
@@ -32,22 +32,22 @@ MODELS = [
 
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    sonar_runner: type[SonarRunner],
     input_cases: list[tuple[list[str], PromptImageInput, dict[str, Any]]],
     model: str,
     *,
     dtype: str,
 ) -> None:
-    with aphrodite_runner(
+    with sonar_runner(
         model,
         runner="pooling",
         dtype=dtype,
         enforce_eager=True,
         max_model_len=64,
         gpu_memory_utilization=0.7,
-    ) as aphrodite_model:
-        aphrodite_outputs_per_case = [
-            aphrodite_model.embed(
+    ) as sonar_model:
+        sonar_outputs_per_case = [
+            sonar_model.embed(
                 input_texts,
                 images=input_images,
                 tokenization_kwargs=tokenization_kwargs,
@@ -58,20 +58,20 @@ def _run_test(
         texts = [HF_TEXT_PROMPTS[0]]
         images = [input_cases[1][1][0]]
         with pytest.raises(ValueError, match="not both"):
-            aphrodite_model.embed(texts, images=images)
+            sonar_model.embed(texts, images=images)
 
-        aphrodite_model.embed(texts)
-        aphrodite_model.embed([""], images=images)
+        sonar_model.embed(texts)
+        sonar_model.embed([""], images=images)
 
-        mixed_outputs = aphrodite_outputs_per_case[2]
+        mixed_outputs = sonar_outputs_per_case[2]
         check_embeddings_close(
-            embeddings_0_lst=[aphrodite_outputs_per_case[0][0]],
+            embeddings_0_lst=[sonar_outputs_per_case[0][0]],
             embeddings_1_lst=[mixed_outputs[0]],
             name_0="text_only",
             name_1="mixed_text",
         )
         check_embeddings_close(
-            embeddings_0_lst=[aphrodite_outputs_per_case[1][0]],
+            embeddings_0_lst=[sonar_outputs_per_case[1][0]],
             embeddings_1_lst=[mixed_outputs[1]],
             name_0="image_only",
             name_1="mixed_image",
@@ -106,12 +106,12 @@ def _run_test(
 
             hf_outputs_per_case.append(hf_outputs)
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, sonar_outputs in zip(hf_outputs_per_case, sonar_outputs_per_case):
         check_embeddings_close(
             embeddings_0_lst=hf_outputs,
-            embeddings_1_lst=aphrodite_outputs,
+            embeddings_1_lst=sonar_outputs,
             name_0="hf",
-            name_1="aphrodite",
+            name_1="sonar",
         )
 
 
@@ -119,7 +119,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    sonar_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -148,7 +148,7 @@ def test_models(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        sonar_runner,
         input_cases,
         model,
         dtype=dtype,

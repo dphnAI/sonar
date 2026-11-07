@@ -5,13 +5,13 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(not current_platform.is_device_capability(120), reason="requires SM120")
 
 b12x_rotary = pytest.importorskip("b12x.attention.compressed_sparse_mla.rotary")
 
-from aphrodite.models.deepseek_v41.sm120.qkv_norm import (  # noqa: E402
+from sonar.models.deepseek_v41.sm120.qkv_norm import (  # noqa: E402
     KV_WIDTH,
     Q_WIDTH,
     ROPE_DIM,

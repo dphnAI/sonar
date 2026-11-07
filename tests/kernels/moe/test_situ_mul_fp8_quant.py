@@ -17,9 +17,9 @@ elements, never off by more than 2).
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import situ_and_mul_quant
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.layers.fused_moe.activation import situ_and_mul_quant
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 
 fp8_dtype = current_platform.fp8_dtype()
 DEVICE = current_platform.device_type

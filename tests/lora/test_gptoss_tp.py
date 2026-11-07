@@ -3,9 +3,9 @@
 
 import pytest
 
-import aphrodite
-from aphrodite.lora.request import LoRARequest
-from aphrodite.platforms import current_platform
+import sonar
+from sonar.lora.request import LoRARequest
+from sonar.platforms import current_platform
 
 from ..utils import multi_gpu_test
 
@@ -56,15 +56,15 @@ def _enable_deterministic_lora_shrink(monkeypatch: pytest.MonkeyPatch) -> None:
     # These tests assert exact greedy outputs. Force the Triton LoRA shrink
     # kernel to use SPLIT_K=1 so it stores the complete reduction directly
     # instead of accumulating split-K partial results with atomic_add.
-    monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
-    # The kernel configuration reads APHRODITE_BATCH_INVARIANT at import time.
+    monkeypatch.setenv("SONAR_BATCH_INVARIANT", "1")
+    # The kernel configuration reads SONAR_BATCH_INVARIANT at import time.
     # Spawn the engine process so it observes this setting even if the LoRA
     # Triton utilities were already imported during test collection.
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "spawn")
 
 
 def generate_and_test(
-    llm: aphrodite.LLM,
+    llm: sonar.LLM,
     lora_path: str,
     lora_id: int,
     *,
@@ -77,7 +77,7 @@ def generate_and_test(
         PROMPT_TEMPLATE.format(context="What are the maximum and minimum number of cows across all farms."),
         PROMPT_TEMPLATE.format(context="Return the maximum and minimum number of cows across all farms."),
     ]
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
+    sampling_params = sonar.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -125,7 +125,7 @@ def test_gpt_oss_lora(
 ):
     _enable_deterministic_lora_shrink(monkeypatch)
 
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -136,7 +136,7 @@ def test_gpt_oss_lora(
         specialize_active_lora=specialize_active_lora,
         moe_backend="marlin" if mxfp4_use_marlin else "auto",
         linear_backend="marlin" if mxfp4_use_marlin else "auto",
-        compilation_config=aphrodite.config.CompilationConfig(  # Avoid OOM
+        compilation_config=sonar.config.CompilationConfig(  # Avoid OOM
             cudagraph_specialize_lora=False,
         ),
     )
@@ -168,7 +168,7 @@ def test_gpt_oss_lora_tp2(
 ):
     _enable_deterministic_lora_shrink(monkeypatch)
 
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -181,7 +181,7 @@ def test_gpt_oss_lora_tp2(
         enable_expert_parallel=not fully_sharded_loras,
         moe_backend="marlin" if mxfp4_use_marlin else "auto",
         linear_backend="marlin" if mxfp4_use_marlin else "auto",
-        compilation_config=aphrodite.config.CompilationConfig(
+        compilation_config=sonar.config.CompilationConfig(
             cudagraph_specialize_lora=False,
         ),
     )
@@ -196,7 +196,7 @@ def test_gpt_oss_lora_mixed_moe_format(
 ):
     _enable_deterministic_lora_shrink(monkeypatch)
 
-    llm = aphrodite.LLM(
+    llm = sonar.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
@@ -205,7 +205,7 @@ def test_gpt_oss_lora_mixed_moe_format(
         max_lora_rank=8,
         max_num_seqs=2,
         max_num_batched_tokens=2048,
-        compilation_config=aphrodite.config.CompilationConfig(
+        compilation_config=sonar.config.CompilationConfig(
             cudagraph_specialize_lora=False,
         ),
     )

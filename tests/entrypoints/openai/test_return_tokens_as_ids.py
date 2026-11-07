@@ -7,7 +7,7 @@
 
 import pytest
 
-from aphrodite.tokenizers import get_tokenizer
+from sonar.tokenizers import get_tokenizer
 
 from ...utils import RemoteOpenAIServer
 
@@ -125,9 +125,9 @@ def test_responses_api_logprobs_with_return_tokens_as_token_ids():
     """Test that return_tokens_as_token_ids works in Responses API logprobs."""
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
-    from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
-    from aphrodite.logprobs import Logprob as SampleLogprob
+    from sonar.entrypoints.generate.base.serving import GenerateBaseServing
+    from sonar.entrypoints.openai.responses.serving import OpenAIServingResponses
+    from sonar.logprobs import Logprob as SampleLogprob
 
     serving = MagicMock(spec=OpenAIServingResponses)
     serving.return_tokens_as_token_ids = True

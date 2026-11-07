@@ -25,7 +25,7 @@ Usage (from the bash script, or manually):
         --mode baseline \
         --service_url http://localhost:19603 \
         --model_name Qwen/Qwen3-VL-2B-Instruct \
-        --baseline_file /tmp/aphrodite_scale_out_ec_baseline.txt
+        --baseline_file /tmp/sonar_scale_out_ec_baseline.txt
 
     # Disagg mode (compares outputs):
     python test_scale_out_ec_e2e.py \
@@ -34,7 +34,7 @@ Usage (from the bash script, or manually):
         --encode_url http://localhost:19601 \
         --prefill_url http://localhost:19602 \
         --model_name Qwen/Qwen3-VL-2B-Instruct \
-        --baseline_file /tmp/aphrodite_scale_out_ec_baseline.txt
+        --baseline_file /tmp/sonar_scale_out_ec_baseline.txt
 """
 
 import argparse
@@ -44,8 +44,8 @@ import time
 
 import requests
 
-from aphrodite.assets.image import ImageAsset
-from aphrodite.multimodal.utils import encode_image_url
+from sonar.assets.image import ImageAsset
+from sonar.multimodal.utils import encode_image_url
 
 MAX_OUTPUT_LEN = 128
 REQUEST_TIMEOUT = 300

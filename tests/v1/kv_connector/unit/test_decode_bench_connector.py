@@ -9,28 +9,28 @@ with dummy values for decode performance benchmarking.
 import pytest
 import torch
 
-from aphrodite import SamplingParams
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar import SamplingParams
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 
 # ruff: noqa: E501
-from aphrodite.distributed.kv_transfer.kv_connector.v1.decode_bench_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.decode_bench_connector import (
     DecodeBenchConnector,
     DecodeBenchConnectorMetadata,
 )
-from aphrodite.forward_context import ForwardContext
-from aphrodite.platforms import current_platform
-from aphrodite.utils.hashing import sha256
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import (
+from sonar.forward_context import ForwardContext
+from sonar.platforms import current_platform
+from sonar.utils.hashing import sha256
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import (
     BlockHash,
     KVCacheBlock,
     get_request_block_hasher,
     init_none_hash,
     make_block_hash_with_group_id,
 )
-from aphrodite.v1.core.sched.output import SchedulerOutput
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.sched.output import SchedulerOutput
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     HiSparseHotSpec,
@@ -40,14 +40,14 @@ from aphrodite.v1.kv_cache_interface import (
     MambaSpec,
     SlidingWindowSpec,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 
 from .utils import (
     EOS_TOKEN_ID,
-    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
+    create_sonar_config,
 )
 
 
@@ -65,20 +65,20 @@ class DecodeBenchTestRunner:
 
         self.req_id = -1
 
-        # Create aphrodite config with DecodeBenchConnector
-        aphrodite_config = create_aphrodite_config(
+        # Create sonar config with DecodeBenchConnector
+        sonar_config = create_sonar_config(
             block_size=block_size,
             max_num_batched_tokens=1000,
             kv_connector="DecodeBenchConnector",
             kv_connector_extra_config=kv_connector_extra_config,
         )
 
-        self.aphrodite_config = aphrodite_config
-        self.scheduler: Scheduler = create_scheduler(aphrodite_config, num_blocks=num_gpu_blocks)
+        self.sonar_config = sonar_config
+        self.scheduler: Scheduler = create_scheduler(sonar_config, num_blocks=num_gpu_blocks)
 
         # Create worker-side connector
         self.worker_connector = DecodeBenchConnector(
-            aphrodite_config,
+            sonar_config,
             KVConnectorRole.WORKER,
             self.scheduler.kv_cache_config,
         )
@@ -239,7 +239,7 @@ def test_decode_bench_connector_fills_each_hma_group():
     """Each cache group is filled using its own block IDs."""
     block_size = 16
     num_gpu_blocks = 8
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -259,7 +259,7 @@ def test_decode_bench_connector_fills_each_hma_group():
         ],
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         kv_cache_config,
     )
@@ -284,7 +284,7 @@ def test_decode_bench_connector_fills_each_hma_group():
 def test_decode_bench_connector_zero_fills_circular_buffer_groups():
     """Circular buffers are zeroed to preserve packed non-floating metadata."""
     num_gpu_blocks = 8
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -306,7 +306,7 @@ def test_decode_bench_connector_zero_fills_circular_buffer_groups():
         ],
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         kv_cache_config,
     )
@@ -323,7 +323,7 @@ def test_decode_bench_connector_zero_fills_circular_buffer_groups():
 
 def test_decode_bench_connector_selects_external_blocks_per_group():
     """External fills follow the local prefix using each group's block size."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -349,7 +349,7 @@ def test_decode_bench_connector_selects_external_blocks_per_group():
         ),
     ]
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         KVCacheConfig(
             num_blocks=8,
@@ -398,7 +398,7 @@ def test_decode_bench_connector_skips_non_transfer_groups():
     sequence length; the connector applied token-paged block-range math to
     them and asserted once the sequence outgrew the allocation.
     """
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -418,7 +418,7 @@ def test_decode_bench_connector_skips_non_transfer_groups():
             ),
         ],
     )
-    scheduler_connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)
+    scheduler_connector = DecodeBenchConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
     num_external_tokens = 48
     request = create_request(request_id=1, num_tokens=num_external_tokens + 1, block_size=16)
     blocks = KVCacheBlocks(
@@ -440,7 +440,7 @@ def test_decode_bench_connector_skips_non_transfer_groups():
 def test_decode_bench_connector_selects_unaligned_external_block():
     """An external interval includes the block containing its first token."""
     block_size = 32
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -452,7 +452,7 @@ def test_decode_bench_connector_selects_unaligned_external_block():
         dtype=torch.float32,
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         KVCacheConfig(
             num_blocks=4,
@@ -482,7 +482,7 @@ def test_decode_bench_connector_selects_unaligned_external_block():
 def test_decode_bench_connector_skips_null_padding():
     """External fills exclude null padding from a sliding-window group."""
     block_size = 16
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -495,7 +495,7 @@ def test_decode_bench_connector_skips_null_padding():
         sliding_window=2 * block_size,
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         KVCacheConfig(
             num_blocks=8,
@@ -536,11 +536,11 @@ def test_decode_bench_connector_uses_per_group_dcp_block_sizes():
     """DCP scales target blocks but not the replicated draft's window."""
     block_size = 16
     dcp_world_size = 2
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=block_size,
         kv_connector="DecodeBenchConnector",
     )
-    aphrodite_config.parallel_config.decode_context_parallel_size = dcp_world_size
+    sonar_config.parallel_config.decode_context_parallel_size = dcp_world_size
     full_attention = FullAttentionSpec(
         block_size=block_size,
         num_kv_heads=1,
@@ -556,7 +556,7 @@ def test_decode_bench_connector_uses_per_group_dcp_block_sizes():
         sliding_window=2 * block_size,
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.SCHEDULER,
         KVCacheConfig(
             num_blocks=8,
@@ -825,7 +825,7 @@ def test_decode_bench_connector_concurrent_requests():
 
 def _fill_single_block(cache_dtype, spec_dtype, kv_quant_mode, cache, fill_std=0.0):
     """Fill block 1 of a one-layer cache through the worker connector."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         kv_connector="DecodeBenchConnector",
         kv_connector_extra_config={"fill_std": fill_std},
@@ -839,7 +839,7 @@ def _fill_single_block(cache_dtype, spec_dtype, kv_quant_mode, cache, fill_std=0
         kv_quant_mode=kv_quant_mode,
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         KVCacheConfig(
             num_blocks=cache.shape[0],
@@ -894,7 +894,7 @@ def test_decode_bench_connector_zero_fills_packed_uint8_caches():
 @pytest.mark.parametrize("fill_std", [0.0, 0.1])
 def test_decode_bench_connector_startup_fill_fills_registered_caches(fill_std):
     """Startup fill writes every cache view in place, including strided views."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         kv_connector="DecodeBenchConnector",
         kv_connector_extra_config={"startup_fill": True, "fill_std": fill_std},
@@ -909,7 +909,7 @@ def test_decode_bench_connector_startup_fill_fills_registered_caches(fill_std):
             ),
         ],
     )
-    connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    connector = DecodeBenchConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     attention = torch.full((4, 2, 16), -1.0)
     transposed = torch.full((2, 4, 16), -1.0).transpose(0, 1)
     connector.register_kv_caches({"attention": attention, "transposed": transposed})
@@ -925,7 +925,7 @@ def test_decode_bench_connector_startup_fill_fills_registered_caches(fill_std):
 @pytest.mark.parametrize("fill_std", [0.0, 0.1])
 def test_decode_bench_connector_startup_fill_encodes_fp8_caches(fill_std):
     """Startup fill encodes values in the fp8 dtype of a uint8 fp8 cache."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         kv_connector="DecodeBenchConnector",
         kv_connector_extra_config={"startup_fill": True, "fill_std": fill_std},
@@ -939,7 +939,7 @@ def test_decode_bench_connector_startup_fill_encodes_fp8_caches(fill_std):
         kv_quant_mode=KVQuantMode.FP8_PER_TENSOR,
     )
     connector = DecodeBenchConnector(
-        aphrodite_config,
+        sonar_config,
         KVConnectorRole.WORKER,
         KVCacheConfig(
             num_blocks=4,
@@ -961,7 +961,7 @@ def test_decode_bench_connector_startup_fill_encodes_fp8_caches(fill_std):
 
 def test_decode_bench_connector_startup_fill_keeps_zeroed_groups_per_request():
     """Attention blocks the engine zeroes on allocation are filled per request."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -987,7 +987,7 @@ def test_decode_bench_connector_startup_fill_keeps_zeroed_groups_per_request():
         ],
     )
     assert kv_cache_config.needs_kv_cache_zeroing
-    scheduler_connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)
+    scheduler_connector = DecodeBenchConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
     num_external_tokens = 17
     request = create_request(request_id=1, num_tokens=num_external_tokens + 1, block_size=16)
     blocks = KVCacheBlocks(
@@ -1001,7 +1001,7 @@ def test_decode_bench_connector_startup_fill_keeps_zeroed_groups_per_request():
     assert isinstance(metadata, DecodeBenchConnectorMetadata)
     assert metadata.reqs_to_fill == {request.request_id: (([1, 2], []), num_external_tokens)}
 
-    worker_connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    worker_connector = DecodeBenchConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     attention = torch.full((4, 2), -1.0)
     mamba_states = (torch.zeros(4, 4), torch.zeros(4, 4))
     worker_connector.register_kv_caches({"attention": attention, "mamba": mamba_states})
@@ -1050,7 +1050,7 @@ def test_decode_bench_connector_startup_fill_skips_per_step_fill():
 
 def test_decode_bench_connector_startup_fill_keeps_circular_buffer_zero_fill():
     """Circular buffers are still zeroed per request with startup fill."""
-    aphrodite_config = create_aphrodite_config(
+    sonar_config = create_sonar_config(
         block_size=16,
         max_num_batched_tokens=1000,
         kv_connector="DecodeBenchConnector",
@@ -1070,7 +1070,7 @@ def test_decode_bench_connector_startup_fill_keeps_circular_buffer_zero_fill():
             ),
         ],
     )
-    scheduler_connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)
+    scheduler_connector = DecodeBenchConnector(sonar_config, KVConnectorRole.SCHEDULER, kv_cache_config)
     num_external_tokens = 17
     request = create_request(request_id=1, num_tokens=num_external_tokens + 1, block_size=16)
     blocks = KVCacheBlocks(
@@ -1084,7 +1084,7 @@ def test_decode_bench_connector_startup_fill_keeps_circular_buffer_zero_fill():
     assert isinstance(metadata, DecodeBenchConnectorMetadata)
     assert metadata.reqs_to_fill == {request.request_id: (([], [4]), num_external_tokens)}
 
-    worker_connector = DecodeBenchConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
+    worker_connector = DecodeBenchConnector(sonar_config, KVConnectorRole.WORKER, kv_cache_config)
     attention_cache = torch.zeros(8, 2)
     ring_cache = torch.ones(8, 2)
     worker_connector.register_kv_caches({"full_attention": attention_cache, "compressor_ring": ring_cache})

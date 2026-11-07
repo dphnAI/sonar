@@ -6,20 +6,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aphrodite import PoolingParams
-from aphrodite.config import ModelConfig
-from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
-from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.pooling.base.serving import PoolingBaseServing
-from aphrodite.entrypoints.pooling.typing import PoolingServeContext
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.serve.lora.protocol import (
+from sonar import PoolingParams
+from sonar.config import ModelConfig
+from sonar.engine.protocol import EngineClient
+from sonar.entrypoints.openai.models.protocol import BaseModelPath
+from sonar.entrypoints.openai.models.serving import OpenAIServingModels
+from sonar.entrypoints.pooling.base.serving import PoolingBaseServing
+from sonar.entrypoints.pooling.typing import PoolingServeContext
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse
+from sonar.entrypoints.serve.lora.protocol import (
     LoadLoRAAdapterRequest,
     UnloadLoRAAdapterRequest,
 )
-from aphrodite.exceptions import AphroditeNotFoundError
-from aphrodite.lora.request import LoRARequest
+from sonar.exceptions import SonarNotFoundError
+from sonar.lora.request import LoRARequest
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 BASE_MODEL_PATHS = [BaseModelPath(name=MODEL_NAME, model_path=MODEL_NAME)]
@@ -193,8 +193,8 @@ def test_pooling_maybe_get_adapters_lora_name_sets_lora_request():
 
 
 def test_pooling_maybe_get_adapters_unknown_model_raises():
-    """An unrecognised model name must still raise AphroditeNotFoundError."""
+    """An unrecognised model name must still raise SonarNotFoundError."""
     serving = _make_pooling_serving("some-lora")
 
-    with pytest.raises(AphroditeNotFoundError):
+    with pytest.raises(SonarNotFoundError):
         _make_pooling_ctx("unknown-model", serving)

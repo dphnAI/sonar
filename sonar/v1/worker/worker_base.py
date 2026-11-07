@@ -1,0 +1,453 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
+
+import torch
+import torch.nn as nn
+
+import sonar.ir
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.distributed.kv_transfer.kv_connector.utils import get_current_attn_backends
+from sonar.logger import init_logger
+from sonar.lora.request import LoRARequest
+from sonar.multimodal.cache import worker_receiver_cache_from_config
+from sonar.tracing import instrument
+from sonar.utils.import_utils import resolve_obj_by_qualname
+from sonar.utils.system_utils import update_environment_variables
+from sonar.v1.attention.backends.utils import (
+    get_supported_kv_cache_layouts,
+    record_kv_cache_layout,
+)
+from sonar.v1.kv_cache_interface import KVCacheSpec
+
+if TYPE_CHECKING:
+    from sonar.v1.core.sched.output import GrammarOutput, SchedulerOutput
+    from sonar.v1.outputs import AsyncModelRunnerOutput, ModelRunnerOutput
+else:
+    SchedulerOutput = object
+    GrammarOutput = object
+    AsyncModelRunnerOutput = object
+    ModelRunnerOutput = object
+
+logger = init_logger(__name__)
+
+_R = TypeVar("_R")
+
+
+class CompilationTimes(NamedTuple):
+    language_model: float
+    encoder: float
+
+
+class WorkerBase:
+    """Worker interface that allows Sonar to cleanly separate implementations for
+    different hardware. Also abstracts control plane communication, e.g., to
+    communicate request metadata to other workers.
+    """
+
+    def __init__(
+        self,
+        sonar_config: SonarConfig,
+        local_rank: int,
+        rank: int,
+        distributed_init_method: str,
+        is_driver_worker: bool = False,
+    ) -> None:
+        """Initialize common worker components.
+
+        Args:
+            sonar_config: Complete Sonar configuration
+            local_rank: Local device index
+            rank: Global rank in distributed setup
+            distributed_init_method: Distributed initialization method
+            is_driver_worker: Whether this worker handles driver
+                responsibilities
+
+        """
+        self.sonar_config = sonar_config
+        self.model_config = sonar_config.model_config
+        self.cache_config = sonar_config.cache_config
+        self.lora_config = sonar_config.lora_config
+        self.load_config = sonar_config.load_config
+        self.parallel_config = sonar_config.parallel_config
+        self.scheduler_config = sonar_config.scheduler_config
+        self.device_config = sonar_config.device_config
+        self.speculative_config = sonar_config.speculative_config
+        self.observability_config = sonar_config.observability_config
+        self.kv_transfer_config = sonar_config.kv_transfer_config
+        self.compilation_config = sonar_config.compilation_config
+
+        from sonar.platforms import current_platform
+
+        self.current_platform = current_platform
+
+        self.parallel_config.rank = rank
+        self.local_rank = local_rank
+        self.rank = rank
+        self.distributed_init_method = distributed_init_method
+        self.is_driver_worker = is_driver_worker
+
+        # Device and model state
+        self.device: torch.device | None = None
+        self.model_runner: nn.Module | None = None
+
+        # IR op priority and torch-wrap state are constant for the worker's
+        # lifetime.
+        sonar_config.kernel_config.ir_op_priority.set_default()
+        sonar.ir.set_default_torch_wrap(sonar_config.compilation_config.ir_enable_torch_wrap)
+
+    def get_kv_cache_spec(self) -> dict[str, KVCacheSpec]:
+        """Get specifications for KV cache implementation."""
+        raise NotImplementedError
+
+    def get_supported_kv_cache_layouts(self) -> list[str]:
+        """Layout names every attention backend supports, most preferred first."""
+        backends = get_current_attn_backends(self.sonar_config)
+        return [layout.name for layout in get_supported_kv_cache_layouts(backends)]
+
+    def set_kv_cache_layout(self, kv_cache_layout: str, cp_kv_cache_interleave_size: int) -> None:
+        """Assign the KV cache layout and CP interleave size resolved by the core."""
+        record_kv_cache_layout(self.sonar_config.cache_config, kv_cache_layout)
+        self.sonar_config.parallel_config.cp_kv_cache_interleave_size = cp_kv_cache_interleave_size
+
+    def compile_or_warm_up_model(self) -> CompilationTimes:
+        """Prepare model for execution through compilation/warmup.
+
+        Returns:
+            Compilation times (language_model, encoder) in seconds.
+
+        """
+        raise NotImplementedError
+
+    def check_health(self) -> None:
+        """Basic health check (override for device-specific checks)."""
+        return
+
+    def synchronize_device(self) -> None:
+        """Block until in-flight device work completes; backends outside
+        ``torch.accelerator`` must override with their own wait."""
+        if torch.accelerator.is_available():
+            torch.accelerator.synchronize()
+
+    def init_device(self) -> None:
+        """Initialize device state, such as loading the model or other on-device
+        memory allocations.
+        """
+        raise NotImplementedError
+
+    def reset_mm_cache(self) -> None:
+        reset_fn = getattr(self.model_runner, "reset_mm_cache", None)
+        if callable(reset_fn):
+            reset_fn()
+
+    def release_late_interaction_query_cache(self, query_keys: list[str]) -> None:
+        release_fn = getattr(self.model_runner, "release_late_interaction_query_cache", None)
+        if callable(release_fn):
+            release_fn(query_keys)
+
+    def get_model(self) -> nn.Module:
+        raise NotImplementedError
+
+    def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> dict[str, Any]:
+        """Sample runtime weights, without claiming inference provenance."""
+        config = self.sonar_config.dphn_network_config
+        if config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        from sonar.proof import generate_weight_receipt, rank_worker_id
+
+        dp_rank = self.parallel_config.data_parallel_index
+        worker_id = rank_worker_id(config.worker_id, dp_rank, self.rank)
+        proof = generate_weight_receipt(
+            self.get_model(),
+            config,
+            worker_id=worker_id,
+            request_id=request_id,
+            nonce=nonce,
+            output_token_ids=output_token_ids,
+        )
+        if not isinstance(proof, str) or not proof:
+            raise RuntimeError("DPHN provider returned no weight receipt")
+        return {"rank": self.rank, "dp_rank": dp_rank, "worker_id": worker_id, "proof": proof}
+
+    def dphn_snapshot(self, output_dir: str) -> dict[str, Any]:
+        """Dump this worker's actual runtime layout for an offline manifest."""
+        config = self.sonar_config.dphn_network_config
+        if config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        from sonar.config import get_layers_from_sonar_config
+        from sonar.model_executor.layers.attention_layer_base import AttentionLayerBase
+        from sonar.proof import dump_runtime_snapshot
+        from sonar.version import __version__
+
+        model = self.get_model()
+        parallel = self.parallel_config
+        backend = parallel.distributed_executor_backend
+        if isinstance(backend, type):
+            backend = f"{backend.__module__}.{backend.__qualname__}"
+        quant_config = self.sonar_config.quant_config
+        attention_layers = get_layers_from_sonar_config(
+            self.sonar_config,
+            AttentionLayerBase,  # type: ignore[type-abstract]
+        )
+        runtime_info = {
+            "backend": self.current_platform.device_type,
+            "executor_backend": backend,
+            "attention_backends": sorted({layer.get_attn_backend().get_name() for layer in attention_layers.values()}),
+            "model_class": f"{type(model).__module__}.{type(model).__qualname__}",
+            "runner_class": f"{type(self.model_runner).__module__}.{type(self.model_runner).__qualname__}",
+            "quantization": self.model_config.quantization,
+            "quantization_class": (
+                f"{type(quant_config).__module__}.{type(quant_config).__qualname__}"
+                if quant_config is not None
+                else None
+            ),
+            "dtype": str(self.model_config.dtype),
+            "tensor_parallel_size": parallel.tensor_parallel_size,
+            "pipeline_parallel_size": parallel.pipeline_parallel_size,
+            "data_parallel_size": parallel.data_parallel_size,
+            "prefill_context_parallel_size": parallel.prefill_context_parallel_size,
+            "decode_context_parallel_size": parallel.decode_context_parallel_size,
+            "rank": self.rank,
+            "local_rank": self.local_rank,
+            "dp_rank": parallel.data_parallel_index,
+            "build": {"sonar": __version__, "torch": str(torch.__version__), "cuda": torch.version.cuda},
+        }
+        return dump_runtime_snapshot(
+            model,
+            config,
+            rank=self.rank,
+            dp_rank=parallel.data_parallel_index,
+            output_dir=output_dir,
+            runtime_info=runtime_info,
+        )
+
+    def supports_draft_weight_updates(self) -> bool:
+        """Whether this worker can update its configured speculative model."""
+        return False
+
+    def apply_model(self, fn: Callable[[nn.Module], _R]) -> _R:
+        """Apply a function on the model inside this worker."""
+        return fn(self.get_model())
+
+    def get_model_inspection(self) -> str:
+        """Return a transformers-style hierarchical view of the model."""
+        from sonar.model_inspection import format_model_inspection
+
+        return format_model_inspection(self.get_model())
+
+    def load_model(self, *, load_dummy_weights: bool = False) -> None:
+        """Load model onto target device."""
+        raise NotImplementedError
+
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
+        """If this method returns None, sample_tokens should be called immediately after
+        to obtain the ModelRunnerOutput.
+
+        Note that this design may be changed in future if/when structured outputs
+        parallelism is re-architected.
+        """
+        raise NotImplementedError
+
+    def sample_tokens(self, grammar_output: GrammarOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput:
+        """Should be called immediately after execute_model iff it returned None."""
+        raise NotImplementedError
+
+    def get_cache_block_size_bytes(self) -> int:
+        """Return the size of a single cache block, in bytes. Used in
+        speculative decoding.
+        """
+        raise NotImplementedError
+
+    def add_lora(self, lora_request: LoRARequest) -> bool:
+        raise NotImplementedError
+
+    def remove_lora(self, lora_id: int) -> bool:
+        raise NotImplementedError
+
+    def pin_lora(self, lora_id: int) -> bool:
+        raise NotImplementedError
+
+    def list_loras(self) -> set[int]:
+        raise NotImplementedError
+
+    @property
+    def vocab_size(self) -> int:
+        """Get vocabulary size from model configuration."""
+        return self.model_config.get_vocab_size()
+
+    def shutdown(self) -> None:
+        """Clean up resources held by the worker."""
+        return
+
+
+class WorkerWrapperBase:
+    """This class represents one process in an executor/engine. It is responsible
+    for lazily initializing the worker and handling the worker's lifecycle.
+    We first instantiate the WorkerWrapper, which remembers the worker module
+    and class name. Then, when we call `update_environment_variables`, and the
+    real initialization happens in `init_worker`.
+    """
+
+    def __init__(
+        self,
+        rpc_rank: int = 0,
+        global_rank: int | None = None,
+    ) -> None:
+        """Initialize the worker wrapper with the given sonar_config and rpc_rank.
+        Note: rpc_rank is the rank of the worker in the executor. In most cases,
+        it is also the rank of the worker in the distributed group. However,
+        when multiple executors work together, they can be different.
+        e.g. in the case of SPMD-style offline inference with TP=2,
+        users can launch 2 engines/executors, each with only 1 worker.
+        All workers have rpc_rank=0, but they have different ranks in the TP
+        group.
+        """
+        self.rpc_rank: int = rpc_rank
+        self.global_rank: int = self.rpc_rank if global_rank is None else global_rank
+
+        # Initialized after init_worker is called
+        self.worker: WorkerBase
+        self.sonar_config: SonarConfig
+        self._worker_extension_cls: type | None = None
+
+    def shutdown(self) -> None:
+        if self.worker is not None:
+            hook = getattr(self._worker_extension_cls, "destroy_worker_extension", None)
+            if callable(hook):
+                try:
+                    hook(self.worker)
+                except Exception:
+                    # Don't raise: callers still need to run their own teardown.
+                    logger.exception("Worker extension destroy hook failed.")
+            self.worker.shutdown()
+
+    def update_environment_variables(
+        self,
+        envs_list: list[dict[str, str]],
+    ) -> None:
+        envs = envs_list[self.rpc_rank]
+        update_environment_variables(envs)
+
+    @instrument(span_name="Worker init")
+    def init_worker(self, all_kwargs: list[dict[str, Any]]) -> None:
+        """Here we inject some common logic before initializing the worker.
+        Arguments are passed to the worker class constructor.
+        """
+        kwargs = all_kwargs[self.rpc_rank]
+
+        sonar_config: SonarConfig | None = kwargs.get("sonar_config")
+        assert sonar_config is not None, "sonar_config is required to initialize the worker"
+        self.sonar_config = sonar_config
+
+        if sonar_config.dphn_network_config is not None:
+            from sonar.proof import ensure_native_available
+
+            ensure_native_available()
+
+        sonar_config.enable_trace_function_call_for_thread()
+
+        from sonar.plugins import load_general_plugins
+
+        load_general_plugins()
+
+        # Let the platform replace core Triton kernels (e.g. CPU fallback
+        # implementations) before any worker or model code can launch them.
+        from sonar.platforms import current_platform
+
+        current_platform.register_triton_kernel_overrides()
+
+        parallel_config = sonar_config.parallel_config
+        if isinstance(parallel_config.worker_cls, str):
+            worker_class: type[WorkerBase] = resolve_obj_by_qualname(parallel_config.worker_cls)
+        else:
+            raise ValueError(
+                "passing worker_cls is no longer supported. "
+                "Please pass keep the class in a separate module "
+                "and pass the qualified name of the class as a string."
+            )
+
+        worker_extension_cls: type | None = None
+        if parallel_config.worker_extension_cls:
+            worker_extension_cls = resolve_obj_by_qualname(parallel_config.worker_extension_cls)
+            extended_calls = []
+            if worker_extension_cls not in worker_class.__bases__:
+                # check any conflicts between worker and worker_extension_cls
+                for attr in dir(worker_extension_cls):
+                    if attr.startswith("__"):
+                        continue
+                    assert not hasattr(worker_class, attr), (
+                        f"Worker class {worker_class} already has an attribute"
+                        f" {attr}, which conflicts with the worker"
+                        f" extension class {worker_extension_cls}."
+                    )
+                    if callable(getattr(worker_extension_cls, attr)):
+                        extended_calls.append(attr)
+                # dynamically inherit the worker extension class
+                worker_class.__bases__ = worker_class.__bases__ + (worker_extension_cls,)
+                logger.info(
+                    "Injected %s into %s for extended collective_rpc calls %s",
+                    worker_extension_cls,
+                    worker_class,
+                    extended_calls,
+                )
+
+        if sonar_config.dphn_network_config is not None:
+            for method in ("get_model", "dphn_prove", "dphn_snapshot"):
+                implementation = getattr(worker_class, method, None)
+                if not callable(implementation) or implementation is WorkerBase.get_model:
+                    raise ValueError(f"DPHN weight receipts require a worker implementing {method}()")
+
+        assigned_physical_gpu_ids = kwargs.pop("assigned_physical_gpu_ids", None)
+        if assigned_physical_gpu_ids is not None:
+            sonar_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
+
+        shared_worker_lock = kwargs.pop("shared_worker_lock", None)
+        self.mm_receiver_cache = worker_receiver_cache_from_config(
+            sonar_config,
+            shared_worker_lock,
+        )
+
+        with set_current_sonar_config(self.sonar_config):
+            # To make Sonar config available during worker initialization
+            self.worker = worker_class(**kwargs)
+            self._worker_extension_cls = worker_extension_cls
+
+    def initialize_from_config(self, kv_cache_configs: list[Any]) -> None:
+        kv_cache_config = kv_cache_configs[self.global_rank]
+        assert self.sonar_config is not None
+        with set_current_sonar_config(self.sonar_config):
+            self.worker.initialize_from_config(kv_cache_config)  # type: ignore
+
+    def init_device(self):
+        assert self.sonar_config is not None
+        with set_current_sonar_config(self.sonar_config):
+            # To make Sonar config available during device initialization
+            self.worker.init_device()  # type: ignore
+            hook = getattr(self._worker_extension_cls, "init_worker_extension", None)
+            if callable(hook):
+                hook(self.worker)
+
+    def __getattr__(self, attr: str):
+        return getattr(self.worker, attr)
+
+    def _apply_mm_cache(self, scheduler_output: SchedulerOutput) -> None:
+        mm_cache = self.mm_receiver_cache
+        if mm_cache is None:
+            return
+
+        for req_data in scheduler_output.scheduled_new_reqs:
+            req_data.mm_features = mm_cache.get_and_update_features(req_data.mm_features)
+
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
+        self._apply_mm_cache(scheduler_output)
+
+        return self.worker.execute_model(scheduler_output)
+
+    def reset_mm_cache(self) -> None:
+        mm_receiver_cache = self.mm_receiver_cache
+        if mm_receiver_cache is not None:
+            mm_receiver_cache.clear_cache()
+
+        self.worker.reset_mm_cache()

@@ -11,8 +11,8 @@ max_model_len.
 
 import pytest
 
-from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig, SpeculativeConfig
-from aphrodite.engine.arg_utils import EngineArgs
+from sonar.config import ModelConfig, ParallelConfig, SonarConfig, SpeculativeConfig
+from sonar.engine.arg_utils import EngineArgs
 
 # All repos are public; only config/tokenizer-config files are fetched.
 AR_MODEL = "JackFram/llama-68m"  # max_position_embeddings=2048
@@ -24,7 +24,7 @@ HYBRID_MODEL = "ai21labs/Jamba-tiny-random"  # hybrid Mamba/attention
 @pytest.mark.cpu_test
 @pytest.mark.parametrize("use_v2_model_runner", [True, False])
 def test_draft_model_limits_max_model_len(use_v2_model_runner: bool, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", str(int(use_v2_model_runner)))
     model_config = ModelConfig(AR_MODEL, hf_overrides={"max_position_embeddings": 8192})
     speculative_config = SpeculativeConfig(
         target_model_config=model_config,
@@ -33,12 +33,12 @@ def test_draft_model_limits_max_model_len(use_v2_model_runner: bool, monkeypatch
         method="draft_model",
         num_speculative_tokens=3,
     )
-    aphrodite_config = AphroditeConfig(model_config=model_config, speculative_config=speculative_config)
-    assert aphrodite_config.use_v2_model_runner == use_v2_model_runner
+    sonar_config = SonarConfig(model_config=model_config, speculative_config=speculative_config)
+    assert sonar_config.use_v2_model_runner == use_v2_model_runner
     draft_model_config = speculative_config.draft_model_config
     assert draft_model_config.max_model_len == 2048
     expected = 2048 if use_v2_model_runner else 8192
-    assert aphrodite_config.model_config.max_model_len == expected
+    assert sonar_config.model_config.max_model_len == expected
 
 
 @pytest.mark.cpu_test
@@ -47,9 +47,9 @@ def test_eagle_draft_limits_max_model_len_unless_resized(resizable: bool, monkey
     """An EAGLE draft's max_position_embeddings is raised to the target's
     max_model_len when its RoPE type allows it; otherwise the draft limits
     max_model_len."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
     if not resizable:
-        monkeypatch.setattr("aphrodite.config.speculative._CACHE_ONLY_ROPE_TYPES", frozenset())
+        monkeypatch.setattr("sonar.config.speculative._CACHE_ONLY_ROPE_TYPES", frozenset())
     model_config = ModelConfig(LLAMA3_TARGET, max_model_len=8192)
     speculative_config = SpeculativeConfig(
         target_model_config=model_config,
@@ -58,11 +58,11 @@ def test_eagle_draft_limits_max_model_len_unless_resized(resizable: bool, monkey
         method="eagle3",
         num_speculative_tokens=3,
     )
-    aphrodite_config = AphroditeConfig(model_config=model_config, speculative_config=speculative_config)
-    assert aphrodite_config.use_v2_model_runner
+    sonar_config = SonarConfig(model_config=model_config, speculative_config=speculative_config)
+    assert sonar_config.use_v2_model_runner
     draft_hf_config = speculative_config.draft_model_config.hf_config
     assert draft_hf_config.max_position_embeddings == (8192 if resizable else 2048)
-    assert aphrodite_config.model_config.max_model_len == (8192 if resizable else 2048)
+    assert sonar_config.model_config.max_model_len == (8192 if resizable else 2048)
 
 
 @pytest.mark.cpu_test
@@ -72,8 +72,8 @@ def test_draft_limit_applies_before_hybrid_mamba_block_size(
     """With prefix caching off, hybrid models default mamba_block_size to
     max_model_len, so it must follow the draft's limit instead of tripping
     the --mamba-block-size validation (#63844)."""
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1")
-    aphrodite_config = EngineArgs(
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1")
+    sonar_config = EngineArgs(
         model=HYBRID_MODEL,
         max_model_len=4096,
         enable_prefix_caching=False,
@@ -84,5 +84,5 @@ def test_draft_limit_applies_before_hybrid_mamba_block_size(
             "max_model_len": 1024,
         },
     ).create_engine_config()
-    assert aphrodite_config.model_config.max_model_len == 1024
-    assert aphrodite_config.cache_config.mamba_block_size == 1024
+    assert sonar_config.model_config.max_model_len == 1024
+    assert sonar_config.cache_config.mamba_block_size == 1024

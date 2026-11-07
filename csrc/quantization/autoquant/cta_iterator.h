@@ -20,7 +20,7 @@
 #include <cstdint>
 #include "common.h"
 
-namespace aphrodite {
+namespace sonar {
 namespace autoquant {
 
 #if (__CUDACC_VER_MAJOR__ >= 11) && (__CUDACC_VER_MINOR__ >= 4)
@@ -32,7 +32,7 @@ namespace autoquant {
 template <typename T>
 __inline__ __device__ void cp_async_cg_A(uint32_t smem_int_ptr,
                                          const T* __restrict__ src, bool mask) {
-#if APHRODITE_ARCH_SM80
+#if SONAR_ARCH_SM80
   constexpr int cp_size = sizeof(T);
   static_assert(cp_size == 16, "cp.async.cg requreis cp_size == 16");
   // clang-format off
@@ -46,14 +46,14 @@ __inline__ __device__ void cp_async_cg_A(uint32_t smem_int_ptr,
                  "n"(cp_size));
   // clang-format on
 #else
-  assert(APHRODITE_ARCH_SM80);
+  assert(SONAR_ARCH_SM80);
 #endif
 }
 
 template <typename T>
 __inline__ __device__ void cp_async_cg_B(uint32_t smem_int_ptr,
                                          const T* __restrict__ src, bool mask) {
-#if APHRODITE_ARCH_SM80
+#if SONAR_ARCH_SM80
   constexpr int cp_size = sizeof(T);
   static_assert(cp_size == 16, "cp.async.cg requreis cp_size == 16");
   // clang-format off
@@ -67,14 +67,14 @@ __inline__ __device__ void cp_async_cg_B(uint32_t smem_int_ptr,
                  "n"(cp_size));
   // clang-format on
 #else
-  assert(APHRODITE_ARCH_SM80);
+  assert(SONAR_ARCH_SM80);
 #endif
 }
 
 template <typename T>
 __inline__ __device__ void cp_async_ca(uint32_t smem_int_ptr,
                                        const T* __restrict__ src, bool mask) {
-#if APHRODITE_ARCH_SM80
+#if SONAR_ARCH_SM80
   constexpr int cp_size = sizeof(T);
   // clang-format off
     asm volatile("{\n"
@@ -87,7 +87,7 @@ __inline__ __device__ void cp_async_ca(uint32_t smem_int_ptr,
                  "n"(cp_size));
   // clang-format on
 #else
-  assert(APHRODITE_ARCH_SM80);
+  assert(SONAR_ARCH_SM80);
 #endif
 }
 
@@ -636,4 +636,4 @@ struct IteratorB {
 };
 
 }  // namespace autoquant
-}  // namespace aphrodite
+}  // namespace sonar

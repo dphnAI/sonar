@@ -28,8 +28,8 @@ import pytest_asyncio
 from pydantic import ValidationError
 from tokenizers.decoders import DecodeStream
 
-import aphrodite.renderers.online_derenderer as online_derenderer_module
-from aphrodite.entrypoints.generate.base.protocol import (
+import sonar.renderers.online_derenderer as online_derenderer_module
+from sonar.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
@@ -37,13 +37,13 @@ from aphrodite.entrypoints.generate.base.protocol import (
     PerRequestMetrics,
     SpeculativeDecodingMetrics,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
+from sonar.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionStreamResponse,
 )
-from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
-from aphrodite.entrypoints.scale_out.derender.serving import ServingDerender
-from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
+from sonar.entrypoints.openai.completion.protocol import CompletionRequest
+from sonar.entrypoints.scale_out.derender.serving import ServingDerender
+from sonar.entrypoints.scale_out.token_in_token_out.protocol import (
     DerenderChatRequest,
     DerenderChatStreamRequest,
     DerenderCompletionRequest,
@@ -56,16 +56,16 @@ from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateTokensStreamResponse,
     ParseContext,
 )
-from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
-from aphrodite.parser import Parser
-from aphrodite.renderers.online_derenderer import (
+from sonar.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
+from sonar.parser import Parser
+from sonar.renderers.online_derenderer import (
     OnlineDerenderer,
     _decode_params,
     _seed_stream_state,
 )
-from aphrodite.tokenizers import get_tokenizer
-from aphrodite.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
-from aphrodite.utils import random_uuid
+from sonar.tokenizers import get_tokenizer
+from sonar.tokenizers.detokenizer_utils import convert_ids_list_to_tokens
+from sonar.utils import random_uuid
 from tests.entrypoints.scale_out.derender.utils import stream_chat_derender
 from tests.utils import RemoteLaunchRenderServer
 
@@ -305,8 +305,8 @@ def parsed_derenderer(tokenizer):
 def test_non_streaming_derender_initializes_parser_prefix(derenderer, tokenizer, monkeypatch):
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.generate.base.protocol import FunctionCall
-    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+    from sonar.entrypoints.generate.base.protocol import FunctionCall
+    from sonar.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 
     parser = MagicMock()
     parser.parse.return_value = (
@@ -1569,7 +1569,7 @@ def harmony_encode():
 
     # Pre-caches the o200k_base BPE file that openai-harmony's Rust backend
     # downloads on first use, same as the sibling suite's E2E harmony tests.
-    from aphrodite.entrypoints.openai.parser.harmony_utils import get_encoding
+    from sonar.entrypoints.openai.parser.harmony_utils import get_encoding
     from tests.entrypoints.scale_out.derender.test_derender import (
         _ensure_harmony_vocab,
     )
@@ -1597,7 +1597,7 @@ def harmony_derenderer(harmony_tokenizer):
     with a real tokenizer and parser, so the replay path is exercised
     against Harmony's actual channel grammar rather than a stub.
     """
-    from aphrodite.parser.harmony import HarmonyParser
+    from sonar.parser.harmony import HarmonyParser
 
     renderer = MagicMock()
     renderer.get_tokenizer.return_value = harmony_tokenizer
@@ -2304,7 +2304,7 @@ async def _render_parser_chat(client, messages: list[dict]) -> dict:
             "triples",
             marks=pytest.mark.xfail(
                 reason="<think> leaks into reasoning when it shares a "
-                "multi-token delta with reasoning text (aphrodite#55195)"
+                "multi-token delta with reasoning text (sonar#55195)"
             ),
         ),
     ],

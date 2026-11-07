@@ -14,19 +14,19 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.utils.hashing import sha256
-from aphrodite.utils.math_utils import cdiv
-from aphrodite.v1.core.kv_cache_manager import KVCacheManager
-from aphrodite.v1.core.kv_cache_utils import init_none_hash
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import (
+from sonar.utils.hashing import sha256
+from sonar.utils.math_utils import cdiv
+from sonar.v1.core.kv_cache_manager import KVCacheManager
+from sonar.v1.core.kv_cache_utils import init_none_hash
+from sonar.v1.core.sched.scheduler import Scheduler
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
     MambaSpec,
     is_mamba_prefill_checkpoint_valid,
 )
-from aphrodite.v1.request import Request
+from sonar.v1.request import Request
 from tests.v1.core.test_prefix_caching import make_request
 
 from .utils import create_requests

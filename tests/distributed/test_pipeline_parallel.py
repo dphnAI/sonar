@@ -14,16 +14,16 @@ from typing import Literal, NamedTuple
 
 import pytest
 
-from aphrodite.config.model import _FLOAT16_NOT_SUPPORTED_MODELS, RunnerOption
-from aphrodite.logger import init_logger
-from aphrodite.transformers_utils.config import get_config
+from sonar.config.model import _FLOAT16_NOT_SUPPORTED_MODELS, RunnerOption
+from sonar.logger import init_logger
+from sonar.transformers_utils.config import get_config
 
 from ..models.registry import HF_EXAMPLE_MODELS
 from ..utils import compare_two_settings, create_new_process_for_each_test
 
 logger = init_logger("test_pipeline_parallel")
 
-APHRODITE_MULTI_NODE = os.getenv("APHRODITE_MULTI_NODE", "0") == "1"
+SONAR_MULTI_NODE = os.getenv("SONAR_MULTI_NODE", "0") == "1"
 
 
 class ParallelSetup(NamedTuple):
@@ -244,9 +244,9 @@ def _compare_tp(
 
     if num_gpus_available < tp_size * pp_size:
         pytest.skip(f"Need at least {tp_size} x {pp_size} GPUs")
-    if APHRODITE_MULTI_NODE and distributed_backend == "mp":
+    if SONAR_MULTI_NODE and distributed_backend == "mp":
         pytest.skip("Skipping multi-node pipeline parallel test for multiprocessing distributed backend")
-    if multi_node_only and not APHRODITE_MULTI_NODE:
+    if multi_node_only and not SONAR_MULTI_NODE:
         pytest.skip("Not in multi-node setting")
 
     common_args = [

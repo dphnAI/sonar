@@ -8,14 +8,14 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from aphrodite import _custom_ops as ops
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar import _custom_ops as ops
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     pack_rows,
     quantize_weights,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.scalar_type import ScalarType, scalar_types
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.scalar_type import ScalarType, scalar_types
+from sonar.utils.torch_utils import set_random_seed
 
 IS_SUPPORTED_BY_GPU = current_platform.is_cuda() and current_platform.is_device_capability(90)
 

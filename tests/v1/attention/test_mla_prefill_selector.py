@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, AttentionConfig, ModelConfig
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.interface import DeviceCapability, Platform
-from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
-from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
-from aphrodite.v1.attention.backends.mla.prefill.selector import (
+from sonar.config import AttentionConfig, ModelConfig, SonarConfig
+from sonar.platforms import current_platform
+from sonar.platforms.interface import DeviceCapability, Platform
+from sonar.v1.attention.backends.mla.prefill.base import MLADimensions
+from sonar.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
+from sonar.v1.attention.backends.mla.prefill.selector import (
     MLAPrefillSelectorConfig,
     _auto_select_mla_prefill_backend,
     get_mla_prefill_backend,
@@ -41,18 +41,18 @@ def _make_mock_model_config(
     return mock_config
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     model_config: ModelConfig | None = None,
     mla_prefill_backend: MLAPrefillBackendEnum | None = None,
-) -> AphroditeConfig:
+) -> SonarConfig:
     if model_config is None:
         model_config = _make_mock_model_config()
 
     attention_config = AttentionConfig(mla_prefill_backend=mla_prefill_backend)
-    mock_aphrodite_config = MagicMock(spec=AphroditeConfig)
-    mock_aphrodite_config.model_config = model_config
-    mock_aphrodite_config.attention_config = attention_config
-    return mock_aphrodite_config
+    mock_sonar_config = MagicMock(spec=SonarConfig)
+    mock_sonar_config.model_config = model_config
+    mock_sonar_config.attention_config = attention_config
+    return mock_sonar_config
 
 
 class TestPlatformMLAPrefillHooks:
@@ -172,7 +172,7 @@ class TestPlatformMLAPrefillHooks:
             pytest.skip("CPU MLA prefill backend not available")
             return
 
-        from aphrodite.platforms.cpu import CpuPlatform
+        from sonar.platforms.cpu import CpuPlatform
 
         expected = zen_cls if zen_cls.is_available() else cpu_cls
         assert CpuPlatform.get_mla_prefill_backend_cls(MLAPrefillSelectorConfig(dtype=torch.bfloat16)) is expected
@@ -182,16 +182,16 @@ class TestGetMLAPrefillBackend:
     """Tests for get_mla_prefill_backend (public API)."""
 
     def test_cpu_uses_sdpa_prefill(self):
-        aphrodite_config = _make_aphrodite_config()
+        sonar_config = _make_sonar_config()
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.get_mla_prefill_backend_cls.return_value = MLAPrefillBackendEnum.CPU.get_class()
 
-            backend = get_mla_prefill_backend(aphrodite_config)
+            backend = get_mla_prefill_backend(sonar_config)
             assert backend is MLAPrefillBackendEnum.CPU.get_class()
 
     def test_zen_cpu_prefers_zentorch_prefill(self):
-        from aphrodite.platforms.cpu import CpuPlatform
+        from sonar.platforms.cpu import CpuPlatform
 
         zen_cls = MLAPrefillBackendEnum.ZEN_CPU.get_class()
 
@@ -200,7 +200,7 @@ class TestGetMLAPrefillBackend:
         assert backend is zen_cls
 
     def test_zen_cpu_falls_back_when_zentorch_unavailable(self):
-        from aphrodite.platforms.cpu import CpuPlatform
+        from sonar.platforms.cpu import CpuPlatform
 
         zen_cls = MLAPrefillBackendEnum.ZEN_CPU.get_class()
 
@@ -209,17 +209,17 @@ class TestGetMLAPrefillBackend:
         assert backend is MLAPrefillBackendEnum.CPU.get_class()
 
     def test_no_device_capability_returns_flash_attn(self):
-        aphrodite_config = _make_aphrodite_config()
+        sonar_config = _make_sonar_config()
 
         class FlashAttnBackend:
             @staticmethod
             def get_name():
                 return "FLASH_ATTN"
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.get_mla_prefill_backend_cls.return_value = FlashAttnBackend
 
-            backend = get_mla_prefill_backend(aphrodite_config)
+            backend = get_mla_prefill_backend(sonar_config)
             assert backend.get_name() == "FLASH_ATTN"
 
     def test_explicit_flash_attn_selection(self):
@@ -229,11 +229,11 @@ class TestGetMLAPrefillBackend:
             pytest.skip("FLASH_ATTN backend not available")
             return
 
-        aphrodite_config = _make_aphrodite_config(
+        sonar_config = _make_sonar_config(
             mla_prefill_backend=MLAPrefillBackendEnum.FLASH_ATTN,
         )
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.is_cpu.return_value = False
             mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
 
@@ -242,27 +242,27 @@ class TestGetMLAPrefillBackend:
                 "validate_configuration",
                 return_value=[],
             ):
-                backend = get_mla_prefill_backend(aphrodite_config)
+                backend = get_mla_prefill_backend(sonar_config)
                 assert backend.get_name() == "FLASH_ATTN"
 
     def test_explicit_backend_invalid_raises_error(self):
-        aphrodite_config = _make_aphrodite_config(
+        sonar_config = _make_sonar_config(
             mla_prefill_backend=MLAPrefillBackendEnum.FLASHINFER,
         )
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.is_cpu.return_value = False
             mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
 
             with pytest.raises(ValueError, match="is not valid"):
-                get_mla_prefill_backend(aphrodite_config)
+                get_mla_prefill_backend(sonar_config)
 
     def test_explicit_backend_import_error_raises(self):
-        aphrodite_config = _make_aphrodite_config(
+        sonar_config = _make_sonar_config(
             mla_prefill_backend=MLAPrefillBackendEnum.TRTLLM_RAGGED,
         )
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.is_cpu.return_value = False
             mock_platform.get_device_capability.return_value = DeviceCapability(major=10, minor=0)
 
@@ -274,7 +274,7 @@ class TestGetMLAPrefillBackend:
                 ),
                 pytest.raises(ValueError, match="is not valid"),
             ):
-                get_mla_prefill_backend(aphrodite_config)
+                get_mla_prefill_backend(sonar_config)
 
     @pytest.mark.parametrize(
         ("qk_nope_head_dim", "v_head_dim"),
@@ -288,7 +288,7 @@ class TestGetMLAPrefillBackend:
             pytest.skip("FLASH_ATTN backend not available")
             return
 
-        aphrodite_config = _make_aphrodite_config(
+        sonar_config = _make_sonar_config(
             _make_mock_model_config(
                 qk_nope_head_dim=qk_nope_head_dim,
                 v_head_dim=v_head_dim,
@@ -296,10 +296,10 @@ class TestGetMLAPrefillBackend:
         )
 
         with (
-            patch("aphrodite.platforms.current_platform") as mock_platform,
+            patch("sonar.platforms.current_platform") as mock_platform,
             patch.object(flash_attn_cls, "is_available", return_value=True),
             patch(
-                "aphrodite.v1.attention.backends.mla.prefill.flash_attn.get_flash_attn_version",
+                "sonar.v1.attention.backends.mla.prefill.flash_attn.get_flash_attn_version",
                 return_value=3,
             ),
         ):
@@ -307,7 +307,7 @@ class TestGetMLAPrefillBackend:
             mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
             mock_platform.get_mla_prefill_backend_cls.return_value = flash_attn_cls
 
-            backend = get_mla_prefill_backend(aphrodite_config)
+            backend = get_mla_prefill_backend(sonar_config)
             assert backend.get_name() == "FLASH_ATTN"
 
 
@@ -331,7 +331,7 @@ class TestAutoSelectMLAPrefillBackend:
             return
 
         with (
-            patch("aphrodite.platforms.current_platform") as mock_platform,
+            patch("sonar.platforms.current_platform") as mock_platform,
             patch.object(trtllm_cls, "validate_configuration", return_value=[]),
         ):
             mock_platform.get_mla_prefill_backend_cls.return_value = trtllm_cls
@@ -349,7 +349,7 @@ class TestAutoSelectMLAPrefillBackend:
         )
 
         with (
-            patch("aphrodite.platforms.current_platform") as mock_platform,
+            patch("sonar.platforms.current_platform") as mock_platform,
             pytest.raises(ValueError, match="No valid MLA"),
         ):
             mock_platform.get_mla_prefill_backend_cls.side_effect = ValueError("No valid MLA prefill backend found")
@@ -361,10 +361,10 @@ class TestBackendValidation:
 
     def test_backend_supported_dimension_validation(self):
         try:
-            from aphrodite.v1.attention.backends.mla.prefill.flashinfer import (
+            from sonar.v1.attention.backends.mla.prefill.flashinfer import (
                 FlashInferPrefillBackend,
             )
-            from aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged import (
+            from sonar.v1.attention.backends.mla.prefill.trtllm_ragged import (
                 TrtllmRaggedPrefillBackend,
             )
         except ImportError:
@@ -425,7 +425,7 @@ class TestBackendValidation:
         """(256, 0, 256) runs the same FA kernels as GLM-5's (192, 64, 256); a
         RoPE-carrying 320-wide query does not."""
         try:
-            from aphrodite.v1.attention.backends.mla.prefill.flash_attn import (
+            from sonar.v1.attention.backends.mla.prefill.flash_attn import (
                 FlashAttnPrefillBackend,
             )
         except ImportError:
@@ -454,7 +454,7 @@ class TestBackendValidation:
 
 @pytest.mark.skipif(
     not current_platform.is_cuda_alike(),
-    reason="Imports aphrodite.platforms.rocm, whose module init requires a CUDA or "
+    reason="Imports sonar.platforms.rocm, whose module init requires a CUDA or "
     "ROCm torch build; not importable on XPU/CPU/TPU.",
 )
 class TestROCmAiterFAPrefillSelection:
@@ -462,7 +462,7 @@ class TestROCmAiterFAPrefillSelection:
 
     def test_rocm_priorities_prefer_aiter_fa(self):
         """On ROCm, ROCM_AITER_FA is tried first, FLASH_ATTN as fallback."""
-        from aphrodite.platforms.rocm import RocmPlatform
+        from sonar.platforms.rocm import RocmPlatform
 
         selector_config = MLAPrefillSelectorConfig(dtype=torch.bfloat16)
         tried: list[MLAPrefillBackendEnum] = []
@@ -490,7 +490,7 @@ class TestROCmAiterFAPrefillSelection:
         ]
 
     def test_supported_dtypes_are_fp16_bf16_only(self):
-        from aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn import (
+        from sonar.v1.attention.backends.mla.prefill.aiter_flash_attn import (
             AiterFlashAttnPrefillBackend,
         )
 
@@ -500,7 +500,7 @@ class TestROCmAiterFAPrefillSelection:
         assert not AiterFlashAttnPrefillBackend.supports_dtype(torch.float8_e4m3fn)
 
     def test_supports_compute_capability_on_rocm(self):
-        from aphrodite.v1.attention.backends.mla.prefill import aiter_flash_attn as mod
+        from sonar.v1.attention.backends.mla.prefill import aiter_flash_attn as mod
 
         # Gating is decided by on_mi3xx(), not by capability
         capability = MagicMock()
@@ -510,19 +510,19 @@ class TestROCmAiterFAPrefillSelection:
 
         with (
             patch.object(mod.current_platform, "is_rocm", return_value=True),
-            patch("aphrodite.platforms.rocm.on_mi3xx", return_value=False),
+            patch("sonar.platforms.rocm.on_mi3xx", return_value=False),
         ):
             assert not mod.AiterFlashAttnPrefillBackend.supports_compute_capability(capability)
 
         with (
             patch.object(mod.current_platform, "is_rocm", return_value=True),
-            patch("aphrodite.platforms.rocm.on_mi3xx", return_value=True),
+            patch("sonar.platforms.rocm.on_mi3xx", return_value=True),
         ):
             assert mod.AiterFlashAttnPrefillBackend.supports_compute_capability(capability)
 
     def test_is_available_delegates_to_rocm_aiter_ops(self):
-        from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.v1.attention.backends.mla.prefill import aiter_flash_attn as mod
+        from sonar._aiter_ops import rocm_aiter_ops
+        from sonar.v1.attention.backends.mla.prefill import aiter_flash_attn as mod
 
         with patch.object(rocm_aiter_ops, "is_enabled", return_value=False):
             assert not mod.AiterFlashAttnPrefillBackend.is_available()
@@ -531,13 +531,13 @@ class TestROCmAiterFAPrefillSelection:
             assert mod.AiterFlashAttnPrefillBackend.is_available()
 
     def test_auto_select_prefers_aiter_fa_on_rocm(self):
-        from aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn import (
+        from sonar.v1.attention.backends.mla.prefill.aiter_flash_attn import (
             AiterFlashAttnPrefillBackend,
         )
 
         selector_config = MLAPrefillSelectorConfig(dtype=torch.bfloat16)
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.get_mla_prefill_backend_cls.return_value = AiterFlashAttnPrefillBackend
             backend = _auto_select_mla_prefill_backend(selector_config)
             assert backend.get_name() == "ROCM_AITER_FA"
@@ -553,7 +553,7 @@ class TestROCmAiterFAPrefillSelection:
         # not the capability.
         selector_config = MLAPrefillSelectorConfig(dtype=torch.bfloat16)
 
-        with patch("aphrodite.platforms.current_platform") as mock_platform:
+        with patch("sonar.platforms.current_platform") as mock_platform:
             mock_platform.get_mla_prefill_backend_cls.return_value = flash_attn_cls
             backend = _auto_select_mla_prefill_backend(selector_config)
             assert backend.get_name() == "FLASH_ATTN"

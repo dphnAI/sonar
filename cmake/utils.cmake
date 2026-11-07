@@ -54,7 +54,7 @@ endmacro()
 function (hipify_sources_target OUT_SRCS NAME ORIG_SRCS)
   if (TARGET hipify_all)
     message(FATAL_ERROR
-      "hipify_sources_target(${NAME}) called after aphrodite_finalize_hipify_target. "
+      "hipify_sources_target(${NAME}) called after sonar_finalize_hipify_target. "
       "Add the new HIP extension before the finalizer call in CMakeLists.txt.")
   endif()
 
@@ -78,16 +78,16 @@ function (hipify_sources_target OUT_SRCS NAME ORIG_SRCS)
     list(APPEND HIP_SRCS "${CMAKE_CURRENT_BINARY_DIR}/${SRC}")
   endforeach()
 
-  set_property(GLOBAL APPEND PROPERTY APHRODITE_HIPIFY_ALL_SRCS ${SRCS})
-  set_property(GLOBAL APPEND PROPERTY APHRODITE_HIPIFY_ALL_BYPRODUCTS ${HIP_SRCS})
+  set_property(GLOBAL APPEND PROPERTY SONAR_HIPIFY_ALL_SRCS ${SRCS})
+  set_property(GLOBAL APPEND PROPERTY SONAR_HIPIFY_ALL_BYPRODUCTS ${HIP_SRCS})
 
   # Chain hipify targets so they run sequentially. Parallel hipify
   # invocations race on shutil.copytree, overwriting .hip files
   # produced by another target back to .cu originals.
-  if (DEFINED _APHRODITE_LAST_HIPIFY_TARGET)
-    add_dependencies(hipify${NAME} ${_APHRODITE_LAST_HIPIFY_TARGET})
+  if (DEFINED _SONAR_LAST_HIPIFY_TARGET)
+    add_dependencies(hipify${NAME} ${_SONAR_LAST_HIPIFY_TARGET})
   endif()
-  set(_APHRODITE_LAST_HIPIFY_TARGET "hipify${NAME}" PARENT_SCOPE)
+  set(_SONAR_LAST_HIPIFY_TARGET "hipify${NAME}" PARENT_SCOPE)
 
   # Swap out original extension sources with hipified sources.
   list(APPEND HIP_SRCS ${CXX_SRCS})
@@ -97,13 +97,13 @@ endfunction()
 # Define the single shared `hipify_all` custom target that runs hipify once
 # on the union of every HIP extension's sources. Call after the last HIP
 # `define_extension_target`.
-function (aphrodite_finalize_hipify_target)
+function (sonar_finalize_hipify_target)
   if (TARGET hipify_all)
     return()
   endif()
 
-  get_property(ALL_SRCS GLOBAL PROPERTY APHRODITE_HIPIFY_ALL_SRCS)
-  get_property(ALL_BYPRODUCTS GLOBAL PROPERTY APHRODITE_HIPIFY_ALL_BYPRODUCTS)
+  get_property(ALL_SRCS GLOBAL PROPERTY SONAR_HIPIFY_ALL_SRCS)
+  get_property(ALL_BYPRODUCTS GLOBAL PROPERTY SONAR_HIPIFY_ALL_BYPRODUCTS)
 
   if (NOT ALL_SRCS)
     return()
@@ -171,11 +171,11 @@ endfunction()
 #   libgomp.so    -> libgomp-<hash>.so...
 #   libgomp.so.1  -> libgomp-<hash>.so...
 # OUTPUT: TORCH_GOMP_SHIM_DIR  ("" if not found)
-function(aphrodite_prepare_torch_gomp_shim TORCH_GOMP_SHIM_DIR)
+function(sonar_prepare_torch_gomp_shim TORCH_GOMP_SHIM_DIR)
   set(${TORCH_GOMP_SHIM_DIR} "" PARENT_SCOPE)
 
   # Use run_python to locate vendored libgomp; never throw on failure.
-  run_python(_APHRODITE_TORCH_GOMP_PATH
+  run_python(_SONAR_TORCH_GOMP_PATH
     "
 import os, glob
 import torch
@@ -194,7 +194,7 @@ print(candidates[0] if candidates else '')
 "
     "failed to probe for libgomp")
 
-  if(_APHRODITE_TORCH_GOMP_PATH STREQUAL "" OR NOT EXISTS "${_APHRODITE_TORCH_GOMP_PATH}")
+  if(_SONAR_TORCH_GOMP_PATH STREQUAL "" OR NOT EXISTS "${_SONAR_TORCH_GOMP_PATH}")
     return()
   endif()
 
@@ -204,8 +204,8 @@ print(candidates[0] if candidates else '')
 
   execute_process(COMMAND ${CMAKE_COMMAND} -E rm -f "${_shim}/libgomp.so")
   execute_process(COMMAND ${CMAKE_COMMAND} -E rm -f "${_shim}/libgomp.so.1")
-  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_APHRODITE_TORCH_GOMP_PATH}" "${_shim}/libgomp.so")
-  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_APHRODITE_TORCH_GOMP_PATH}" "${_shim}/libgomp.so.1")
+  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_SONAR_TORCH_GOMP_PATH}" "${_shim}/libgomp.so")
+  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${_SONAR_TORCH_GOMP_PATH}" "${_shim}/libgomp.so.1")
 
   set(${TORCH_GOMP_SHIM_DIR} "${_shim}" PARENT_SCOPE)
 endfunction()
@@ -240,7 +240,7 @@ endmacro()
 
 #
 # Warn when a caller requested PTX code generation through global CUDA arch
-# flags. Aphrodite removes those flags and reapplies per-source gencode flags, so the
+# flags. Sonar removes those flags and reapplies per-source gencode flags, so the
 # user's global PTX request will not be preserved.
 #
 function(warn_if_ptx_arch_requested CUDA_ARCH_FLAGS)
@@ -248,9 +248,9 @@ function(warn_if_ptx_arch_requested CUDA_ARCH_FLAGS)
     if(_ARCH_FLAG MATCHES "code=.*compute_[0-9]+[af]?")
       message(WARNING
         "PTX code generation requested in CUDA architecture flags "
-        "(${_ARCH_FLAG}), but Aphrodite does not preserve global PTX requests "
+        "(${_ARCH_FLAG}), but Sonar does not preserve global PTX requests "
         "when normalizing per-source CUDA architectures. Remove '+PTX' from "
-        "TORCH_CUDA_ARCH_LIST or rely on Aphrodite's built-in per-kernel PTX "
+        "TORCH_CUDA_ARCH_LIST or rely on Sonar's built-in per-kernel PTX "
         "selection.")
       return()
     endif()

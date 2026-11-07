@@ -19,9 +19,9 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.attention.mla_attention import QueryLenSupport
-from aphrodite.v1.attention.backend import AttentionCGSupport
-from aphrodite.v1.attention.backends.mla.triton_mla import (
+from sonar.model_executor.layers.attention.mla_attention import QueryLenSupport
+from sonar.v1.attention.backend import AttentionCGSupport
+from sonar.v1.attention.backends.mla.triton_mla import (
     TritonMLAImpl,
     TritonMLAMetadataBuilder,
 )
@@ -90,7 +90,7 @@ def _run_forward_mqa(
     kv_cache = torch.zeros(len(seq_lens) * 64, PAGE_SIZE, HEAD_SIZE, dtype=torch.bfloat16)
     layer = SimpleNamespace(_k_scale=torch.ones(1), layer_name="test")
 
-    with patch("aphrodite.v1.attention.backends.mla.triton_mla.decode_attention_fwd", spy):
+    with patch("sonar.v1.attention.backends.mla.triton_mla.decode_attention_fwd", spy):
         _make_impl(dcp_world_size).forward_mqa(q, kv_cache, metadata, layer)
 
     assert captured, "forward_mqa did not reach the decode kernel"

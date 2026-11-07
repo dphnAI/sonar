@@ -17,8 +17,8 @@ import psutil
 import pytest
 import requests
 
-from aphrodite.utils.import_utils import has_nixl_ep
-from aphrodite.utils.network_utils import get_open_port
+from sonar.utils.import_utils import has_nixl_ep
+from sonar.utils.network_utils import get_open_port
 from tests.utils import RemoteOpenAIServer, multi_gpu_test
 
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-30B-A3B")
@@ -41,16 +41,16 @@ SCALE_DOWN_DEADLINE_S = 20
 
 
 # Patches ``gpu.dp_utils.sync_cudagraph_and_dp_padding`` to raise on ``rank``
-# once armed (via /collective_rpc). Gated on APHRODITE_FT_TEST_INJECT_FAULT.
+# once armed (via /collective_rpc). Gated on SONAR_FT_TEST_INJECT_FAULT.
 _FAULT_INJECT_SITECUSTOMIZE = """\
 import builtins
 import os
 import sys
 
-_SPEC = os.environ.get("APHRODITE_FT_TEST_INJECT_FAULT")
-_MODULE = "aphrodite.v1.worker.gpu.dp_utils"
+_SPEC = os.environ.get("SONAR_FT_TEST_INJECT_FAULT")
+_MODULE = "sonar.v1.worker.gpu.dp_utils"
 _ATTR = "sync_cudagraph_and_dp_padding"
-_WORKER_MODULE = "aphrodite.v1.worker.gpu_worker"
+_WORKER_MODULE = "sonar.v1.worker.gpu_worker"
 
 if _SPEC:
     _f = dict(kv.split("=", 1) for kv in _SPEC.split(","))
@@ -111,7 +111,7 @@ if _SPEC:
 def _install_fault_injection(monkeypatch, tmp_path, rank: int) -> None:
     """Install a sitecustomize that raises on ``rank`` once armed.
 
-    Disarmed until the test calls /collective_rpc (needs APHRODITE_SERVER_DEV_MODE,
+    Disarmed until the test calls /collective_rpc (needs SONAR_SERVER_DEV_MODE,
     set here).
     """
     site_dir = tmp_path / "ft_inject"
@@ -122,8 +122,8 @@ def _install_fault_injection(monkeypatch, tmp_path, rank: int) -> None:
         "PYTHONPATH",
         str(site_dir) + (os.pathsep + existing if existing else ""),
     )
-    monkeypatch.setenv("APHRODITE_FT_TEST_INJECT_FAULT", f"rank={rank}")
-    monkeypatch.setenv("APHRODITE_SERVER_DEV_MODE", "1")
+    monkeypatch.setenv("SONAR_FT_TEST_INJECT_FAULT", f"rank={rank}")
+    monkeypatch.setenv("SONAR_SERVER_DEV_MODE", "1")
 
 
 def _ft_server_args(extra_args: list[str] | None = None) -> list[str]:

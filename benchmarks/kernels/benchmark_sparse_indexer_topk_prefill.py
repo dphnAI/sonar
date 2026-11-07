@@ -14,8 +14,8 @@ import time
 
 import torch
 
-from aphrodite import _custom_ops  # noqa: F401
-from aphrodite._aiter_ops import rocm_aiter_ops
+from sonar import _custom_ops  # noqa: F401
+from sonar._aiter_ops import rocm_aiter_ops
 
 
 def _make_inputs(num_rows, num_cols, causal, device):
@@ -81,10 +81,10 @@ def main():
     print(f"in-tree  topKPerRowPrefill : {native_ms:8.3f} ms")
 
     if not rocm_aiter_ops.is_indexer_top_k_enabled():
-        print("AITER path unavailable: requires ROCm gfx950 with AITER installed and APHRODITE_ROCM_USE_AITER=1")
+        print("AITER path unavailable: requires ROCm gfx950 with AITER installed and SONAR_ROCM_USE_AITER=1")
         return
 
-    from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import (
+    from sonar.v1.attention.ops.rocm_aiter_mla_sparse import (
         _launch_aiter_top_k_per_row_prefill,
     )
 

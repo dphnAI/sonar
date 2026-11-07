@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 
-from aphrodite.models.inkling.amd.sconv_swa_attn import InklingConvState
+from sonar.models.inkling.amd.sconv_swa_attn import InklingConvState
 
 
 def test_runtime_sconv_block_size_tracks_unified_cache_page():

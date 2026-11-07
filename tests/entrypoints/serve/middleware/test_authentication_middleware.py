@@ -11,12 +11,12 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from aphrodite.entrypoints.launchers.api_server.routers import register_api_routers
-from aphrodite.entrypoints.serve.middleware.authenticate import (
+from sonar.entrypoints.launchers.api_server.routers import register_api_routers
+from sonar.entrypoints.serve.middleware.authenticate import (
     GUARDED_PREFIX,
     AuthenticationMiddleware,
 )
-from aphrodite.tasks import POOLING_TASKS, SupportedTask
+from sonar.tasks import POOLING_TASKS, SupportedTask
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,7 +77,7 @@ def task_routes(request, monkeypatch) -> tuple[str, list[tuple[str, list[str]]]]
     extract all routes, and return the task name and routes."""
     task = request.param
     # Enable development mode to register all routes (including dev-only routes).
-    monkeypatch.setenv("APHRODITE_SERVER_DEV_MODE", "1")
+    monkeypatch.setenv("SONAR_SERVER_DEV_MODE", "1")
 
     app = FastAPI()
     args = Namespace()

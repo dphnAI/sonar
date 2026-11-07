@@ -11,12 +11,12 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.entrypoints.pooling.scoring.utils import compute_maxsim_score
 from tests.utils import wait_for_memory_to_settle
 
 # -----------------------------------------------------------------------
-# Model definitions: (model_name, colbert_dim, extra aphrodite_runner kwargs)
+# Model definitions: (model_name, colbert_dim, extra sonar_runner kwargs)
 # -----------------------------------------------------------------------
 COLBERT_MODELS = {
     "bert": {
@@ -128,7 +128,7 @@ def _load_projection_weight(model_name: str, hf_spec: dict, device: torch.device
     """Download and return the ColBERT linear projection weight."""
     from safetensors.torch import load_file
 
-    from aphrodite.transformers_utils.repo_utils import hf_api, with_retry
+    from sonar.transformers_utils.repo_utils import hf_api, with_retry
 
     path = with_retry(
         lambda: hf_api().hf_hub_download(model_name, filename=hf_spec["weights_file"]),
@@ -171,17 +171,17 @@ def _hf_colbert_model(model_name: str, hf_spec: dict, device: torch.device):
         wait_for_memory_to_settle()
 
 
-def _assert_embeddings_close(aphrodite_outputs, hf_embeddings):
-    """Assert that Aphrodite and HuggingFace embeddings match."""
-    for i, (hf_emb, aphrodite_out) in enumerate(zip(hf_embeddings, aphrodite_outputs)):
-        aphrodite_emb = torch.as_tensor(aphrodite_out).float()
+def _assert_embeddings_close(sonar_outputs, hf_embeddings):
+    """Assert that Sonar and HuggingFace embeddings match."""
+    for i, (hf_emb, sonar_out) in enumerate(zip(hf_embeddings, sonar_outputs)):
+        sonar_emb = torch.as_tensor(sonar_out).float()
 
-        assert hf_emb.shape == aphrodite_emb.shape, (
-            f"Shape mismatch for text {i}: HF {hf_emb.shape} vs Aphrodite {aphrodite_emb.shape}"
+        assert hf_emb.shape == sonar_emb.shape, (
+            f"Shape mismatch for text {i}: HF {hf_emb.shape} vs Sonar {sonar_emb.shape}"
         )
 
         torch.testing.assert_close(
-            aphrodite_emb,
+            sonar_emb,
             hf_emb,
             rtol=1e-2,
             atol=1e-2,
@@ -217,20 +217,20 @@ def colbert_extra_kwargs(colbert_spec):
 
 @pytest.fixture(scope="class")
 def colbert_model(
-    aphrodite_runner,
+    sonar_runner,
     colbert_model_name,
     colbert_max_model_len,
     colbert_extra_kwargs,
 ):
-    with aphrodite_runner(
+    with sonar_runner(
         colbert_model_name,
         runner="pooling",
         dtype=DTYPE,
         max_model_len=colbert_max_model_len,
         enforce_eager=True,
         **colbert_extra_kwargs,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as sonar_model:
+        yield sonar_model
 
 
 class TestColbertSharedEngine:
@@ -260,10 +260,10 @@ class TestColbertSharedEngine:
 
         manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-        aphrodite_scores = colbert_model.score(TEXTS_1[0], TEXTS_2[0])
+        sonar_scores = colbert_model.score(TEXTS_1[0], TEXTS_2[0])
 
-        assert len(aphrodite_scores) == 1
-        assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
+        assert len(sonar_scores) == 1
+        assert sonar_scores[0] == pytest.approx(manual_score, rel=0.01)
 
     def test_colbert_late_interaction_1_to_N(self, colbert_model):
         """Test ColBERT late interaction scoring with 1:N query-documents."""
@@ -277,11 +277,11 @@ class TestColbertSharedEngine:
             d_emb = torch.as_tensor(d_out)
             manual_scores.append(compute_maxsim_score(q_emb, d_emb).item())
 
-        aphrodite_scores = colbert_model.score(TEXTS_1[0], TEXTS_2)
+        sonar_scores = colbert_model.score(TEXTS_1[0], TEXTS_2)
 
-        assert len(aphrodite_scores) == 2
+        assert len(sonar_scores) == 2
         for i in range(2):
-            assert aphrodite_scores[i] == pytest.approx(manual_scores[i], rel=0.01)
+            assert sonar_scores[i] == pytest.approx(manual_scores[i], rel=0.01)
 
     def test_colbert_late_interaction_N_to_N(self, colbert_model):
         """Test ColBERT late interaction scoring with N:N query-documents."""
@@ -294,11 +294,11 @@ class TestColbertSharedEngine:
             d_emb = torch.as_tensor(d_out)
             manual_scores.append(compute_maxsim_score(q_emb, d_emb).item())
 
-        aphrodite_scores = colbert_model.score(TEXTS_1, TEXTS_2)
+        sonar_scores = colbert_model.score(TEXTS_1, TEXTS_2)
 
-        assert len(aphrodite_scores) == 2
+        assert len(sonar_scores) == 2
         for i in range(2):
-            assert aphrodite_scores[i] == pytest.approx(manual_scores[i], rel=0.01)
+            assert sonar_scores[i] == pytest.approx(manual_scores[i], rel=0.01)
 
     def test_colbert_relevance_ordering(self, colbert_model):
         """Test that ColBERT scores relevant documents higher than irrelevant."""
@@ -330,8 +330,8 @@ class TestColbertSharedEngine:
         pytest.param("lfm2", True, id="lfm2-v2"),
     ],
 )
-def test_colbert_hf_comparison(aphrodite_runner, monkeypatch, backend, use_v2):
-    """Test that Aphrodite ColBERT embeddings match HuggingFace for each backend."""
+def test_colbert_hf_comparison(sonar_runner, monkeypatch, backend, use_v2):
+    """Test that Sonar ColBERT embeddings match HuggingFace for each backend."""
     from transformers import AutoTokenizer
 
     spec = COLBERT_MODELS[backend]
@@ -343,18 +343,18 @@ def test_colbert_hf_comparison(aphrodite_runner, monkeypatch, backend, use_v2):
     assert isinstance(extra_kwargs, dict)
     test_texts = [TEXTS_1[0], TEXTS_2[0]]
 
-    monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", "1" if use_v2 else "0")
+    monkeypatch.setenv("SONAR_USE_V2_MODEL_RUNNER", "1" if use_v2 else "0")
 
-    with aphrodite_runner(
+    with sonar_runner(
         model_name,
         runner="pooling",
         dtype="float32",
         max_model_len=spec["max_model_len"],
         enforce_eager=True,
         **extra_kwargs,
-    ) as aphrodite_model:
-        assert aphrodite_model.llm.llm_engine.aphrodite_config.use_v2_model_runner == use_v2
-        aphrodite_outputs = aphrodite_model.token_embed(test_texts)
+    ) as sonar_model:
+        assert sonar_model.llm.llm_engine.sonar_config.use_v2_model_runner == use_v2
+        sonar_outputs = sonar_model.token_embed(test_texts)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -371,4 +371,4 @@ def test_colbert_hf_comparison(aphrodite_runner, monkeypatch, backend, use_v2):
             device,
         )
 
-    _assert_embeddings_close(aphrodite_outputs, hf_embeddings)
+    _assert_embeddings_close(sonar_outputs, hf_embeddings)

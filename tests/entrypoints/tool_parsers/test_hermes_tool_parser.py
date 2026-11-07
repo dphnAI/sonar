@@ -8,10 +8,10 @@ import pytest
 import pytest_asyncio
 from typing_extensions import TypedDict
 
-from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
-from aphrodite.tool_parsers.granite4_tool_parser import Granite4ToolParser
-from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
-from aphrodite.transformers_utils.repo_utils import hf_api
+from sonar.tool_parsers.abstract_tool_parser import ToolParser
+from sonar.tool_parsers.granite4_tool_parser import Granite4ToolParser
+from sonar.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from sonar.transformers_utils.repo_utils import hf_api
 from tests.utils import RemoteOpenAIServer
 
 LORA_MODEL = "minpeter/LoRA-Llama-3.2-1B-tool-vllm-ci"

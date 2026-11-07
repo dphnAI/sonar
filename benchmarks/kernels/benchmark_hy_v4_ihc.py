@@ -11,19 +11,19 @@ from statistics import median
 import torch
 import torch.nn.functional as F
 
-import aphrodite
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import triton
-from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+import sonar
+from sonar.platforms import current_platform
+from sonar.triton_utils import triton
+from sonar.utils.argparse_utils import FlexibleArgumentParser
 
 if current_platform.is_rocm():
-    from aphrodite.models.hy_v4.amd.triton_ihc import (
+    from sonar.models.hy_v4.amd.triton_ihc import (
         triton_ihc_post,
         triton_ihc_post_pre_rms_norm,
         triton_ihc_pre,
     )
 else:
-    from aphrodite.models.hy_v4.nvidia.triton_ihc import (
+    from sonar.models.hy_v4.nvidia.triton_ihc import (
         triton_ihc_post,
         triton_ihc_pre,
     )
@@ -163,7 +163,7 @@ def run_benchmark(
     platform_description = f"HIP: {torch.version.hip}" if current_platform.is_rocm() else f"CUDA: {torch.version.cuda}"
     print(f"device: {device_name}")
     print(f"branch: {git_branch}; commit: {git_commit}")
-    print(f"aphrodite: {aphrodite.__version__}; torch: {torch.__version__}; {platform_description}")
+    print(f"sonar: {sonar.__version__}; torch: {torch.__version__}; {platform_description}")
     if method == "torch_event":
         flashinfer_version = "not used"
         event_backend = "HIP" if current_platform.is_rocm() else "CUDA"
@@ -176,10 +176,10 @@ def run_benchmark(
         time_description = f"method: {method}; cache: cold L2"
     print(f"triton: {triton.__version__}; flashinfer: {flashinfer_version}; dtype: {dtype}; {time_description}")
     print(
-        "env: APHRODITE_ENABLE_HPC_OPS="
-        f"{os.getenv('APHRODITE_ENABLE_HPC_OPS', '<unset>')}; "
-        "APHRODITE_BATCH_INVARIANT="
-        f"{os.getenv('APHRODITE_BATCH_INVARIANT', '<unset>')}"
+        "env: SONAR_ENABLE_HPC_OPS="
+        f"{os.getenv('SONAR_ENABLE_HPC_OPS', '<unset>')}; "
+        "SONAR_BATCH_INVARIANT="
+        f"{os.getenv('SONAR_BATCH_INVARIANT', '<unset>')}"
     )
     print(f"hidden_size: {hidden_size}; hc_mult: {hc_mult}")
     print(

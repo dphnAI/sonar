@@ -14,7 +14,7 @@
 #include "topk_histogram_4096.cuh"
 #include "persistent_topk_overflow.cuh"
 
-namespace aphrodite {
+namespace sonar {
 namespace persistent {
 
 using topk_histogram_4096::convert_to_uint32_v2;
@@ -1179,6 +1179,6 @@ cudaError_t FilteredTopKRaggedTransform(const DType* input,
       input, output_indices, lengths, num_rows, top_k_val, max_len, stream);
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 #endif  // PERSISTENT_TOPK_CUH_

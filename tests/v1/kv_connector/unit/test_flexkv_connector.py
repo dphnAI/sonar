@@ -18,29 +18,29 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, KVTransferConfig
-from aphrodite.config.kv_transfer import KVRole
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
+from sonar.config import KVTransferConfig, SonarConfig
+from sonar.config.kv_transfer import KVRole
+from sonar.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
+from sonar.v1.kv_cache_interface import KVCacheConfig
 
-from .utils import create_aphrodite_config
+from .utils import create_sonar_config
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_aphrodite_config(
+def _make_sonar_config(
     kv_connector: str = "FlexKVConnectorV1",
     kv_role: KVRole = "kv_both",
-) -> AphroditeConfig:
-    """Return a minimal AphroditeConfig with a KVTransferConfig attached."""
-    aphrodite_config = create_aphrodite_config(block_size=16, max_num_batched_tokens=512)
-    aphrodite_config.kv_transfer_config = KVTransferConfig(
+) -> SonarConfig:
+    """Return a minimal SonarConfig with a KVTransferConfig attached."""
+    sonar_config = create_sonar_config(block_size=16, max_num_batched_tokens=512)
+    sonar_config.kv_transfer_config = KVTransferConfig(
         kv_connector=kv_connector,
         kv_role=kv_role,
     )
-    return aphrodite_config
+    return sonar_config
 
 
 def _make_kv_cache_config() -> KVCacheConfig:
@@ -54,7 +54,7 @@ def _make_flexkv_module(
     when ``FlexKVConnectorV1Impl`` is instantiated."""
     flexkv_mod = types.ModuleType("flexkv")
     integration_mod = types.ModuleType("flexkv.integration")
-    aphrodite_mod = types.ModuleType("flexkv.integration.aphrodite")
+    integration_backend = types.ModuleType("flexkv.integration.aphrodite")
     adapter_mod = types.ModuleType("flexkv.integration.aphrodite.aphrodite_v1_adapter")
 
     # Make FlexKVConnectorV1Impl() return our mock instance.
@@ -62,8 +62,8 @@ def _make_flexkv_module(
     adapter_mod.FlexKVConnectorV1Impl = FlexKVConnectorV1ImplCls  # type: ignore[attr-defined]
 
     flexkv_mod.integration = integration_mod  # type: ignore[attr-defined]
-    integration_mod.aphrodite = aphrodite_mod  # type: ignore[attr-defined]
-    aphrodite_mod.aphrodite_v1_adapter = adapter_mod  # type: ignore[attr-defined]
+    integration_mod.aphrodite = integration_backend  # type: ignore[attr-defined]
+    integration_backend.aphrodite_v1_adapter = adapter_mod  # type: ignore[attr-defined]
 
     return flexkv_mod, adapter_mod
 
@@ -81,15 +81,15 @@ def _install_flexkv_mock(impl_mock: MagicMock):
     return patch.dict(sys.modules, mods)
 
 
-def _build_connector(aphrodite_config: AphroditeConfig, impl_mock: MagicMock):
+def _build_connector(sonar_config: SonarConfig, impl_mock: MagicMock):
     """Instantiate FlexKVConnectorV1 with faked flexkv modules."""
-    from aphrodite.distributed.kv_transfer.kv_connector.v1.flexkv_connector import (
+    from sonar.distributed.kv_transfer.kv_connector.v1.flexkv_connector import (
         FlexKVConnectorV1,
     )
 
     with _install_flexkv_mock(impl_mock):
         connector = FlexKVConnectorV1(
-            aphrodite_config=aphrodite_config,
+            sonar_config=sonar_config,
             role=KVConnectorRole.WORKER,
             kv_cache_config=_make_kv_cache_config(),
         )
@@ -106,7 +106,7 @@ class TestFlexKVConnectorImportError:
     absent."""
 
     def test_import_error_message(self):
-        from aphrodite.distributed.kv_transfer.kv_connector.v1.flexkv_connector import (
+        from sonar.distributed.kv_transfer.kv_connector.v1.flexkv_connector import (
             FlexKVConnectorV1,
         )
 
@@ -117,7 +117,7 @@ class TestFlexKVConnectorImportError:
 
         with pytest.raises(ImportError, match="(?i)flexkv") as exc_info:
             FlexKVConnectorV1(
-                aphrodite_config=_make_aphrodite_config(),
+                sonar_config=_make_sonar_config(),
                 role=KVConnectorRole.WORKER,
                 kv_cache_config=_make_kv_cache_config(),
             )
@@ -131,7 +131,7 @@ class TestFlexKVConnectorDelegation:
     @pytest.fixture()
     def connector_and_impl(self):
         impl = MagicMock()
-        cfg = _make_aphrodite_config()
+        cfg = _make_sonar_config()
         connector = _build_connector(cfg, impl)
         return connector, impl
 

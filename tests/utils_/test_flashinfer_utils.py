@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import aphrodite.utils.flashinfer as fi
+import sonar.utils.flashinfer as fi
 
 
 def _make_exe(path: Path) -> None:
@@ -50,7 +50,7 @@ def test_has_flashinfer_finds_toolkit_off_path(default_cuda_home: Path):
 
 def test_has_flashinfer_requires_ninja(default_cuda_home: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """FlashInfer runs `ninja` from PATH, which lacks the venv's bin directory
-    when Aphrodite is launched without activating the venv."""
+    when Sonar is launched without activating the venv."""
     _make_exe(tmp_path / "cuda" / "bin" / "nvcc")
     monkeypatch.setenv("PATH", str(tmp_path / "cuda" / "bin"))
     assert not fi.has_flashinfer()

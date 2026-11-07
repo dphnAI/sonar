@@ -9,12 +9,12 @@
 // flattening `(batch, token)`, exactly like upstream. AVX512 `dot_fp8_128`
 // dequant-dot-product and the split K-region-then-scale-region page byte
 // layout are verbatim (that part of the upstream contract already matches
-// Aphrodite's cache, written by `compress_norm_rope_store_indexer_cpu` in
+// Sonar's cache, written by `compress_norm_rope_store_indexer_cpu` in
 // compressor.cpp).
 //
 // Differences from upstream:
 //  - `block_size` is a runtime argument instead of the hardcoded
-//    `kBlockSize = 64`. Aphrodite's indexer K-cache shares the model's single
+//    `kBlockSize = 64`. Sonar's indexer K-cache shares the model's single
 //    global `--block-size` KV-cache-group setting (confirmed empirically:
 //    the DeepSeek-V4-Flash TP1/TP4 baseline configs run with
 //    `block_size=256`, not 64 -- see `.agent-workspace/perf_baseline_tp*_
@@ -24,11 +24,11 @@
 //    128]`/`[batch, heads]` instead of `[batch, 1, heads, 128]`) since S_q is
 //    always 1 here; `weight` is fp32-only (already folds q_scale/softmax_
 //    scale/head_scale, matching this call site's actual dtype -- unlike
-//    upstream's bf16/fp16/fp32 dispatch, which Aphrodite's CPU indexer never
+//    upstream's bf16/fp16/fp32 dispatch, which Sonar's CPU indexer never
 //    produces).
 //  - `index_head_dim` (128) stays a compile-time constant, matching
 //    upstream: it's `config.index_head_dim`, a genuine DeepSeek-V4 model
-//    invariant, not a Aphrodite KV-cache config knob like `block_size`.
+//    invariant, not a Sonar KV-cache config knob like `block_size`.
 
 #include "common.h"
 #include "vec.h"
@@ -37,7 +37,7 @@
 static_assert(false,
               "paged_mqa_logits.cpp is only ever compiled into the "
               "AVX512+AMX-flagged _C target (see cmake/cpu_extension.cmake's "
-              "APHRODITE_EXT_SRC_SGL) and relies on that unconditionally -- "
+              "SONAR_EXT_SRC_SGL) and relies on that unconditionally -- "
               "CPU_CAPABILITY_AVX512 must be defined here.");
 #endif
 

@@ -5,11 +5,11 @@ import math
 import pytest
 import torch
 
-import aphrodite._custom_ops as ops
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.platforms import current_platform
-from aphrodite.platforms.rocm import on_gfx950
-from aphrodite.utils.platform_utils import num_compute_units
+import sonar._custom_ops as ops
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.platforms import current_platform
+from sonar.platforms.rocm import on_gfx950
+from sonar.utils.platform_utils import num_compute_units
 from tests.kernels.quant_utils import ref_dynamic_per_tensor_fp8_quant
 
 # Global per-test cleanup costs more than the tests themselves.

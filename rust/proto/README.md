@@ -4,7 +4,7 @@ This directory contains Sonar's gRPC schema. Rust builds use these local files.
 The Buf configuration supports local schema linting. Sonar does not configure
 automatic publication to a Buf registry or crates.io.
 
-The `aphrodite-proto` workspace crate exposes the Prost message types and Tonic
+The `sonar-proto` workspace crate exposes the Prost message types and Tonic
 client and server modules for the inference and control APIs. It includes the
 canonical `.proto` files and generates bindings using `protox` and
 `tonic-prost-build`; a separately installed `protoc` is not required.
@@ -23,7 +23,7 @@ They are forwarded through the same text lowering path as engine-native
 requests, including tokenizer-based DRY sequence-breaker resolution.
 
 gRPC clients set the corresponding fields in
-`GenerateRequest.aphrodite_sampling`. Omitted scalar fields use the shared
+`GenerateRequest.sonar_sampling`. Omitted scalar fields use the shared
 Python sampling defaults, not protobuf zero values. The
 `dry_sequence_breakers` wrapper distinguishes an omitted list from an
 explicitly empty one; `dry_sequence_breaker_ids` accepts already-tokenized

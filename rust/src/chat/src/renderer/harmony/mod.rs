@@ -7,13 +7,13 @@ pub(crate) mod encoding;
 
 use std::collections::HashMap;
 
-use aphrodite_text::Prompt;
 use openai_harmony::HarmonyEncoding;
 use openai_harmony::chat::{
     Author, Conversation, DeveloperContent, Message, ReasoningEffort as HarmonyReasoningEffort,
     Role, SystemContent, ToolDescription,
 };
 use serde_json::Value;
+use sonar_text::Prompt;
 use thiserror_ext::AsReport as _;
 use time::macros::format_description;
 
@@ -26,8 +26,8 @@ use crate::event::AssistantContentBlock;
 use crate::reasoning::ReasoningControl;
 use crate::request::{ChatContent, ChatMessage, ChatRequest, ChatTool, GenerationPromptMode};
 
-const SYSTEM_START_DATE_ENV: &str = "APHRODITE_SYSTEM_START_DATE";
-const HARMONY_SYSTEM_INSTRUCTIONS_ENV: &str = "APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS";
+const SYSTEM_START_DATE_ENV: &str = "SONAR_SYSTEM_START_DATE";
+const HARMONY_SYSTEM_INSTRUCTIONS_ENV: &str = "SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS";
 
 /// GPT-OSS renderer backed by the official Harmony encoding.
 pub struct HarmonyChatRenderer {
@@ -46,9 +46,9 @@ impl HarmonyChatRenderer {
     ///
     /// Environment-derived options are resolved once at construction time:
     ///
-    /// - `APHRODITE_SYSTEM_START_DATE` pins the Harmony system start date. When it is
+    /// - `SONAR_SYSTEM_START_DATE` pins the Harmony system start date. When it is
     ///   unset, the renderer uses the current local date with a UTC fallback.
-    /// - `APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS` moves leading instructions
+    /// - `SONAR_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS` moves leading instructions
     ///   into the system model identity when set to a non-zero integer.
     pub fn new(default_template_kwargs: HashMap<String, Value>) -> Result<Self> {
         Self::with_options(
@@ -139,7 +139,7 @@ impl ChatRenderer for HarmonyChatRenderer {
     }
 }
 
-/// Convert a Aphrodite chat request into a full Harmony conversation.
+/// Convert a Sonar chat request into a full Harmony conversation.
 ///
 /// This adds the Harmony system/developer preamble, peels at most one leading
 /// system/developer instruction message, and then lowers the remaining chat
@@ -278,7 +278,7 @@ fn system_content(
     Ok(content)
 }
 
-/// Lower a single Aphrodite chat message into one or more Harmony messages.
+/// Lower a single Sonar chat message into one or more Harmony messages.
 ///
 /// Assistant messages can split into separate analysis, final, commentary, and
 /// tool-call messages. Tool responses require the earlier assistant tool-call ID
@@ -428,12 +428,12 @@ fn tool_call_names(messages: &[ChatMessage]) -> std::collections::HashMap<String
     names
 }
 
-/// Drop stale assistant analysis messages using Aphrodite Python's policy.
+/// Drop stale assistant analysis messages using Sonar Python's policy.
 ///
 /// Once an assistant final message exists, earlier analysis messages represent
 /// chain-of-thought for completed turns and should not be replayed to the model.
 fn auto_drop_analysis_messages(messages: Vec<Message>) -> Vec<Message> {
-    // Match Aphrodite Python's Harmony cleanup: once an assistant final message exists,
+    // Match Sonar Python's Harmony cleanup: once an assistant final message exists,
     // previous assistant analysis messages are stale chain-of-thought and should
     // be removed. oss-harmony can also drop analysis with `Some(Default::default())`,
     // but that built-in path only triggers when the last assistant message is final
@@ -455,12 +455,12 @@ fn auto_drop_analysis_messages(messages: Vec<Message>) -> Vec<Message> {
         .collect()
 }
 
-/// Flatten Aphrodite text content and reject unsupported multimodal parts.
+/// Flatten Sonar text content and reject unsupported multimodal parts.
 fn flatten_text(content: &ChatContent) -> Result<String> {
     content.try_flatten_to_text()
 }
 
-/// Convert Aphrodite function tool definitions to Harmony tool descriptions.
+/// Convert Sonar function tool definitions to Harmony tool descriptions.
 fn to_tool_descriptions(tools: &[ChatTool]) -> Vec<ToolDescription> {
     tools
         .iter()

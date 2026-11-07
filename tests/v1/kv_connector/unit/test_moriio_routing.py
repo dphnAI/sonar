@@ -14,10 +14,10 @@ stand-in rather than constructing a full scheduler.
 
 from types import SimpleNamespace
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
+from sonar.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector import (
     MoRIIOConnectorScheduler,
 )
-from aphrodite.v1.request import RequestStatus
+from sonar.v1.request import RequestStatus
 
 _request_finished = MoRIIOConnectorScheduler.request_finished
 _clip_blocks = MoRIIOConnectorScheduler.get_exchange_clipped_blocks
@@ -35,7 +35,7 @@ def _producer(global_dp_rank: int, dp_size: int, dp_size_local: int):
         host_ip="10.0.0.1",
         handshake_port=6300,
         side_notify_port=7300,
-        aphrodite_config=SimpleNamespace(
+        sonar_config=SimpleNamespace(
             parallel_config=SimpleNamespace(
                 data_parallel_size=dp_size,
                 data_parallel_size_local=dp_size_local,

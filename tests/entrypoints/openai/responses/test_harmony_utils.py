@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for aphrodite.entrypoints.openai.responses.harmony."""
+"""Unit tests for sonar.entrypoints.openai.responses.harmony."""
 
 import pytest
 from openai.types.responses import (
@@ -12,11 +12,11 @@ from openai.types.responses import (
 from openai.types.responses.response_output_item import McpCall
 from openai_harmony import Author, Message, Role, TextContent
 
-from aphrodite.entrypoints.openai.responses.harmony import (
+from sonar.entrypoints.openai.responses.harmony import (
     harmony_to_response_output,
     response_previous_input_to_harmony,
 )
-from aphrodite.exceptions import AphroditeValidationError
+from sonar.exceptions import SonarValidationError
 
 
 class TestResponsePreviousInputToHarmony:
@@ -94,7 +94,7 @@ class TestResponsePreviousInputToHarmony:
         """A chat-format message missing the 'role' key is invalid input."""
         chat_msg = {"content": "hello, no role here"}
 
-        with pytest.raises(AphroditeValidationError, match="Message has no 'role' key") as exc_info:
+        with pytest.raises(SonarValidationError, match="Message has no 'role' key") as exc_info:
             response_previous_input_to_harmony(chat_msg)
         assert exc_info.value.parameter == "input"
 
@@ -250,7 +250,7 @@ class TestHarmonyToResponseOutput:
     def test_browser_find_recipient_uses_responses_action_type(self):
         """browser.find must use the Responses API find_in_page action type."""
         message = (
-            Message.from_role_and_content(Role.ASSISTANT, '{"pattern": "Aphrodite", "cursor": 42}')
+            Message.from_role_and_content(Role.ASSISTANT, '{"pattern": "Sonar", "cursor": 42}')
             .with_channel("analysis")
             .with_recipient("browser.find")
         )
@@ -260,7 +260,7 @@ class TestHarmonyToResponseOutput:
         assert len(output_items) == 1
         assert isinstance(output_items[0], ResponseFunctionWebSearch)
         assert output_items[0].action.type == "find_in_page"
-        assert output_items[0].action.pattern == "Aphrodite"
+        assert output_items[0].action.pattern == "Sonar"
 
     def test_commentary_with_empty_content_and_no_recipient(self):
         """Test edge case: empty commentary with recipient=None."""
@@ -343,5 +343,5 @@ class TestHarmonyToResponseOutput:
         message = Message.from_role_and_content(Role.ASSISTANT, "some text")
         message = message.with_channel(channel)
 
-        with pytest.raises(AphroditeValidationError, match=f"Unknown channel: {channel}"):
+        with pytest.raises(SonarValidationError, match=f"Unknown channel: {channel}"):
             harmony_to_response_output(message, frozenset())

@@ -11,7 +11,7 @@ aliasing.
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.kernels.utils import opcheck
 
 pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
@@ -21,8 +21,8 @@ V_HEAD_DIM = 512  # kv_lora_rank
 
 
 def _require_aiter():
-    from aphrodite._aiter_ops import is_aiter_found_and_supported
-    from aphrodite.platforms.rocm import get_cdna_version
+    from sonar._aiter_ops import is_aiter_found_and_supported
+    from sonar.platforms.rocm import get_cdna_version
 
     if get_cdna_version() not in (3, 4):
         pytest.skip("AITER MLA requires CDNA 3 or 4")
@@ -35,7 +35,7 @@ def _require_aiter():
 def test_gather_kv_b_proj_op_schema() -> None:
     """Validate fake tensors and mutation of both expanded K/V outputs."""
     _require_aiter()
-    from aphrodite._aiter_ops import rocm_aiter_ops  # noqa: F401
+    from sonar._aiter_ops import rocm_aiter_ops  # noqa: F401
 
     rows, num_heads = 32, 12
     cache = torch.randn(rows, 1, 576, device="cuda").to(current_platform.fp8_dtype())
@@ -46,7 +46,7 @@ def test_gather_kv_b_proj_op_schema() -> None:
     k = torch.empty(rows, num_heads, 192, dtype=torch.bfloat16, device="cuda")
     v = torch.empty(rows, num_heads, 128, dtype=torch.bfloat16, device="cuda")
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_gather_kv_b_proj,
+        torch.ops.sonar.rocm_aiter_gather_kv_b_proj,
         (cache, scale, cu_seq_lens, indices, cu_seq_lens, weight, k, v),
     )
 
@@ -61,7 +61,7 @@ def test_mla_decode_fwd_op_schema() -> None:
     """
     _require_aiter()
     # Import ensures the custom op is registered.
-    from aphrodite._aiter_ops import rocm_aiter_ops  # noqa: F401
+    from sonar._aiter_ops import rocm_aiter_ops  # noqa: F401
 
     batch_size, nhead = 4, 128
 
@@ -74,7 +74,7 @@ def test_mla_decode_fwd_op_schema() -> None:
     kv_last_page_lens = torch.ones(batch_size, dtype=torch.int32, device="cuda")
 
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_mla_decode_fwd,
+        torch.ops.sonar.rocm_aiter_mla_decode_fwd,
         (q, kv_buffer, o, qo_indptr, 1),
         {
             "kv_indptr": kv_indptr,
@@ -99,7 +99,7 @@ def test_mla_decode_fwd_lse_op_schema() -> None:
     """Validate graph registration and mutation schema for LSE decode."""
     _require_aiter()
     # Import ensures the custom op is registered.
-    from aphrodite._aiter_ops import rocm_aiter_ops  # noqa: F401
+    from sonar._aiter_ops import rocm_aiter_ops  # noqa: F401
 
     batch_size, nhead = 2, 16
     q = torch.randn(batch_size, nhead, Q_HEAD_DIM, dtype=torch.bfloat16, device="cuda")
@@ -111,7 +111,7 @@ def test_mla_decode_fwd_lse_op_schema() -> None:
     kv_last_page_lens = torch.ones(batch_size, dtype=torch.int32, device="cuda")
 
     opcheck(
-        torch.ops.aphrodite.rocm_aiter_mla_decode_fwd_lse,
+        torch.ops.sonar.rocm_aiter_mla_decode_fwd_lse,
         (q, kv_buffer, o, qo_indptr, 1),
         {
             "kv_indptr": kv_indptr,

@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from typing import Any
 
-from aphrodite.v1.worker.gpu.spec_decode.speculator_config import (
+from sonar.v1.worker.gpu.spec_decode.speculator_config import (
     SpeculatorConfig,
     get_speculator_config_class,
 )

@@ -88,7 +88,7 @@ constexpr int64_t kRocmDefaultMaxBatchDescriptors = 8192;
 #endif
 
 constexpr const char* kMaxBatchDescriptorsEnv =
-    "APHRODITE_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS";
+    "SONAR_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS";
 
 // Max copy descriptors per batch-memcpy call (0 = unlimited). ROCm caps and
 // chunks; CUDA is uncapped. The env var (>0) overrides on any platform.
@@ -174,7 +174,7 @@ void swap_blocks_batch(const torch::stable::Tensor& src_ptrs,
     size_t attrs_idx = 0;
     size_t fail_idx = 0;
     // Uncapped on CUDA (max_desc == 0 -> single call) unless overridden by
-    // APHRODITE_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS; chunk to honor the override.
+    // SONAR_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS; chunk to honor the override.
     const int64_t max_desc = resolve_max_batch_descriptors();
     const int64_t step = max_desc <= 0 ? n : max_desc;
     for (int64_t off = 0; off < n; off += step) {
@@ -246,7 +246,7 @@ void swap_blocks_batch(const torch::stable::Tensor& src_ptrs,
   }
 }
 
-namespace aphrodite {
+namespace sonar {
 
 // Used to copy/convert one element
 template <typename OutT, typename InT, Fp8KVCacheDataType kv_dt>
@@ -671,8 +671,7 @@ __global__ void concat_and_cache_ds_mla_kernel(
   // Warp-level reduction to find the max absolute value in each half-warp
 #pragma unroll
   for (int offset = 8; offset > 0; offset /= 2) {
-    max_abs =
-        fmaxf(max_abs, APHRODITE_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 16));
+    max_abs = fmaxf(max_abs, SONAR_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 16));
   }
 
   // Both SM90 and SM100 readers preserve power-of-two fp32 scales exactly.
@@ -843,13 +842,13 @@ __global__ void cp_gather_indexer_k_quant_cache_kernel(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // KV_T is the data type of key and value tensors.
 // CACHE_T is the stored data type of kv-cache.
 // KV_DTYPE is the real data type of kv-cache.
 #define CALL_RESHAPE_AND_CACHE(KV_T, CACHE_T, KV_DTYPE)                     \
-  aphrodite::reshape_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE>              \
+  sonar::reshape_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE>                  \
       <<<grid, block, 0, stream>>>(                                         \
           reinterpret_cast<KV_T*>(key.data_ptr()),                          \
           reinterpret_cast<KV_T*>(value.data_ptr()),                        \
@@ -896,7 +895,7 @@ void reshape_and_cache(
 // CACHE_T is the stored data type of kv-cache.
 // KV_DTYPE is the real data type of kv-cache.
 #define CALL_RESHAPE_AND_CACHE_FLASH_ASYM(KV_T, CACHE_T, KV_DTYPE)           \
-  aphrodite::reshape_and_cache_flash_kernel_asym<KV_T, CACHE_T, KV_DTYPE>    \
+  sonar::reshape_and_cache_flash_kernel_asym<KV_T, CACHE_T, KV_DTYPE>        \
       <<<grid, block, 0, stream>>>(                                          \
           reinterpret_cast<KV_T*>(key.data_ptr()),                           \
           reinterpret_cast<KV_T*>(value.data_ptr()),                         \
@@ -910,7 +909,7 @@ void reshape_and_cache(
           kv_scale_stride);
 
 #define CALL_RESHAPE_AND_CACHE_FLASH(KV_T, CACHE_T, KV_DTYPE)                \
-  aphrodite::reshape_and_cache_flash_kernel<KV_T, CACHE_T, KV_DTYPE>         \
+  sonar::reshape_and_cache_flash_kernel<KV_T, CACHE_T, KV_DTYPE>             \
       <<<grid, block, 0, stream>>>(                                          \
           reinterpret_cast<KV_T*>(key.data_ptr()),                           \
           reinterpret_cast<KV_T*>(value.data_ptr()),                         \
@@ -933,10 +932,10 @@ void reshape_and_cache_flash(
     const std::string& kv_cache_dtype,
     torch::stable::Tensor& k_scale,    // [1] or [num_heads]
     torch::stable::Tensor& v_scale) {  // [1] or [num_heads]
-  // NOTE(woosuk): In Aphrodite V1, key.size(0) can be different from
+  // NOTE(woosuk): In Sonar V1, key.size(0) can be different from
   // slot_mapping.size(0) because of padding for CUDA graphs.
-  // In Aphrodite V0, key.size(0) is always equal to slot_mapping.size(0)
-  // because both include padding. In Aphrodite V1, however, key.size(0) can be
+  // In Sonar V0, key.size(0) is always equal to slot_mapping.size(0)
+  // because both include padding. In Sonar V1, however, key.size(0) can be
   // larger than slot_mapping.size(0) since key includes padding for CUDA
   // graphs, while slot_mapping does not. In this case, slot_mapping.size(0)
   // represents the actual number of tokens before padding. For compatibility
@@ -966,7 +965,7 @@ void reshape_and_cache_flash(
     STD_TORCH_CHECK(
         false,
         "NVFP4 KV cache requires SM100+ (Blackwell). "
-        "Please rebuild aphrodite with a Blackwell-compatible CUDA target.");
+        "Please rebuild sonar with a Blackwell-compatible CUDA target.");
 #endif
   }
 
@@ -1018,7 +1017,7 @@ void reshape_and_cache_flash(
 // CACHE_T is the stored data type of kv-cache.
 // KV_DTYPE is the real data type of kv-cache.
 #define LAUNCH_CONCAT_AND_CACHE_MLA(KV_T, CACHE_T, KV_DTYPE, SKIP_SCALE)      \
-  aphrodite::concat_and_cache_mla_kernel<KV_T, CACHE_T, KV_DTYPE, SKIP_SCALE> \
+  sonar::concat_and_cache_mla_kernel<KV_T, CACHE_T, KV_DTYPE, SKIP_SCALE>     \
       <<<grid, block, 0, stream>>>(                                           \
           reinterpret_cast<KV_T*>(kv_c.data_ptr()),                           \
           reinterpret_cast<KV_T*>(k_pe.data_ptr()),                           \
@@ -1037,7 +1036,7 @@ void reshape_and_cache_flash(
 // KV_T is the data type of key and value tensors.
 // CACHE_T is the stored data type of kv-cache.
 #define CALL_CONCAT_AND_CACHE_DS_MLA(KV_T, CACHE_T, KV_DTYPE)                 \
-  aphrodite::concat_and_cache_ds_mla_kernel<KV_T, CACHE_T, KV_DTYPE>          \
+  sonar::concat_and_cache_ds_mla_kernel<KV_T, CACHE_T, KV_DTYPE>              \
       <<<grid, block, 0, stream>>>(                                           \
           reinterpret_cast<KV_T*>(kv_c.data_ptr()),                           \
           reinterpret_cast<KV_T*>(k_pe.data_ptr()),                           \
@@ -1054,10 +1053,10 @@ void concat_and_cache_mla(
     torch::stable::Tensor& slot_mapping,  // [num_tokens] or [num_actual_tokens]
     const std::string& kv_cache_dtype, torch::stable::Tensor& scale,
     bool skip_scale) {
-  // NOTE(woosuk): In Aphrodite V1, key.size(0) can be different from
+  // NOTE(woosuk): In Sonar V1, key.size(0) can be different from
   // slot_mapping.size(0) because of padding for CUDA graphs.
-  // In Aphrodite V0, key.size(0) is always equal to slot_mapping.size(0)
-  // because both include padding. In Aphrodite V1, however, key.size(0) can be
+  // In Sonar V0, key.size(0) is always equal to slot_mapping.size(0)
+  // because both include padding. In Sonar V1, however, key.size(0) can be
   // larger than slot_mapping.size(0) since key includes padding for CUDA
   // graphs, while slot_mapping does not. In this case, slot_mapping.size(0)
   // represents the actual number of tokens before padding. For compatibility
@@ -1129,7 +1128,7 @@ void concat_and_cache_mla(
                     "nvfp4_ds_mla KV cache requires SM100 (Blackwell); "
                     "got SM",
                     props->major, props->minor);
-    aphrodite::launch_concat_and_cache_nvfp4_ds_mla(
+    sonar::launch_concat_and_cache_nvfp4_ds_mla(
         kv_c.data_ptr(), k_pe.data_ptr(), kv_cache.data_ptr(),
         slot_mapping.const_data_ptr<int64_t>(), block_stride, entry_stride,
         kv_c_stride, k_pe_stride, block_size, num_tokens, stream);
@@ -1222,8 +1221,8 @@ void concat_and_cache_mla_grouped(
   const dim3 block(std::min(kv_lora_rank, 512));
 
   if (!use_fp8) {
-    aphrodite::concat_and_cache_mla_grouped_kernel<
-        uint16_t, uint16_t, aphrodite::Fp8KVCacheDataType::kAuto>
+    sonar::concat_and_cache_mla_grouped_kernel<uint16_t, uint16_t,
+                                               sonar::Fp8KVCacheDataType::kAuto>
         <<<grid, block, 0, stream>>>(
             reinterpret_cast<const uint16_t*>(kv_c.data_ptr()),
             reinterpret_cast<const uint16_t*>(k_pe.data_ptr()),
@@ -1236,8 +1235,7 @@ void concat_and_cache_mla_grouped(
   }
 
 #define LAUNCH_GROUPED_FP8(KV_DTYPE)                                           \
-  aphrodite::concat_and_cache_mla_grouped_kernel<__nv_bfloat16, uint8_t,       \
-                                                 KV_DTYPE>                     \
+  sonar::concat_and_cache_mla_grouped_kernel<__nv_bfloat16, uint8_t, KV_DTYPE> \
       <<<grid, block, 0, stream>>>(                                            \
           reinterpret_cast<const __nv_bfloat16*>(kv_c.data_ptr()),             \
           reinterpret_cast<const __nv_bfloat16*>(k_pe.data_ptr()),             \
@@ -1248,14 +1246,14 @@ void concat_and_cache_mla_grouped(
           block_size)
 
   if (kv_cache_dtype == "fp8_e5m2") {
-    LAUNCH_GROUPED_FP8(aphrodite::Fp8KVCacheDataType::kFp8E5M2);
+    LAUNCH_GROUPED_FP8(sonar::Fp8KVCacheDataType::kFp8E5M2);
   } else {
-    LAUNCH_GROUPED_FP8(aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+    LAUNCH_GROUPED_FP8(sonar::Fp8KVCacheDataType::kFp8E4M3);
   }
 #undef LAUNCH_GROUPED_FP8
 }
 
-namespace aphrodite {
+namespace sonar {
 
 template <typename Tout, typename Tin, Fp8KVCacheDataType kv_dt>
 __global__ void convert_fp8_kernel(const Tin* __restrict__ src_cache,
@@ -1270,13 +1268,12 @@ __global__ void convert_fp8_kernel(const Tin* __restrict__ src_cache,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
-#define CALL_CONVERT_FP8(Tout, Tin, KV_DTYPE)           \
-  aphrodite::convert_fp8_kernel<Tout, Tin, KV_DTYPE>    \
-      <<<grid, block, 0, stream>>>(                     \
-          reinterpret_cast<Tin*>(src_cache.data_ptr()), \
-          reinterpret_cast<Tout*>(dst_cache.data_ptr()), scale, block_stride);
+#define CALL_CONVERT_FP8(Tout, Tin, KV_DTYPE)                                 \
+  sonar::convert_fp8_kernel<Tout, Tin, KV_DTYPE><<<grid, block, 0, stream>>>( \
+      reinterpret_cast<Tin*>(src_cache.data_ptr()),                           \
+      reinterpret_cast<Tout*>(dst_cache.data_ptr()), scale, block_stride);
 
 // Only for testing.
 void convert_fp8(torch::stable::Tensor& dst_cache,
@@ -1299,50 +1296,48 @@ void convert_fp8(torch::stable::Tensor& dst_cache,
 
   if (kv_cache_dtype == "auto") {
     if (src_cache.scalar_type() == torch::headeronly::ScalarType::Float) {
-      CALL_CONVERT_FP8(uint8_t, float, aphrodite::Fp8KVCacheDataType::kAuto);
+      CALL_CONVERT_FP8(uint8_t, float, sonar::Fp8KVCacheDataType::kAuto);
     } else if (src_cache.scalar_type() == torch::headeronly::ScalarType::Half) {
-      CALL_CONVERT_FP8(uint8_t, uint16_t, aphrodite::Fp8KVCacheDataType::kAuto);
+      CALL_CONVERT_FP8(uint8_t, uint16_t, sonar::Fp8KVCacheDataType::kAuto);
     } else if (src_cache.scalar_type() ==
                torch::headeronly::ScalarType::BFloat16) {
       CALL_CONVERT_FP8(uint8_t, __nv_bfloat16,
-                       aphrodite::Fp8KVCacheDataType::kAuto);
+                       sonar::Fp8KVCacheDataType::kAuto);
     } else if (dst_cache.scalar_type() ==
                torch::headeronly::ScalarType::Float) {
-      CALL_CONVERT_FP8(float, uint8_t, aphrodite::Fp8KVCacheDataType::kAuto);
+      CALL_CONVERT_FP8(float, uint8_t, sonar::Fp8KVCacheDataType::kAuto);
     } else if (dst_cache.scalar_type() == torch::headeronly::ScalarType::Half) {
-      CALL_CONVERT_FP8(uint16_t, uint8_t, aphrodite::Fp8KVCacheDataType::kAuto);
+      CALL_CONVERT_FP8(uint16_t, uint8_t, sonar::Fp8KVCacheDataType::kAuto);
     } else if (dst_cache.scalar_type() ==
                torch::headeronly::ScalarType::BFloat16) {
       CALL_CONVERT_FP8(__nv_bfloat16, uint8_t,
-                       aphrodite::Fp8KVCacheDataType::kAuto);
+                       sonar::Fp8KVCacheDataType::kAuto);
     }
   } else if (kv_cache_dtype == "fp8" || kv_cache_dtype == "fp8_e4m3") {
     if (src_cache.scalar_type() == torch::headeronly::ScalarType::Float) {
-      CALL_CONVERT_FP8(uint8_t, float, aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+      CALL_CONVERT_FP8(uint8_t, float, sonar::Fp8KVCacheDataType::kFp8E4M3);
     } else if (src_cache.scalar_type() == torch::headeronly::ScalarType::Half) {
-      CALL_CONVERT_FP8(uint8_t, uint16_t,
-                       aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+      CALL_CONVERT_FP8(uint8_t, uint16_t, sonar::Fp8KVCacheDataType::kFp8E4M3);
     } else if (src_cache.scalar_type() ==
                torch::headeronly::ScalarType::BFloat16) {
       CALL_CONVERT_FP8(uint8_t, __nv_bfloat16,
-                       aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+                       sonar::Fp8KVCacheDataType::kFp8E4M3);
     } else if (dst_cache.scalar_type() ==
                torch::headeronly::ScalarType::Float) {
-      CALL_CONVERT_FP8(float, uint8_t, aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+      CALL_CONVERT_FP8(float, uint8_t, sonar::Fp8KVCacheDataType::kFp8E4M3);
     } else if (dst_cache.scalar_type() == torch::headeronly::ScalarType::Half) {
-      CALL_CONVERT_FP8(uint16_t, uint8_t,
-                       aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+      CALL_CONVERT_FP8(uint16_t, uint8_t, sonar::Fp8KVCacheDataType::kFp8E4M3);
     } else if (dst_cache.scalar_type() ==
                torch::headeronly::ScalarType::BFloat16) {
       CALL_CONVERT_FP8(__nv_bfloat16, uint8_t,
-                       aphrodite::Fp8KVCacheDataType::kFp8E4M3);
+                       sonar::Fp8KVCacheDataType::kFp8E4M3);
     }
   } else {
     STD_TORCH_CHECK(false, "Unsupported data type: ", kv_cache_dtype);
   }
 }
 
-namespace aphrodite {
+namespace sonar {
 
 struct GatherPageTask {
   int32_t req_id;
@@ -1403,8 +1398,8 @@ __global__ void gather_and_maybe_dequant_cache_page(
   constexpr int32_t vec_size = sizeof(float4) / sizeof(scalar_t);
   constexpr int32_t vec_iter_cnt = ENTRY_SIZE / vec_size;
   static_assert(ENTRY_SIZE % vec_size == 0);
-  using ltype = aphrodite::vec_n_t<cache_t, vec_size>;
-  using stype = aphrodite::vec_n_t<scalar_t, vec_size>;
+  using ltype = sonar::vec_n_t<cache_t, vec_size>;
+  using stype = sonar::vec_n_t<scalar_t, vec_size>;
 
   __shared__ GatherPageTask page;
   __shared__ int32_t physical_block;
@@ -1464,22 +1459,22 @@ __global__ void gather_and_maybe_dequant_cache_page(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Macro to dispatch the kernel based on the data type.
 // SCALAR_T is the data type of the destination tensor.
 // CACHE_T is the stored data type of kv-cache.
 // KV_DTYPE is the real data type of kv-cache.
-#define CALL_GATHER_CACHE(SCALAR_T, CACHE_T, KV_DTYPE, ENTRY_SZ)              \
-  aphrodite::gather_and_maybe_dequant_cache_page<SCALAR_T, CACHE_T, KV_DTYPE, \
-                                                 ENTRY_SZ>                    \
-      <<<grid, block, 0, stream>>>(                                           \
-          reinterpret_cast<CACHE_T*>(src_cache.data_ptr()),                   \
-          reinterpret_cast<SCALAR_T*>(dst.data_ptr()),                        \
-          block_table.const_data_ptr<int32_t>(),                              \
-          cu_seq_lens.const_data_ptr<int32_t>(), num_reqs,                    \
-          static_cast<int32_t>(num_tokens), block_size, block_table_stride,   \
-          cache_block_stride, cache_entry_stride, dst_entry_stride,           \
+#define CALL_GATHER_CACHE(SCALAR_T, CACHE_T, KV_DTYPE, ENTRY_SZ)            \
+  sonar::gather_and_maybe_dequant_cache_page<SCALAR_T, CACHE_T, KV_DTYPE,   \
+                                             ENTRY_SZ>                      \
+      <<<grid, block, 0, stream>>>(                                         \
+          reinterpret_cast<CACHE_T*>(src_cache.data_ptr()),                 \
+          reinterpret_cast<SCALAR_T*>(dst.data_ptr()),                      \
+          block_table.const_data_ptr<int32_t>(),                            \
+          cu_seq_lens.const_data_ptr<int32_t>(), num_reqs,                  \
+          static_cast<int32_t>(num_tokens), block_size, block_table_stride, \
+          cache_block_stride, cache_entry_stride, dst_entry_stride,         \
           reinterpret_cast<const float*>(scale.data_ptr()), seq_starts_ptr)
 
 #define CALL_GATHER_CACHE_576(SCALAR_T, CACHE_T, KV_DTYPE) \
@@ -1571,7 +1566,7 @@ void gather_and_maybe_dequant_cache(
   }
 }
 
-namespace aphrodite {
+namespace sonar {
 
 __device__ __forceinline__ void gather_and_upconvert_fp8_token(
     const uint8_t* __restrict__ token_ptr, __nv_bfloat16* __restrict__ dst_ptr,
@@ -1744,7 +1739,7 @@ __global__ void cp_gather_cache_page(
     }
   }
 }
-}  // namespace aphrodite
+}  // namespace sonar
 
 // Gather sequences from the cache into the destination tensor.
 //  - cu_seq_lens contains the cumulative sequence lengths for each batch
@@ -1832,7 +1827,7 @@ void cp_gather_cache(
   const dim3 block(256);
 
 #define CALL_CP_GATHER_CACHE(CONTIGUOUS, VECTORIZED)                   \
-  aphrodite::cp_gather_cache_page<CONTIGUOUS, VECTORIZED>              \
+  sonar::cp_gather_cache_page<CONTIGUOUS, VECTORIZED>                  \
       <<<grid, block, 0, stream>>>(                                    \
           reinterpret_cast<const uint8_t*>(src_cache.data_ptr()),      \
           reinterpret_cast<uint8_t*>(dst.data_ptr()),                  \
@@ -1974,7 +1969,7 @@ void cp_gather_and_upconvert_fp8_kv_cache(
                              : nullptr;
   const int required_blocks =
       div_ceil(total_tokens, block_size) + 2 * static_cast<int32_t>(batch_size);
-  aphrodite::cp_gather_and_upconvert_fp8_kv_cache_page<<<
+  sonar::cp_gather_and_upconvert_fp8_kv_cache_page<<<
       required_blocks, block_size_threads, 0, stream>>>(
       src_ptr, reinterpret_cast<__nv_bfloat16*>(dst.data_ptr()),
       block_table.const_data_ptr<int32_t>(),
@@ -2044,7 +2039,7 @@ void cp_gather_and_upconvert_nvfp4_kv_cache(
 
   const int total_tokens = dst.size(0);
 
-  aphrodite::launch_cp_gather_and_upconvert_nvfp4_kv_cache(
+  sonar::launch_cp_gather_and_upconvert_nvfp4_kv_cache(
       src_cache.const_data_ptr<uint8_t>(), dst.data_ptr(),
       block_table.const_data_ptr<int32_t>(),
       workspace_starts.const_data_ptr<int32_t>(),
@@ -2062,7 +2057,7 @@ void cp_gather_and_upconvert_nvfp4_kv_cache(
 
 // Macro to dispatch the kernel based on the data type.
 #define CALL_INDEXER_K_QUANT_AND_CACHE(KV_T, CACHE_T, KV_DTYPE)               \
-  aphrodite::indexer_k_quant_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE>        \
+  sonar::indexer_k_quant_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE>            \
       <<<grid, block, 0, stream>>>(                                           \
           reinterpret_cast<KV_T*>(k.data_ptr()),                              \
           reinterpret_cast<CACHE_T*>(kv_cache.data_ptr()),                    \
@@ -2108,7 +2103,7 @@ void indexer_k_quant_and_cache(
 
 // Macro to dispatch the kernel based on the data amount.
 #define CALL_CP_GATHER_INDEXER_K_QUANT_CACHE(BLOCK_Y_SIZE)                    \
-  aphrodite::cp_gather_indexer_k_quant_cache_kernel<BLOCK_Y_SIZE>             \
+  sonar::cp_gather_indexer_k_quant_cache_kernel<BLOCK_Y_SIZE>                 \
       <<<dim3((num_tokens + BLOCK_Y_SIZE - 1) / BLOCK_Y_SIZE,                 \
               (head_dim + 8 * vec_size - 1) / (8 * vec_size)),                \
          dim3(8, BLOCK_Y_SIZE), 0, stream>>>(                                 \
@@ -2204,14 +2199,13 @@ void concat_mla_q(
       ql_nope.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
-      ql_nope.scalar_type(), "concat_mla_q", [&] {
-        aphrodite::ConcatMLAQKernel<scalar_t, 512>
-            <<<grid_size, block_size, 0, stream>>>(
-                q_out.mutable_data_ptr<scalar_t>(),
-                ql_nope.const_data_ptr<scalar_t>(),
-                q_pe.const_data_ptr<scalar_t>(), num_tokens, num_heads,
-                q_out.stride(0), q_out.stride(1), ql_nope.stride(0),
-                ql_nope.stride(1), q_pe.stride(0), q_pe.stride(1));
-      });
+  SONAR_STABLE_DISPATCH_HALF_TYPES(ql_nope.scalar_type(), "concat_mla_q", [&] {
+    sonar::ConcatMLAQKernel<scalar_t, 512>
+        <<<grid_size, block_size, 0, stream>>>(
+            q_out.mutable_data_ptr<scalar_t>(),
+            ql_nope.const_data_ptr<scalar_t>(), q_pe.const_data_ptr<scalar_t>(),
+            num_tokens, num_heads, q_out.stride(0), q_out.stride(1),
+            ql_nope.stride(0), ql_nope.stride(1), q_pe.stride(0),
+            q_pe.stride(1));
+  });
 }

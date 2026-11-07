@@ -5,13 +5,13 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEParallelConfig,
     RoutingMethodType,
 )
-from aphrodite.models.muse_spark.nvidia.muse_moe_runner import (
+from sonar.models.muse_spark.nvidia.muse_moe_runner import (
     _validate_route_major_deployment,
     needs_pre_norm_all_reduce,
     validate_deployment,

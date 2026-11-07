@@ -7,11 +7,11 @@ import tempfile
 import pytest
 import torch
 
-from aphrodite import LLM, SamplingParams
-from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
+from sonar import LLM, SamplingParams
+from sonar.distributed.kv_transfer.kv_connector.v1 import (
     example_hidden_states_connector,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 from tests.utils import create_new_process_for_each_test, multi_gpu_test
 
 
@@ -67,7 +67,7 @@ def predictable_llama_config_path(tmp_path_factory):
     return str(config_dir)
 
 
-# Need for Python 3.14 compatibility, Aphrodite with force spawn due to CUDA
+# Need for Python 3.14 compatibility, Sonar with force spawn due to CUDA
 # reinitialization, and register will not persist.
 PREDICTABLE_LLAMA_MODEL_CLS = (
     "tests.v1.kv_connector.extract_hidden_states_integration.predictable_llama:PredictableLlamaForCausalLM"
@@ -90,7 +90,7 @@ def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_co
        include_output_tokens — verifies per-request kv_transfer_params
        plumbing.
     """
-    monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "fork")
+    monkeypatch.setenv("SONAR_WORKER_MULTIPROC_METHOD", "fork")
 
     layer_ids = [5, 2, 10]
     expected_layer_ids = sorted(layer_ids)

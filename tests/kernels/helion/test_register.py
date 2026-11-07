@@ -11,20 +11,20 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.utils.import_utils import has_helion
+from sonar.utils.import_utils import has_helion
 
 if not has_helion():
     pytest.skip(
-        "Helion is not installed. Install with: pip install aphrodite[helion]",
+        "Helion is not installed. Install sonar[helion] from the Sonar wheel index.",
         allow_module_level=True,
     )
 
 import helion
 import helion.language as hl
 
-from aphrodite.kernels.helion.case_key import CaseKey
-from aphrodite.kernels.helion.config_manager import ConfigManager
-from aphrodite.kernels.helion.register import (
+from sonar.kernels.helion.case_key import CaseKey
+from sonar.kernels.helion.config_manager import ConfigManager
+from sonar.kernels.helion.register import (
     _HOP_AVAILABLE,
     ConfiguredHelionKernel,
     HelionKernelWrapper,
@@ -105,14 +105,14 @@ def configured_kernel(sample_kernel, sample_configs, config_manager_with_test_co
 
     with (
         patch(
-            "aphrodite.kernels.helion.config_manager.ConfigManager",
+            "sonar.kernels.helion.config_manager.ConfigManager",
             return_value=config_manager_with_test_configs,
         ),
         patch(
-            "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+            "sonar.kernels.helion.utils.get_canonical_gpu_name",
             return_value="nvidia_h200",
         ),
-        patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+        patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
     ):
         mock_decorated = Mock()
         mock_kernel.return_value = Mock(return_value=mock_decorated)
@@ -152,7 +152,7 @@ class TestValidateHelionSettings:
         settings = helion.Settings()
         settings.static_shapes = True
 
-        with patch("aphrodite.kernels.helion.register.logger") as mock_logger:
+        with patch("sonar.kernels.helion.register.logger") as mock_logger:
             validate_helion_settings(settings, "test_kernel")
             mock_logger.warning.assert_called_once()
             assert "overridden to False" in mock_logger.warning.call_args[0][0]
@@ -172,14 +172,14 @@ def create_configured_kernel_with_configs(
 
     with (
         patch(
-            "aphrodite.kernels.helion.config_manager.ConfigManager",
+            "sonar.kernels.helion.config_manager.ConfigManager",
             return_value=mock_config_manager,
         ),
         patch(
-            "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+            "sonar.kernels.helion.utils.get_canonical_gpu_name",
             return_value=platform,
         ),
-        patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+        patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
     ):
         mock_decorated = Mock()
         mock_kernel.return_value = Mock(return_value=mock_decorated)
@@ -203,11 +203,11 @@ class TestConfiguredHelionKernel:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
             pytest.raises(RuntimeError, match="No config picker registered"),
@@ -270,13 +270,13 @@ class TestConfiguredHelionKernel:
         mock_config_manager.get_platform_configs = Mock(return_value=sample_configs)
 
         with (
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
         ):
@@ -293,7 +293,7 @@ class TestConfiguredHelionKernel:
             call_kwargs = mock_kernel.call_args[1]
             assert "print_output_code" in call_kwargs
             assert call_kwargs["print_output_code"] is True
-            # static_shapes is always forced to False by Aphrodite
+            # static_shapes is always forced to False by Sonar
             assert call_kwargs["static_shapes"] is False
 
     def test_key_and_config_selector_use_same_logic(self, sample_kernel, sample_configs):
@@ -312,13 +312,13 @@ class TestConfiguredHelionKernel:
         mock_config_manager.get_platform_configs = Mock(return_value=sample_configs)
 
         with (
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_helion_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_helion_kernel,
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
         ):
@@ -364,14 +364,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -400,14 +400,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -435,14 +435,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -473,14 +473,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -512,14 +512,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -532,7 +532,7 @@ class TestHelionKernelWrapper:
 
         assert wrapper._disabled is True
 
-        with patch("aphrodite.kernels.helion.register.create_helion_decorated_kernel") as mock_create:
+        with patch("sonar.kernels.helion.register.create_helion_decorated_kernel") as mock_create:
             mock_autotune_kernel = Mock()
             mock_autotune_kernel.autotune.return_value = mock_config
             mock_create.return_value = mock_autotune_kernel
@@ -555,14 +555,14 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=sample_kernel)
 
@@ -582,13 +582,13 @@ class TestHelionKernelWrapper:
     def test_init_eagerly_initializes_hop_path(self):
         """Test that register_kernel eagerly builds the configured kernel
         on the HOP path (no custom op registration needed)."""
-        from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+        from sonar.kernels.helion.utils import get_canonical_gpu_name
 
         configs: dict[CaseKey, helion.Config] = {CaseKey.default(): helion.Config(block_sizes=[4, 4])}
         with (
             dummy_kernel_registry(configs=configs) as register,
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 wraps=get_canonical_gpu_name,
             ) as mock_gpu,
         ):
@@ -600,7 +600,7 @@ class TestHelionKernelWrapper:
             assert wrapper._configured_kernel is not None
 
         with patch(
-            "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+            "sonar.kernels.helion.utils.get_canonical_gpu_name",
             side_effect=AssertionError("get_canonical_gpu_name called during __call__"),
         ):
             x = torch.randn(4, 4, device="cuda")
@@ -613,12 +613,12 @@ class TestHelionKernelWrapper:
     def test_init_eagerly_initializes(self):
         """Test that register_kernel eagerly loads configs and detects GPU
         during construction so __call__ needs no further initialization."""
-        from aphrodite.kernels.helion.utils import get_canonical_gpu_name
+        from sonar.kernels.helion.utils import get_canonical_gpu_name
 
         with (
             dummy_kernel_registry() as register,
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 wraps=get_canonical_gpu_name,
             ) as mock_gpu,
         ):
@@ -629,7 +629,7 @@ class TestHelionKernelWrapper:
             # Init must have detected GPU and built the kernel
             mock_gpu.assert_called_once()
             assert wrapper._configured_kernel is not None
-            assert hasattr(torch.ops.aphrodite_helion, wrapper.op_name)
+            assert hasattr(torch.ops.sonar_helion, wrapper.op_name)
 
     @pytest.mark.skipif(_HOP_AVAILABLE, reason="CustomOp path not used when HOP available")
     def test_get_or_register_custom_op_returns_cached_op(self, sample_kernel, sample_configs):
@@ -648,15 +648,15 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch.object(torch.ops, "aphrodite_helion", mock_namespace),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch.object(torch.ops, "sonar_helion", mock_namespace),
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_decorated = Mock()
             mock_kernel.return_value = Mock(return_value=mock_decorated)
@@ -698,19 +698,19 @@ class TestHelionKernelWrapper:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch.object(torch.ops, "aphrodite_helion", mock_namespace),
+            patch.object(torch.ops, "sonar_helion", mock_namespace),
             patch(
-                "aphrodite.kernels.helion.register.direct_register_custom_op",
+                "sonar.kernels.helion.register.direct_register_custom_op",
                 side_effect=register_side_effect,
             ) as mock_register,
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_decorated = Mock()
             mock_kernel.return_value = Mock(return_value=mock_decorated)
@@ -735,14 +735,14 @@ class TestKernelRegistry:
 
     def setup_method(self):
         """Save and clear the registry before each test."""
-        from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
+        from sonar.kernels.helion.register import _REGISTERED_KERNELS
 
         self._saved_registry = dict(_REGISTERED_KERNELS)
         _REGISTERED_KERNELS.clear()
 
     def teardown_method(self):
         """Restore the registry after each test."""
-        from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
+        from sonar.kernels.helion.register import _REGISTERED_KERNELS
 
         _REGISTERED_KERNELS.clear()
         _REGISTERED_KERNELS.update(self._saved_registry)
@@ -762,7 +762,7 @@ class TestKernelRegistry:
         with dummy_kernel_registry() as register:
             wrapper = register("test_kernel", config_picker=lambda args, keys: None)(_add_kernel)
 
-        from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
+        from sonar.kernels.helion.register import _REGISTERED_KERNELS
 
         _REGISTERED_KERNELS["test_kernel"] = wrapper
 
@@ -778,7 +778,7 @@ class TestKernelRegistry:
         """Test register_kernel auto-generates fake_impl when not provided."""
         with (
             dummy_kernel_registry() as register,
-            patch("aphrodite.kernels.helion.register.infer_fake_impl") as mock_infer,
+            patch("sonar.kernels.helion.register.infer_fake_impl") as mock_infer,
         ):
             mock_fake = Mock()
             mock_infer.return_value = mock_fake
@@ -872,7 +872,7 @@ class TestKernelRegistry:
 
         with (
             dummy_kernel_registry() as register,
-            patch("aphrodite.kernels.helion.register.logger") as mock_logger,
+            patch("sonar.kernels.helion.register.logger") as mock_logger,
         ):
             register(
                 "test",
@@ -893,14 +893,14 @@ class TestKernelRegistry:
 
         with (
             patch(
-                "aphrodite.kernels.helion.config_manager.ConfigManager",
+                "sonar.kernels.helion.config_manager.ConfigManager",
                 return_value=mock_config_manager,
             ),
             patch(
-                "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
+                "sonar.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
+            patch("sonar.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_kernel.return_value = Mock(return_value=_add_kernel)
 

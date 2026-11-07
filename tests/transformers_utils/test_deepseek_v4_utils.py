@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from transformers import DeepseekV4Config
 
-from aphrodite.transformers_utils.deepseek_v4_utils import get_compress_ratios
+from sonar.transformers_utils.deepseek_v4_utils import get_compress_ratios
 
 # Legacy field as shipped by deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
 COMPRESS_RATIOS = [0, 0] + [4, 128] * 20 + [4, 0, 0, 0]

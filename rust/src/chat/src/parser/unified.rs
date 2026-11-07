@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! Unified parser registration and selection boundary for `aphrodite-chat`.
+//! Unified parser registration and selection boundary for `sonar-chat`.
 
 use std::sync::LazyLock;
 
-pub use aphrodite_parser::unified::{
+pub use sonar_parser::unified::{
     BeamUnifiedParser, Gemma4UnifiedParser, HfTemplateError, HfUnifiedParser, HyV3UnifiedParser,
     HyV4UnifiedParser, InklingUnifiedParser, KimiK3UnifiedParser, MuseUnifiedParser,
     ResponseTemplate, UnifiedParser,
 };
-use aphrodite_tokenizer::DynTokenizer;
+use sonar_tokenizer::DynTokenizer;
 
 use crate::parser::ParserFactory;
 use crate::request::ChatTool;
@@ -37,7 +37,7 @@ pub mod names {
 
 /// Constructor signature for one registered unified parser implementation.
 type UnifiedParserCreator =
-    fn(&[ChatTool], DynTokenizer) -> aphrodite_parser::unified::Result<Box<dyn UnifiedParser>>;
+    fn(&[ChatTool], DynTokenizer) -> sonar_parser::unified::Result<Box<dyn UnifiedParser>>;
 
 /// Registry and model matcher for unified parsers.
 pub type UnifiedParserFactory = ParserFactory<UnifiedParserCreator>;
@@ -112,7 +112,7 @@ impl UnifiedParserFactory {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use sonar_tokenizer::test_utils::TestTokenizer;
 
     use super::{UnifiedParserFactory, names};
 

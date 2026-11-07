@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Unit tests for :mod:`aphrodite.entrypoints.cohere.cohere_chat_message`.
+"""Unit tests for :mod:`sonar.entrypoints.cohere.cohere_chat_message`.
 
 The module hosts the citation-carrying subclasses of the OpenAI chat
 completion protocol (``CohereChatMessage`` / ``CohereDeltaMessage``) plus
@@ -14,7 +14,7 @@ the shared ``Citation`` / ``CitationSource`` shapes. These tests pin:
 import pytest
 from pydantic import ValidationError
 
-from aphrodite.entrypoints.cohere.cohere_chat_message import (
+from sonar.entrypoints.cohere.cohere_chat_message import (
     Citation,
     CitationSource,
     CohereChatMessage,
@@ -40,8 +40,8 @@ class TestCitationSource:
 
     def test_resolved_source_survives_json_round_trip(self):
         # The parser produces fully-resolved sources (see
-        # ``_melody_sources_to_aphrodite`` in
-        # ``aphrodite/reasoning/cohere_command_reasoning_parser.py``) which
+        # ``_melody_sources_to_sonar`` in
+        # ``sonar/reasoning/cohere_command_reasoning_parser.py``) which
         # then flow through the internal streaming pipeline (parser ->
         # OpenAI stream chunk -> ``_chat_completion_stream_to_v2``).
         # Every field must round-trip through ``model_dump_json`` at

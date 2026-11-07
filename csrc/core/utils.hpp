@@ -28,15 +28,15 @@ inline constexpr T round_to_next_multiple_of(T a, T b) {
   return a % b == 0 ? a : ((a / b) + 1) * b;
 }
 
-namespace aphrodite {
+namespace sonar {
 
-// Returns true if env APHRODITE_BATCH_INVARIANT=1
-inline bool aphrodite_is_batch_invariant() {
+// Returns true if env SONAR_BATCH_INVARIANT=1
+inline bool sonar_is_batch_invariant() {
   static bool cached = []() {
-    const char* val = std::getenv("APHRODITE_BATCH_INVARIANT");
+    const char* val = std::getenv("SONAR_BATCH_INVARIANT");
     return val && std::atoi(val) != 0;
   }();
   return cached;
 }
 
-}  // namespace aphrodite
+}  // namespace sonar

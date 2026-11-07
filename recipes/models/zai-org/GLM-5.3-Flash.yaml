@@ -36,7 +36,7 @@ model:
     - "--tokenizer-mode"
     - "glm5_next"
   base_env:
-    APHRODITE_ENGINE_READY_TIMEOUT_S: "3600"
+    SONAR_ENGINE_READY_TIMEOUT_S: "3600"
 
 dependencies: []
 
@@ -89,8 +89,8 @@ variants:
           pip: false
       mi350x: &gfx950_aiter
         extra_env:
-          APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
-          APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
+          SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS: "1"
+          SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA: "1"
       mi355x: *gfx950_aiter
   nvfp4:
     model_id: "RedHatAI/GLM-5.3-Flash-NVFP4"
@@ -152,7 +152,7 @@ hardware_overrides:
       - "--attention-backend"
       - "ROCM_AITER_MLA_SPARSE"
     extra_env:
-      APHRODITE_ROCM_USE_AITER: "1"
+      SONAR_ROCM_USE_AITER: "1"
   # Shared by 950PR 8x (8×128 GB). SFA / kpool indexer needs --block-size 512.
   npu:
     extra_args:
@@ -179,7 +179,7 @@ hardware_notes:
     body: "When serving long contexts (>=64k), add `--sparse-indexer-topk-backend aiter` for improved decode performance."
   mi355x: *cdna4_indexer_topk_notes
   ascend_950pr_8x:
-    title: "Aphrodite Ascend A5 image required"
+    title: "Sonar Ascend A5 image required"
     body: "Single-node TP8 on 8×950PR. Pin quay.io/ascend/vllm-ascend:nightly-main-a5 and overlay vLLM#53906 / vllm-ascend#15127. Do not pass --quantization ascend. --block-size 512 is required (kpool indexer). EP is not available on this interconnect."
 
 strategy_overrides:
@@ -188,8 +188,8 @@ strategy_overrides:
     # transfer; UCX is needed on the decode side too (strategy sets it on
     # prefill only).
     env:
-      APHRODITE_SSM_CONV_STATE_LAYOUT: "DS"
-      APHRODITE_KV_CACHE_LAYOUT: "HND"
+      SONAR_SSM_CONV_STATE_LAYOUT: "DS"
+      SONAR_KV_CACHE_LAYOUT: "HND"
       UCX_NET_DEVICES: "all"
     prefill:
       vllm_args:
@@ -214,7 +214,7 @@ guide: |
   a maximum context length of 1,048,576 tokens and includes one MTP draft layer.
 
   The implementation supports NVIDIA Hopper and newer GPUs, AMD Instinct
-  gfx950 via ROCm, and Huawei Ascend 950PR (8 NPUs, one node) via Aphrodite
+  gfx950 via ROCm, and Huawei Ascend 950PR (8 NPUs, one node) via Sonar
   Ascend. On NVIDIA/AMD it can scale with tensor, pipeline, expert, or
   data+expert parallelism. The Ascend path is validated as single-node TP=8
   only.
@@ -223,7 +223,7 @@ guide: |
 
   - **Weights:** about 306 GiB for the default native FP8 checkpoint before runtime
     and KV-cache overhead; the BF16 variant requires roughly twice the weight memory
-  - **Aphrodite:** an image containing [native GLM5Next support (#62424)](https://github.com/vllm-project/vllm/pull/62424), including the matching Rust frontend binary. Older images need an updated build for the commands below.
+  - **Sonar:** an image containing [native GLM5Next support (#62424)](https://github.com/vllm-project/vllm/pull/62424), including the matching Rust frontend binary. Older images need an updated build for the commands below.
   - **FlashInfer:** 0.6.17 or newer is required for NoPE sparse MLA
 
   The default model ID, `zai-org/GLM-5.3-Flash`, is the FP8 checkpoint. Select the BF16
@@ -234,12 +234,12 @@ guide: |
   ## Frontends
 
   The command builder defaults to **Rust** and adds `--tokenizer-mode glm5_next`.
-  With `APHRODITE_USE_RUST_FRONTEND=1`, this selects native GLM5Next chat rendering for
+  With `SONAR_USE_RUST_FRONTEND=1`, this selects native GLM5Next chat rendering for
   the GLM-5.3-Flash template, including tool calls and reasoning options. Image and
   video inputs are not yet supported on the Rust frontend; use the Python frontend
   for multimodal requests.
 
-  Select **Python** in the command builder, or set `APHRODITE_USE_RUST_FRONTEND=0`,
+  Select **Python** in the command builder, or set `SONAR_USE_RUST_FRONTEND=0`,
   to use the Hugging Face renderer and processor on the same build. On older builds
   that do not recognize `glm5_next`, also replace `--tokenizer-mode glm5_next` with
   `--tokenizer-mode auto`.
@@ -249,7 +249,7 @@ guide: |
   ### FP8 with TP4 and MTP on one GB200 tray
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3-Flash \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3-Flash \
     --tokenizer-mode glm5_next \
     --tensor-parallel-size 4 \
     --kv-cache-dtype fp8 \
@@ -273,12 +273,12 @@ guide: |
   ```bash
   # Prefill pool
   CUDA_VISIBLE_DEVICES=0,1,2,3 \
-  APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
-  APHRODITE_KV_CACHE_LAYOUT=HND \
+  SONAR_SSM_CONV_STATE_LAYOUT=DS \
+  SONAR_KV_CACHE_LAYOUT=HND \
   UCX_NET_DEVICES=all \
-  APHRODITE_NIXL_SIDE_CHANNEL_PORT=5557 \
-  APHRODITE_USE_RUST_FRONTEND=1 \
-  aphrodite serve zai-org/GLM-5.3-Flash \
+  SONAR_NIXL_SIDE_CHANNEL_PORT=5557 \
+  SONAR_USE_RUST_FRONTEND=1 \
+  sonar serve zai-org/GLM-5.3-Flash \
     --tokenizer-mode glm5_next \
     --port 8001 \
     --tensor-parallel-size 4 \
@@ -291,12 +291,12 @@ guide: |
 
   # Decode pool
   CUDA_VISIBLE_DEVICES=4,5,6,7 \
-  APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
-  APHRODITE_KV_CACHE_LAYOUT=HND \
+  SONAR_SSM_CONV_STATE_LAYOUT=DS \
+  SONAR_KV_CACHE_LAYOUT=HND \
   UCX_NET_DEVICES=all \
-  APHRODITE_NIXL_SIDE_CHANNEL_PORT=5558 \
-  APHRODITE_USE_RUST_FRONTEND=1 \
-  aphrodite serve zai-org/GLM-5.3-Flash \
+  SONAR_NIXL_SIDE_CHANNEL_PORT=5558 \
+  SONAR_USE_RUST_FRONTEND=1 \
+  sonar serve zai-org/GLM-5.3-Flash \
     --tokenizer-mode glm5_next \
     --port 8002 \
     --tensor-parallel-size 4 \
@@ -456,14 +456,14 @@ guide: |
   ## Running on AMD Instinct
 
   Use a `vllm/vllm-openai-rocm:nightly` build containing #62424 for native Rust
-  rendering. Model support landed in [Aphrodite #53906](https://github.com/vllm-project/vllm/pull/53906).
+  rendering. Model support landed in [Sonar #53906](https://github.com/vllm-project/vllm/pull/53906).
 
   ```bash
-  export APHRODITE_ROCM_USE_AITER=1
+  export SONAR_ROCM_USE_AITER=1
   # gfx950 (MI350X/MI355X) only
-  export APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-  export APHRODITE_ROCM_USE_AITER_TRITON_SPARSE_MLA=1
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3-Flash \
+  export SONAR_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+  export SONAR_ROCM_USE_AITER_TRITON_SPARSE_MLA=1
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3-Flash \
     --tokenizer-mode glm5_next \
     --served-model-name zai-org/GLM-5.3-Flash \
     --tensor-parallel-size 4 \
@@ -478,8 +478,8 @@ guide: |
   concurrency at 128K context; the BF16 checkpoint reports an 8.87M-token KV
   pool at the same TP and context.
 
-  MTP speculative decoding is supported on MI355X by Aphrodite builds containing
-  [Aphrodite #55239](https://github.com/vllm-project/vllm/pull/55239), validated on 4×MI355X
+  MTP speculative decoding is supported on MI355X by Sonar builds containing
+  [Sonar #55239](https://github.com/vllm-project/vllm/pull/55239), validated on 4×MI355X
   with TP=4 and MTP5. Enable **Spec Decoding** and select **MTP** in the command builder
   to add the required configuration.
 
@@ -489,7 +489,7 @@ guide: |
   (MI350X/MI355X), using the topk indexer backend from AITER is recommended:
 
   ```bash
-  APHRODITE_USE_RUST_FRONTEND=1 aphrodite serve zai-org/GLM-5.3-Flash \
+  SONAR_USE_RUST_FRONTEND=1 sonar serve zai-org/GLM-5.3-Flash \
     --tokenizer-mode glm5_next \
     --attention-backend ROCM_AITER_MLA_SPARSE \
     --sparse-indexer-topk-backend aiter
@@ -498,8 +498,8 @@ guide: |
   ## Benchmarking
 
   ```bash
-  aphrodite bench serve \
-    --backend aphrodite \
+  sonar bench serve \
+    --backend sonar \
     --model zai-org/GLM-5.3-Flash \
     --served-model-name zai-org/GLM-5.3-Flash \
     --dataset-name random \
@@ -518,7 +518,7 @@ guide: |
 
   Offloading requires a build containing [vllm-project/vllm#57145](https://github.com/vllm-project/vllm/pull/57145).
   Validation used [zai-org/GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash) on 4×H200 (TP4),
-  Aphrodite commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
+  Sonar commit `d1b4028d7e`, the Python frontend, `--enforce-eager`,
   `--max-model-len 16384`, `--max-num-seqs 16` and `--max-num-batched-tokens 8192`.
   Validation used `TieringOffloadingSpec`: 8 GiB total CPU tier, `blocks_per_chunk: 1`,
   a persistent filesystem `root_dir`, eight read/write threads and `PYTHONHASHSEED=0`.
@@ -530,7 +530,7 @@ guide: |
   ## References
 
   - [Model card](https://huggingface.co/zai-org/GLM-5.3-Flash)
-  - [Aphrodite](https://github.com/vllm-project/vllm)
+  - [Sonar](https://github.com/vllm-project/vllm)
   - [ROCm MTP sparse-MLA fix](https://github.com/vllm-project/vllm/pull/55239)
   - **FlashInfer:** 0.6.17 or newer is required for NoPE sparse MLA
   - **Ascend 950PR:** native FP8 checkpoint (~306 GiB). On 950 the block

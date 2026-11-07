@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.attention.mla_attention import (
+from sonar.model_executor.layers.attention.mla_attention import (
     MLACommonMetadata,
     MLACommonMetadataBuilder,
 )
-from aphrodite.v1.attention.backend import CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from sonar.v1.attention.backend import CommonAttentionMetadata
+from sonar.v1.kv_cache_interface import MLAAttentionSpec
 
 
 class _NonCausalMLAMetadataBuilder(MLACommonMetadataBuilder[MLACommonMetadata]):
@@ -90,7 +90,7 @@ def _merged_mla_spec() -> MLAAttentionSpec:
     )
 
 
-def _dspark_dcp_aphrodite_config(
+def _dspark_dcp_sonar_config(
     static_forward_context: dict[str, SimpleNamespace],
 ) -> SimpleNamespace:
     return SimpleNamespace(
@@ -194,14 +194,14 @@ def test_builder_scopes_noncausal_capability_to_its_layers():
         # Indexer and compressor caches share an MLA group but predate the flag.
         "indexer": SimpleNamespace(),
     }
-    aphrodite_config = _dspark_dcp_aphrodite_config(static_forward_context)
+    sonar_config = _dspark_dcp_sonar_config(static_forward_context)
     device = torch.device("cpu")
 
     def _flag(layer_names: list[str]) -> bool:
         return _DcpCapableMLAMetadataBuilder(
             merged_spec,
             layer_names,
-            aphrodite_config,
+            sonar_config,
             device,
             supports_dcp_with_varlen=True,
         ).non_causal_multi_token_decode
@@ -221,14 +221,14 @@ def test_merged_group_spec_does_not_mark_a_target_only_builder():
         "target": _mla_layer(non_causal=False),
         "draft": _mla_layer(non_causal=True),
     }
-    aphrodite_config = _dspark_dcp_aphrodite_config(static_forward_context)
+    sonar_config = _dspark_dcp_sonar_config(static_forward_context)
     device = torch.device("cpu")
     assert merged_spec.non_causal_multi_token_decode
 
     target = _CausalOnlyMLAMetadataBuilder(
         merged_spec,
         ["target"],
-        aphrodite_config,
+        sonar_config,
         device,
         supports_dcp_with_varlen=True,
     )
@@ -238,7 +238,7 @@ def test_merged_group_spec_does_not_mark_a_target_only_builder():
         _DraftMLAMetadataBuilder(
             merged_spec,
             ["draft"],
-            aphrodite_config,
+            sonar_config,
             device,
             supports_dcp_with_varlen=True,
         )

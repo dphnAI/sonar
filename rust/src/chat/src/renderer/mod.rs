@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aphrodite_text::Prompt;
 use serde_json::Value;
+use sonar_text::Prompt;
 
 use crate::error::Result;
 use crate::request::ChatRequest;
@@ -55,7 +55,7 @@ pub struct RenderedPrompt {
     pub effective_template_kwargs: HashMap<String, Value>,
 }
 
-/// Minimal chat-prompt renderer used by `aphrodite-chat`.
+/// Minimal chat-prompt renderer used by `sonar-chat`.
 pub trait ChatRenderer: Send + Sync {
     /// Render one chat request into the text prompt submitted to the text
     /// backend.

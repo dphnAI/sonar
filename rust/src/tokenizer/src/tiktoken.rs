@@ -30,7 +30,7 @@ const KIMI_PATTERN: &str = r"[\p{Han}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{
 /// `config.json` *is* present we honour the model's actual `vocab_size` instead
 /// of this fallback — see `Self::new`.
 const FALLBACK_NUM_RESERVED_SPECIAL_TOKENS: u32 = 256;
-const DISABLE_RIPTOKEN_ENV: &str = "APHRODITE_RS_DISABLE_RIPTOKEN";
+const DISABLE_RIPTOKEN_ENV: &str = "SONAR_RS_DISABLE_RIPTOKEN";
 
 /// Parsed entry from `tokenizer_config.json`'s `added_tokens_decoder`.
 #[derive(Debug, Clone, Deserialize)]

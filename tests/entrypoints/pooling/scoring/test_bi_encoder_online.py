@@ -4,8 +4,8 @@
 import pytest
 import requests
 
-from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from sonar.entrypoints.pooling.pooling.protocol import PoolingResponse
+from sonar.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from tests.entrypoints.pooling.scoring.util import EncoderScoringHfRunner
 from tests.utils import RemoteOpenAIServer
 
@@ -55,11 +55,11 @@ async def test_score_api_queries_str_1_documents_str_1(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 1
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict([[TEXTS_1[0], TEXTS_2[0]]]).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -84,11 +84,11 @@ async def test_score_api_queries_str_1_documents_str_n(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -113,11 +113,11 @@ async def test_score_api_queries_str_n_documents_str_n(hf_model, server: RemoteO
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -142,11 +142,11 @@ async def test_score_api_queries_vs_items(hf_model, server: RemoteOpenAIServer):
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -171,11 +171,11 @@ async def test_score_api_text_1_vs_text_2(hf_model, server: RemoteOpenAIServer):
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -200,11 +200,11 @@ async def test_score_api_data_1_vs_data_2(hf_model, server: RemoteOpenAIServer):
     assert score.data is not None
     assert len(score.data) == 2
 
-    aphrodite_outputs = [d.score for d in score.data]
+    sonar_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(aphrodite_outputs)):
-        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
+    for i in range(len(sonar_outputs)):
+        assert hf_outputs[i] == pytest.approx(sonar_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio

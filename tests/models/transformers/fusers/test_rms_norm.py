@@ -10,8 +10,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aphrodite.model_executor.models.transformers.fuser import get_fuser
-from aphrodite.model_executor.models.transformers.fusers import RMSNormFuser
+from sonar.model_executor.models.transformers.fuser import get_fuser
+from sonar.model_executor.models.transformers.fusers import RMSNormFuser
 
 
 class RMSNorm(nn.Module):
@@ -247,20 +247,20 @@ def test_gated_rms_norm_is_not_fused(cls):
         (WeightlessGemma4RMSNorm, "RMSNorm", False),
     ],
 )
-def test_rms_norm_builds_aphrodite_class(cls, expected, zero_centered, default_aphrodite_config):
-    from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm as AphroditeGemmaRMSNorm
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+def test_rms_norm_builds_sonar_class(cls, expected, zero_centered, default_sonar_config):
+    from sonar.model_executor.layers.layernorm import GemmaRMSNorm as SonarGemmaRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
     with torch.device("meta"):
         module = cls()
         fuser = get_fuser(module, RMSNormFuser)
         assert fuser is not None
-        built = fuser.fuse(module, "norm", default_aphrodite_config)
-    from aphrodite.model_executor.models.transformers.fusers.rms_norm import (
+        built = fuser.fuse(module, "norm", default_sonar_config)
+    from sonar.model_executor.models.transformers.fusers.rms_norm import (
         TPAwareNormMixin,
     )
 
-    types_by_name = {"RMSNorm": AphroditeRMSNorm, "GemmaRMSNorm": AphroditeGemmaRMSNorm}
+    types_by_name = {"RMSNorm": SonarRMSNorm, "GemmaRMSNorm": SonarGemmaRMSNorm}
     assert isinstance(built, types_by_name[expected])
     assert isinstance(built, TPAwareNormMixin)
     assert built.variance_epsilon == module.variance_epsilon
@@ -272,7 +272,7 @@ def test_rms_norm_builds_aphrodite_class(cls, expected, zero_centered, default_a
 
 
 @pytest.mark.parametrize("cls", [Gemma4RMSNorm, PowOperatorRMSNorm, KwargPowRMSNorm, KwargBasePowRMSNorm])
-def test_pow_spelled_norm_fuses_to_equivalent_math(cls, default_aphrodite_config):
+def test_pow_spelled_norm_fuses_to_equivalent_math(cls, default_sonar_config):
     """Matching `pow(v, -0.5)` is only sound if it really is the reciprocal square
     root: the fused norm must reproduce the unfused forward, not just replace it.
     `pow` and `rsqrt` take different paths to the same value, so compare at float32
@@ -283,24 +283,24 @@ def test_pow_spelled_norm_fuses_to_equivalent_math(cls, default_aphrodite_config
         module.weight.copy_(torch.randn(16))
     fuser = get_fuser(module, RMSNormFuser)
     assert fuser is not None
-    built = fuser.fuse(module, "norm", default_aphrodite_config)
+    built = fuser.fuse(module, "norm", default_sonar_config)
     with torch.no_grad():
         built.weight.copy_(module.weight)
     x = torch.randn(4, 16)
     torch.testing.assert_close(built(x), module(x), rtol=1e-5, atol=1e-6)
 
 
-def test_weightless_norm_has_no_hidden_size(default_aphrodite_config):
+def test_weightless_norm_has_no_hidden_size(default_sonar_config):
     """A weightless norm states no hidden size, and the model's (LM) hidden size
     would be wrong for one on a sub-dimension: Llama 4's `qk_norm` normalizes
     head_dim, so sizing it at hidden_size made the TP gather reject its input.
     It fuses with none, and so normalizes the width it is given at any TP size,
-    matching the unfused norm and Aphrodite's native `RMSNorm(hidden_size=head_dim)`.
+    matching the unfused norm and Sonar's native `RMSNorm(hidden_size=head_dim)`.
     """
     module = WeightlessRMSNorm(72)
     fuser = get_fuser(module, RMSNormFuser)
     assert fuser is not None
-    built = fuser.fuse(module, "norm", default_aphrodite_config)
+    built = fuser.fuse(module, "norm", default_sonar_config)
     assert built.hidden_size == 0
 
     built.tp_size = 2  # emulate TP=2 without a real process group
@@ -308,23 +308,23 @@ def test_weightless_norm_has_no_hidden_size(default_aphrodite_config):
     torch.testing.assert_close(built(x), module(x))
 
 
-def test_fused_rms_norm_op_default_eps(default_aphrodite_config):
+def test_fused_rms_norm_op_default_eps(default_sonar_config):
     """`torch.nn.RMSNorm` (a single `F.rms_norm` call) matches via the fast path;
     its default `eps=None` resolves to `finfo(dtype).eps` in `fuse`."""
-    from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
+    from sonar.model_executor.layers.layernorm import RMSNorm as SonarRMSNorm
 
     with torch.device("meta"):
         module = torch.nn.RMSNorm(16)  # forward is a single `F.rms_norm` call
         fuser = get_fuser(module, RMSNormFuser)
         assert isinstance(fuser, RMSNormFuser)
         assert not fuser.zero_centered
-        aphrodite_config = SimpleNamespace(model_config=SimpleNamespace(dtype=torch.float32))
-        built = fuser.fuse(module, "norm", aphrodite_config)
-    assert isinstance(built, AphroditeRMSNorm)
+        sonar_config = SimpleNamespace(model_config=SimpleNamespace(dtype=torch.float32))
+        built = fuser.fuse(module, "norm", sonar_config)
+    assert isinstance(built, SonarRMSNorm)
     assert built.variance_epsilon == torch.finfo(torch.float32).eps
 
 
-def test_eps_is_derived_per_instance(default_aphrodite_config):
+def test_eps_is_derived_per_instance(default_sonar_config):
     """Two instances of the same norm class with different eps must fuse to their
     own eps: the type-cached fuser holds only structure, not this value."""
     with torch.device("meta"):
@@ -332,12 +332,12 @@ def test_eps_is_derived_per_instance(default_aphrodite_config):
             module = RMSNorm(16, eps=eps)
             fuser = get_fuser(module, RMSNormFuser)
             assert fuser is not None
-            built = fuser.fuse(module, "norm", default_aphrodite_config)
+            built = fuser.fuse(module, "norm", default_sonar_config)
             assert built.variance_epsilon == eps
 
 
 @pytest.mark.parametrize("cls", [NamedEpsRMSNorm, ToleranceRMSNorm])
-def test_eps_attr_is_found_by_value_not_name(cls, default_aphrodite_config):
+def test_eps_attr_is_found_by_value_not_name(cls, default_sonar_config):
     """The eps attribute is identified by holding the traced value, so a norm
     stays per-instance correct whatever it names it."""
     with torch.device("meta"):
@@ -346,25 +346,25 @@ def test_eps_attr_is_found_by_value_not_name(cls, default_aphrodite_config):
             fuser = get_fuser(module, RMSNormFuser)
             assert fuser is not None
             assert fuser.eps_attr == cls.attr
-            built = fuser.fuse(module, "norm", default_aphrodite_config)
+            built = fuser.fuse(module, "norm", default_sonar_config)
             assert built.variance_epsilon == eps
 
 
-def test_literal_eps_is_not_mistaken_for_an_attribute(default_aphrodite_config, caplog):
+def test_literal_eps_is_not_mistaken_for_an_attribute(default_sonar_config, caplog):
     """A literal eps is recognised as coming from no attribute, even when one
     holds the same value, and is taken from the traced source instead."""
-    logger = "aphrodite.model_executor.models.transformers.fusers.rms_norm"
+    logger = "sonar.model_executor.models.transformers.fusers.rms_norm"
     with caplog.at_level("DEBUG", logger=logger), torch.device("meta"):
         module = LiteralEpsRMSNorm()
         fuser = get_fuser(module, RMSNormFuser)
         assert fuser is not None
-        built = fuser.fuse(module, "norm", default_aphrodite_config)
+        built = fuser.fuse(module, "norm", default_sonar_config)
     assert fuser.eps_attr is None
     assert built.variance_epsilon == 1e-4
     assert "does not hold its eps" in caplog.text
 
 
-def test_ambiguous_eps_attrs_are_disambiguated(default_aphrodite_config):
+def test_ambiguous_eps_attrs_are_disambiguated(default_sonar_config):
     """When several attributes hold the eps value, the one the forward actually
     reads is identified, and they are all left as they were found."""
     with torch.device("meta"):
@@ -377,16 +377,16 @@ def test_ambiguous_eps_attrs_are_disambiguated(default_aphrodite_config):
 
         other = AmbiguousEpsRMSNorm(16, eps=1e-5)
         other.decoy_eps = 1e-3
-        built = fuser.fuse(other, "norm", default_aphrodite_config)
+        built = fuser.fuse(other, "norm", default_sonar_config)
     assert built.variance_epsilon == 1e-5
 
 
-def test_fused_norm_is_gather_capable(default_aphrodite_config):
+def test_fused_norm_is_gather_capable(default_sonar_config):
     """Every weighted fused norm is emitted gather-capable, so a norm on a head-sharded
     projection (OLMoE-style) self-corrects at runtime with no QKV-specific
     plumbing. A full-width input skips the gather and equals a plain norm."""
-    from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
-    from aphrodite.model_executor.models.transformers.fusers import rms_norm
+    from sonar.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
+    from sonar.model_executor.models.transformers.fusers import rms_norm
 
     torch.manual_seed(0)
     x = torch.randn(4, 16)
@@ -404,10 +404,10 @@ def test_fused_norm_is_gather_capable(default_aphrodite_config):
         torch.testing.assert_close(gathered(x), plain(x))
 
 
-def test_gathered_norm_rejects_uneven_sharding(default_aphrodite_config):
+def test_gathered_norm_rejects_uneven_sharding(default_sonar_config):
     """A sharded input (narrower than the full-width weight) that does not tile
     the weight evenly across ranks is rejected before any collective."""
-    from aphrodite.model_executor.models.transformers.fusers import rms_norm
+    from sonar.model_executor.models.transformers.fusers import rms_norm
 
     norm = rms_norm.TPAwareRMSNorm(hidden_size=8, eps=1e-6)
     norm.tp_size = 2  # emulate TP=2 without a real process group

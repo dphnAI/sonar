@@ -53,7 +53,7 @@ def parse_config(value: str) -> Config:
 
 def production_residual_config(m: int) -> Config | None:
     """The measured Latent-MoE residual config for M, from the K3 table."""
-    from aphrodite.models.kimi_k3.nvidia.low_latency_gemm import KIMI_K3_PROJECTIONS
+    from sonar.models.kimi_k3.nvidia.low_latency_gemm import KIMI_K3_PROJECTIONS
 
     spec = KIMI_K3_PROJECTIONS.get((N, K))
     config = spec.residual_config(m) if spec is not None else None

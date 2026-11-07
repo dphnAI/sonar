@@ -9,21 +9,21 @@ import torch
 import torch.nn as nn
 from torch.multiprocessing import spawn
 
-from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.model_executor.layers.minimax_rms_norm import (
+from sonar._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
+from sonar.distributed import cleanup_dist_env_and_memory
+from sonar.model_executor.layers.minimax_rms_norm import (
     MiniMaxText01RMSNormTP,
     rms_norm_tp,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.triton_utils import HAS_TRITON
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.platforms import current_platform
+from sonar.triton_utils import HAS_TRITON
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.utils import opcheck
-from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
+from tests.utils import ensure_current_sonar_config, init_test_distributed_environment
 
 
-@ensure_current_aphrodite_config()
+@ensure_current_sonar_config()
 def _worker_forward_qk(
     local_rank,
     world_size,
@@ -73,8 +73,8 @@ def _worker_forward_qk(
     )
 
     # Set up Lamport workspace.
-    from aphrodite.distributed.parallel_state import get_tp_group
-    from aphrodite.model_executor.layers.minimax_rms_norm.lamport_workspace import (
+    from sonar.distributed.parallel_state import get_tp_group
+    from sonar.model_executor.layers.minimax_rms_norm.lamport_workspace import (
         get_allreduce_workspace,
     )
 
@@ -124,7 +124,7 @@ def _worker_forward_qk(
     cleanup_dist_env_and_memory()
 
 
-@ensure_current_aphrodite_config()
+@ensure_current_sonar_config()
 def _worker_forward_qk_rocm_aiter(
     local_rank: int,
     world_size: int,
@@ -208,9 +208,9 @@ def test_minimax_reduce_rms_qk_rocm_aiter(
     """The MiniMax TP QK path dispatches to AITER and matches eager RMSNorm."""
     assert is_aiter_found_and_supported(), "AITER requires ROCm CDNA3 or newer"
 
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "1")
-    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1")
+    monkeypatch.setenv("SONAR_ROCM_USE_AITER_CUSTOM_AR", "1")
+    monkeypatch.setenv("SONAR_ROCM_QUICK_REDUCE_QUANTIZATION", "NONE")
 
     world_size = 2
     if current_platform.device_count() < world_size:

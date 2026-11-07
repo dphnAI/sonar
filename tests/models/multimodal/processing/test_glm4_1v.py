@@ -5,14 +5,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from aphrodite.assets.video import VideoAsset
-from aphrodite.model_executor.models.glm4_1v import (
+from sonar.assets.video import VideoAsset
+from sonar.model_executor.models.glm4_1v import (
     Glm4vForConditionalGeneration,
     Glm4vProcessingInfo,
 )
-from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.multimodal.inputs import batched_tensors_equal
-from aphrodite.multimodal.video import DynamicVideoBackend, VideoBackend
+from sonar.multimodal import MULTIMODAL_REGISTRY
+from sonar.multimodal.inputs import batched_tensors_equal
+from sonar.multimodal.video import DynamicVideoBackend, VideoBackend
 
 from ...utils import build_model_context
 

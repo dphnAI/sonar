@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from aphrodite.model_executor.kernels.linear import (
+from sonar.model_executor.kernels.linear import (
     FlashInferCutedslMxfp8LinearKernel,
     FlashInferCutlassMxfp8LinearKernel,
     MarlinMxfp8LinearKernel,
@@ -63,7 +63,7 @@ def test_cutlass_mxfp8_requires_aligned_n_only_on_sm12x(capability, expected):
     backend needs N % 32 == 0, so SM100/103 must keep accepting it."""
     config = Mxfp8LinearLayerConfig(weight_shape=(130, 256))
     with patch(
-        "aphrodite.model_executor.kernels.linear.mxfp8.flashinfer.current_platform.is_device_capability_family",
+        "sonar.model_executor.kernels.linear.mxfp8.flashinfer.current_platform.is_device_capability_family",
         side_effect=lambda family: family // 10 == capability // 10,
     ):
         can_implement, _ = FlashInferCutlassMxfp8LinearKernel.can_implement(config)
@@ -86,7 +86,7 @@ def test_cutlass_mxfp8_requires_aligned_n_only_on_sm12x(capability, expected):
 def test_cutedsl_mxfp8_shape_admission(capability, weight_shape, expected):
     config = Mxfp8LinearLayerConfig(weight_shape=weight_shape)
     with patch(
-        "aphrodite.model_executor.kernels.linear.mxfp8.flashinfer.current_platform.is_device_capability_family",
+        "sonar.model_executor.kernels.linear.mxfp8.flashinfer.current_platform.is_device_capability_family",
         side_effect=lambda family: family // 10 == capability // 10,
     ):
         supported, _ = FlashInferCutedslMxfp8LinearKernel.can_implement(config)

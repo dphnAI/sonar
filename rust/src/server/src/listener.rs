@@ -297,7 +297,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn inherited_fd_detects_unix_listener_from_fd() {
-        let path = std::env::temp_dir().join(format!("aphrodite-rs-{}.sock", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("sonar-rs-{}.sock", Uuid::new_v4()));
         let socket = Socket::new(Domain::UNIX, Type::STREAM, None).unwrap();
         socket.bind(&SockAddr::unix(&path).unwrap()).unwrap();
         let fd = socket.into_raw_fd();

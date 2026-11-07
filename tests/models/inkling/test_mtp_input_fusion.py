@@ -5,12 +5,12 @@
 import pytest
 import torch
 
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 if not current_platform.is_cuda():
     pytest.skip("requires CUDA", allow_module_level=True)
 
-from aphrodite.models.inkling.nvidia.ops.norm import (  # noqa: E402
+from sonar.models.inkling.nvidia.ops.norm import (  # noqa: E402
     embed_dual_rmsnorm_cat,
     embed_rmsnorm,
     rmsnorm,

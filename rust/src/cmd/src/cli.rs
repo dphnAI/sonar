@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-//! CLI argument definitions for the `aphrodite-rs` binary.
+//! CLI argument definitions for the `sonar-rs` binary.
 //!
-//! Python Aphrodite references:
+//! Python Sonar references:
 //! - Engine args: <https://github.com/vllm-project/vllm/blob/bc2c0c86efb28e77677a3cfb8687e976914a313a/vllm/engine/arg_utils.py#L657-L1311>
 //! - Environment variables: <https://github.com/vllm-project/vllm/blob/bc2c0c86efb28e77677a3cfb8687e976914a313a/vllm/envs.py#L472>
 
@@ -18,27 +18,27 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
-use aphrodite_chat::GenerationConfigMode;
-use aphrodite_chat::ToolStrictLevel;
-use aphrodite_chat::multimodal::MmLimitPerPrompt;
-use aphrodite_engine_core_client::TransportMode;
-use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
-use aphrodite_managed_engine::ManagedEngineConfig;
-use aphrodite_managed_engine::cli::{ManagedEngineArgs, repartition_managed_engine_args};
-use aphrodite_managed_engine::data_parallel::{DataParallelLbArgs, DataParallelTopology};
-use aphrodite_server::{
-    AccessLogConfig, ApiServerOptions, ChatTemplateContentFormatOption, Config, CoordinatorMode,
-    CorsConfig, CustomHistogramBuckets, DEFAULT_KEEP_ALIVE_TIMEOUT, DEFAULT_LOG_STATS_INTERVAL,
-    DEFAULT_REQUEST_BODY_LIMIT_BYTES, HttpListenerMode, LoraModulePath, OutputLogConfig,
-    OutputLogging, ParserSelection, ReasoningEffort, RenderConfig, RendererSelection,
-};
-use aphrodite_text::backend::hf::{HfOverrides, ModelFileSources};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use educe::Educe;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{DefaultOnNull, OneOrMany, serde_as};
+use sonar_chat::GenerationConfigMode;
+use sonar_chat::ToolStrictLevel;
+use sonar_chat::multimodal::MmLimitPerPrompt;
+use sonar_engine_core_client::TransportMode;
+use sonar_engine_core_client::protocol::structured_outputs::StructuredOutputBackend;
+use sonar_managed_engine::ManagedEngineConfig;
+use sonar_managed_engine::cli::{ManagedEngineArgs, repartition_managed_engine_args};
+use sonar_managed_engine::data_parallel::{DataParallelLbArgs, DataParallelTopology};
+use sonar_server::{
+    AccessLogConfig, ApiServerOptions, ChatTemplateContentFormatOption, Config, CoordinatorMode,
+    CorsConfig, CustomHistogramBuckets, DEFAULT_KEEP_ALIVE_TIMEOUT, DEFAULT_LOG_STATS_INTERVAL,
+    DEFAULT_REQUEST_BODY_LIMIT_BYTES, HttpListenerMode, LoraModulePath, OutputLogConfig,
+    OutputLogging, ParserSelection, ReasoningEffort, RenderConfig, RendererSelection,
+};
+use sonar_text::backend::hf::{HfOverrides, ModelFileSources};
 use thiserror_ext::AsReport as _;
 use uuid::Uuid;
 
@@ -46,12 +46,12 @@ use crate::cli::model::ModelArgs;
 use crate::cli::ssl::SslArgs;
 use crate::cli::unsupported::UnsupportedArgs;
 
-/// Top-level parser for the `aphrodite-rs` binary.
+/// Top-level parser for the `sonar-rs` binary.
 #[derive(Debug, Parser)]
 #[command(
-    name = "aphrodite-rs",
-    about = "Rust frontend and managed-engine CLI for Aphrodite.",
-    version = aphrodite_build_info::VERSION
+    name = "sonar-rs",
+    about = "Rust frontend and managed-engine CLI for Sonar.",
+    version = sonar_build_info::VERSION
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -133,7 +133,7 @@ fn validate_dphn_network_args(cli: &Cli) -> Result<(), clap::Error> {
 /// Supported top-level CLI commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Run Aphrodite benchmarks.
+    /// Run Sonar benchmarks.
     #[command(subcommand)]
     Bench(BenchCommand),
     /// Run the Rust OpenAI frontend as a Python-supervised worker.
@@ -149,7 +149,7 @@ pub enum Command {
 #[derive(Debug, Subcommand)]
 pub enum BenchCommand {
     /// Benchmark online serving throughput.
-    Serve(aphrodite_bench::BenchServeArgs),
+    Serve(sonar_bench::BenchServeArgs),
 }
 
 /// Arguments for the engine-free text renderer.
@@ -171,11 +171,11 @@ pub struct RenderArgs {
     #[arg(long, num_args = 0..)]
     served_model_name: Vec<String>,
     /// Accept any requested model name. Like Python, it is set only through
-    /// `APHRODITE_SKIP_MODEL_NAME_VALIDATION`.
+    /// `SONAR_SKIP_MODEL_NAME_VALIDATION`.
     #[arg(
         long,
         hide = true,
-        env = "APHRODITE_SKIP_MODEL_NAME_VALIDATION",
+        env = "SONAR_SKIP_MODEL_NAME_VALIDATION",
         action = ArgAction::Set,
         value_parser = parse_truthy_flag,
         default_value = "0"
@@ -280,9 +280,9 @@ pub struct JsonStringList(pub Vec<String>);
 
 /// Runtime arguments shared by both paths of the Rust frontend:
 ///
-/// - External-engine mode: Python-supervised bootstrap, `aphrodite serve` -> `aphrodite-rs frontend`.
+/// - External-engine mode: Python-supervised bootstrap, `sonar serve` -> `sonar-rs frontend`.
 ///   Arguments are deserialized from a single JSON object and defaults follow `serde` attrs.
-/// - Managed-engine mode: Rust-managed Python engine, `aphrodite-rs serve`.
+/// - Managed-engine mode: Rust-managed Python engine, `sonar-rs serve`.
 ///   Arguments are parsed from CLI flags and defaults follow `clap` attrs.
 #[serde_as]
 #[derive(Educe, Clone, Args, PartialEq, Eq, Deserialize)]
@@ -300,7 +300,7 @@ pub struct SharedRuntimeArgs {
     pub hf_overrides: HfOverrides,
 
     /// The source of generation-config sampling defaults. `"auto"` loads the
-    /// model's defaults, while `"aphrodite"` uses Aphrodite's neutral defaults.
+    /// model's defaults, while `"sonar"` uses Sonar's neutral defaults.
     #[arg(long, default_value_t)]
     #[serde(default)]
     pub generation_config: GenerationConfigMode,
@@ -309,7 +309,7 @@ pub struct SharedRuntimeArgs {
     /// frontend transport.
     #[arg(
         long = "engine-ready-timeout-secs",
-        env = "APHRODITE_ENGINE_READY_TIMEOUT_S",
+        env = "SONAR_ENGINE_READY_TIMEOUT_S",
         default_value_t = default_engine_ready_timeout_secs()
     )]
     #[serde(default = "default_engine_ready_timeout_secs")]
@@ -368,7 +368,7 @@ pub struct SharedRuntimeArgs {
     /// server closes it (default 5).
     #[arg(
         long = "http-timeout-keep-alive",
-        env = "APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE"
+        env = "SONAR_HTTP_TIMEOUT_KEEP_ALIVE"
     )]
     #[serde(default)]
     pub http_timeout_keep_alive: Option<u64>,
@@ -545,7 +545,7 @@ pub struct SharedRuntimeArgs {
     /// If provided, the server will require one of these keys to be presented
     /// in the Authorization header.
     #[educe(Debug(ignore))]
-    #[arg(long, env = "APHRODITE_API_KEY", value_delimiter = ' ')]
+    #[arg(long, env = "SONAR_API_KEY", value_delimiter = ' ')]
     #[serde_as(as = "DefaultOnNull<OneOrMany<_>>")]
     #[serde(default)]
     pub api_key: Vec<String>,
@@ -571,18 +571,18 @@ pub struct SharedRuntimeArgs {
     pub custom_histogram_buckets: CustomHistogramBuckets,
 
     /// Seconds between periodic engine statistics logs (default 10). Like
-    /// Python, it is set only through `APHRODITE_LOG_STATS_INTERVAL`.
-    #[arg(long, hide = true, env = "APHRODITE_LOG_STATS_INTERVAL")]
+    /// Python, it is set only through `SONAR_LOG_STATS_INTERVAL`.
+    #[arg(long, hide = true, env = "SONAR_LOG_STATS_INTERVAL")]
     #[serde(skip)]
     pub log_stats_interval: Option<LogStatsInterval>,
 
     /// Keep external request IDs as engine-core request IDs instead of adding
     /// a random suffix. Like Python, it is set only through the deprecated
-    /// `APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION`.
+    /// `SONAR_DISABLE_REQUEST_ID_RANDOMIZATION`.
     #[arg(
         long,
         hide = true,
-        env = "APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION",
+        env = "SONAR_DISABLE_REQUEST_ID_RANDOMIZATION",
         action = ArgAction::Set,
         value_parser = parse_int_flag,
         default_value = "0"
@@ -592,11 +592,11 @@ pub struct SharedRuntimeArgs {
 
     /// Maximum HTTP request body size in bytes (default 32 MiB); `0` removes
     /// the limit, like the Python frontend, which has none. It is set only
-    /// through `APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE`.
+    /// through `SONAR_HTTP_MAX_REQUEST_BODY_SIZE`.
     #[arg(
         long,
         hide = true,
-        env = "APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE",
+        env = "SONAR_HTTP_MAX_REQUEST_BODY_SIZE",
         value_parser = parse_byte_count
     )]
     #[serde(skip)]
@@ -604,11 +604,11 @@ pub struct SharedRuntimeArgs {
 
     /// Accept any requested model name, served by the base model unless it
     /// names a loaded LoRA adapter. Like Python, it is set only through
-    /// `APHRODITE_SKIP_MODEL_NAME_VALIDATION`.
+    /// `SONAR_SKIP_MODEL_NAME_VALIDATION`.
     #[arg(
         long,
         hide = true,
-        env = "APHRODITE_SKIP_MODEL_NAME_VALIDATION",
+        env = "SONAR_SKIP_MODEL_NAME_VALIDATION",
         action = ArgAction::Set,
         value_parser = parse_truthy_flag,
         default_value = "0"
@@ -702,7 +702,7 @@ pub struct SharedRuntimeArgs {
     #[serde(default)]
     pub dphn_network_config: Option<DphnNetworkArgs>,
 
-    /// Unsupported Python Aphrodite frontend arguments recognized but not yet
+    /// Unsupported Python Sonar frontend arguments recognized but not yet
     /// implemented in Rust.
     #[educe(Debug(ignore))]
     #[command(flatten)]
@@ -723,7 +723,7 @@ pub struct DphnNetworkArgs {
 }
 
 impl SharedRuntimeArgs {
-    fn resolved_dphn_config(&self) -> Option<aphrodite_server::DphnNetworkConfig> {
+    fn resolved_dphn_config(&self) -> Option<sonar_server::DphnNetworkConfig> {
         if !self.dphn_network && self.dphn_network_config.is_none() {
             return None;
         }
@@ -731,7 +731,7 @@ impl SharedRuntimeArgs {
         // Environment defaults apply only after explicit opt-in.
         let env =
             |variable: &str| self.dphn_network.then(|| std::env::var(variable).ok()).flatten();
-        Some(aphrodite_server::DphnNetworkConfig {
+        Some(sonar_server::DphnNetworkConfig {
             public_key: args.public_key.or_else(|| env("DPHN_PUBLIC_KEY")).unwrap_or_default(),
             worker_id: args.worker_id.or_else(|| env("DPHN_WORKER_ID")).unwrap_or_default(),
             model_manifest_id: args
@@ -825,28 +825,27 @@ impl SharedRuntimeArgs {
         lookup: impl Fn(&str) -> Option<String>,
     ) -> Result<(), String> {
         if self.api_key.is_empty()
-            && let Some(api_key) = lookup("APHRODITE_API_KEY")
+            && let Some(api_key) = lookup("SONAR_API_KEY")
         {
             self.api_key.push(api_key);
         }
-        if let Some(value) = lookup("APHRODITE_LOG_STATS_INTERVAL") {
+        if let Some(value) = lookup("SONAR_LOG_STATS_INTERVAL") {
             let interval = value
                 .parse()
-                .map_err(|error| format!("invalid APHRODITE_LOG_STATS_INTERVAL: {error}"))?;
+                .map_err(|error| format!("invalid SONAR_LOG_STATS_INTERVAL: {error}"))?;
             self.log_stats_interval = Some(interval);
         }
-        if let Some(value) = lookup("APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION") {
+        if let Some(value) = lookup("SONAR_DISABLE_REQUEST_ID_RANDOMIZATION") {
             self.disable_request_id_randomization = parse_int_flag(&value).map_err(|error| {
-                format!("invalid APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION: {error}")
+                format!("invalid SONAR_DISABLE_REQUEST_ID_RANDOMIZATION: {error}")
             })?;
         }
-        if let Some(value) = lookup("APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE") {
-            let size = parse_byte_count(&value).map_err(|error| {
-                format!("invalid APHRODITE_HTTP_MAX_REQUEST_BODY_SIZE: {error}")
-            })?;
+        if let Some(value) = lookup("SONAR_HTTP_MAX_REQUEST_BODY_SIZE") {
+            let size = parse_byte_count(&value)
+                .map_err(|error| format!("invalid SONAR_HTTP_MAX_REQUEST_BODY_SIZE: {error}"))?;
             self.http_max_request_body_size = Some(size);
         }
-        if let Some(value) = lookup("APHRODITE_SKIP_MODEL_NAME_VALIDATION") {
+        if let Some(value) = lookup("SONAR_SKIP_MODEL_NAME_VALIDATION") {
             self.skip_model_name_validation = parse_truthy_flag(&value)?;
         }
         Ok(())
@@ -1137,7 +1136,7 @@ pub struct StructuredOutputsConfig {
 /// Keys are API effort names, so unknown efforts fail at startup.
 type ReasoningEffortMap = HashMap<ReasoningEffort, String>;
 
-/// Parsed `APHRODITE_LOG_STATS_INTERVAL`.
+/// Parsed `SONAR_LOG_STATS_INTERVAL`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogStatsInterval {
     Every(Duration),
@@ -1145,7 +1144,7 @@ pub enum LogStatsInterval {
     Never,
 }
 
-/// Parse `APHRODITE_LOG_STATS_INTERVAL` seconds like Python: a non-positive value
+/// Parse `SONAR_LOG_STATS_INTERVAL` seconds like Python: a non-positive value
 /// falls back to the default, and any positive one is slept on as is.
 impl FromStr for LogStatsInterval {
     type Err = String;
@@ -1259,7 +1258,7 @@ impl FrontendArgs {
 /// user.
 #[derive(Educe, Clone, Args, PartialEq, Eq)]
 #[educe(Debug)]
-#[command(override_usage = "aphrodite-rs serve <MODEL> [OPTIONS] [-- <PYTHON_ARGS>...]")]
+#[command(override_usage = "sonar-rs serve <MODEL> [OPTIONS] [-- <PYTHON_ARGS>...]")]
 pub struct ServeArgs {
     /// Only launch the managed Python headless engine and do not start the Rust
     /// frontend.
@@ -1281,7 +1280,7 @@ pub struct ServeArgs {
 
     /// Flag to print debug information about CLI argument parsing and exit.
     #[educe(Debug(ignore))]
-    #[arg(long, hide = true, env = "APHRODITE_RS_DEBUG_CLI")]
+    #[arg(long, hide = true, env = "SONAR_RS_DEBUG_CLI")]
     pub debug_cli: bool,
 
     /// Shared frontend arguments.
@@ -1392,20 +1391,20 @@ fn effective_engine_reasoning_parser(selection: &ParserSelection, model: &str) -
 /// Allocate a fresh IPC handshake endpoint for a frontend that serves only its
 /// node's engines (hybrid or external DP LB).
 pub fn frontend_ipc_handshake_address() -> String {
-    let preferred_base_path = std::env::var_os("APHRODITE_RPC_BASE_PATH")
+    let preferred_base_path = std::env::var_os("SONAR_RPC_BASE_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    let handshake = preferred_base_path.join(format!("aphrodite-rs-h-{}", Uuid::new_v4().simple()));
+    let handshake = preferred_base_path.join(format!("sonar-rs-h-{}", Uuid::new_v4().simple()));
     format!("ipc://{}", handshake.to_string_lossy())
 }
 
 /// Allocate fresh IPC endpoints for one managed frontend instance.
 fn frontend_ipc_addresses() -> (String, String) {
-    let preferred_base_path = std::env::var_os("APHRODITE_RPC_BASE_PATH")
+    let preferred_base_path = std::env::var_os("SONAR_RPC_BASE_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    let input_name = format!("aphrodite-rs-i-{}", Uuid::new_v4().simple());
-    let output_name = format!("aphrodite-rs-o-{}", Uuid::new_v4().simple());
+    let input_name = format!("sonar-rs-i-{}", Uuid::new_v4().simple());
+    let output_name = format!("sonar-rs-o-{}", Uuid::new_v4().simple());
 
     let input = preferred_base_path.join(input_name);
     let output = preferred_base_path.join(output_name);

@@ -8,45 +8,45 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
-import aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 as nvfp4_oracle
-from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode, fused_topk
-from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
-from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
+import sonar.model_executor.layers.fused_moe.modular_kernel as mk
+import sonar.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
+import sonar.model_executor.layers.fused_moe.oracle.nvfp4 as nvfp4_oracle
+from sonar import _custom_ops as ops
+from sonar.config import ParallelConfig, SonarConfig, set_current_sonar_config
+from sonar.model_executor.layers.fused_moe import b12x_fused_decode, fused_topk
+from sonar.model_executor.layers.fused_moe.activation import MoEActivation
+from sonar.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
-from aphrodite.model_executor.layers.fused_moe.b12x import B12xExperts
-from aphrodite.model_executor.layers.fused_moe.config import (
+from sonar.model_executor.layers.fused_moe.b12x import B12xExperts
+from sonar.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
     mxfp4_w4a16_moe_quant_config,
     nvfp4_w4a16_moe_quant_config,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.mxfp4 import (
     Mxfp4MoeBackend,
     select_deepseek_v4_mxfp4_moe_backend,
     select_mxfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 import (
+from sonar.model_executor.layers.fused_moe.oracle.nvfp4 import (
     NvFp4MoeBackend,
     select_nvfp4_moe_backend,
 )
-from aphrodite.model_executor.layers.quantization.utils.b12x_moe import (
+from sonar.model_executor.layers.quantization.utils.b12x_moe import (
     prepare_nvfp4_moe_layer_for_b12x,
 )
-from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import mxfp4_quantize
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+from sonar.model_executor.layers.quantization.utils.mxfp4_utils import mxfp4_quantize
+from sonar.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Static,
     kMxfp8Dynamic,
     kNvfp4Dynamic,
     kNvfp4Static,
 )
-from aphrodite.model_executor.warmup.b12x_warmup import warmup_b12x_model
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
+from sonar.model_executor.warmup.b12x_warmup import warmup_b12x_model
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config
 from tests.kernels.quantization.nvfp4_utils import (
     convert_swizzled_to_linear,
@@ -426,7 +426,7 @@ def test_explicit_b12x_mxfp4_selection(
     monkeypatch.setattr(mxfp4_oracle, "_user_moe_activation_override", lambda: None)
     monkeypatch.setattr(
         mxfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         force_a16,
     )
     config = make_dummy_moe_config(hidden_dim=256, intermediate_size=64)
@@ -448,7 +448,7 @@ def test_explicit_b12x_mxfp4_force_a16_uses_a16_contract(
     monkeypatch.setattr(mxfp4_oracle, "_user_moe_activation_override", lambda: None)
     monkeypatch.setattr(
         mxfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         True,
     )
     config = make_dummy_moe_config(hidden_dim=128, intermediate_size=64)
@@ -478,7 +478,7 @@ def test_deepseek_v4_b12x_activation_selection(
     monkeypatch.setattr(B12xExperts, "_supports_current_device", lambda: True)
     monkeypatch.setattr(
         mxfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         force_a16,
     )
     config = make_dummy_moe_config(hidden_dim=256, intermediate_size=64)
@@ -495,7 +495,7 @@ def test_deepseek_v4_flashinfer_cutlass_falls_through_to_w4a8(
 ) -> None:
     """Explicit flashinfer_cutlass must try the W4A8 variant when the BF16
     variant is unsupported (the BF16 variant is gated to SM90)."""
-    from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
+    from sonar.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe import (
         FlashInferExperts,
     )
 
@@ -524,7 +524,7 @@ def test_b12x_mxfp4_falls_back_to_a16(
     monkeypatch.setattr(mxfp4_oracle, "_user_moe_activation_override", lambda: None)
     monkeypatch.setattr(
         mxfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         False,
     )
     config = make_dummy_moe_config(hidden_dim=128, intermediate_size=64)
@@ -555,7 +555,7 @@ def test_explicit_b12x_nvfp4_selection(
     monkeypatch.setattr(B12xExperts, "_supports_current_device", lambda: True)
     monkeypatch.setattr(
         nvfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         force_a16,
     )
     config = make_dummy_moe_config(hidden_dim=128, intermediate_size=64, activation=activation)
@@ -584,7 +584,7 @@ def test_b12x_nvfp4_force_a16_updates_quant_config(
 ) -> None:
     monkeypatch.setattr(
         nvfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
+        "SONAR_B12X_MOE_FP4_FORCE_A16",
         force_a16,
     )
     scale = torch.ones(1)
@@ -845,7 +845,7 @@ def test_b12x_moe_matches_torch(
     activation: MoEActivation,
     workspace_init,
 ) -> None:
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         case = _make_b12x_moe_case(
             weight_dtype,
             activation_dtype,
@@ -985,9 +985,9 @@ def test_b12x_moe_cuda_graph_replay(
     activation: MoEActivation,
     workspace_init,
 ) -> None:
-    from aphrodite.v1.worker.workspace import lock_workspace
+    from sonar.v1.worker.workspace import lock_workspace
 
-    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
+    with set_current_sonar_config(SonarConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         case = _make_b12x_moe_case(
             weight_dtype,
             activation_dtype,
@@ -1120,7 +1120,7 @@ def test_b12x_moe_cuda_graph_replay(
 @pytest.mark.skipif(not _has_b12x_moe(), reason="requires b12x MoE on SM120")
 @torch.inference_mode()
 def test_b12x_moe_warmup_prepares_each_owner_for_static_decode(workspace_init) -> None:
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         layers = torch.nn.ModuleList([torch.nn.Module(), torch.nn.Module()])
         cases = [
             _make_b12x_moe_case(
@@ -1208,7 +1208,7 @@ def test_b12x_block_quant_relu2_moe_graph(codec, tokens, workspace_init):
 
     from tests.model_executor.kernels.test_b12x_linear import _block_weights
 
-    with set_current_aphrodite_config(AphroditeConfig()):
+    with set_current_sonar_config(SonarConfig()):
         torch.manual_seed(71)
         e, h, i, topk = 4, 256, 256, 2
         raw1, raw2 = _block_weights(e * i, h, codec), _block_weights(e * h, i, codec)
@@ -1216,7 +1216,7 @@ def test_b12x_block_quant_relu2_moe_graph(codec, tokens, workspace_init):
         w2 = raw2.view(e, h, *raw2.shape[1:]).cuda()
         x = torch.randn(tokens, h, device="cuda", dtype=torch.bfloat16) * 0.125
         scores = torch.randn(tokens, e, device="cuda", dtype=torch.bfloat16)
-        from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantDesc
+        from sonar.model_executor.layers.fused_moe.config import FusedMoEQuantDesc
 
         quant = FusedMoEQuantConfig(
             _a1=FusedMoEQuantDesc(),

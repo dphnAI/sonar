@@ -9,12 +9,12 @@ import pytest
 from huggingface_hub.utils import HfHubHTTPError
 from torch import nn
 
-from aphrodite.lora.utils import (
+from sonar.lora.utils import (
     get_adapter_absolute_path,
     parse_fine_tuned_lora_name,
     replace_submodule,
 )
-from aphrodite.model_executor.models.utils import WeightsMapper
+from sonar.model_executor.models.utils import WeightsMapper
 
 
 class LoRANameParserTestConfig(NamedTuple):

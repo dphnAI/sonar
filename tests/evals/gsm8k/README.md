@@ -4,7 +4,7 @@ This directory contains a replacement for the lm-eval-harness GSM8K evaluation, 
 
 ## Usage
 
-### Run tests with pytest (like buildkite)
+### Run tests with pytest
 
 ```bash
 pytest -s -v tests/evals/gsm8k/test_gsm8k_correctness.py \
@@ -15,7 +15,7 @@ pytest -s -v tests/evals/gsm8k/test_gsm8k_correctness.py \
 
 ```bash
 # Start the Sonar server first
-aphrodite serve Qwen/Qwen2.5-1.5B-Instruct --port 8000
+sonar serve Qwen/Qwen2.5-1.5B-Instruct --port 8000
 
 # Run evaluation
 python tests/evals/gsm8k/gsm8k_eval.py --port 8000
@@ -48,9 +48,9 @@ num_questions: 1319       # Number of questions (default: full test set)
 num_fewshot: 5            # Few-shot examples from train set
 server_args: "--max-model-len 4096 --tensor-parallel-size 2 --moe-backend flashinfer_cutlass"  # Server arguments
 env:                      # Environment variables (optional)
-  APHRODITE_LOGGING_LEVEL: "DEBUG"
+  SONAR_LOGGING_LEVEL: "DEBUG"
 ```
 
-The `server_args` field accepts any arguments that can be passed to `aphrodite serve`.
+The `server_args` field accepts any arguments that can be passed to `sonar serve`.
 
 The `env` field accepts a dictionary of environment variables to set for the server process.

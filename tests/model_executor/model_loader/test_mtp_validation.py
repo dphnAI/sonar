@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.model_executor.model_loader.mtp_validation import (
+from sonar.model_executor.model_loader.mtp_validation import (
     disable_mtp_completeness_check,
     is_mtp_completeness_check_enabled,
 )

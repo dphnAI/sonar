@@ -10,11 +10,11 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_torch_equal_or_newer, set_random_seed
+from sonar.config import SonarConfig, set_current_sonar_config
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.fused_moe import FusedMoEFactory
+from sonar.platforms import current_platform
+from sonar.utils.torch_utils import is_torch_equal_or_newer, set_random_seed
 
 
 class SimpleLinear(nn.Module):
@@ -129,9 +129,9 @@ def test_routed_input_transform_inside_vs_outside(
     Method B (outside): Manually transform, then FusedMoEFactory without transform
     """
     if current_platform.is_rocm():
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1" if use_rocm_aiter else "0")
-        monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_MOE", "1" if use_rocm_aiter else "0")
-        from aphrodite._aiter_ops import rocm_aiter_ops
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER", "1" if use_rocm_aiter else "0")
+        monkeypatch.setenv("SONAR_ROCM_USE_AITER_MOE", "1" if use_rocm_aiter else "0")
+        from sonar._aiter_ops import rocm_aiter_ops
 
         rocm_aiter_ops.refresh_env_variables()
 
@@ -141,13 +141,13 @@ def test_routed_input_transform_inside_vs_outside(
     top_k = 2
     intermediate_size = hidden_size * 2
 
-    aphrodite_config = AphroditeConfig()
-    aphrodite_config.compilation_config.static_forward_context = dict()
+    sonar_config = SonarConfig()
+    sonar_config.compilation_config.static_forward_context = dict()
 
     shared_experts = SimpleSharedExperts(hidden_size, intermediate_size, dtype)
     routed_transform = SimpleLinear(hidden_size, latent_size, dtype)
 
-    with set_current_aphrodite_config(aphrodite_config):
+    with set_current_sonar_config(sonar_config):
         # Method A: FusedMoEFactory WITH routed_input_transform
         moe_with_transform = FusedMoEFactory(
             shared_experts=shared_experts,
@@ -197,7 +197,7 @@ def test_routed_input_transform_inside_vs_outside(
         hidden_states = torch.randn(num_tokens, hidden_size, device="cuda", dtype=dtype)
         router_logits = torch.randn(num_tokens, num_experts, device="cuda", dtype=dtype)
 
-        with set_forward_context(None, aphrodite_config, num_tokens=num_tokens):
+        with set_forward_context(None, sonar_config, num_tokens=num_tokens):
             # Method A: combined output (shared + routed)
             combined_A = moe_with_transform(hidden_states, router_logits)
 

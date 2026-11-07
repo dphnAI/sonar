@@ -17,4 +17,4 @@ server_args: >-
   --attention-config '{"hisparse_config":{}}'
   --kv-transfer-config '{"kv_connector":"HiSparseConnector","kv_role":"kv_both","kv_connector_extra_config":{"host_pool_gib":32}}'
 env:
-  APHRODITE_USE_V2_MODEL_RUNNER: "1"
+  SONAR_USE_V2_MODEL_RUNNER: "1"

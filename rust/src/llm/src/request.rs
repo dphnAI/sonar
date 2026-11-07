@@ -3,12 +3,12 @@
 
 use std::collections::BTreeMap;
 
-use aphrodite_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
-use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
-use aphrodite_engine_core_client::protocol::request::{EngineCoreRequest, ReasoningParserKwargs};
-use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use serde::Deserialize;
+use sonar_engine_core_client::protocol::kv_hints::KvHintsEnvelope;
+use sonar_engine_core_client::protocol::lora::LoraRequest;
+use sonar_engine_core_client::protocol::multimodal::MmFeatures;
+use sonar_engine_core_client::protocol::request::{EngineCoreRequest, ReasoningParserKwargs};
+use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use uuid::Uuid;
 
 use crate::error::{Error, Result};
@@ -31,7 +31,7 @@ pub struct GenerateRequest {
     pub prompt_token_ids: Vec<u32>,
     /// Sampling parameters forwarded to engine-core.
     pub sampling_params: EngineCoreSamplingParams,
-    /// Optional multimodal features already prepared by `aphrodite-chat`.
+    /// Optional multimodal features already prepared by `sonar-chat`.
     pub mm_features: Option<MmFeatures>,
     /// Unix timestamp, in seconds, when this request arrived at the frontend.
     ///
@@ -173,10 +173,10 @@ impl PreparedGenerateRequest {
 mod tests {
     use std::collections::BTreeMap;
 
-    use aphrodite_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
-    use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
-    use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
     use serde_json::json;
+    use sonar_engine_core_client::protocol::kv_hints::{KvHintAction, KvHintsEnvelope};
+    use sonar_engine_core_client::protocol::request::ReasoningParserKwargs;
+    use sonar_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 
     use super::GenerateRequest;
     use crate::error::Error;

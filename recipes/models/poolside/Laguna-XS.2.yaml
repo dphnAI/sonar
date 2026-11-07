@@ -59,7 +59,7 @@ variants:
     min_vllm_version: "0.22.0"
     description: "Block-FP8 weights + FP8 KV cache — halves VRAM, fits on a single 40GB+ GPU"
     extra_env:
-      APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
+      SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER: "0"
   nvfp4:
     model_id: "poolside/Laguna-XS.2-NVFP4"
     precision: nvfp4
@@ -115,7 +115,7 @@ guide: |
 
   ## Prerequisites
 
-  Laguna XS.2 support is on the open Aphrodite PR ([vllm-project/vllm#41129](https://github.com/vllm-project/vllm/pull/41129)) — install from a nightly wheel or the pinned Docker image below until the PR lands in a stable release.
+  Laguna XS.2 support is on the open Sonar PR ([vllm-project/vllm#41129](https://github.com/vllm-project/vllm/pull/41129)) — install from a nightly wheel or the pinned Docker image below until the PR lands in a stable release.
 
   ### Docker (recommended)
   ```bash
@@ -126,10 +126,10 @@ guide: |
   ```bash
   uv venv
   source .venv/bin/activate
-  uv pip install -U aphrodite-engine --pre \
-    --extra-index-url https://wheels.vllm.ai/nightly/cu130 \
+  uv pip install -U sonar --torch-backend cu130 --pre \
+    --extra-index-url https://sonar.dphn.ai/whl/nightly/cuda/x86_64/simple \
     --extra-index-url https://download.pytorch.org/whl/cu130 \
-    --index-strategy unsafe-best-match
+    --index-strategy first-index
   ```
 
   ## Quantized variants
@@ -139,19 +139,19 @@ guide: |
   | Variant | Checkpoint | Weights | ~VRAM | Notes |
   |---------|-----------|---------|-------|-------|
   | BF16 | [Laguna-XS.2](https://huggingface.co/poolside/Laguna-XS.2) | BF16 | 80 GB | Default |
-  | FP8 | [Laguna-XS.2-FP8](https://huggingface.co/poolside/Laguna-XS.2-FP8) | Block-FP8 | 40 GB | Set `APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
+  | FP8 | [Laguna-XS.2-FP8](https://huggingface.co/poolside/Laguna-XS.2-FP8) | Block-FP8 | 40 GB | Set `SONAR_BLOCKSCALE_FP8_GEMM_FLASHINFER=0` |
   | NVFP4 | [Laguna-XS.2-NVFP4](https://huggingface.co/poolside/Laguna-XS.2-NVFP4) | NVFP4 | 26 GB | Blackwell only |
   | INT4 | [Laguna-XS.2-INT4](https://huggingface.co/poolside/Laguna-XS.2-INT4) | INT4 (W4A16) | 29 GB | Hopper or Blackwell |
 
   Quantization is detected automatically from each checkpoint's `quantization_config`, so the launch command is identical — just swap the model ID (select the variant above). All three quantized checkpoints ship an **FP8-quantized KV cache**.
 
-  > **Aphrodite ≥ 0.22.0 required for the quantized variants.** The FP8 KV cache needs the per-layer attention-head fix in [aphrodite#42650](https://github.com/vllm-project/vllm/pull/42650); earlier versions produce scrambled output on non-Hopper GPUs. On older Aphrodite you can disable the FP8 KV cache with `--kv-cache-dtype-skip-layers $(seq 0 39)`.
+  > **Sonar ≥ 0.22.0 required for the quantized variants.** The FP8 KV cache needs the per-layer attention-head fix in [sonar#42650](https://github.com/vllm-project/vllm/pull/42650); earlier versions produce scrambled output on non-Hopper GPUs. On older Sonar you can disable the FP8 KV cache with `--kv-cache-dtype-skip-layers $(seq 0 39)`.
 
   ## Deployment Configurations
 
   ### Single GPU (H100/H200/B200, BF16)
   ```bash
-  aphrodite serve poolside/Laguna-XS.2 \
+  sonar serve poolside/Laguna-XS.2 \
     --trust-remote-code \
     --max-model-len 262144 \
     --enable-auto-tool-choice \
@@ -177,7 +177,7 @@ guide: |
   ### AMD MI300X / MI325X / MI355X
 
   ```bash
-  aphrodite serve poolside/Laguna-XS.2 \
+  sonar serve poolside/Laguna-XS.2 \
     --trust-remote-code \
     --max-model-len 262144 \
     --enable-auto-tool-choice \
@@ -233,13 +233,13 @@ guide: |
   Enable the **Spec Decoding** toggle above to attach Poolside's [DFlash draft model](https://huggingface.co/poolside/Laguna-XS.2-speculator.dflash) — a 5-layer Llama-style speculator that proposes up to 7 tokens per step. Reported per-position acceptance with reasoning enabled is ~70% at position 1 across coding, math, QA, and writing workloads.
 
   Requires:
-  - Aphrodite built from [PR #41880](https://github.com/vllm-project/vllm/pull/41880) (extends the base Laguna PR with DFlash support).
-  - `APHRODITE_USE_DEEP_GEMM=0` in the launch environment — DeepGEMM is currently incompatible with the DFlash draft path.
+  - Sonar built from [PR #41880](https://github.com/vllm-project/vllm/pull/41880) (extends the base Laguna PR with DFlash support).
+  - `SONAR_USE_DEEP_GEMM=0` in the launch environment — DeepGEMM is currently incompatible with the DFlash draft path.
 
   Example:
 
   ```bash
-  APHRODITE_USE_DEEP_GEMM=0 aphrodite serve poolside/Laguna-XS.2 \
+  SONAR_USE_DEEP_GEMM=0 sonar serve poolside/Laguna-XS.2 \
     --trust-remote-code \
     --max-model-len 16384 \
     --enable-auto-tool-choice \
@@ -252,6 +252,6 @@ guide: |
 
   - [Model card](https://huggingface.co/poolside/Laguna-XS.2)
   - [Release blog post](https://poolside.ai/blog/laguna-a-deeper-dive)
-  - [Aphrodite support PR #41129](https://github.com/vllm-project/vllm/pull/41129)
-  - [Aphrodite DFlash spec-decoding PR #41880](https://github.com/vllm-project/vllm/pull/41880)
+  - [Sonar support PR #41129](https://github.com/vllm-project/vllm/pull/41129)
+  - [Sonar DFlash spec-decoding PR #41880](https://github.com/vllm-project/vllm/pull/41880)
   - [DFlash draft model](https://huggingface.co/poolside/Laguna-XS.2-speculator.dflash)

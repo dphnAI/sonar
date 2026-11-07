@@ -62,7 +62,7 @@ build_with_current_rust_helper() (
   for helper in "${helpers[@]}"; do
     git show "${target_commit}:${helper}" > "$helper"
   done
-  APHRODITE_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
+  SONAR_VERSION_OVERRIDE="$version" "$PLATFORM_BUILD_SCRIPT" "$output_dir"
 )
 
 upload_wheel() {
@@ -108,7 +108,7 @@ find_commit_wheel() {
   "$rclone" lsf \
     "${remote_root}/commits/${commit}" \
     --files-only \
-    --include '*.whl' 2>/dev/null |
+    --include 'sonar-*.whl' 2>/dev/null |
     head -n 1 || true
 }
 
@@ -150,11 +150,11 @@ write_commit_index() {
     --title "Sonar ${PLATFORM_BACKEND} wheel for ${commit:0:12}" \
     --description "Precompiled ${PLATFORM_BACKEND} wheel for ${PLATFORM_ARCHITECTURE} at commit ${commit}." \
     --install-command \
-    "uv pip install aphrodite-engine --extra-index-url ${public_root}/commits/${commit}/aphrodite-engine --index-strategy first-index" \
+    "uv pip install sonar --extra-index-url ${public_root}/commits/${commit} --index-strategy first-index" \
     --output "$output"
   "$rclone" copyto \
     "$output" \
-    "${remote_root}/commits/${commit}/aphrodite-engine/index.html"
+    "${remote_root}/commits/${commit}/sonar/index.html"
   rm -f "$entries" "$output"
 }
 
@@ -206,6 +206,12 @@ echo "Commits requiring reconciliation: ${#commits[@]}"
 
 # macOS bash 3.2 treats "${empty[@]}" as unbound under set -u.
 for commit in ${commits[@]+"${commits[@]}"}; do
+  # Historical commits before the cutover cannot produce the Sonar distribution.
+  if ! git show "${commit}:pyproject.toml" | grep -E '^name *= *"sonar"$' >/dev/null; then
+    echo "Skipping pre-Sonar commit ${commit}"
+    printf '%s\n' "$commit" | "$rclone" rcat "$state_remote"
+    continue
+  fi
   restore_tracked_build_changes
   git checkout --detach "$commit"
   wheel_name="$(find_commit_wheel "$commit")"
@@ -270,28 +276,31 @@ done < <(
     "$rclone" lsf \
       "${remote_root}/wheels" \
       --files-only \
-      --include '*.whl' 2>/dev/null |
+      --include 'sonar-*.whl' 2>/dev/null |
       sed 's#^#wheels/#'
     "$rclone" lsf \
       "${remote_root}/commits" \
       --recursive \
       --files-only \
-      --include '*.whl' 2>/dev/null |
+      --include 'sonar-*.whl' 2>/dev/null |
       sed 's#^#commits/#'
   } | sort -r
 )
 
 index_dir="${index_root}/whl/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
-package_dir="${index_dir}/simple/aphrodite-engine"
+package_dir="${index_dir}/simple/sonar"
 nightly_dir="${index_root}/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
 mkdir -p "$package_dir" "$nightly_dir"
+install_command="uv pip install sonar --extra-index-url https://sonar.dphn.ai/whl/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}/simple --index-strategy first-index"
+if [[ "$PLATFORM_BACKEND" == cpu ]]; then
+  install_command="curl -LsSf https://sonar.dphn.ai/install.sh | sh -s -- --backend cpu --channel nightly"
+fi
 python3 .github/scripts/generate_nightly_index.py \
   --entry-file "$entries" \
   --commit "$target_commit" \
   --title "Sonar nightly ${PLATFORM_BACKEND} wheels" \
   --description "Precompiled ${PLATFORM_BACKEND} wheels for ${PLATFORM_ARCHITECTURE} from every commit on main." \
-  --install-command \
-  "uv pip install aphrodite-engine --extra-index-url https://sonar.dphn.ai/whl/nightly/${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}/simple --index-strategy first-index" \
+  --install-command "$install_command" \
   --output "${index_dir}/index.html"
 cp "${index_dir}/index.html" "${package_dir}/index.html"
 cp "${index_dir}/index.html" "${nightly_dir}/index.html"
@@ -303,5 +312,5 @@ if [[ -z "$tip_wheel" ]]; then
   exit 1
 fi
 "$rclone" copyto \
-  "${remote_root}/commits/${target_commit}/aphrodite-engine/index.html" \
-  "${remote_root}/aphrodite-engine/index.html"
+  "${remote_root}/commits/${target_commit}/sonar/index.html" \
+  "${remote_root}/sonar/index.html"

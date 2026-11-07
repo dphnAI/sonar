@@ -9,12 +9,6 @@ use std::convert::Infallible;
 use std::result::Result;
 use std::sync::Arc;
 
-use aphrodite_chat::{
-    AssistantBlockKind, AssistantMessageExt as _, ChatEvent, ChatEventStream, ChatEventStreamTrait,
-    ChatRequest, CollectedAssistantMessage, FinishReason,
-};
-use aphrodite_engine_core_client::protocol::output::StopReason;
-use aphrodite_llm::WeightVersionSpan;
 use asynk_strim_attr::{TryYielder, try_stream};
 use axum::Json;
 use axum::extract::State;
@@ -23,6 +17,12 @@ use axum::response::sse::Event;
 use axum::response::{IntoResponse, Response};
 use futures::{Stream, StreamExt as _, pin_mut};
 use serde_json::Value;
+use sonar_chat::{
+    AssistantBlockKind, AssistantMessageExt as _, ChatEvent, ChatEventStream, ChatEventStreamTrait,
+    ChatRequest, CollectedAssistantMessage, FinishReason,
+};
+use sonar_engine_core_client::protocol::output::StopReason;
+use sonar_llm::WeightVersionSpan;
 use thiserror_ext::AsReport as _;
 use tracing::{debug, error, info, trace};
 use tracing_futures::Instrument as _;
@@ -61,7 +61,7 @@ pub(crate) fn lower_chat_request(
 }
 
 /// Validate one chat completion request and proxy it into the shared
-/// `aphrodite-chat` stack.
+/// `sonar-chat` stack.
 pub async fn chat_completions(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -699,7 +699,7 @@ impl UpdateOutput {
 /// Per-update delta logging of one chat stream (`--enable-log-deltas`).
 ///
 /// Each update is held until the next one ends or the stream finishes, so the
-/// last delta line carries the finish reason: `aphrodite-chat` emits `Done` after
+/// last delta line carries the finish reason: `sonar-chat` emits `Done` after
 /// the last update's `LogprobsDelta`, and a parser may release held-back output
 /// in between, which belongs to that last update.
 #[derive(Debug)]
@@ -760,14 +760,14 @@ impl Drop for StreamDeltaLog {
 
 /// One in-flight chat-completions SSE chunk being assembled at the route layer.
 ///
-/// `aphrodite-chat` emits semantic chat events first and `LogprobsDelta` separately,
+/// `sonar-chat` emits semantic chat events first and `LogprobsDelta` separately,
 /// because one decoded update may be rewritten into multiple chat events.
 /// The OpenAI chat API, though, wants one streamed chunk to optionally carry
 /// both the delta and its logprobs.
 ///
 /// This small buffer accumulates the semantic delta first, then attaches the
 /// following `LogprobsDelta` and flushes one combined chunk. It relies on the
-/// current `aphrodite-chat` invariant that all semantic events from one decoded
+/// current `sonar-chat` invariant that all semantic events from one decoded
 /// update are emitted before that update's `LogprobsDelta`.
 #[derive(Debug, Default)]
 struct PendingChatChunk {
@@ -1078,14 +1078,14 @@ fn stop_reason_to_json(stop_reason: &StopReason) -> Value {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_chat::{
+    use futures::{StreamExt as _, stream};
+    use serde_json::json;
+    use sonar_chat::{
         AssistantBlockKind, AssistantContentBlock, AssistantToolCall, ChatEvent, ChatTokenUsage,
         FinishReason,
     };
-    use aphrodite_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
-    use aphrodite_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedTokenLogprob};
-    use futures::{StreamExt as _, stream};
-    use serde_json::json;
+    use sonar_engine_core_client::protocol::output::{RequestSpecDecodeMetrics, StopReason};
+    use sonar_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedTokenLogprob};
 
     use super::{
         ApiServerOptions, ChatCompletionStreamResponse, ResponseOptions, StreamResponseEnvelope,
@@ -1098,10 +1098,10 @@ mod tests {
         output_tokens: usize,
         cached_tokens: usize,
     ) -> ChatTokenUsage {
-        aphrodite_llm::TokenUsage {
+        sonar_llm::TokenUsage {
             prompt_token_count: prompt_tokens,
             output_token_count: output_tokens,
-            prompt_cache_usage: aphrodite_llm::PromptCacheUsage {
+            prompt_cache_usage: sonar_llm::PromptCacheUsage {
                 cached_token_count: cached_tokens,
                 cache_creation_token_count: 0,
             },
@@ -1263,7 +1263,7 @@ mod tests {
             Ok(ChatEvent::Done {
                 message: Default::default(),
                 usage: done_usage(1, 1, 1),
-                timestamps: aphrodite_llm::RequestTimestamps {
+                timestamps: sonar_llm::RequestTimestamps {
                     queued_ts: 10.0,
                     scheduled_ts: 10.2,
                     first_token_ts: 10.5,
@@ -1937,7 +1937,7 @@ mod tests {
             Ok(ChatEvent::Done {
                 message: Default::default(),
                 usage: ChatTokenUsage {
-                    engine: aphrodite_llm::TokenUsage {
+                    engine: sonar_llm::TokenUsage {
                         prompt_token_count: 3,
                         output_token_count: 3,
                         prompt_cache_usage: Default::default(),
@@ -2013,7 +2013,7 @@ mod tests {
             Ok(ChatEvent::Done {
                 message: Default::default(),
                 usage: ChatTokenUsage {
-                    engine: aphrodite_llm::TokenUsage {
+                    engine: sonar_llm::TokenUsage {
                         prompt_token_count: 1,
                         output_token_count: 2,
                         prompt_cache_usage: Default::default(),

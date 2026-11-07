@@ -9,22 +9,22 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.data import (
     BlockTransferPlan,
     KVLayoutDescriptor,
     RankTopology,
     TransferJobState,
     TransferJobStatus,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime.base import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime.base import (
     IUMBPRuntime,
     UMBPSchedulerHandle,
     UMBPWorkerHandle,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
+from sonar.distributed.kv_transfer.kv_connector.v1.umbp.runtime.factory import (
     UMBPRuntimeFactory,
 )
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -285,7 +285,7 @@ def _hybrid_kv_cache_config() -> KVCacheConfig:
     )
 
 
-def _aphrodite_config(extra: dict, prefix_match_unit: int | None = None, **parallel_overrides) -> SimpleNamespace:
+def _sonar_config(extra: dict, prefix_match_unit: int | None = None, **parallel_overrides) -> SimpleNamespace:
     parallel = {
         "tensor_parallel_size": 1,
         "pipeline_parallel_size": 1,

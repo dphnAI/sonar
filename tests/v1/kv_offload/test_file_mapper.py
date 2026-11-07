@@ -5,11 +5,11 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from aphrodite.v1.kv_offload.base import (
+from sonar.v1.kv_offload.base import (
     OffloadingSpec,
     make_offload_key,
 )
-from aphrodite.v1.kv_offload.file_mapper import FileMapper
+from sonar.v1.kv_offload.file_mapper import FileMapper
 
 
 def make_mapper_from_offloading_spec(**kwargs) -> FileMapper:
@@ -89,7 +89,7 @@ def test_get_run_config_fields():
         "dcp_size": 1,
         "dtype": "bfloat16",
         "kv_cache_groups": [],
-        "inference_engine": "aphrodite",
+        "inference_engine": "sonar",
         "parallel_agnostic": False,
     }
 

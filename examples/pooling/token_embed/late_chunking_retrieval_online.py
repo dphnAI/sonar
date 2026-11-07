@@ -4,7 +4,7 @@
 """Index contextual chunks and retrieve source excerpts with multilingual E5.
 
 Start the server with:
-    aphrodite serve intfloat/multilingual-e5-small --runner pooling \
+    sonar serve intfloat/multilingual-e5-small --runner pooling \
         --pooler-config.task token_embed --max-model-len 512
 
 Then run this file to search an in-memory index. Use --index-path to save it.

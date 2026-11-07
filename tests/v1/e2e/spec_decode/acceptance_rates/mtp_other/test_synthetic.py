@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from aphrodite import SamplingParams
-from aphrodite.config import CompilationConfig
+from sonar import SamplingParams
+from sonar.config import CompilationConfig
 from tests.utils import single_gpu_only
 
 from ...utils import compute_acceptance_len, get_test_prompts
 
 
 @single_gpu_only
-def test_synthetic_acceptance_rate(aphrodite_runner):
+def test_synthetic_acceptance_rate(sonar_runner):
     """Verify that synthetic rejection sampling produces an acceptance
     length close to the requested mean acceptance length."""
     num_spec_tokens = 3
     expected_acceptance_len = 1.875
     tolerance = 0.15
 
-    with aphrodite_runner(
+    with sonar_runner(
         "meta-llama/Llama-3.2-1B-Instruct",
         block_size=None,
         trust_remote_code=True,

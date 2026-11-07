@@ -5,16 +5,16 @@ import pytest
 import regex as re
 import torch
 
-from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+from sonar.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.models.utils import (
+from sonar.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
     _merge_multimodal_embeddings,
 )
-from aphrodite.platforms import current_platform
+from sonar.platforms import current_platform
 
 DEVICE_TYPE = current_platform.device_type
 

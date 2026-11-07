@@ -7,10 +7,10 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.coordinator import (
     MooncakeStoreCoordinator,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (
     BoundaryPut,
     LoadSpec,
     MooncakeLookupResult,
@@ -19,15 +19,15 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.data impor
     ReqMeta,
     RequestTracker,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
+from sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler import (
     MooncakeStoreScheduler,
     _partial_tail_non_mamba_puts,
 )
-from aphrodite.v1.core.block_pool import BlockPool
-from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
-from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
-from aphrodite.v1.core.sched.output import KVConnectorBlockState
-from aphrodite.v1.kv_cache_interface import (
+from sonar.v1.core.block_pool import BlockPool
+from sonar.v1.core.kv_cache_manager import KVCacheBlocks
+from sonar.v1.core.kv_cache_utils import KVCacheBlock
+from sonar.v1.core.sched.output import KVConnectorBlockState
+from sonar.v1.kv_cache_interface import (
     CircularBufferSpec,
     FullAttentionSpec,
     KVCacheConfig,
@@ -264,7 +264,7 @@ def test_pending_load_for_non_chosen_connector_is_dropped():
     )
     blocks = SimpleNamespace(get_block_ids=lambda: ([1, 2], [9]))
     scheduler.load_specs["req-0"] = LoadSpec(
-        aphrodite_cached_tokens=0,
+        sonar_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=False,
     )
@@ -309,7 +309,7 @@ def _make_qsa_hybrid_cache_config():
 
 
 def test_scheduler_projects_nonprefix_groups_and_mamba_ids():
-    aphrodite_config = SimpleNamespace(
+    sonar_config = SimpleNamespace(
         speculative_config=None,
         kv_transfer_config=SimpleNamespace(kv_role="kv_both", kv_connector_extra_config={}),
         kv_events_config=None,
@@ -317,8 +317,8 @@ def test_scheduler_projects_nonprefix_groups_and_mamba_ids():
         parallel_config=SimpleNamespace(decode_context_parallel_size=1, world_size=1),
     )
 
-    with patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
-        scheduler = MooncakeStoreScheduler(aphrodite_config, _make_qsa_hybrid_cache_config())
+    with patch("sonar.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"):
+        scheduler = MooncakeStoreScheduler(sonar_config, _make_qsa_hybrid_cache_config())
 
     assert scheduler._store_group_ids == (0, 2)
     assert scheduler._boundary_state_group_ids == frozenset({1})
@@ -527,7 +527,7 @@ def test_preemption_clears_stale_load_state():
         block_ids=([10, 11, 12],),
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        aphrodite_cached_tokens=0,
+        sonar_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -586,7 +586,7 @@ def test_pending_load_does_not_co_queue_save():
         block_hashes=[b"h0", b"h1", b"h2"],
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        aphrodite_cached_tokens=0,
+        sonar_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -655,7 +655,7 @@ def test_resumed_from_preemption_with_load_skips_save():
         num_computed_tokens=0,
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        aphrodite_cached_tokens=0,
+        sonar_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -770,7 +770,7 @@ def test_from_request_tracker_load_overrides_caller_skip_save():
         allocated_block_ids=([0, 1, 2],),
         num_saved_tokens=0,
     )
-    load_spec = LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=48, can_load=True)
+    load_spec = LoadSpec(sonar_cached_tokens=0, kvpool_cached_tokens=48, can_load=True)
 
     req_meta = ReqMeta.from_request_tracker(
         tracker,
@@ -795,7 +795,7 @@ def test_from_request_tracker_load_with_can_load_false_still_saves():
         allocated_block_ids=([0, 1, 2],),
         num_saved_tokens=0,
     )
-    load_spec = LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=48, can_load=False)
+    load_spec = LoadSpec(sonar_cached_tokens=0, kvpool_cached_tokens=48, can_load=False)
 
     req_meta = ReqMeta.from_request_tracker(
         tracker,
@@ -933,7 +933,7 @@ def test_full_external_hit_keeps_kvpool_cached_tokens_block_aligned():
     assert load_async is True
     load_spec = scheduler.load_specs["req-0"]
     assert scheduler.client.num_tokens == [48]
-    assert load_spec.aphrodite_cached_tokens == 16
+    assert load_spec.sonar_cached_tokens == 16
     assert load_spec.kvpool_cached_tokens == 32
     assert load_spec.kvpool_cached_tokens % 16 == 0
 
@@ -978,7 +978,7 @@ def test_partial_hash_hit_block_aligned_local_loads_partial_tail():
     assert need_to_allocate == 8
     assert load_async is True
     load_spec = scheduler.load_specs["req-0"]
-    assert load_spec.aphrodite_cached_tokens == 16
+    assert load_spec.sonar_cached_tokens == 16
     assert load_spec.kvpool_cached_tokens == 24
 
 

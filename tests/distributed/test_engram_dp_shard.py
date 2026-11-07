@@ -22,31 +22,31 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.config import (
-    AphroditeConfig,
+from sonar.config import (
     EngramConfig,
-    get_current_aphrodite_config_or_none,
-    set_current_aphrodite_config,
+    SonarConfig,
+    get_current_sonar_config_or_none,
+    set_current_sonar_config,
 )
-from aphrodite.config.load import LoadConfig
-from aphrodite.config.parallel import ParallelConfig
-from aphrodite.config.scheduler import SchedulerConfig
-from aphrodite.distributed import cleanup_dist_env_and_memory, parallel_state
-from aphrodite.distributed.parallel_state import (
+from sonar.config.load import LoadConfig
+from sonar.config.parallel import ParallelConfig
+from sonar.config.scheduler import SchedulerConfig
+from sonar.distributed import cleanup_dist_env_and_memory, parallel_state
+from sonar.distributed.parallel_state import (
     get_engram_dp_group,
     get_engram_dp_size,
     init_distributed_environment,
     initialize_model_parallel,
 )
-from aphrodite.forward_context import set_forward_context
-from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+from sonar.forward_context import set_forward_context
+from sonar.model_executor.layers.quantization.utils.mxfp8_utils import (
     dequant_mxfp8_to_bf16,
 )
-from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
+from sonar.model_executor.layers.quantization.utils.nvfp4_emulation_utils import (
     convert_swizzled_to_linear,
 )
-from aphrodite.models.deepseek_v41.common import engram as engram_ops
-from aphrodite.models.deepseek_v41.common.engram import (
+from sonar.models.deepseek_v41.common import engram as engram_ops
+from sonar.models.deepseek_v41.common.engram import (
     Engram,
     EngramBatch,
     EngramLayout,
@@ -54,9 +54,9 @@ from aphrodite.models.deepseek_v41.common.engram import (
     engram_head_shard_rank,
     gather_engram_hashes,
 )
-from aphrodite.platforms import current_platform
-from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.system_utils import update_environment_variables
+from sonar.platforms import current_platform
+from sonar.utils.network_utils import get_open_port
+from sonar.utils.system_utils import update_environment_variables
 
 WORLD_SIZE = 4
 DIM, BLOCK = 64, 32
@@ -159,7 +159,7 @@ def test_engram_group_creation_honors_model_and_options(
         return SimpleNamespace(ranks=ranks, rank_in_group=0, world_size=len(ranks))
 
     monkeypatch.setattr(parallel_state, "init_model_parallel_group", make_group)
-    with set_current_aphrodite_config(config):
+    with set_current_sonar_config(config):
         initialize_model_parallel(tensor_model_parallel_size=tp_size, backend="nccl")
     group = get_engram_dp_group()
     assert (group.ranks if group is not None else None) == edp_ranks
@@ -182,7 +182,7 @@ def _worker(rank: int, tp_size: int, port: int) -> None:
     )
     dp_size = WORLD_SIZE // tp_size
     dp_rank, tp_rank = divmod(rank, tp_size)
-    aphrodite_config = AphroditeConfig(
+    sonar_config = SonarConfig(
         parallel_config=ParallelConfig(
             tensor_parallel_size=tp_size,
             data_parallel_size=dp_size,
@@ -196,15 +196,15 @@ def _worker(rank: int, tp_size: int, port: int) -> None:
         ),
     )
     # Supply the resolved Engram settings without constructing a full model.
-    aphrodite_config.engram_config = EngramConfig()
-    aphrodite_config.model_config = SimpleNamespace(
+    sonar_config.engram_config = EngramConfig()
+    sonar_config.model_config = SimpleNamespace(
         architecture="DeepseekV41ForCausalLM",
         is_moe=True,
         sleep_mode_offload_cudagraph=False,
     )
     try:
         init_distributed_environment()
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             initialize_model_parallel(tensor_model_parallel_size=tp_size)
         assert get_engram_dp_size() == dp_size
         assert get_engram_dp_group().ranks == [tp_rank + replica * tp_size for replica in range(dp_size)]
@@ -226,7 +226,7 @@ def _worker(rank: int, tp_size: int, port: int) -> None:
             [False, True] if tp_size > 1 else [False],
         ):
             _check_table(
-                aphrodite_config,
+                sonar_config,
                 cpu_offload,
                 dp_shared_memory,
                 n_heads,
@@ -235,19 +235,19 @@ def _worker(rank: int, tp_size: int, port: int) -> None:
             )
         if tp_size == 1 and p2p:
             # Without NVLink P2P, GPU tables keep the DP collectives.
-            _check_table(aphrodite_config, False, False, 8, False, p2p=False)
+            _check_table(sonar_config, False, False, 8, False, p2p=False)
         if tp_size == 1:
-            _check_fp8_batch(aphrodite_config)
+            _check_fp8_batch(sonar_config)
     finally:
         cleanup_dist_env_and_memory()
 
 
-def _check_fp8_batch(aphrodite_config):
+def _check_fp8_batch(sonar_config):
     """MXFP8 staging matches the tables across peer/all-to-all slots, idle
     replicas and graph replays."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
-    dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+    dp_rank = sonar_config.parallel_config.data_parallel_rank
     layers = []
     for index in range(2):
         weight, scale = _full_table(sum(HEAD_SIZES))
@@ -277,7 +277,7 @@ def _check_fp8_batch(aphrodite_config):
         ids = torch.stack([_make_ids(HEAD_SIZES, tokens, seed + i) for i in (0, 1)], 1)
         with set_forward_context(
             None,
-            aphrodite_config,
+            sonar_config,
             num_tokens=tokens,
             num_tokens_across_dp=torch.tensor(counts, dtype=torch.int32),
         ):
@@ -351,7 +351,7 @@ def _check_shared_storage_lifetime_and_failures(failure):
         assert result.value == 0
         return result
 
-    from aphrodite.models.deepseek_v41.nvidia.ops import engram_host_table
+    from sonar.models.deepseek_v41.nvidia.ops import engram_host_table
 
     with pytest.MonkeyPatch.context() as patch:
         # Exercise the /dev/shm path even where cuMem tables are used.
@@ -407,7 +407,7 @@ def _check_shared_storage_lifetime_and_failures(failure):
 def _check_cumem_host_table(failure):
     """Chunked cuMem tables read back across ranks; a failed allocation or
     import on any rank falls back to /dev/shm on all of them."""
-    from aphrodite.models.deepseek_v41.nvidia.ops import engram_host_table
+    from sonar.models.deepseek_v41.nvidia.ops import engram_host_table
 
     if not engram_host_table.fabric_host_memory_supported():
         return
@@ -439,8 +439,8 @@ def _check_cumem_host_table(failure):
     group.barrier()
 
 
-def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, sequence_parallel, p2p):
-    parallel = aphrodite_config.parallel_config
+def _check_table(sonar_config, cpu_offload, dp_shared_memory, n_heads, sequence_parallel, p2p):
+    parallel = sonar_config.parallel_config
     dp_size, tp_size = parallel.data_parallel_size, parallel.tensor_parallel_size
     dp_rank = parallel.data_parallel_rank
     tp_rank = engram_ops.get_tensor_model_parallel_rank()
@@ -455,7 +455,7 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
             },
         )
         if multithread
-        else aphrodite_config.load_config
+        else sonar_config.load_config
     )
     with pytest.MonkeyPatch.context() as m:
         head_sizes = HEAD_SIZES[:n_heads]
@@ -473,7 +473,7 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
             engram_pad_token_id=0,
             engram_vocab_size=HEAD_SIZES[0],
         )
-        with set_current_aphrodite_config(aphrodite_config):
+        with set_current_sonar_config(sonar_config):
             weight, scale_inv = _full_table(rows)
             layout = EngramLayout(config)
             # Stub configuration inputs, not Engram's initialization or execution.
@@ -482,11 +482,11 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
                     cpu_offload=cpu_offload,
                     dp_shared_memory=dp_shared_memory,
                 ),
-                scheduler_config=aphrodite_config.scheduler_config,
+                scheduler_config=sonar_config.scheduler_config,
                 load_config=load_config,
             )
             with m.context() as init_patch, torch.device("cuda"):
-                init_patch.setattr(engram_ops, "get_current_aphrodite_config", lambda: component_config)
+                init_patch.setattr(engram_ops, "get_current_sonar_config", lambda: component_config)
                 init_patch.setattr(engram_ops.current_platform, "is_fully_connected", lambda _: p2p)
                 engram = Engram(
                     config,
@@ -522,7 +522,7 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
             token_counts = _token_counts(dp_size)
 
         # Production forward runs after the construction-time config has exited.
-        assert get_current_aphrodite_config_or_none() is None
+        assert get_current_sonar_config_or_none() is None
         for batch_idx, counts in enumerate(token_counts):
             num_tokens = counts[dp_rank]
             # Ids differ per replica but must agree across its TP ranks.
@@ -531,7 +531,7 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
                 ids.fill_(engram_ops.DEAD_ID)
             with set_forward_context(
                 None,
-                aphrodite_config,
+                sonar_config,
                 num_tokens=num_tokens,
                 num_tokens_across_dp=torch.tensor(counts, dtype=torch.int32),
             ):
@@ -552,7 +552,7 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
 
         if cpu_offload and n_heads == 7 and not sequence_parallel and (not dp_shared_memory or tp_size == 1):
             _check_dummy_hash_model_forward(
-                aphrodite_config,
+                sonar_config,
                 engram,
                 head_sizes,
                 weight,
@@ -584,17 +584,17 @@ def _check_table(aphrodite_config, cpu_offload, dp_shared_memory, n_heads, seque
                     layer(ids)
 
 
-def _check_dummy_hash_model_forward(aphrodite_config, engram, head_sizes, weight, scales, dp_shared_memory):
+def _check_dummy_hash_model_forward(sonar_config, engram, head_sizes, weight, scales, dp_shared_memory):
     """A metadata-less replica looks up dead rows, so it joins DP sharding and
     the memory profile sees the Engram activations."""
-    from aphrodite.models.deepseek_v41.common.engram import NgramHashState
+    from sonar.models.deepseek_v41.common.engram import NgramHashState
 
     if current_platform.is_rocm():
-        from aphrodite.models.deepseek_v41.amd import model as model_ops
+        from sonar.models.deepseek_v41.amd import model as model_ops
     else:
-        from aphrodite.models.deepseek_v41.nvidia import model as model_ops
+        from sonar.models.deepseek_v41.nvidia import model as model_ops
 
-    dp_rank = aphrodite_config.parallel_config.data_parallel_rank
+    dp_rank = sonar_config.parallel_config.data_parallel_rank
     if dp_shared_memory and dp_rank != 1:
         return
     tokens = 4
@@ -625,7 +625,7 @@ def _check_dummy_hash_model_forward(aphrodite_config, engram, head_sizes, weight
 
     model = model_ops.DeepseekV4Model.__new__(model_ops.DeepseekV4Model)
     torch.nn.Module.__init__(model)
-    model.parallel_config = aphrodite_config.parallel_config
+    model.parallel_config = sonar_config.parallel_config
     model.use_native_mega_moe = False
     model.use_mega_moe = False
     model.use_sequence_parallel = False
@@ -656,10 +656,10 @@ def _check_dummy_hash_model_forward(aphrodite_config, engram, head_sizes, weight
         patch.setattr(model_ops, "mhc_post_tilelang", lambda hidden, *args: hidden, raising=False)
         with set_forward_context(
             metadata,
-            aphrodite_config,
+            sonar_config,
             num_tokens=tokens,
             num_tokens_across_dp=torch.full(
-                (aphrodite_config.parallel_config.data_parallel_size,),
+                (sonar_config.parallel_config.data_parallel_size,),
                 tokens,
                 dtype=torch.int32,
             ),
@@ -680,8 +680,8 @@ def _load_shared_multithread(layer, weight, scale_inv, load_config):
     """Opposite shard completion orders must leave every shared parameter ready."""
     from safetensors.torch import save_file
 
-    from aphrodite.model_executor.model_loader import weight_utils
-    from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
+    from sonar.model_executor.model_loader import weight_utils
+    from sonar.model_executor.model_loader.default_loader import DefaultModelLoader
 
     tensors = {
         "weight": weight,
@@ -721,7 +721,7 @@ def _load_shared_multithread(layer, weight, scale_inv, load_config):
 
 def _check_prefetch_replay(engram, head_sizes, weight, scale_inv, dp_shared_memory, capture):
     """DP-sharded and shared prefetches must replay with new IDs."""
-    from aphrodite.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
+    from sonar.compilation.breakable_cudagraph import BreakableCUDAGraphCapture
 
     ids = _make_ids(head_sizes, 8, seed=501)
     tp_rank = engram_ops.get_tensor_model_parallel_rank()
@@ -765,7 +765,7 @@ def test_engram_table_shared_across_dp_replicas(tp_size, monkeypatch):
     """Check all storage modes with one process launch per TP/DP topology."""
     if torch.accelerator.device_count() < WORLD_SIZE:
         pytest.skip(f"Need {WORLD_SIZE} GPUs to run the test.")
-    monkeypatch.setenv("APHRODITE_USE_BREAKABLE_CUDAGRAPH", "1")
+    monkeypatch.setenv("SONAR_USE_BREAKABLE_CUDAGRAPH", "1")
     mp.spawn(_worker, args=(tp_size, get_open_port()), nprocs=WORLD_SIZE)
     cleanup_dist_env_and_memory()
 

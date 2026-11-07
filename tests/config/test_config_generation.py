@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from aphrodite.engine.arg_utils import EngineArgs
-from aphrodite.model_executor.layers.quantization.quark.utils import deep_compare
+from sonar.engine.arg_utils import EngineArgs
+from sonar.model_executor.layers.quantization.quark.utils import deep_compare
 
 
 def test_cuda_empty_vs_unset_configs(monkeypatch: pytest.MonkeyPatch):
@@ -76,20 +76,20 @@ def test_ray_runtime_env(monkeypatch: pytest.MonkeyPatch):
 def test_unrecognized_env(monkeypatch):
     import os
 
-    from aphrodite.envs import environment_variables
+    from sonar.envs import environment_variables
 
-    # Remove any existing unrecognized APHRODITE env vars that might interfere
+    # Remove any existing unrecognized SONAR env vars that might interfere
     for env in list(os.environ):
-        if env.startswith("APHRODITE_") and env not in environment_variables:
+        if env.startswith("SONAR_") and env not in environment_variables:
             monkeypatch.delenv(env, raising=False)
 
     # Test that if fail_on_environ_validation is True, then an error
-    # is raised when an unrecognized Aphrodite environment variable is set
-    monkeypatch.setenv("APHRODITE_UNRECOGNIZED_ENV_VAR", "some_value")
+    # is raised when an unrecognized Sonar environment variable is set
+    monkeypatch.setenv("SONAR_UNRECOGNIZED_ENV_VAR", "some_value")
     engine_args = EngineArgs(
         fail_on_environ_validation=True,
     )
-    with pytest.raises(ValueError, match="Unknown Aphrodite environment variable detected"):
+    with pytest.raises(ValueError, match="Unknown Sonar environment variable detected"):
         engine_args.create_engine_config()
 
     # Test that if fail_on_environ_validation is False, then no error is raised
@@ -97,7 +97,7 @@ def test_unrecognized_env(monkeypatch):
     engine_args.create_engine_config()
 
     # Test that when the unrecognized env var is removed, no error is raised
-    monkeypatch.delenv("APHRODITE_UNRECOGNIZED_ENV_VAR")
+    monkeypatch.delenv("SONAR_UNRECOGNIZED_ENV_VAR")
     engine_args = EngineArgs(
         fail_on_environ_validation=True,
     )
@@ -110,15 +110,15 @@ def test_get_diff_sampling_param_includes_penalties():
     params. Regression test for the whitelist silently dropping them.
 
     Called unbound with a lightweight stand-in so no model is loaded:
-    generation_config="aphrodite" makes the method skip try_get_generation_config
+    generation_config="sonar" makes the method skip try_get_generation_config
     and read only override_generation_config.
     """
     from types import SimpleNamespace
 
-    from aphrodite.config.model import ModelConfig
+    from sonar.config.model import ModelConfig
 
     fake = SimpleNamespace(
-        generation_config="aphrodite",
+        generation_config="sonar",
         override_generation_config={
             "presence_penalty": 1.5,
             "frequency_penalty": 0.5,
@@ -142,7 +142,7 @@ def test_generation_config_penalties_survive_diff_sampling_filter():
     """
     from types import SimpleNamespace
 
-    from aphrodite.config.model import ModelConfig
+    from sonar.config.model import ModelConfig
 
     fake = SimpleNamespace(
         generation_config="auto",

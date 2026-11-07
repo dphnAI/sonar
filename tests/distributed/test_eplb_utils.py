@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from aphrodite.distributed.eplb.eplb_state import (
+from sonar.distributed.eplb.eplb_state import (
     _commit_eplb_maps,
     _commit_eplb_maps_for_layer,
 )

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-use aphrodite_engine_core_client::protocol::output::RequestError;
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use sonar_engine_core_client::protocol::output::RequestError;
 use thiserror_ext::AsReport as _;
 use thiserror_ext::{Construct, Macro};
 
@@ -47,7 +47,7 @@ impl ApiError {
         }
     }
 
-    /// Convert this error into the Aphrodite JSON error payload: `type` names the
+    /// Convert this error into the Sonar JSON error payload: `type` names the
     /// error class as the Python frontend does, and `code` is the HTTP status.
     pub fn to_error_response(&self) -> ErrorResponse {
         let (error_type, message, param) = match self {
@@ -101,7 +101,7 @@ impl IntoResponse for ApiError {
 /// Classify a text-pipeline submit failure: request validation failures are
 /// the client's fault and map to HTTP 400, mirroring the Python frontend.
 /// Everything else stays an internal 500.
-pub fn text_submit_error(context: &'static str, error: aphrodite_text::Error) -> ApiError {
+pub fn text_submit_error(context: &'static str, error: sonar_text::Error) -> ApiError {
     if error.is_request_validation_error() {
         return invalid_request!(param = error.param(), "{error}");
     }
@@ -110,7 +110,7 @@ pub fn text_submit_error(context: &'static str, error: aphrodite_text::Error) ->
 
 /// Like [`text_submit_error`], for the chat pipeline, which wraps the text
 /// errors.
-pub fn chat_submit_error(context: &'static str, error: aphrodite_chat::Error) -> ApiError {
+pub fn chat_submit_error(context: &'static str, error: sonar_chat::Error) -> ApiError {
     if error.is_request_validation_error() {
         return invalid_request!(param = error.param(), "{error}");
     }
@@ -170,11 +170,11 @@ mod tests {
     #[test]
     fn prompt_too_long_maps_to_invalid_request() {
         let errors = [
-            aphrodite_text::Error::PromptTooLong {
+            sonar_text::Error::PromptTooLong {
                 max_model_len: 8192,
                 prompt_len: 9000,
             },
-            aphrodite_text::Error::PromptFillsContext {
+            sonar_text::Error::PromptFillsContext {
                 max_model_len: 8192,
             },
         ];
@@ -195,7 +195,7 @@ mod tests {
     fn invalid_thinking_token_budget_maps_to_invalid_request() {
         let api_error = text_submit_error(
             "failed to submit completion request",
-            aphrodite_text::Error::InvalidThinkingTokenBudget,
+            sonar_text::Error::InvalidThinkingTokenBudget,
         );
         assert_eq!(api_error.status_code(), StatusCode::BAD_REQUEST);
         let response = api_error.to_error_response();
@@ -207,7 +207,7 @@ mod tests {
     fn min_tokens_above_max_tokens_maps_to_invalid_request() {
         let api_error = text_submit_error(
             "failed to submit completion request",
-            aphrodite_text::Error::MinTokensExceedsMaxTokens {
+            sonar_text::Error::MinTokensExceedsMaxTokens {
                 min_tokens: 5,
                 max_tokens: 4,
             },
@@ -223,13 +223,11 @@ mod tests {
     fn sampling_params_validation_maps_to_invalid_request() {
         let api_error = text_submit_error(
             "failed to submit completion request",
-            aphrodite_text::Error::SamplingParams(
-                aphrodite_text::SamplingParamsError::OutOfRange {
-                    parameter: "top_p",
-                    value: 0.0,
-                    expected: "(0, 1]",
-                },
-            ),
+            sonar_text::Error::SamplingParams(sonar_text::SamplingParamsError::OutOfRange {
+                parameter: "top_p",
+                value: 0.0,
+                expected: "(0, 1]",
+            }),
         );
         assert_eq!(api_error.status_code(), StatusCode::BAD_REQUEST);
         let response = api_error.to_error_response();
@@ -239,7 +237,7 @@ mod tests {
 
     #[test]
     fn chat_wrapped_prompt_too_long_maps_to_invalid_request() {
-        let error = aphrodite_chat::Error::Text(aphrodite_text::Error::PromptTooLong {
+        let error = sonar_chat::Error::Text(sonar_text::Error::PromptTooLong {
             max_model_len: 8192,
             prompt_len: 9000,
         });
@@ -254,10 +252,10 @@ mod tests {
     #[test]
     fn invalid_reasoning_parameters_map_to_invalid_request() {
         for error in [
-            aphrodite_chat::Error::InvalidReasoningEffort(
+            sonar_chat::Error::InvalidReasoningEffort(
                 "DeepSeek V4.1 reasoning_effort must be within [1, 100]".to_string(),
             ),
-            aphrodite_chat::Error::InvalidReasoningControl {
+            sonar_chat::Error::InvalidReasoningControl {
                 message: "template kwarg `thinking` must be a boolean".to_string(),
             },
         ] {
@@ -272,7 +270,7 @@ mod tests {
 
     #[test]
     fn chat_template_throw_maps_to_invalid_request() {
-        let error = aphrodite_chat::Error::ChatTemplateThrown {
+        let error = sonar_chat::Error::ChatTemplateThrown {
             message: "Unexpected reasoning effort high.".to_string(),
         };
         let api_error = chat_submit_error("failed to submit chat request", error);
@@ -286,7 +284,7 @@ mod tests {
     fn untrusted_request_chat_template_maps_to_invalid_request() {
         let api_error = chat_submit_error(
             "tokenize failed",
-            aphrodite_chat::Error::UntrustedRequestChatTemplate,
+            sonar_chat::Error::UntrustedRequestChatTemplate,
         );
         assert_eq!(api_error.status_code(), StatusCode::BAD_REQUEST);
         assert_eq!(
@@ -298,7 +296,7 @@ mod tests {
 
     #[test]
     fn chat_template_render_failure_stays_internal() {
-        let error = aphrodite_chat::Error::ChatTemplate(
+        let error = sonar_chat::Error::ChatTemplate(
             "failed to render jinja template: unknown function".to_string(),
         );
         let api_error = chat_submit_error("failed to submit chat request", error);
@@ -307,7 +305,7 @@ mod tests {
 
     #[test]
     fn llm_wrapped_empty_prompt_maps_to_invalid_request() {
-        let error = aphrodite_text::Error::Llm(aphrodite_llm::Error::EmptyPromptTokenIds {
+        let error = sonar_text::Error::Llm(sonar_llm::Error::EmptyPromptTokenIds {
             request_id: "req-1".to_string(),
         });
         let api_error = text_submit_error("failed to submit completion request", error);
@@ -316,7 +314,7 @@ mod tests {
 
     #[test]
     fn logprobs_validation_maps_to_invalid_request() {
-        let error = aphrodite_text::Error::Logprobs(aphrodite_text::LogprobsError::TooManyCount {
+        let error = sonar_text::Error::Logprobs(sonar_text::LogprobsError::TooManyCount {
             parameter: "logprobs",
             requested: 1000,
             max_allowed: 20,
@@ -330,8 +328,8 @@ mod tests {
 
     #[test]
     fn chat_wrapped_logprobs_validation_maps_to_invalid_request() {
-        let error = aphrodite_chat::Error::Text(aphrodite_text::Error::Logprobs(
-            aphrodite_text::LogprobsError::TooManyCount {
+        let error = sonar_chat::Error::Text(sonar_text::Error::Logprobs(
+            sonar_text::LogprobsError::TooManyCount {
                 parameter: "prompt_logprobs",
                 requested: 1000,
                 max_allowed: 20,
@@ -343,7 +341,7 @@ mod tests {
 
     #[test]
     fn out_of_vocab_validation_maps_to_invalid_request() {
-        let error = aphrodite_text::Error::TokenIds(aphrodite_text::TokenIdsError::OutOfVocab {
+        let error = sonar_text::Error::TokenIds(sonar_text::TokenIdsError::OutOfVocab {
             parameter: "logprob_token_ids",
             token_ids: vec![1000],
             vocab_size: 1000,
@@ -354,8 +352,7 @@ mod tests {
 
     #[test]
     fn empty_allowed_token_ids_maps_to_invalid_request() {
-        let error =
-            aphrodite_text::Error::TokenIds(aphrodite_text::TokenIdsError::EmptyAllowedTokenIds);
+        let error = sonar_text::Error::TokenIds(sonar_text::TokenIdsError::EmptyAllowedTokenIds);
         let api_error = text_submit_error("failed to submit completion request", error);
         assert_eq!(api_error.status_code(), StatusCode::BAD_REQUEST);
         let response = api_error.to_error_response();
@@ -365,7 +362,7 @@ mod tests {
 
     #[test]
     fn truncate_exceeds_max_model_len_maps_to_invalid_request() {
-        let error = aphrodite_text::Error::TruncatePromptTokensExceedsMaxModelLen {
+        let error = sonar_text::Error::TruncatePromptTokensExceedsMaxModelLen {
             value: 8000,
             max_model_len: 4000,
         };
@@ -379,7 +376,7 @@ mod tests {
 
     #[test]
     fn invalid_truncate_prompt_tokens_maps_to_invalid_request() {
-        let error = aphrodite_text::Error::InvalidTruncatePromptTokens { value: -2 };
+        let error = sonar_text::Error::InvalidTruncatePromptTokens { value: -2 };
         let api_error = text_submit_error("failed to submit completion request", error);
         assert_eq!(api_error.status_code(), StatusCode::BAD_REQUEST);
         let response = api_error.to_error_response();
@@ -390,7 +387,7 @@ mod tests {
 
     #[test]
     fn other_submit_errors_stay_internal() {
-        let error = aphrodite_text::Error::Tokenizer("backend exploded".to_string());
+        let error = sonar_text::Error::Tokenizer("backend exploded".to_string());
         let api_error = text_submit_error("failed to submit completion request", error);
         assert_eq!(api_error.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
         let response = api_error.to_error_response();

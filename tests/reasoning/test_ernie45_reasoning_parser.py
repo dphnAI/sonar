@@ -4,7 +4,7 @@
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from sonar.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "ernie45"

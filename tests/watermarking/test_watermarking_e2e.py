@@ -3,19 +3,19 @@
 
 import pytest
 
-from aphrodite import SamplingParams
-from aphrodite.platforms import current_platform
-from aphrodite.v1.metrics.reader import Counter
-from aphrodite.v1.watermarking import GumbelWatermarkDetector
+from sonar import SamplingParams
+from sonar.platforms import current_platform
+from sonar.v1.metrics.reader import Counter
+from sonar.v1.watermarking import GumbelWatermarkDetector
 
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator")
-def test_llm_generated_sequence_is_watermarked(aphrodite_runner):
+def test_llm_generated_sequence_is_watermarked(sonar_runner):
     """Engine-level watermarking must produce tokens the detector recognizes."""
     watermark_config = {"key": 42, "context_width": 4}
     detector = GumbelWatermarkDetector(**watermark_config)
 
-    runner = aphrodite_runner(
+    runner = sonar_runner(
         "facebook/opt-125m",
         watermark_config=watermark_config,
         seed=0,
@@ -37,9 +37,9 @@ def test_llm_generated_sequence_is_watermarked(aphrodite_runner):
 
     # The greedy request is skipped; the opt-out one is not watermarked.
     counters = [m for m in metrics if isinstance(m, Counter)]
-    status = {m.labels["status"]: m.value for m in counters if m.name == "aphrodite:watermark_requests"}
+    status = {m.labels["status"]: m.value for m in counters if m.name == "sonar:watermark_requests"}
     assert status == {"watermarked": 1, "skipped": 1, "not_watermarked": 1}
-    num_success = sum(m.value for m in counters if m.name == "aphrodite:request_success")
+    num_success = sum(m.value for m in counters if m.name == "sonar:request_success")
     assert sum(status.values()) == num_success
 
     result_use_wm = detector.detect(list(output_use_wm[0].outputs[0].token_ids))
