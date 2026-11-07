@@ -2494,3 +2494,27 @@ def test_online_quant_load_format_dummy(
     ) as llm:
         outputs = llm.generate_greedy(["The future of AI is"], max_tokens=4)
         print(outputs[0][1])
+
+
+@pytest.mark.skipif(
+    not (current_platform.is_cuda() and current_platform.has_device_capability(80)),
+    reason="NF12 requires CUDA SM80 or newer.",
+)
+def test_online_nf12_rejects_checkpoint_reload(aphrodite_runner, monkeypatch) -> None:
+    """Reject re-encoding weights that captured graphs may still reference."""
+    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    monkeypatch.setenv("APHRODITE_RELOAD_MODE", "layerwise")
+    with (
+        aphrodite_runner(
+            "Qwen/Qwen3-0.6B",
+            quantization="nf12",
+            dtype="bfloat16",
+            enforce_eager=True,
+            max_model_len=64,
+            max_num_seqs=1,
+            gpu_memory_utilization=0.4,
+            kv_cache_memory_bytes=256 * 1024**2,
+        ) as llm,
+        pytest.raises(NotImplementedError, match="checkpoint weight reloads"),
+    ):
+        llm.get_llm().collective_rpc("reload_weights")

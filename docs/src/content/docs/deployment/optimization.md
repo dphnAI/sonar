@@ -210,6 +210,9 @@ shapes or MoE configurations remain unquantized with a warning. MoE support
 excludes expert load balancing, fused shared experts, LoRA, and specialized
 all-to-all backends.
 
+NF12-encoded linear layers do not support checkpoint weight reloads. Restart
+the engine to load new weights.
+
 ### FP4 MoE on SM120 GPUs
 
 On SM120 GPUs, use `--moe-backend b12x` for supported FP4 MoE checkpoints.
