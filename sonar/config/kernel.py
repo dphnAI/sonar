@@ -268,7 +268,7 @@ class KernelConfig:
     ir_op_priority: IrOpPriorityConfig = Field(default_factory=IrOpPriorityConfig)
     """
     Sonar IR op priority for dispatching/lowering during the forward pass.
-    Platform defaults appended automatically during SonarConfig.__post_init__.
+    Platform defaults appended automatically during `SonarConfig.__post_init__`.
 
     Deprecated: Sonar IR is being removed, and this option will be removed in
     v0.34.0. Kernels will be selected by the platform, as for other custom ops.
