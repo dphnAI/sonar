@@ -205,10 +205,10 @@ BF16 weights losslessly; kernel accumulation can still differ from the
 unquantized implementation.
 
 Sonar encodes linear layers and supported gated-SiLU MoE experts one layer at a
-time. Embeddings and the LM head remain unquantized. Unsupported local weight
-shapes or MoE configurations remain unquantized with a warning. MoE support
-excludes expert load balancing, fused shared experts, LoRA, and specialized
-all-to-all backends.
+time. Embeddings and the LM head remain unquantized. Unsupported local linear
+weight shapes remain unquantized. Unsupported MoE layers retain their checkpoint
+format, with a warning. MoE support excludes expert load balancing, fused shared
+experts, LoRA, and specialized all-to-all backends.
 
 NF12-encoded linear layers do not support checkpoint weight reloads. Restart
 the engine to load new weights.

@@ -325,13 +325,19 @@ class OnlineQuantizationConfig(QuantizationConfig):
         return cls
 
     def resolve_quant_method_cls(
-        self, layer_cls: type[torch.nn.Module], prefix: str
+        self,
+        layer_cls: type[torch.nn.Module],
+        prefix: str,
+        *,
+        layer: torch.nn.Module | None = None,
     ) -> tuple[OnlineQuantizationSource, str, str | None, QuantSpec, type] | None:
         """Resolve quantization metadata and method class without instantiating it.
 
         Args:
             layer_cls: Type of layer for which to resolve online quantization.
             prefix: Fully qualified layer name.
+            layer: Optional instance for runtime capability checks. Class-only
+                callers resolve configured metadata without these checks.
 
         Returns:
             A tuple of source, quantization key string, target pattern, spec,
@@ -373,6 +379,11 @@ class OnlineQuantizationConfig(QuantizationConfig):
         if quant_method_cls is None:
             return None
         assert quant_spec is not None
+        if quant_method_cls is Nf12OnlineMoEMethod and layer is not None:
+            supported, reason = quant_method_cls.can_implement(layer)
+            if not supported:
+                logger.warning_once("Skipping NF12 for unsupported experts: %s", reason)
+                return None
         return source, quant_key_str, target_pattern, quant_spec, quant_method_cls
 
     def _resolve_targets_quant_method_metadata(
@@ -443,18 +454,13 @@ class OnlineQuantizationConfig(QuantizationConfig):
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         # `targets` takes precedence over `moe` and `linear` and is exclusive.
-        resolved = self.resolve_quant_method_cls(type(layer), prefix)
+        resolved = self.resolve_quant_method_cls(type(layer), prefix, layer=layer)
         if resolved is not None:
             source, quant_key_str, target_pattern, quant_spec, quant_method_cls = resolved
             if quant_method_cls is Mxfp6OnlineMoEMethod:
                 supported, reason = Mxfp6OnlineMoEMethod.can_implement(layer.moe_config)
                 if not supported:
                     logger.warning_once("Keeping MXFP6-targeted MoE layers in BF16 because %s", reason)
-                    return UnquantizedFusedMoEMethod(layer.moe_config)
-            if quant_method_cls is Nf12OnlineMoEMethod:
-                supported, reason = Nf12OnlineMoEMethod.can_implement(layer)
-                if not supported:
-                    logger.warning_once("Keeping NF12-targeted MoE layers unquantized because %s", reason)
                     return UnquantizedFusedMoEMethod(layer.moe_config)
             self.quantized_layers[prefix] = (
                 source.value,

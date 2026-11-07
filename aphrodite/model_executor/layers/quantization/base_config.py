@@ -322,7 +322,7 @@ def resolve_quant_method(
     online_target = None
     if online_config is not None and is_online_supported_layer:
         online_config.packed_modules_mapping = quant_config.packed_modules_mapping
-        online_target = online_config.resolve_quant_method_cls(type(layer), prefix)
+        online_target = online_config.resolve_quant_method_cls(type(layer), prefix, layer=layer)
 
     # The checkpoint method of requantized experts is only a dequantization source.
     with (
