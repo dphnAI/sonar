@@ -57,6 +57,12 @@ from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
     Mxfp8OnlineLinearMethod,
     Mxfp8OnlineMoEMethod,
 )
+from aphrodite.model_executor.layers.quantization.online.nf12 import (
+    Nf12OnlineLinearMethod,
+)
+from aphrodite.model_executor.layers.quantization.online.nf12_moe import (
+    Nf12OnlineMoEMethod,
+)
 from aphrodite.model_executor.layers.quantization.online.nvfp4 import (
     Nvfp4OnlineMoEMethod,
 )
@@ -80,6 +86,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
     kMxfp8Static,
+    kNf12,
     kNvfp4Static,
 )
 
@@ -105,6 +112,7 @@ _ONLINE_LINEAR_METHODS: dict[QuantKey, type] = {
     kMxfp6E2M3Static: Mxfp6OnlineLinearMethod,
     kMxfp6E3M2Static: Mxfp6OnlineLinearMethod,
     kMxfp4Static: Mxfp4OnlineLinearMethod,
+    kNf12: Nf12OnlineLinearMethod,
 }
 
 _ONLINE_MOE_METHODS: dict[QuantKey, type] = {
@@ -117,6 +125,7 @@ _ONLINE_MOE_METHODS: dict[QuantKey, type] = {
     kNvfp4Static: Nvfp4OnlineMoEMethod,
     kMxfp6E2M3Static: Mxfp6OnlineMoEMethod,
     kMxfp6E3M2Static: Mxfp6OnlineMoEMethod,
+    kNf12: Nf12OnlineMoEMethod,
 }
 
 # Quantizers for full-precision fused shared-expert weights, keyed by the routed
@@ -441,6 +450,11 @@ class OnlineQuantizationConfig(QuantizationConfig):
                 supported, reason = Mxfp6OnlineMoEMethod.can_implement(layer.moe_config)
                 if not supported:
                     logger.warning_once("Keeping MXFP6-targeted MoE layers in BF16 because %s", reason)
+                    return UnquantizedFusedMoEMethod(layer.moe_config)
+            if quant_method_cls is Nf12OnlineMoEMethod:
+                supported, reason = Nf12OnlineMoEMethod.can_implement(layer)
+                if not supported:
+                    logger.warning_once("Keeping NF12-targeted MoE layers unquantized because %s", reason)
                     return UnquantizedFusedMoEMethod(layer.moe_config)
             self.quantized_layers[prefix] = (
                 source.value,

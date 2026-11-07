@@ -50,6 +50,7 @@ QuantizationMethods = Literal[
     "nvfp4_per_token",
     "mxfp8",
     "mxfp6",
+    "nf12",
 ]
 QUANTIZATION_METHODS: list[str] = list(get_args(QuantizationMethods))
 

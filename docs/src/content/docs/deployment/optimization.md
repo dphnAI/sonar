@@ -191,6 +191,25 @@ checkpoint on the target GPU.
 Compare output quality with the unquantized checkpoint. Weight-only formats can
 affect model quality even when the serving interface is unchanged.
 
+### NF12 from BF16 checkpoints
+
+CUDA installations include the `nf12` package. To encode supported weights
+during loading:
+
+```bash
+aphrodite run Qwen/Qwen3-0.6B --dtype bfloat16 --quantization nf12
+```
+
+NF12 requires an NVIDIA GPU with compute capability 8.0 or newer. It stores
+BF16 weights losslessly; kernel accumulation can still differ from the
+unquantized implementation.
+
+Sonar encodes linear layers and supported gated-SiLU MoE experts one layer at a
+time. Embeddings and the LM head remain unquantized. Unsupported local weight
+shapes or MoE configurations remain unquantized with a warning. MoE support
+excludes expert load balancing, fused shared experts, LoRA, and specialized
+all-to-all backends.
+
 ### FP4 MoE on SM120 GPUs
 
 On SM120 GPUs, use `--moe-backend b12x` for supported FP4 MoE checkpoints.

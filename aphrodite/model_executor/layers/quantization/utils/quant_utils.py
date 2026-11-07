@@ -264,6 +264,9 @@ kMxfp6E2M3Static = QuantKey(scalar_types.float6_e2m3f, scale=kMxfp6E2M3StaticGro
 kMxfp6E2M3DynamicGroupScale = ScaleDesc(MXFP_SCALE_DTYPE, False, GroupShape(1, 32))
 kMxfp6E2M3Dynamic = QuantKey(scalar_types.float6_e2m3f, scale=kMxfp6E2M3DynamicGroupScale, symmetric=True)
 
+# NF12 stores a per-matrix exponent base rather than a multiplicative scale.
+kNf12 = QuantKey(torch.bfloat16, ScaleDesc(torch.uint8, True, GroupShape.PER_TENSOR))
+
 # TODO: convert this to use SCALAR_TYPE. This is not right.
 kInt4StaticGroupScale = ScaleDesc(torch.float16, True, GroupShape(1, -1))
 kInt4Static = QuantKey(INT4_DTYPE, scale=kInt4StaticGroupScale, symmetric=True)
