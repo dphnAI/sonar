@@ -161,7 +161,7 @@ def quantization_config_classes() -> dict[str, str]:
     raise RuntimeError("Could not find method_to_config")
 
 
-def class_capabilities() -> dict[str, tuple[str | None, int | None]]:
+def class_capabilities(class_names: set[str]) -> dict[str, tuple[str | None, int | None]]:
     classes: dict[str, ast.ClassDef] = {}
     for path in (ROOT / "aphrodite").rglob("*.py"):
         tree = ast.parse(path.read_text())
@@ -201,7 +201,7 @@ def class_capabilities() -> dict[str, tuple[str | None, int | None]]:
         visiting.discard(class_name)
         return cache[class_name]
 
-    for class_name in classes:
+    for class_name in class_names:
         capability(class_name)
     return cache
 
@@ -209,11 +209,11 @@ def class_capabilities() -> dict[str, tuple[str | None, int | None]]:
 def quantization_reference() -> str:
     methods = quantization_methods()
     config_classes = quantization_config_classes()
-    capabilities = class_capabilities()
+    capabilities = class_capabilities(set(config_classes.values()) | {"OnlineQuantizationConfig"})
     declared = {
         platform: set(literal_assignment(path, "supported_quantization")) for platform, path in PLATFORMS.items()
     }
-    method_capability_overrides = {"mxfp6": 110}
+    method_capability_overrides = {"mxfp6": 110, "nf12": 80}
     lines = [
         frontmatter(
             "Quantization support",

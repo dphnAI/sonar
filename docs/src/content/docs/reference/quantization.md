@@ -14,7 +14,7 @@ A check mark means that the platform class declares the method. NVIDIA CUDA acce
 | `fp8` | SM 7.5 | ✓ | ✓ |
 | `fbgemm_fp8` | SM 8.0 | ✓ | — |
 | `fp_quant` | SM 10.0 | — | — |
-| `modelopt` | SM 8.9 | ✓ | ✓ |
+| `modelopt` | SM 8.0 | ✓ | ✓ |
 | `modelopt_fp4` | SM 7.5 | ✓ | — |
 | `modelopt_mxfp8` | SM 8.0 | ✓ | — |
 | `modelopt_mixed` | SM 7.5 | ✓ | — |
@@ -28,20 +28,22 @@ A check mark means that the platform class declares the method. NVIDIA CUDA acce
 | `experts_int8` | SM 8.0 | — | — |
 | `exl3` | SM 8.0 | — | — |
 | `quark` | SM 7.0 | ✓ | — |
-| `moe_wna16` | SM 7.0 | — | — |
+| `moe_wna16` | SM 7.0 | — | ✓ |
 | `torchao` | SM 7.5 | ✓ | — |
-| `inc` | SM 6.0 | — | ✓ |
+| `inc` | SM 6.0 | ✓ | ✓ |
 | `mxfp4` | SM 8.0 | ✓ | ✓ |
 | `gpt_oss_mxfp4` | SM 8.0 | ✓ | ✓ |
-| `deepseek_v4_fp8` | SM 7.5 | ✓ | — |
+| `deepseek_v4_fp8` | Any supported CUDA GPU | ✓ | ✓ |
+| `deepseek_v41_fp8` | SM 7.5 | — | — |
 | `online` | SM 7.5 | ✓ | ✓ |
 | `fp8_per_tensor` | SM 7.5 | ✓ | ✓ |
 | `fp8_per_block` | SM 7.5 | ✓ | ✓ |
-| `fp8_per_channel` | SM 7.5 | ✓ | — |
+| `fp8_per_channel` | SM 7.5 | ✓ | ✓ |
 | `int8_per_channel_weight_only` | SM 7.5 | — | — |
 | `nvfp4_per_token` | SM 7.5 | — | — |
 | `mxfp8` | SM 8.0 | ✓ | ✓ |
 | `mxfp6` | SM 11.0 | — | — |
+| `nf12` | SM 8.0 | — | — |
 
 ## Read the table
 

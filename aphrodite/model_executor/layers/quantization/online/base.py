@@ -57,6 +57,12 @@ from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
     Mxfp8OnlineLinearMethod,
     Mxfp8OnlineMoEMethod,
 )
+from aphrodite.model_executor.layers.quantization.online.nf12 import (
+    Nf12OnlineLinearMethod,
+)
+from aphrodite.model_executor.layers.quantization.online.nf12_moe import (
+    Nf12OnlineMoEMethod,
+)
 from aphrodite.model_executor.layers.quantization.online.nvfp4 import (
     Nvfp4OnlineMoEMethod,
 )
@@ -80,6 +86,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
     kMxfp8Static,
+    kNf12,
     kNvfp4Static,
 )
 
@@ -105,6 +112,7 @@ _ONLINE_LINEAR_METHODS: dict[QuantKey, type] = {
     kMxfp6E2M3Static: Mxfp6OnlineLinearMethod,
     kMxfp6E3M2Static: Mxfp6OnlineLinearMethod,
     kMxfp4Static: Mxfp4OnlineLinearMethod,
+    kNf12: Nf12OnlineLinearMethod,
 }
 
 _ONLINE_MOE_METHODS: dict[QuantKey, type] = {
@@ -117,6 +125,7 @@ _ONLINE_MOE_METHODS: dict[QuantKey, type] = {
     kNvfp4Static: Nvfp4OnlineMoEMethod,
     kMxfp6E2M3Static: Mxfp6OnlineMoEMethod,
     kMxfp6E3M2Static: Mxfp6OnlineMoEMethod,
+    kNf12: Nf12OnlineMoEMethod,
 }
 
 # Quantizers for full-precision fused shared-expert weights, keyed by the routed
@@ -316,13 +325,19 @@ class OnlineQuantizationConfig(QuantizationConfig):
         return cls
 
     def resolve_quant_method_cls(
-        self, layer_cls: type[torch.nn.Module], prefix: str
+        self,
+        layer_cls: type[torch.nn.Module],
+        prefix: str,
+        *,
+        layer: torch.nn.Module | None = None,
     ) -> tuple[OnlineQuantizationSource, str, str | None, QuantSpec, type] | None:
         """Resolve quantization metadata and method class without instantiating it.
 
         Args:
             layer_cls: Type of layer for which to resolve online quantization.
             prefix: Fully qualified layer name.
+            layer: Optional instance for runtime capability checks. Class-only
+                callers resolve configured metadata without these checks.
 
         Returns:
             A tuple of source, quantization key string, target pattern, spec,
@@ -364,6 +379,11 @@ class OnlineQuantizationConfig(QuantizationConfig):
         if quant_method_cls is None:
             return None
         assert quant_spec is not None
+        if quant_method_cls is Nf12OnlineMoEMethod and layer is not None:
+            supported, reason = quant_method_cls.can_implement(layer)
+            if not supported:
+                logger.warning_once("Skipping NF12 for unsupported experts: %s", reason)
+                return None
         return source, quant_key_str, target_pattern, quant_spec, quant_method_cls
 
     def _resolve_targets_quant_method_metadata(
@@ -434,7 +454,7 @@ class OnlineQuantizationConfig(QuantizationConfig):
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         # `targets` takes precedence over `moe` and `linear` and is exclusive.
-        resolved = self.resolve_quant_method_cls(type(layer), prefix)
+        resolved = self.resolve_quant_method_cls(type(layer), prefix, layer=layer)
         if resolved is not None:
             source, quant_key_str, target_pattern, quant_spec, quant_method_cls = resolved
             if quant_method_cls is Mxfp6OnlineMoEMethod:

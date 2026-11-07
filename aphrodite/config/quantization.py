@@ -33,6 +33,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E3M2Dynamic,
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
+    kNf12,
     kNvfp4DynamicToken,
     kNvfp4Static,
 )
@@ -57,6 +58,7 @@ QUANT_KEY_NAMES: dict[str, QuantKey] = {
     "int8_per_group_32": kInt8Dynamic32Sym,
     # Load-time MXFP4-to-int4 for Kimi-K3 on gfx942.
     "int4_per_group_32": kInt4Static32,
+    "nf12": kNf12,
 }
 
 
@@ -268,6 +270,10 @@ _ONLINE_SHORTHANDS: dict[str, QuantizationConfigArgs] = {
     # FlashInfer TRTLLM only); linear stays unquantized (no `linear` field).
     "nvfp4_per_token": QuantizationConfigArgs(
         moe=QuantSpec(weight=kNvfp4Static),
+    ),
+    "nf12": QuantizationConfigArgs(
+        linear=QuantSpec(weight=kNf12),
+        moe=QuantSpec(weight=kNf12),
     ),
 }
 
